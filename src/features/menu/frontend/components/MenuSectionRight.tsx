@@ -10,7 +10,7 @@ export function MenuSectionRight({ group }: MenuSectionProps) {
 
     return (
         <div className="-mb-3 h-full pb-20">
-            <header className="flex text-white flex-col w-full bg-primary rounded-2xl px-6 p-3">
+            <header className="flex text-white flex-col w-full bg-primary rounded-t-2xl rounded-b-lg px-6 p-3">
                 <h2 className="text-3xl font-bold tracking-widest">
                     {group.name}
                 </h2>
