@@ -4,6 +4,7 @@
   --background: #F3EEDC;
   --foreground: #171717;
   --primary: #3A4824;
+  --desert: #B8790A;
 }
 
 @theme inline {
@@ -14,6 +15,7 @@
 
   /*colors*/
   --color-primary: var(--primary);
+  --color-desert: var(--desert);
 }
 
 body {

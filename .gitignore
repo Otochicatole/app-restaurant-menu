@@ -17,6 +17,7 @@
 .next
 .windsurf
 .agents
+dev.db
 
 # next.js
 /.next/

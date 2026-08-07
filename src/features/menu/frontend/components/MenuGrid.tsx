@@ -18,20 +18,20 @@ export function MenuGrid({sections}: MenuGridProps) {
                 return (
                     <section
                         key={rowIdx}
-                        className="min-h-dvh w-full border-b border-primary/10 flex flex-col p-3 md:p-10 snap-start"
+                        className="min-h-dvh w-full border-b border-primary/10 flex flex-col p-3 md:p-10 snap-start "
                     >
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-                            <div className="flex flex-col">
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-10 sm:mt-15 xl:mt-20 min-h-[80vh]">
+                            <div className="flex flex-col h-full">
                                 {col1.map((group) => (
                                     <MenuSectionLeft key={group.name} group={group}/>
                                 ))}
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col h-full">
                                 {col2.map((group) => (
                                     <MenuSectionMid key={group.name} group={group}/>
                                 ))}
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col h-full">
                                 {col3.map((group) => (
                                     <MenuSectionRight key={group.name} group={group}/>
                                 ))}
