@@ -16,11 +16,11 @@ export function MenuSectionRight({ group }: MenuSectionProps) {
                 </h2>
                 {group.description && (<p className="text-sm opacity-70">({group.description})</p>)}
             </header>
-            <div className="flex flex-col -mt-3 py-6 px-3 border-r border-l border-primary/50 h-full">
+            <ul className="flex flex-col -mt-3 py-6 px-3 border-r border-l border-primary/50 h-full">
                 {group.products.map((product) => (
                     <ProductCard key={product.id} product={product} />
                 ))}
-            </div>
+            </ul>
         </div>
     );
 }

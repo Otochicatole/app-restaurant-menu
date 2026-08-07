@@ -5,6 +5,8 @@
   --foreground: #171717;
   --primary: #3A4824;
   --desert: #B8790A;
+  --beige: #EAD8B8;
+  --terracota: #AB5641;
 }
 
 @theme inline {
@@ -16,6 +18,8 @@
   /*colors*/
   --color-primary: var(--primary);
   --color-desert: var(--desert);
+  --color-beige: var(--beige);
+  --color-terracota: var(--terracota);
 }
 
 body {
