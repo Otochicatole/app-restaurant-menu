@@ -49,6 +49,7 @@ model Product {
   description String           @default("")
   price       Float
   groupId     String
+  sortOrder   Int              @default(0)
   group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

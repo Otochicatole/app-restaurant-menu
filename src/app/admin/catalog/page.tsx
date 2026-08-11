@@ -1,5 +1,5 @@
 import { getGroups, createGroup, updateGroup, deleteGroup } from "@/features/groups/backend/services/group.service";
-import { getProducts, createProduct, updateProduct, deleteProduct } from "@/features/products/backend/services/product.service";
+import { getProducts, createProduct, updateProduct, deleteProduct, updateProductOrder } from "@/features/products/backend/services/product.service";
 import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import type { GroupDTO } from "@/features/groups/frontend/types";
 import type { ProductDTO } from "@/features/products/frontend/types";
@@ -85,6 +85,19 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     }
   }
 
+  async function reorderCatalogProducts(groupId: string, productIds: string[]): Promise<CatalogActionResult> {
+    "use server";
+    try {
+      await ensureAdmin();
+      await updateProductOrder(groupId, productIds);
+      revalidatePath("/admin/catalog");
+      revalidatePath("/");
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo guardar el orden" } };
+    }
+  }
+
   return (
     <AdminLayout>
       <ProductCatalogClient
@@ -97,6 +110,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
         createProduct={createCatalogProduct}
         updateProduct={updateCatalogProduct}
         deleteProduct={removeCatalogProduct}
+        reorderProducts={reorderCatalogProducts}
       />
     </AdminLayout>
   );

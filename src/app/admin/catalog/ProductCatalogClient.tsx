@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { closestCenter, DndContext, DragOverlay, MeasuringStrategy, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { GroupDTO } from "@/features/groups/frontend/types";
 import type { ProductDTO } from "@/features/products/frontend/types";
 import { GroupForm } from "@/features/groups/frontend/components/GroupForm";
 import { ProductForm } from "@/features/products/frontend/components/ProductForm";
 import { AdminCard, AdminConfirmModal, AdminEmptyState, AdminModal, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/shared/frontend/components/admin/AdminUI";
-import { AlertCircle, FolderPlus, Layers3, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, FolderPlus, GripVertical, Layers3, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 export interface CatalogActionResult<T = unknown> {
   success: boolean;
@@ -25,6 +28,67 @@ interface ProductCatalogClientProps {
   createProduct: (data: { name: string; description: string; price: number; groupId: string }) => Promise<CatalogActionResult<ProductDTO>>;
   updateProduct: (id: string, data: { name: string; description: string; price: number; groupId: string }) => Promise<CatalogActionResult<ProductDTO>>;
   deleteProduct: (id: string) => Promise<CatalogActionResult>;
+  reorderProducts: (groupId: string, productIds: string[]) => Promise<CatalogActionResult>;
+}
+
+function SortableProductRow({
+  product,
+  sortable,
+  onEdit,
+  onDelete,
+}: {
+  product: ProductDTO;
+  sortable: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: product.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    willChange: "transform",
+  };
+
+  return (
+    <article ref={setNodeRef} style={style} className={`grid gap-4 px-5 py-5 transition-[background-color,box-shadow,opacity] hover:bg-emerald-50/40 sm:grid-cols-[minmax(0,1.5fr)_minmax(120px,0.5fr)_minmax(150px,0.8fr)_auto] sm:items-center ${isDragging ? "relative z-10 opacity-40" : ""}`}>
+      <div className="flex min-w-0 items-start gap-3">
+        {sortable ? (
+          <button type="button" className="mt-0.5 cursor-grab touch-none rounded-sm p-1 text-zinc-400 hover:bg-zinc-100 hover:text-emerald-800 active:cursor-grabbing" aria-label={`Ordenar ${product.name}`} {...attributes} {...listeners}>
+            <GripVertical size={18} />
+          </button>
+        ) : <span className="hidden w-7 shrink-0 sm:block" />}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4 sm:block">
+            <h3 className="truncate text-base font-semibold text-zinc-950">{product.name}</h3>
+            <span className="shrink-0 text-base font-semibold text-emerald-900 sm:hidden">${product.price.toFixed(2)}</span>
+          </div>
+          <p className="mt-1 truncate text-sm text-zinc-500">{product.description || "Sin descripción cargada."}</p>
+        </div>
+      </div>
+      <span className="hidden text-base font-semibold text-emerald-900 sm:block">${product.price.toFixed(2)}</span>
+      <span className="w-fit rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">{product.groupName}</span>
+      <div className="flex gap-2 sm:justify-end">
+        <button type="button" className={adminSecondaryButtonClass} onClick={onEdit}><Pencil size={15} /> Editar</button>
+        <button type="button" className={adminDangerButtonClass} onClick={onDelete}><Trash2 size={15} /> Eliminar</button>
+      </div>
+    </article>
+  );
+}
+
+function DragOverlayProduct({ product }: { product: ProductDTO }) {
+  return (
+    <div className="grid w-[min(680px,calc(100vw-2rem))] gap-4 rounded-sm border border-emerald-200 bg-white px-5 py-5 shadow-2xl sm:grid-cols-[minmax(0,1.5fr)_minmax(120px,0.5fr)_minmax(150px,0.8fr)_auto] sm:items-center">
+      <div className="flex min-w-0 items-center gap-3">
+        <GripVertical size={18} className="shrink-0 text-emerald-700" />
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold text-zinc-950">{product.name}</p>
+          <p className="truncate text-sm text-zinc-500">{product.description || "Sin descripción cargada."}</p>
+        </div>
+      </div>
+      <span className="text-base font-semibold text-emerald-900">${product.price.toFixed(2)}</span>
+      <span className="w-fit rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">{product.groupName}</span>
+    </div>
+  );
 }
 
 export function ProductCatalogClient({
@@ -37,6 +101,7 @@ export function ProductCatalogClient({
   createProduct,
   updateProduct,
   deleteProduct,
+  reorderProducts,
 }: ProductCatalogClientProps) {
   const router = useRouter();
   const initialSelection = initialGroupId && groups.some((group) => group.id === initialGroupId) ? initialGroupId : "all";
@@ -47,6 +112,13 @@ export function ProductCatalogClient({
   const [confirmAction, setConfirmAction] = useState<{ type: "product"; product: ProductDTO } | { type: "group"; group: GroupDTO } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [groupOrder, setGroupOrder] = useState<Record<string, string[]>>({});
+  const [reordering, setReordering] = useState(false);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  );
 
   const activeGroup = groups.find((group) => group.id === activeGroupId) ?? null;
   const groupCounts = useMemo(() => {
@@ -58,12 +130,17 @@ export function ProductCatalogClient({
 
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       const matchesGroup = activeGroupId === "all" || product.groupId === activeGroupId;
       const matchesSearch = !normalizedSearch || `${product.name} ${product.description}`.toLowerCase().includes(normalizedSearch);
       return matchesGroup && matchesSearch;
     });
-  }, [activeGroupId, products, search]);
+
+    if (activeGroupId === "all") return filtered;
+    const order = groupOrder[activeGroupId] ?? [];
+    const positions = new Map(order.map((id, index) => [id, index]));
+    return [...filtered].sort((a, b) => (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  }, [activeGroupId, groupOrder, products, search]);
 
   const selectGroup = (groupId: string) => {
     setActiveGroupId(groupId);
@@ -111,6 +188,36 @@ export function ProductCatalogClient({
     setDeleting(false);
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveDragId(null);
+    if (activeGroupId === "all" || search.trim() || !event.over || event.active.id === event.over.id) return;
+    const oldIndex = visibleProducts.findIndex((product) => product.id === event.active.id);
+    const newIndex = visibleProducts.findIndex((product) => product.id === event.over?.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const nextOrder = arrayMove(visibleProducts, oldIndex, newIndex).map((product) => product.id);
+    const previousOrder = groupOrder[activeGroupId];
+    setGroupOrder((current) => ({ ...current, [activeGroupId]: nextOrder }));
+    setReordering(true);
+    setActionError(null);
+    const result = await reorderProducts(activeGroupId, nextOrder);
+    if (result.success) {
+      setActionError(null);
+    } else {
+      setGroupOrder((current) => {
+        const next = { ...current };
+        if (previousOrder) next[activeGroupId] = previousOrder;
+        else delete next[activeGroupId];
+        return next;
+      });
+      setActionError(result.error?.message ?? "No se pudo guardar el orden");
+    }
+    setReordering(false);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    if (activeGroupId !== "all" && !search.trim() && !reordering) setActiveDragId(String(event.active.id));
+  };
+
   const formGroups = groups.map((group) => ({ id: group.id, name: group.name }));
   const productInitialData = selectedProduct
     ? { name: selectedProduct.name, description: selectedProduct.description, price: selectedProduct.price, groupId: selectedProduct.groupId }
@@ -154,6 +261,7 @@ export function ProductCatalogClient({
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">{activeGroup ? "Vista de grupo" : "Menú completo"}</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">{activeGroup?.name ?? "Todos los productos"}</h2>
                 <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">{activeGroup?.description || `${products.length} productos en ${groups.length} grupos.`}</p>
+                {activeGroup && <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700"><GripVertical size={15} />{search.trim() ? "Limpiá la búsqueda para ordenar" : reordering ? "Guardando el orden..." : "Arrastrá los productos para ordenarlos"}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
                 {activeGroup && <>
@@ -175,25 +283,32 @@ export function ProductCatalogClient({
                 <span>Grupo</span>
                 <span className="text-right">Acciones</span>
               </div>
-              <div className="divide-y divide-zinc-100">
-              {visibleProducts.map((product) => (
-                <article key={product.id} className="grid gap-4 px-5 py-5 transition hover:bg-emerald-50/40 sm:grid-cols-[minmax(0,1.5fr)_minmax(120px,0.5fr)_minmax(150px,0.8fr)_auto] sm:items-center">
-                  <div className="min-w-0">
-                    <div className="flex items-start justify-between gap-4 sm:block">
-                      <h3 className="truncate text-base font-semibold text-zinc-950">{product.name}</h3>
-                      <span className="shrink-0 text-base font-semibold text-emerald-900 sm:hidden">${product.price.toFixed(2)}</span>
-                    </div>
-                    <p className="mt-1 truncate text-sm text-zinc-500">{product.description || "Sin descripción cargada."}</p>
+              <DndContext
+                id="catalog-product-dnd"
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+                onDragStart={handleDragStart}
+                onDragCancel={() => setActiveDragId(null)}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={visibleProducts.map((product) => product.id)} strategy={verticalListSortingStrategy}>
+                  <div className="divide-y divide-zinc-100">
+                    {visibleProducts.map((product) => (
+                      <SortableProductRow
+                        key={product.id}
+                        product={product}
+                        sortable={activeGroupId !== "all" && !search.trim() && !reordering}
+                        onEdit={() => { setSelectedProduct(product); setModal("edit-product"); }}
+                        onDelete={() => requestDeleteProduct(product)}
+                      />
+                    ))}
                   </div>
-                  <span className="hidden text-base font-semibold text-emerald-900 sm:block">${product.price.toFixed(2)}</span>
-                  <span className="w-fit rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">{product.groupName}</span>
-                  <div className="flex gap-2 sm:justify-end">
-                    <button type="button" className={adminSecondaryButtonClass} onClick={() => { setSelectedProduct(product); setModal("edit-product"); }}><Pencil size={15} /> Editar</button>
-                    <button type="button" className={adminDangerButtonClass} onClick={() => requestDeleteProduct(product)}><Trash2 size={15} /> Eliminar</button>
-                  </div>
-                </article>
-              ))}
-              </div>
+                </SortableContext>
+                <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+                  {activeDragId ? <DragOverlayProduct product={visibleProducts.find((product) => product.id === activeDragId) ?? products.find((product) => product.id === activeDragId)!} /> : null}
+                </DragOverlay>
+              </DndContext>
             </div>
           )}
         </>
