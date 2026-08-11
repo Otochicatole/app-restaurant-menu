@@ -44,12 +44,22 @@ model HomePage {
 }
 
 model Product {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   name        String
-  description String   @default("")
+  description String           @default("")
   price       Float
   groupId     String
-  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  featured    FeaturedProduct[]
+}
+
+model FeaturedProduct {
+  id        String   @id @default(cuid())
+  position  Int      @unique
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

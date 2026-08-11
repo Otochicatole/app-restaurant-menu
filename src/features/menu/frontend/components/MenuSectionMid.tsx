@@ -1,12 +1,18 @@
 import type {GroupWithProducts} from "../utils/layout";
 import {ProductCard} from "@/features/products/frontend/components/ProductCard";
+import type {FeaturedProductDTO} from "@/features/featured-products/frontend/types";
 
 interface MenuSectionProps {
     group: GroupWithProducts;
+    featured: (FeaturedProductDTO | null)[];
 }
 
-export function MenuSectionMid({group}: MenuSectionProps) {
+const bgColors = ["text-beige bg-primary", "bg-beige", "text-white bg-terracota"];
+
+export function MenuSectionMid({group, featured}: MenuSectionProps) {
     if (group.products.length === 0) return null;
+
+    const validFeatured = featured.filter((f): f is FeaturedProductDTO => f !== null);
 
     return (
         <div className="mt-10 border-r border-l border-primary/10 p-6 h-full pb-20 rounded-3xl">
@@ -28,22 +34,18 @@ export function MenuSectionMid({group}: MenuSectionProps) {
                         <ProductCard key={product.id} product={product}/>
                     ))}
                 </ul>
+                {validFeatured.length > 0 && (
                 <div className="flex w-full lg:border-r border-primary/50 pr-6">
                     <div className="flex flex-col max-w-100 gap-2 w-fit rounded-b-3xl rounded-r-3xl border-l border-b border-r border-primary/50 p-4">
-                        <article className="px-10 py-6 w-full text-beige bg-primary rounded-xl border border-black/10 shadow-2xl">
-                            <h1 className="font-bold text-4xl">Chocolate caliente</h1>
-                            <p className="font-semibold">$300.00</p>
-                        </article>
-                        <article className="px-10 py-6 w-full bg-beige rounded-xl border border-black/10 shadow-2xl">
-                            <h1 className="font-bold text-3xl">Extra crema</h1>
-                            <p className="font-semibold">$300.00</p>
-                        </article>
-                        <article className="px-10 py-6 w-full text-white bg-terracota rounded-xl border border-black/10 shadow-2xl">
-                            <h1 className="font-bold text-3xl">CHURRO FUZION</h1>
-                            <p className="font-semibold">$300.00</p>
-                        </article>
+                        {validFeatured.map((f, i) => (
+                            <article key={f.id} className={`px-10 py-6 w-full rounded-xl border border-black/10 shadow-2xl ${bgColors[i % 3]}`}>
+                                <h1 className={`font-bold ${i === 0 ? 'text-4xl' : 'text-3xl'}`}>{f.product.name}</h1>
+                                <p className="font-semibold">${f.product.price.toFixed(2)}</p>
+                            </article>
+                        ))}
                     </div>
                 </div>
+                )}
             </section>
         </div>
     );

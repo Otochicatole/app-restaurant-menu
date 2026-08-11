@@ -43,6 +43,16 @@ export default async function AdminDashboard() {
             Edit title &amp; description
           </Link>
         </div>
+        <div className="bg-white rounded-lg border border-zinc-200 p-6">
+          <p className="text-sm text-zinc-500">Featured Products</p>
+          <p className="mt-1 text-3xl font-bold text-zinc-900">3</p>
+          <Link
+            href="/admin/featured-products"
+            className="mt-2 inline-block text-sm text-zinc-600 underline"
+          >
+            Manage featured
+          </Link>
+        </div>
       </div>
     </AdminLayout>
   );

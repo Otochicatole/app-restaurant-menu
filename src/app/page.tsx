@@ -1,6 +1,7 @@
 import {getGroups} from "@/features/groups/backend/services/group.service";
 import {getProducts} from "@/features/products/backend/services/product.service";
 import {getOrCreateHomePage} from "@/features/home-page/backend/services/home-page.service";
+import {getFeaturedProducts} from "@/features/featured-products/backend/services/featured-product.service";
 import {MenuGrid} from "@/features/menu/frontend/components/MenuGrid";
 import {Footer} from "@/features/menu/frontend/components/Footer";
 import {buildSections} from "@/features/menu/frontend/utils/layout";
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-    const [groups, products, homePage] = await Promise.all([getGroups(), getProducts(), getOrCreateHomePage()]);
+    const [groups, products, homePage, featured] = await Promise.all([getGroups(), getProducts(), getOrCreateHomePage(), getFeaturedProducts()]);
     const sections = buildSections(groups, products);
 
     return (
@@ -83,7 +84,7 @@ export default async function HomePage() {
             {groups.length === 0 && (
                 <p className="text-center text-zinc-500 py-16">No menu available yet.</p>
             )}
-            <MenuGrid sections={sections}/>
+            <MenuGrid sections={sections} featured={featured}/>
         </main>
     );
 }

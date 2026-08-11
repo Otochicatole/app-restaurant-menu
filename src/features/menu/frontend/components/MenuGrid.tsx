@@ -4,12 +4,14 @@ import {MenuSectionLeft} from "./MenuSectionLeft";
 import {MenuSectionMid} from "@/features/menu/frontend/components/MenuSectionMid";
 import {MenuSectionRight} from "@/features/menu/frontend/components/MenuSectionRight";
 import {Footer} from "./Footer";
+import type {FeaturedProductDTO} from "@/features/featured-products/frontend/types";
 
 interface MenuGridProps {
     sections: GroupWithProducts[];
+    featured: (FeaturedProductDTO | null)[];
 }
 
-export function MenuGrid({sections}: MenuGridProps) {
+export function MenuGrid({sections, featured}: MenuGridProps) {
     const rows = chunkBy4(sections);
 
     return (
@@ -29,7 +31,7 @@ export function MenuGrid({sections}: MenuGridProps) {
                             </div>
                             <div className="flex flex-col h-full">
                                 {col2.map((group) => (
-                                    <MenuSectionMid key={group.name} group={group}/>
+                                    <MenuSectionMid key={group.name} group={group} featured={featured}/>
                                 ))}
                             </div>
                             <div className="flex flex-col h-full">
