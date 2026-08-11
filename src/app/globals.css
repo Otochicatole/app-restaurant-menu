@@ -27,3 +27,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+}
+
+[class~="rounded"],
+[class*="rounded-"] {
+  border-radius: 0.125rem !important;
+}
+
+a,
+button:not(:disabled),
+select,
+summary,
+[role="button"],
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}

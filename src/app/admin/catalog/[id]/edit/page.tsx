@@ -4,6 +4,7 @@ import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
 import { ProductForm } from "@/features/products/frontend/components/ProductForm";
 import { notFound } from "next/navigation";
+import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
 
 interface EditProductPageProps {
   params: Promise<{ id: string }>;
@@ -36,19 +37,21 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
 
   return (
     <AdminLayout>
-      <h1 className="text-2xl font-bold text-zinc-900">Edit Product</h1>
-      <div className="mt-6 max-w-lg bg-white rounded-lg border border-zinc-200 p-6">
-        <ProductForm
-          groups={groups.map((g) => ({ id: g.id, name: g.name }))}
-          initialData={{
-            name: product.name,
-            description: product.description,
-            price: product.price,
-            groupId: product.groupId,
-          }}
-          onSubmit={handleSubmit}
-          submitLabel="Update Product"
-        />
+      <div className="space-y-8">
+        <AdminPageHeader eyebrow="Catalog" title={`Edit ${product.name}`} description="Update the product details used across your menu." />
+        <AdminCard className="max-w-xl p-6 sm:p-8">
+          <ProductForm
+            groups={groups.map((g) => ({ id: g.id, name: g.name }))}
+            initialData={{
+              name: product.name,
+              description: product.description,
+              price: product.price,
+              groupId: product.groupId,
+            }}
+            onSubmit={handleSubmit}
+            submitLabel="Save changes"
+          />
+        </AdminCard>
       </div>
     </AdminLayout>
   );

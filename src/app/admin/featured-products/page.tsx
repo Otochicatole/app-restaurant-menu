@@ -3,29 +3,24 @@ import { getFeaturedProducts, setFeaturedProduct, removeFeaturedProduct } from "
 import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
 import { FeaturedProductsForm } from "@/features/featured-products/frontend/components/FeaturedProductsForm";
+import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
 
 export default async function AdminFeaturedProductsPage() {
   const [products, featured] = await Promise.all([getProducts(), getFeaturedProducts()]);
 
-  async function handleSet(position: number, productId: string) {
+  async function handleSave(featuredIds: (string | null)[]) {
     "use server";
     try {
       await ensureAdmin();
-      await setFeaturedProduct(position, productId);
+      await Promise.all(
+        featuredIds.map((productId, index) => {
+          const position = index + 1;
+          return productId ? setFeaturedProduct(position, productId) : removeFeaturedProduct(position);
+        }),
+      );
       return { success: true };
     } catch (e) {
-      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to set featured product" } };
-    }
-  }
-
-  async function handleRemove(position: number) {
-    "use server";
-    try {
-      await ensureAdmin();
-      await removeFeaturedProduct(position);
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to remove featured product" } };
+      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to save featured products" } };
     }
   }
 
@@ -33,22 +28,20 @@ export default async function AdminFeaturedProductsPage() {
 
   return (
     <AdminLayout>
-      <h1 className="text-2xl font-bold text-zinc-900">Featured Products</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Select up to 3 products to highlight on the menu.
-      </p>
-      <div className="mt-6 max-w-lg bg-white rounded-lg border border-zinc-200 p-6">
-        <FeaturedProductsForm
-          products={products.map((p) => ({
-            id: p.id,
-            name: p.name,
-            groupName: p.groupName ?? "",
-            price: p.price,
-          }))}
-          featured={featuredIds}
-          onSet={handleSet}
-          onRemove={handleRemove}
-        />
+      <div className="space-y-8">
+        <AdminPageHeader eyebrow="Public menu" title="Featured products" description="Choose up to three products to spotlight in the center of your menu." />
+        <AdminCard className="max-w-3xl p-6 sm:p-8">
+          <FeaturedProductsForm
+            products={products.map((p) => ({
+              id: p.id,
+              name: p.name,
+              groupName: p.groupName ?? "",
+              price: p.price,
+            }))}
+            featured={featuredIds}
+            onSave={handleSave}
+          />
+        </AdminCard>
       </div>
     </AdminLayout>
   );

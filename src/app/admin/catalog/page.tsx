@@ -1,0 +1,103 @@
+import { getGroups, createGroup, updateGroup, deleteGroup } from "@/features/groups/backend/services/group.service";
+import { getProducts, createProduct, updateProduct, deleteProduct } from "@/features/products/backend/services/product.service";
+import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
+import type { GroupDTO } from "@/features/groups/frontend/types";
+import type { ProductDTO } from "@/features/products/frontend/types";
+import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
+import { revalidatePath } from "next/cache";
+import { ProductCatalogClient, type CatalogActionResult } from "./ProductCatalogClient";
+
+export default async function AdminProductsPage({ searchParams }: { searchParams: Promise<{ group?: string }> }) {
+  const [{ group }, [groups, products]] = await Promise.all([
+    searchParams,
+    Promise.all([getGroups(), getProducts()]),
+  ]);
+
+  async function createCatalogGroup(data: { name: string; description: string }): Promise<CatalogActionResult<GroupDTO>> {
+    "use server";
+    try {
+      await ensureAdmin();
+      const created = await createGroup(data);
+      revalidatePath("/admin/catalog");
+      return { success: true, data: created };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to create group" } };
+    }
+  }
+
+  async function updateCatalogGroup(id: string, data: { name: string; description: string }): Promise<CatalogActionResult<GroupDTO>> {
+    "use server";
+    try {
+      await ensureAdmin();
+      const updated = await updateGroup(id, data);
+      revalidatePath("/admin/catalog");
+      return { success: true, data: updated };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to update group" } };
+    }
+  }
+
+  async function removeCatalogGroup(id: string): Promise<CatalogActionResult> {
+    "use server";
+    try {
+      await ensureAdmin();
+      await deleteGroup(id);
+      revalidatePath("/admin/catalog");
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to delete group" } };
+    }
+  }
+
+  async function createCatalogProduct(data: { name: string; description: string; price: number; groupId: string }): Promise<CatalogActionResult<ProductDTO>> {
+    "use server";
+    try {
+      await ensureAdmin();
+      const created = await createProduct(data);
+      revalidatePath("/admin/catalog");
+      return { success: true, data: created };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to create product" } };
+    }
+  }
+
+  async function updateCatalogProduct(id: string, data: { name: string; description: string; price: number; groupId: string }): Promise<CatalogActionResult<ProductDTO>> {
+    "use server";
+    try {
+      await ensureAdmin();
+      const updated = await updateProduct(id, data);
+      revalidatePath("/admin/catalog");
+      return { success: true, data: updated };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to update product" } };
+    }
+  }
+
+  async function removeCatalogProduct(id: string): Promise<CatalogActionResult> {
+    "use server";
+    try {
+      await ensureAdmin();
+      await deleteProduct(id);
+      revalidatePath("/admin/catalog");
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to delete product" } };
+    }
+  }
+
+  return (
+    <AdminLayout>
+      <ProductCatalogClient
+        groups={groups}
+        products={products}
+        initialGroupId={group}
+        createGroup={createCatalogGroup}
+        updateGroup={updateCatalogGroup}
+        deleteGroup={removeCatalogGroup}
+        createProduct={createCatalogProduct}
+        updateProduct={updateCatalogProduct}
+        deleteProduct={removeCatalogProduct}
+      />
+    </AdminLayout>
+  );
+}

@@ -62,9 +62,9 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label htmlFor="title" className="block text-sm font-medium text-zinc-700">
+        <label htmlFor="title" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
           Title
         </label>
         <input
@@ -72,12 +72,12 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
           id="title"
           name="title"
           defaultValue={initialData?.title}
-          className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          className="mt-2 block w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100"
         />
         {fieldErrors.title && <p className="mt-1 text-xs text-red-600">{fieldErrors.title}</p>}
       </div>
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-zinc-700">
+        <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
           Description
         </label>
         <input
@@ -85,7 +85,7 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
           id="description"
           name="description"
           defaultValue={initialData?.description}
-          className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          className="mt-2 block w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100"
         />
         {fieldErrors.description && (
           <p className="mt-1 text-xs text-red-600">{fieldErrors.description}</p>
@@ -95,7 +95,7 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
       <button
         type="submit"
         disabled={loading}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        className="rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
       >
         {loading ? "Saving..." : submitLabel}
       </button>
