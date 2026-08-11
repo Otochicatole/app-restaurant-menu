@@ -34,8 +34,8 @@ select {
   background-image: none;
 }
 
-[class~="rounded"],
-[class*="rounded-"] {
+[data-admin-panel] [class~="rounded"],
+[data-admin-panel] [class*="rounded-"] {
   border-radius: 0.125rem !important;
 }
 

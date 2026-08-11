@@ -21,7 +21,7 @@ export function AdminShell({ children, brandTitle, brandSubtitle }: { children: 
   const isActive = (item: (typeof navigation)[number]) => item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
   return (
-    <div className="min-h-screen bg-[#f5f7f3] text-zinc-900">
+    <div data-admin-panel className="min-h-screen bg-[#f5f7f3] text-zinc-900">
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-zinc-200/80 bg-emerald-950 px-5 py-6 text-white transition-transform lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between px-3">
