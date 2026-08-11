@@ -17,6 +17,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               <Link href="/admin/groups" className="text-zinc-600 hover:text-zinc-900">
                 Groups
               </Link>
+              <Link href="/admin/home-page" className="text-zinc-600 hover:text-zinc-900">
+                Home Page
+              </Link>
             </nav>
           </div>
           <LogoutButton />

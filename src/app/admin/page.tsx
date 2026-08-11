@@ -33,6 +33,16 @@ export default async function AdminDashboard() {
             Manage groups
           </Link>
         </div>
+        <div className="bg-white rounded-lg border border-zinc-200 p-6">
+          <p className="text-sm text-zinc-500">Home Page</p>
+          <p className="mt-1 text-3xl font-bold text-zinc-900">--</p>
+          <Link
+            href="/admin/home-page"
+            className="mt-2 inline-block text-sm text-zinc-600 underline"
+          >
+            Edit title &amp; description
+          </Link>
+        </div>
       </div>
     </AdminLayout>
   );

@@ -35,6 +35,14 @@ model Group {
   products    Product[]
 }
 
+model HomePage {
+  id          String   @id @default(cuid())
+  title       String   @default("Fuzion")
+  description String   @default("Desayunos y meriendas")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Product {
   id          String   @id @default(cuid())
   name        String

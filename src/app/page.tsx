@@ -1,8 +1,9 @@
 import {getGroups} from "@/features/groups/backend/services/group.service";
 import {getProducts} from "@/features/products/backend/services/product.service";
+import {getOrCreateHomePage} from "@/features/home-page/backend/services/home-page.service";
 import {MenuGrid} from "@/features/menu/frontend/components/MenuGrid";
+import {Footer} from "@/features/menu/frontend/components/Footer";
 import {buildSections} from "@/features/menu/frontend/utils/layout";
-import Link from "next/link";
 import type {Metadata} from "next";
 import Image from "next/image";
 
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-    const [groups, products] = await Promise.all([getGroups(), getProducts()]);
+    const [groups, products, homePage] = await Promise.all([getGroups(), getProducts(), getOrCreateHomePage()]);
     const sections = buildSections(groups, products);
 
     return (
@@ -25,14 +26,14 @@ export default async function HomePage() {
                     <div className="flex opacity-90">
                         <Image
                             className="mt-1"
-                            src={"./svgs/leaf-1.svg"}
+                            src={"/svgs/leaf-1.svg"}
                             alt={"asd"}
                             width={40}
                             height={40}
                         />
                         <Image
                             className="-ml-1.5"
-                            src={"./svgs/leaf-2.svg"}
+                            src={"/svgs/leaf-2.svg"}
                             alt={"asd"}
                             width={40}
                             height={40}
@@ -42,26 +43,26 @@ export default async function HomePage() {
                 <section className="flex flex-col w-full relative">
                     <Image
                         className="absolute top-3 scale-x-[-1] -left-14 -z-1 hidden lg:block"
-                        src={"./svgs/leaves-branch.svg"}
+                        src={"/svgs/leaves-branch.svg"}
                         alt={"asd"}
                         width={140}
                         height={140}
                     />
                     <Image
                         className="absolute top-3 -right-14 -z-1 hidden lg:block"
-                        src={"./svgs/leaves-branch.svg"}
+                        src={"/svgs/leaves-branch.svg"}
                         alt={"asd"}
                         width={140}
                         height={140}
                     />
                     <h1 className="text-center text-desert font-bold text-[40px] sm:text-[60px] xl:text-[90px]">
-                        Fuzion
+                        {homePage.title}
                     </h1>
                     <div className="hidden xl:flex w-full items-center justify-center -mt-6">
                         <div className="border border-desert w-10 mx-5 mt-2"/>
                         <div
                             className="text-center text-desert font-mono text-md mt-2 w-fit px-3 border-r-2 border-l-2 ">
-                            Desayunos y meriendas
+                            {homePage.description}
                         </div>
                         <div className="border border-desert w-10 mx-5 mt-2"/>
                     </div>
@@ -72,7 +73,7 @@ export default async function HomePage() {
                     </h1>
                     <Image
                         className="rotate-12"
-                        src={"./svgs/croissant.svg"}
+                        src={"/svgs/croissant.svg"}
                         alt={"asd"}
                         width={90}
                         height={90}
