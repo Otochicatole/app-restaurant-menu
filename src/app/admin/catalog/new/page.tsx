@@ -20,19 +20,19 @@ export default async function NewProductPage() {
       const product = await createProduct(data);
       return { success: true, data: product };
     } catch (e) {
-      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to create product" } };
+      return { success: false, error: { message: e instanceof Error ? e.message : "No se pudo crear el producto" } };
     }
   }
 
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <AdminPageHeader eyebrow="Catalog" title="New product" description="Add a product to one of your menu groups." />
+        <AdminPageHeader eyebrow="Catálogo" title="Nuevo producto" description="Agregá un producto a uno de los grupos de tu menú." />
         <AdminCard className="max-w-xl p-6 sm:p-8">
           <ProductForm
             groups={groups.map((g) => ({ id: g.id, name: g.name }))}
             onSubmit={handleSubmit}
-            submitLabel="Create product"
+            submitLabel="Crear producto"
           />
         </AdminCard>
       </div>

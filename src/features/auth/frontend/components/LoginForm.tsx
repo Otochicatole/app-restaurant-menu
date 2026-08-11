@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LogIn } from "lucide-react";
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -35,10 +36,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         if (onSuccess) onSuccess();
         else router.push("/admin");
       } else {
-        setError(data.error?.message ?? "Login failed");
+        setError(data.error?.message ?? "No se pudo iniciar sesión");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError("Ocurrió un error inesperado");
     } finally {
       setLoading(false);
     }
@@ -48,7 +49,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
         <label htmlFor="email" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Email
+          Correo electrónico
         </label>
         <input
           type="email"
@@ -61,7 +62,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       </div>
       <div>
         <label htmlFor="password" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Password
+          Contraseña
         </label>
         <input
           type="password"
@@ -69,7 +70,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           name="password"
           required
           className="mt-2 block w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-          placeholder="Enter password"
+          placeholder="Ingresá tu contraseña"
         />
       </div>
       {error && (
@@ -78,9 +79,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl bg-emerald-950 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
+        className="flex w-full flex-row items-center justify-center gap-2 rounded-xl bg-emerald-950 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
       >
-        {loading ? "Signing in..." : "Sign in"}
+        {loading ? "Ingresando..." : <><LogIn size={16} /> Iniciar sesión</>}
       </button>
     </form>
   );

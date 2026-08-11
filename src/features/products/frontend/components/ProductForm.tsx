@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
+import { Save, X } from "lucide-react";
 
 interface ProductFormProps {
   groups: { id: string; name: string }[];
@@ -31,16 +32,16 @@ export interface FormActionResult {
 }
 
 const formSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100, "Name is too long"),
+  name: z.string().trim().min(1, "El nombre es obligatorio").max(100, "El nombre es demasiado largo"),
   description: z.string().default(""),
-  price: z.string().min(1, "Price is required"),
-  groupId: z.string().min(1, "Group is required"),
+  price: z.string().min(1, "El precio es obligatorio"),
+  groupId: z.string().min(1, "El grupo es obligatorio"),
 }).refine((value) => Number.isFinite(Number(value.price)) && Number(value.price) >= 0, {
   path: ["price"],
-  message: "Enter a valid price",
+  message: "Ingresá un precio válido",
 });
 
-export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save", redirectTo = "/admin/catalog", onSuccess, onCancel }: ProductFormProps) {
+export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Guardar", redirectTo = "/admin/catalog", onSuccess, onCancel }: ProductFormProps) {
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -87,10 +88,10 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
           router.refresh();
         }
       } else {
-        setServerError(result.error?.message ?? "Failed to save");
+        setServerError(result.error?.message ?? "No se pudo guardar");
       }
     } catch {
-      setServerError("An unexpected error occurred");
+      setServerError("Ocurrió un error inesperado");
     } finally {
       setLoading(false);
     }
@@ -100,7 +101,7 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
         <label htmlFor="name" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Name
+          Nombre
         </label>
         <input
           type="text"
@@ -113,7 +114,7 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
       </div>
       <div>
         <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Description
+          Descripción
         </label>
         <textarea
           id="description"
@@ -126,7 +127,7 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
       </div>
       <div>
         <label htmlFor="price" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Price
+          Precio
         </label>
         <input
           type="number"
@@ -140,7 +141,7 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
       </div>
       <div>
         <label htmlFor="groupId" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Group
+          Grupo
         </label>
         <select
           id="groupId"
@@ -148,7 +149,7 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
           defaultValue={initialData?.groupId}
           className="mt-2 block w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100"
         >
-          <option value="">Select a group</option>
+          <option value="">Seleccioná un grupo</option>
           {groups.map((group) => (
             <option key={group.id} value={group.id}>
               {group.name}
@@ -162,16 +163,16 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Save
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
+          className="flex flex-row items-center gap-2 rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
         >
-          {loading ? "Saving..." : submitLabel}
+          {loading ? "Guardando..." : <><Save size={15} /> {submitLabel}</>}
         </button>
         <button
           type="button"
           onClick={() => (onCancel ? onCancel() : router.back())}
-          className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          className="flex flex-row items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
         >
-          Cancel
+          <X size={15} /> Cancelar
         </button>
       </div>
     </form>

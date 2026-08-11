@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { Plus, X } from "lucide-react";
 
 export const adminButtonClass =
-  "inline-flex cursor-pointer items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex cursor-pointer flex-row items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50";
 
 export const adminPrimaryButtonClass = `${adminButtonClass} bg-emerald-950 text-white shadow-sm hover:bg-emerald-900`;
 export const adminSecondaryButtonClass = `${adminButtonClass} border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50`;
@@ -63,7 +64,7 @@ export function AdminStatCard({
     <a href={href} className="group cursor-pointer rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(24,24,27,0.45)] transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm font-medium text-zinc-500">{label}</p>
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${accentClasses[accent]}`}>CMS</span>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${accentClasses[accent]}`}>Panel</span>
       </div>
       <p className="mt-5 text-4xl font-semibold tracking-tight text-zinc-950">{value}</p>
       <p className="mt-2 text-sm text-zinc-500 group-hover:text-zinc-700">{detail}</p>
@@ -74,7 +75,7 @@ export function AdminStatCard({
 export function AdminEmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
     <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-lg font-bold text-emerald-800">+</div>
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><Plus size={20} /></div>
       <h2 className="mt-4 text-base font-semibold text-zinc-900">{title}</h2>
       <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">{description}</p>
       {action && <div className="mt-5">{action}</div>}
@@ -121,8 +122,8 @@ export function AdminModal({
             <h2 className="text-xl font-semibold text-zinc-950">{title}</h2>
             {description && <p className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>}
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-2xl leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Close">
-            x
+          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Cerrar">
+            <X size={20} />
           </button>
         </div>
         {children}
@@ -138,7 +139,7 @@ export function AdminConfirmModal({
   onClose,
   onConfirm,
   loading = false,
-  confirmLabel = "Delete",
+  confirmLabel = "Eliminar",
 }: {
   open: boolean;
   title: string;
@@ -152,10 +153,10 @@ export function AdminConfirmModal({
     <AdminModal open={open} title={title} description={description} onClose={loading ? () => undefined : onClose}>
       <div className="flex flex-col-reverse gap-2 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
         <button type="button" className={adminSecondaryButtonClass} onClick={onClose} disabled={loading}>
-          Cancel
+          Cancelar
         </button>
         <button type="button" className={adminDangerButtonClass} onClick={onConfirm} disabled={loading}>
-          {loading ? "Deleting..." : confirmLabel}
+          {loading ? "Eliminando..." : confirmLabel}
         </button>
       </div>
     </AdminModal>

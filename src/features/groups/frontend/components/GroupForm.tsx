@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
+import { Save, X } from "lucide-react";
 
 interface GroupFormProps {
   initialData?: { name: string; description: string };
@@ -23,11 +24,11 @@ export interface GroupFormActionResult {
 }
 
 const formSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100, "Name too long"),
-  description: z.string().max(500).default(""),
+  name: z.string().min(1, "El nombre es obligatorio").max(100, "El nombre es demasiado largo"),
+  description: z.string().max(500, "La descripción es demasiado larga").default(""),
 });
 
-export function GroupForm({ initialData, onSubmit, submitLabel = "Save", redirectTo = "/admin/catalog", onSuccess, onCancel }: GroupFormProps) {
+export function GroupForm({ initialData, onSubmit, submitLabel = "Guardar", redirectTo = "/admin/catalog", onSuccess, onCancel }: GroupFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -66,10 +67,10 @@ export function GroupForm({ initialData, onSubmit, submitLabel = "Save", redirec
           router.refresh();
         }
       } else {
-        setError(result.error?.message ?? "Failed to save");
+        setError(result.error?.message ?? "No se pudo guardar");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError("Ocurrió un error inesperado");
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export function GroupForm({ initialData, onSubmit, submitLabel = "Save", redirec
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
         <label htmlFor="name" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Name
+          Nombre
         </label>
         <input
           type="text"
@@ -92,7 +93,7 @@ export function GroupForm({ initialData, onSubmit, submitLabel = "Save", redirec
       </div>
       <div>
         <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Description
+          Descripción
         </label>
         <textarea
           id="description"
@@ -108,16 +109,16 @@ export function GroupForm({ initialData, onSubmit, submitLabel = "Save", redirec
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
+          className="flex flex-row items-center gap-2 rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
         >
-          {loading ? "Saving..." : submitLabel}
+          {loading ? "Guardando..." : <><Save size={15} /> {submitLabel}</>}
         </button>
         <button
           type="button"
           onClick={() => (onCancel ? onCancel() : router.back())}
-          className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          className="flex flex-row items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
         >
-          Cancel
+          <X size={15} /> Cancelar
         </button>
       </div>
     </form>

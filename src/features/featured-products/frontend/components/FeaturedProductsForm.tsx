@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Save } from "lucide-react";
 
 interface FeaturedProductsFormProps {
   products: { id: string; name: string; groupName: string; price: number }[];
@@ -24,9 +25,9 @@ export function FeaturedProductsForm({ products, featured, onSave }: FeaturedPro
 
     try {
       const result = await onSave(selected);
-      if (!result.success) setError(result.error?.message ?? "Failed to save featured products");
+      if (!result.success) setError(result.error?.message ?? "No se pudieron guardar los productos destacados");
     } catch {
-      setError("An unexpected error occurred");
+      setError("Ocurrió un error inesperado");
     } finally {
       setLoading(false);
     }
@@ -35,7 +36,7 @@ export function FeaturedProductsForm({ products, featured, onSave }: FeaturedPro
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-        Select up to 3 products to feature on the menu page, then save all positions together.
+        Seleccioná hasta 3 productos para destacar en el menú y guardá todas las posiciones juntas.
       </div>
       {[1, 2, 3].map((position) => {
         const productId = selected[position - 1] ?? "";
@@ -44,22 +45,22 @@ export function FeaturedProductsForm({ products, featured, onSave }: FeaturedPro
         return (
           <div key={position} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Position #{position}</p>
-              {currentProduct && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">Configured</span>}
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Posición #{position}</p>
+              {currentProduct && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">Configurado</span>}
             </div>
             <select
               value={productId}
               onChange={(event) => updatePosition(position - 1, event.target.value)}
               className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
             >
-              <option value="">-- Empty position --</option>
+              <option value="">-- Posición vacía --</option>
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name} ({product.groupName} - ${product.price.toFixed(2)})
                 </option>
               ))}
             </select>
-            {currentProduct && <p className="mt-2 text-sm text-zinc-500">Current: {currentProduct.name} - ${currentProduct.price.toFixed(2)}</p>}
+            {currentProduct && <p className="mt-2 text-sm text-zinc-500">Actual: {currentProduct.name} - ${currentProduct.price.toFixed(2)}</p>}
           </div>
         );
       })}
@@ -68,9 +69,9 @@ export function FeaturedProductsForm({ products, featured, onSave }: FeaturedPro
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-emerald-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
+          className="flex flex-row items-center gap-2 rounded-xl bg-emerald-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
         >
-          {loading ? "Saving..." : "Save changes"}
+          {loading ? "Guardando..." : <><Save size={15} /> Guardar cambios</>}
         </button>
       </div>
     </form>

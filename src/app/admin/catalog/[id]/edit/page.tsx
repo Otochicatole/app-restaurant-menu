@@ -31,14 +31,14 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
       const updated = await updateProduct(id, data);
       return { success: true, data: updated };
     } catch (e) {
-      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to update product" } };
+      return { success: false, error: { message: e instanceof Error ? e.message : "No se pudo actualizar el producto" } };
     }
   }
 
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <AdminPageHeader eyebrow="Catalog" title={`Edit ${product.name}`} description="Update the product details used across your menu." />
+        <AdminPageHeader eyebrow="Catálogo" title={`Editar ${product.name}`} description="Actualizá los datos del producto que se muestran en tu menú." />
         <AdminCard className="max-w-xl p-6 sm:p-8">
           <ProductForm
             groups={groups.map((g) => ({ id: g.id, name: g.name }))}
@@ -49,7 +49,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
               groupId: product.groupId,
             }}
             onSubmit={handleSubmit}
-            submitLabel="Save changes"
+            submitLabel="Guardar cambios"
           />
         </AdminCard>
       </div>

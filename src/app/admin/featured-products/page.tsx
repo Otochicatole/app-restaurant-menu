@@ -20,7 +20,7 @@ export default async function AdminFeaturedProductsPage() {
       );
       return { success: true };
     } catch (e) {
-      return { success: false, error: { message: e instanceof Error ? e.message : "Failed to save featured products" } };
+      return { success: false, error: { message: e instanceof Error ? e.message : "No se pudieron guardar los productos destacados" } };
     }
   }
 
@@ -29,7 +29,7 @@ export default async function AdminFeaturedProductsPage() {
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <AdminPageHeader eyebrow="Public menu" title="Featured products" description="Choose up to three products to spotlight in the center of your menu." />
+        <AdminPageHeader eyebrow="Menú público" title="Productos destacados" description="Elegí hasta tres productos para destacar en el centro de tu menú." />
         <AdminCard className="max-w-3xl p-6 sm:p-8">
           <FeaturedProductsForm
             products={products.map((p) => ({

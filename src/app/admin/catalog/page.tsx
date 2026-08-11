@@ -21,7 +21,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true, data: created };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to create group" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo crear el grupo" } };
     }
   }
 
@@ -33,7 +33,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true, data: updated };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to update group" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo actualizar el grupo" } };
     }
   }
 
@@ -45,7 +45,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to delete group" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo eliminar el grupo" } };
     }
   }
 
@@ -57,7 +57,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true, data: created };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to create product" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo crear el producto" } };
     }
   }
 
@@ -69,7 +69,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true, data: updated };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to update product" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo actualizar el producto" } };
     }
   }
 
@@ -81,7 +81,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       revalidatePath("/admin/catalog");
       return { success: true };
     } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "Failed to delete product" } };
+      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo eliminar el producto" } };
     }
   }
 

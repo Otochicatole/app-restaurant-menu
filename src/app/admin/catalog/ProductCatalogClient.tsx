@@ -7,6 +7,7 @@ import type { ProductDTO } from "@/features/products/frontend/types";
 import { GroupForm } from "@/features/groups/frontend/components/GroupForm";
 import { ProductForm } from "@/features/products/frontend/components/ProductForm";
 import { AdminCard, AdminConfirmModal, AdminEmptyState, AdminModal, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/shared/frontend/components/admin/AdminUI";
+import { AlertCircle, FolderPlus, Layers3, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 export interface CatalogActionResult<T = unknown> {
   success: boolean;
@@ -105,7 +106,7 @@ export function ProductCatalogClient({
       if (confirmAction.type === "group") selectGroup("all");
       router.refresh();
     } else {
-      setActionError(result.error?.message ?? "Unable to delete item");
+      setActionError(result.error?.message ?? "No se pudo eliminar el elemento");
     }
     setDeleting(false);
   };
@@ -118,31 +119,31 @@ export function ProductCatalogClient({
   return (
     <div className="space-y-8">
       <AdminPageHeader
-        eyebrow="Catalog"
-        title="Menu catalog"
-        description="Organize groups and keep every product up to date from one workspace."
+        eyebrow="Catálogo"
+        title="Catálogo del menú"
+        description="Organizá tus grupos y mantené cada producto actualizado desde un solo lugar."
         actions={
           <>
-            <button type="button" className={adminSecondaryButtonClass} onClick={() => setModal("create-group")}>New group</button>
-            <button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-product")} disabled={groups.length === 0}>New product</button>
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setModal("create-group")}><FolderPlus size={16} /> Nuevo grupo</button>
+            <button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-product")} disabled={groups.length === 0}><PackagePlus size={16} /> Nuevo producto</button>
           </>
         }
       />
 
-      {actionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>}
+      {actionError && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><AlertCircle size={17} /> {actionError}</div>}
 
       {groups.length === 0 ? (
-        <AdminEmptyState title="Your catalog is empty" description="Create your first group to start adding products to the menu." action={<button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-group")}>Create group</button>} />
+        <AdminEmptyState title="Tu catálogo está vacío" description="Creá tu primer grupo para comenzar a agregar productos al menú." action={<button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-group")}><Plus size={16} /> Crear grupo</button>} />
       ) : (
         <>
           <AdminCard className="overflow-hidden">
             <div className="overflow-x-auto border-b border-zinc-200 bg-zinc-50/70 px-3 py-3 sm:px-5">
               <div className="flex min-w-max gap-2">
-                <button type="button" onClick={() => selectGroup("all")} className={`cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeGroupId === "all" ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}>
-                  All products <span className="ml-1.5 text-xs opacity-70">{products.length}</span>
+                <button type="button" onClick={() => selectGroup("all")} className={`flex cursor-pointer flex-row items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeGroupId === "all" ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}>
+                  <Layers3 size={16} /> Todos <span className="ml-1.5 text-xs opacity-70">{products.length}</span>
                 </button>
                 {groups.map((group) => (
-                  <button key={group.id} type="button" onClick={() => selectGroup(group.id)} className={`cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeGroupId === group.id ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}>
+                  <button key={group.id} type="button" onClick={() => selectGroup(group.id)} className={`flex cursor-pointer flex-row items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeGroupId === group.id ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}>
                     {group.name} <span className="ml-1.5 text-xs opacity-70">{groupCounts[group.id] ?? 0}</span>
                   </button>
                 ))}
@@ -150,29 +151,29 @@ export function ProductCatalogClient({
             </div>
             <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">{activeGroup ? "Group view" : "Full menu"}</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">{activeGroup?.name ?? "All products"}</h2>
-                <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">{activeGroup?.description || `${products.length} products across ${groups.length} groups.`}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">{activeGroup ? "Vista de grupo" : "Menú completo"}</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">{activeGroup?.name ?? "Todos los productos"}</h2>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">{activeGroup?.description || `${products.length} productos en ${groups.length} grupos.`}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {activeGroup && <>
-                  <button type="button" className={adminSecondaryButtonClass} onClick={() => setModal("edit-group")}>Edit group</button>
-                  <button type="button" className={adminDangerButtonClass} onClick={requestDeleteGroup}>Delete group</button>
+                  <button type="button" className={adminSecondaryButtonClass} onClick={() => setModal("edit-group")}><Pencil size={15} /> Editar grupo</button>
+                  <button type="button" className={adminDangerButtonClass} onClick={requestDeleteGroup}><Trash2 size={15} /> Eliminar grupo</button>
                 </>}
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products" className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm outline-none focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100 sm:w-52" />
+                <label className="flex w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm focus-within:border-emerald-600 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100 sm:w-52"><Search size={16} className="text-zinc-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar productos" className="w-full bg-transparent outline-none" /></label>
               </div>
             </div>
           </AdminCard>
 
           {visibleProducts.length === 0 ? (
-            <AdminEmptyState title="No products found" description={search ? "Try another search term." : "This group does not have products yet."} action={!search ? <button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-product")}>Add product</button> : undefined} />
+            <AdminEmptyState title="No se encontraron productos" description={search ? "Probá con otro término de búsqueda." : "Este grupo todavía no tiene productos."} action={!search ? <button type="button" className={adminPrimaryButtonClass} onClick={() => setModal("create-product")}><Plus size={16} /> Agregar producto</button> : undefined} />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_12px_40px_-28px_rgba(24,24,27,0.45)]">
               <div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(120px,0.5fr)_minmax(150px,0.8fr)_auto] gap-4 border-b border-zinc-100 bg-zinc-50/70 px-5 py-3 text-xs font-bold uppercase tracking-[0.14em] text-zinc-500 sm:grid">
-                <span>Product</span>
-                <span>Price</span>
-                <span>Group</span>
-                <span className="text-right">Actions</span>
+                <span>Producto</span>
+                <span>Precio</span>
+                <span>Grupo</span>
+                <span className="text-right">Acciones</span>
               </div>
               <div className="divide-y divide-zinc-100">
               {visibleProducts.map((product) => (
@@ -182,13 +183,13 @@ export function ProductCatalogClient({
                       <h3 className="truncate text-base font-semibold text-zinc-950">{product.name}</h3>
                       <span className="shrink-0 text-base font-semibold text-emerald-900 sm:hidden">${product.price.toFixed(2)}</span>
                     </div>
-                    <p className="mt-1 truncate text-sm text-zinc-500">{product.description || "No description added."}</p>
+                    <p className="mt-1 truncate text-sm text-zinc-500">{product.description || "Sin descripción cargada."}</p>
                   </div>
                   <span className="hidden text-base font-semibold text-emerald-900 sm:block">${product.price.toFixed(2)}</span>
                   <span className="w-fit rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">{product.groupName}</span>
                   <div className="flex gap-2 sm:justify-end">
-                    <button type="button" className={adminSecondaryButtonClass} onClick={() => { setSelectedProduct(product); setModal("edit-product"); }}>Edit</button>
-                    <button type="button" className={adminDangerButtonClass} onClick={() => requestDeleteProduct(product)}>Delete</button>
+                    <button type="button" className={adminSecondaryButtonClass} onClick={() => { setSelectedProduct(product); setModal("edit-product"); }}><Pencil size={15} /> Editar</button>
+                    <button type="button" className={adminDangerButtonClass} onClick={() => requestDeleteProduct(product)}><Trash2 size={15} /> Eliminar</button>
                   </div>
                 </article>
               ))}
@@ -198,22 +199,22 @@ export function ProductCatalogClient({
         </>
       )}
 
-      <AdminModal open={modal === "create-group"} title="Create group" description="Groups organize products on your public menu." onClose={closeModal}>
-        <GroupForm onSubmit={createGroup} submitLabel="Create group" onSuccess={(result) => { const created = result.data as GroupDTO | undefined; if (created) { setActiveGroupId(created.id); router.replace(`/admin/catalog?group=${created.id}`, { scroll: false }); } refreshCatalog(); }} onCancel={closeModal} />
+      <AdminModal open={modal === "create-group"} title="Crear grupo" description="Los grupos organizan los productos de tu menú público." onClose={closeModal}>
+        <GroupForm onSubmit={createGroup} submitLabel="Crear grupo" onSuccess={(result) => { const created = result.data as GroupDTO | undefined; if (created) { setActiveGroupId(created.id); router.replace(`/admin/catalog?group=${created.id}`, { scroll: false }); } refreshCatalog(); }} onCancel={closeModal} />
       </AdminModal>
-      <AdminModal open={modal === "edit-group" && Boolean(activeGroup)} title="Edit group" description="Update the group information shown in your menu." onClose={closeModal}>
-        {activeGroup && <GroupForm key={activeGroup.id} initialData={{ name: activeGroup.name, description: activeGroup.description }} onSubmit={(data) => updateGroup(activeGroup.id, data)} submitLabel="Save changes" onSuccess={refreshCatalog} onCancel={closeModal} />}
+      <AdminModal open={modal === "edit-group" && Boolean(activeGroup)} title="Editar grupo" description="Actualizá la información que se muestra en tu menú." onClose={closeModal}>
+        {activeGroup && <GroupForm key={activeGroup.id} initialData={{ name: activeGroup.name, description: activeGroup.description }} onSubmit={(data) => updateGroup(activeGroup.id, data)} submitLabel="Guardar cambios" onSuccess={refreshCatalog} onCancel={closeModal} />}
       </AdminModal>
-      <AdminModal open={modal === "create-product"} title="Create product" description="Add a product to an existing group." onClose={closeModal}>
-        <ProductForm key={`create-${activeGroupId}`} groups={formGroups} initialData={productInitialData} onSubmit={createProduct} submitLabel="Create product" onSuccess={refreshCatalog} onCancel={closeModal} />
+      <AdminModal open={modal === "create-product"} title="Crear producto" description="Agregá un producto a un grupo existente." onClose={closeModal}>
+        <ProductForm key={`create-${activeGroupId}`} groups={formGroups} initialData={productInitialData} onSubmit={createProduct} submitLabel="Crear producto" onSuccess={refreshCatalog} onCancel={closeModal} />
       </AdminModal>
-      <AdminModal open={modal === "edit-product" && Boolean(selectedProduct)} title="Edit product" description="Keep the name, price and menu group up to date." onClose={closeModal}>
-        {selectedProduct && <ProductForm key={selectedProduct.id} groups={formGroups} initialData={productInitialData} onSubmit={(data) => updateProduct(selectedProduct.id, data)} submitLabel="Save changes" onSuccess={refreshCatalog} onCancel={closeModal} />}
+      <AdminModal open={modal === "edit-product" && Boolean(selectedProduct)} title="Editar producto" description="Mantené actualizados el nombre, el precio y el grupo." onClose={closeModal}>
+        {selectedProduct && <ProductForm key={selectedProduct.id} groups={formGroups} initialData={productInitialData} onSubmit={(data) => updateProduct(selectedProduct.id, data)} submitLabel="Guardar cambios" onSuccess={refreshCatalog} onCancel={closeModal} />}
       </AdminModal>
       <AdminConfirmModal
         open={Boolean(confirmAction)}
-        title={confirmAction?.type === "group" ? `Delete ${confirmAction.group.name}?` : `Delete ${confirmAction?.product.name ?? "product"}?`}
-        description={confirmAction?.type === "group" ? "This may also remove the products assigned to this group. This action cannot be undone." : "This product will be removed from the catalog and cannot be recovered."}
+        title={confirmAction?.type === "group" ? `¿Eliminar ${confirmAction.group.name}?` : `¿Eliminar ${confirmAction?.product.name ?? "producto"}?`}
+        description={confirmAction?.type === "group" ? "También podrían eliminarse los productos asignados a este grupo. Esta acción no se puede deshacer." : "Este producto se eliminará del catálogo y no se podrá recuperar."}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleConfirmDelete}
         loading={deleting}

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
+import { Save } from "lucide-react";
 
 interface HomePageFormProps {
   initialData?: { title: string; description: string };
@@ -14,8 +15,8 @@ interface HomePageFormProps {
 }
 
 const formSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Title too long"),
-  description: z.string().min(1, "Description is required").max(200, "Description too long"),
+  title: z.string().min(1, "El título es obligatorio").max(100, "El título es demasiado largo"),
+  description: z.string().min(1, "La descripción es obligatoria").max(200, "La descripción es demasiado larga"),
 });
 
 export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: HomePageFormProps) {
@@ -52,10 +53,10 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
       if (result.success) {
         router.refresh();
       } else {
-        setError(result.error?.message ?? "Failed to save");
+        setError(result.error?.message ?? "No se pudo guardar");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError("Ocurrió un error inesperado");
     } finally {
       setLoading(false);
     }
@@ -65,7 +66,7 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
         <label htmlFor="title" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Title
+          Título
         </label>
         <input
           type="text"
@@ -78,7 +79,7 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
       </div>
       <div>
         <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Description
+          Descripción
         </label>
         <input
           type="text"
@@ -95,9 +96,9 @@ export function HomePageForm({ initialData, onSubmit, submitLabel = "Save" }: Ho
       <button
         type="submit"
         disabled={loading}
-        className="rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
+        className="flex flex-row items-center gap-2 rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-50"
       >
-        {loading ? "Saving..." : submitLabel}
+        {loading ? "Guardando..." : <><Save size={15} /> {submitLabel}</>}
       </button>
     </form>
   );
