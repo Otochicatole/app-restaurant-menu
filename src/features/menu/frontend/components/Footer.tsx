@@ -6,8 +6,8 @@ export function Footer() {
       <Image
         className="w-full h-full z-0 object-cover"
         style={{
-          maskImage: "url('/images/footer-3.png')",
-          WebkitMaskImage: "url('/images/footer-3.png')",
+          maskImage: "url('/images/footer.png')",
+          WebkitMaskImage: "url('/images/footer.png')",
           maskRepeat: "repeat-x",
           WebkitMaskRepeat: "repeat-x",
           maskSize: "auto 100%",
