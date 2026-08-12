@@ -6,7 +6,7 @@ interface ProductCardProps {
 
 export function ProductCard({product}: ProductCardProps) {
     return (
-        <li className="flex items-center text-primary gap-6 border-b border-primary/20 py-2 px-4">
+        <li className="flex items-center z-10 text-primary gap-6 border-b border-primary/20 py-2 px-4">
             <p className="font-bold h-fit">
                 ${product.price.toFixed(2)}
             </p>

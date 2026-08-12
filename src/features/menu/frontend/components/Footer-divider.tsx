@@ -1,10 +1,10 @@
 import Image from "next/image";
 
-export function Footer() {
+export function FooterDivider() {
   return (
-    <div className="absolute -bottom-35 lg:-bottom-70 left-0 -z-1 w-full h-75 lg:h-150 overflow-hidden">
+    <div className="absolute -bottom-33 lg:-bottom-66 left-0 -z-1 w-full h-75 lg:h-150 overflow-hidden">
       <Image
-        className="w-full h-full z-0 object-cover"
+        className="w-full h-full z-0 object-cover opacity-80"
         style={{
           maskImage: "url('/images/footer.png')",
           WebkitMaskImage: "url('/images/footer.png')",

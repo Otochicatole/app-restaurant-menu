@@ -3,7 +3,6 @@ import {getProducts} from "@/features/products/backend/services/product.service"
 import {getOrCreateHomePage} from "@/features/home-page/backend/services/home-page.service";
 import {getFeaturedProducts} from "@/features/featured-products/backend/services/featured-product.service";
 import {MenuGrid} from "@/features/menu/frontend/components/MenuGrid";
-import {Footer} from "@/features/menu/frontend/components/Footer";
 import {buildSections} from "@/features/menu/frontend/utils/layout";
 import type {Metadata} from "next";
 import Image from "next/image";
