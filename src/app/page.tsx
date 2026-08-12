@@ -89,11 +89,11 @@ export default async function HomePage() {
             </main>
             <MenuSearch sections={sections}/>
                 <footer className="w-full h-60 flex items-center gap-3 justify-center">
-                    <div className="w-full max-w-12.5 sm:max-w-full border border-primary"/>
+                    <div className="w-full max-w-12.5 sm:max-w-full border border-primary/30"/>
                     <div className="flex items-center justify-center text-center w-full">
                         <p>Ingredientes reales. Opciones ricas y consistentes. Elegí lo que te hace bien.</p>
                     </div>
-                    <div className="w-full max-w-12.5 sm:max-w-full border border-primary"/>
+                    <div className="w-full max-w-12.5 sm:max-w-full border border-primary/30"/>
                 </footer>
         </>
     );

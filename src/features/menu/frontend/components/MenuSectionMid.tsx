@@ -16,7 +16,7 @@ export function MenuSectionMid({group, featured}: MenuSectionProps) {
     const validFeatured = featured.filter((f): f is FeaturedProductDTO => f !== null);
 
     return (
-        <div className="mt-10 border-r border-l border-primary/10 p-6 h-full pb-20 rounded-3xl">
+        <div className="mt-10 border-r border-l border-primary/10 py-6 px-3 h-full pb-20 rounded-3xl">
             <header style={{
                 borderTopLeftRadius: 18,
                 borderBottomLeftRadius: 3,
