@@ -8,6 +8,8 @@ import {MenuSearch} from "@/features/menu/frontend/components/MenuSearch";
 import type {Metadata} from "next";
 import Image from "next/image";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
     title: "Menu",
     description: "Our restaurant menu",
