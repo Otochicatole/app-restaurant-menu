@@ -11,6 +11,11 @@ import Image from "next/image";
 export const metadata: Metadata = {
     title: "Menu",
     description: "Our restaurant menu",
+    openGraph: {
+        title: "Menu",
+        description: "Our restaurant menu",
+        type: "website",
+    },
 };
 
 export default async function HomePage() {

@@ -22,6 +22,21 @@ export const metadata: Metadata = {
     template: "%s | Restaurant",
   },
   description: "Our restaurant menu",
+  keywords: ["restaurant", "menu", "food", "healthy", "classic"],
+  icons: {
+    icon: "/coffe.svg",
+    shortcut: "/coffe.svg",
+  },
+  openGraph: {
+    title: "Menu - Restaurant",
+    description: "Our restaurant menu",
+    type: "website",
+    siteName: "Restaurant",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
