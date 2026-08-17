@@ -1,64 +1,38 @@
-import { getActiveFont, getFonts, setActiveFont, deleteFont } from "@/features/fonts/backend/services/font.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
-import { FontSettingsClient, type FontActionResult } from "@/features/fonts/frontend/components/FontSettingsClient";
-import { revalidatePath } from "next/cache";
+import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
+import Link from "next/link";
+import { ArrowRight, Type } from "lucide-react";
 
-export default async function AdminSettingsPage() {
-  const [fonts, activeFont] = await Promise.all([getFonts(), getActiveFont()]);
-
-  async function selectFont(fontId: string | null): Promise<FontActionResult> {
-    "use server";
-    try {
-      await ensureAdmin();
-      await setActiveFont(fontId);
-      revalidatePath("/admin/settings");
-      revalidatePath("/", "layout");
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo aplicar la fuente" } };
-    }
-  }
-
-  async function removeFont(id: string): Promise<FontActionResult> {
-    "use server";
-    try {
-      await ensureAdmin();
-      await deleteFont(id);
-      revalidatePath("/admin/settings");
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo eliminar la fuente" } };
-    }
-  }
-
-  const googleFonts = fonts.filter((font) => font.source === "google" && font.googleFamily);
-  const customFonts = fonts.filter((font) => font.source === "custom" && font.filePath);
-
+export default function AdminSettingsPage() {
   return (
     <AdminLayout>
-      {googleFonts.map((font) => (
-        <link
-          key={font.id}
-          rel="stylesheet"
-          href={`https://fonts.googleapis.com/css2?family=${font.googleFamily!.replace(/ /g, "+")}:wght@${font.weights}&display=swap`}
+      <div className="space-y-8">
+        <AdminPageHeader
+          eyebrow="Configuración"
+          title="Ajustes"
+          description="Personalizá la apariencia y el comportamiento de tu menú."
         />
-      ))}
-      {customFonts.length > 0 && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: customFonts
-              .map((font) => `@font-face{font-family:'${font.name}';src:url('/api/fonts/${font.id}/file');font-weight:400;font-style:normal;font-display:swap;}`)
-              .join("\n"),
-          }}
-        />
-      )}
-      <FontSettingsClient
-        fonts={fonts}
-        activeFontId={activeFont?.id ?? null}
-        selectFont={selectFont}
-        removeFont={removeFont}
-      />
+
+        <AdminCard className="overflow-hidden">
+          <Link
+            href="/admin/settings/fonts"
+            className="flex items-center justify-between gap-4 px-6 py-5 transition hover:bg-emerald-50/40 sm:px-7"
+          >
+            <div className="flex items-center gap-4">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800">
+                <Type size={20} />
+              </span>
+              <div>
+                <p className="text-base font-semibold text-zinc-950">Tipografía del menú</p>
+                <p className="mt-0.5 text-sm text-zinc-500">
+                  Elegí la fuente del menú público o instalá la tuya.
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={16} className="shrink-0 text-zinc-400" />
+          </Link>
+        </AdminCard>
+      </div>
     </AdminLayout>
   );
 }
