@@ -3,6 +3,7 @@ import type { ProductInput, ProductUpdateInput } from "../schemas/product.schema
 import type { ProductDTO } from "../types";
 import { BadRequestError, NotFoundError } from "@/shared/backend/errors/app-error";
 import type { Prisma } from "@/generated/prisma/client";
+import { deleteFile, saveFile, validateMediaFile } from "@/shared/backend/storage";
 
 function toDTO(product: Prisma.ProductGetPayload<{ include: { group: true } }>): ProductDTO {
   return {
@@ -13,6 +14,8 @@ function toDTO(product: Prisma.ProductGetPayload<{ include: { group: true } }>):
     groupId: product.groupId,
     sortOrder: product.sortOrder,
     groupName: product.group.name,
+    mediaUrl: product.mediaPath ? `/api/products/${product.id}/media` : null,
+    mediaType: (product.mediaType as ProductDTO["mediaType"]) ?? null,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
@@ -97,7 +100,60 @@ export async function deleteProduct(id: string): Promise<void> {
   const existing = await prisma.product.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError("Product");
 
+  if (existing.mediaPath) {
+    await deleteFile(existing.mediaPath);
+  }
+
   await prisma.product.delete({ where: { id } });
+}
+
+export async function saveProductMedia(
+  id: string,
+  file: { type: string; size: number; buffer: Buffer },
+): Promise<ProductDTO> {
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError("Product");
+
+  const { mediaType, extension } = validateMediaFile(file);
+  const relativePath = `products/${id}-${Date.now()}.${extension}`;
+
+  await saveFile(relativePath, file.buffer);
+
+  if (existing.mediaPath) {
+    await deleteFile(existing.mediaPath);
+  }
+
+  const product = await prisma.product.update({
+    where: { id },
+    data: { mediaPath: relativePath, mediaType },
+    include: { group: true },
+  });
+  return toDTO(product);
+}
+
+export async function removeProductMedia(id: string): Promise<ProductDTO> {
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) throw new NotFoundError("Product");
+
+  if (existing.mediaPath) {
+    await deleteFile(existing.mediaPath);
+  }
+
+  const product = await prisma.product.update({
+    where: { id },
+    data: { mediaPath: null, mediaType: null },
+    include: { group: true },
+  });
+  return toDTO(product);
+}
+
+export async function getProductMediaPath(id: string): Promise<{ mediaPath: string; mediaType: string | null } | null> {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { mediaPath: true, mediaType: true },
+  });
+  if (!product?.mediaPath) return null;
+  return { mediaPath: product.mediaPath, mediaType: product.mediaType };
 }
 
 export async function getProductCount(): Promise<number> {

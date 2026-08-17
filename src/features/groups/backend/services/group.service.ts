@@ -2,6 +2,7 @@ import { prisma } from "@/shared/backend/database/prisma";
 import type { GroupInput, GroupUpdateInput } from "../schemas/group.schema";
 import type { GroupDTO } from "../types";
 import { NotFoundError } from "@/shared/backend/errors/app-error";
+import { deleteFile } from "@/shared/backend/storage";
 
 export async function getGroups(): Promise<GroupDTO[]> {
   const groups = await prisma.group.findMany({
@@ -63,6 +64,16 @@ export async function updateGroup(id: string, input: GroupUpdateInput): Promise<
 export async function deleteGroup(id: string): Promise<void> {
   const existing = await prisma.group.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError("Group");
+
+  const products = await prisma.product.findMany({
+    where: { groupId: id },
+    select: { mediaPath: true },
+  });
+  for (const product of products) {
+    if (product.mediaPath) {
+      await deleteFile(product.mediaPath);
+    }
+  }
 
   await prisma.group.delete({ where: { id } });
 }

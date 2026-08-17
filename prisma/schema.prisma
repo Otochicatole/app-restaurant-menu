@@ -50,6 +50,8 @@ model Product {
   price       Float
   groupId     String
   sortOrder   Int              @default(0)
+  mediaPath   String?
+  mediaType   String?
   group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

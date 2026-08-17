@@ -220,7 +220,7 @@ export function ProductCatalogClient({
 
   const formGroups = groups.map((group) => ({ id: group.id, name: group.name }));
   const productInitialData = selectedProduct
-    ? { name: selectedProduct.name, description: selectedProduct.description, price: selectedProduct.price, groupId: selectedProduct.groupId }
+    ? { name: selectedProduct.name, description: selectedProduct.description, price: selectedProduct.price, groupId: selectedProduct.groupId, mediaUrl: selectedProduct.mediaUrl, mediaType: selectedProduct.mediaType }
     : { name: "", description: "", price: 0, groupId: activeGroupId === "all" ? "" : activeGroupId };
 
   return (

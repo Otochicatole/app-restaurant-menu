@@ -48,3 +48,6 @@ bun.lock
 next-env.d.ts
 
 /src/generated/prisma
+
+# uploaded media
+/storage

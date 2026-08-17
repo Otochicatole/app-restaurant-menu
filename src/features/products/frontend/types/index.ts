@@ -6,6 +6,8 @@ export interface ProductDTO {
   groupId: string;
   sortOrder: number;
   groupName?: string;
+  mediaUrl?: string | null;
+  mediaType?: "image" | "video" | null;
   createdAt: string;
   updatedAt: string;
 }

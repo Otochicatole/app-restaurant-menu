@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { Save, X } from "lucide-react";
+import { Save, Trash2, Upload, X } from "lucide-react";
 
 interface ProductFormProps {
   groups: { id: string; name: string }[];
@@ -12,6 +12,8 @@ interface ProductFormProps {
     description: string;
     price: number;
     groupId: string;
+    mediaUrl?: string | null;
+    mediaType?: "image" | "video" | null;
   };
   onSubmit: (data: {
     name: string;
@@ -46,6 +48,58 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Guar
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removeMedia, setRemoveMedia] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  const setPreview = (url: string | null) => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = url;
+    setPreviewUrl(url);
+  };
+
+  const hasExistingMedia = Boolean(initialData?.mediaUrl);
+  const showExistingPreview = hasExistingMedia && !removeMedia && !selectedFile;
+  const showNewPreview = Boolean(selectedFile && !removeMedia);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    setRemoveMedia(false);
+    setPreview(file ? URL.createObjectURL(file) : null);
+  };
+
+  const handleRemoveMedia = () => {
+    setSelectedFile(null);
+    setRemoveMedia(true);
+    setPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const syncMedia = async (productId: string) => {
+    if (removeMedia) {
+      const response = await fetch(`/api/products/${productId}/media`, { method: "DELETE" });
+      if (!response.ok) throw new Error("No se pudo quitar el archivo");
+      return;
+    }
+    if (selectedFile) {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const response = await fetch(`/api/products/${productId}/media`, { method: "POST", body: formData });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error?.message ?? "No se pudo subir el archivo");
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -80,15 +134,26 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Guar
         groupId: parsed.data.groupId,
       });
 
-      if (result.success) {
-        if (onSuccess) {
-          onSuccess(result);
-        } else {
-          router.push(redirectTo);
-          router.refresh();
-        }
-      } else {
+      if (!result.success) {
         setServerError(result.error?.message ?? "No se pudo guardar");
+        return;
+      }
+
+      const product = result.data as { id: string } | undefined;
+      if (product?.id) {
+        try {
+          await syncMedia(product.id);
+        } catch (error) {
+          setServerError(error instanceof Error ? error.message : "No se pudo subir el archivo");
+          return;
+        }
+      }
+
+      if (onSuccess) {
+        onSuccess(result);
+      } else {
+        router.push(redirectTo);
+        router.refresh();
       }
     } catch {
       setServerError("Ocurrió un error inesperado");
@@ -157,6 +222,46 @@ export function ProductForm({ groups, initialData, onSubmit, submitLabel = "Guar
           ))}
         </select>
         {errors.groupId && <p className="mt-1 text-xs text-red-600">{errors.groupId}</p>}
+      </div>
+      <div>
+        <span className="block text-xs font-bold uppercase tracking-wide text-zinc-500">
+          Foto o video
+        </span>
+        <div className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          {showExistingPreview && initialData?.mediaType === "image" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={initialData.mediaUrl ?? undefined} alt="Vista previa" className="mb-3 max-h-40 rounded-lg object-contain" />
+          )}
+          {showExistingPreview && initialData?.mediaType === "video" && (
+            <video src={initialData.mediaUrl ?? undefined} className="mb-3 max-h-40 w-full rounded-lg" controls playsInline />
+          )}
+          {showNewPreview && selectedFile?.type.startsWith("image/") && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl ?? undefined} alt="Vista previa" className="mb-3 max-h-40 rounded-lg object-contain" />
+          )}
+          {showNewPreview && selectedFile?.type.startsWith("video/") && (
+            <video src={previewUrl ?? undefined} className="mb-3 max-h-40 w-full rounded-lg" controls playsInline />
+          )}
+          {showExistingPreview && (
+            <button type="button" onClick={handleRemoveMedia} className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">
+              <Trash2 size={14} /> Quitar archivo
+            </button>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50">
+              <Upload size={14} /> {hasExistingMedia ? "Reemplazar archivo" : "Subir archivo"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {selectedFile && <span className="truncate text-xs text-zinc-500">{selectedFile.name}</span>}
+          </div>
+          <p className="mt-2 text-xs text-zinc-400">JPG, PNG, WEBP, GIF (hasta 5MB) o MP4, WEBM (hasta 50MB).</p>
+        </div>
       </div>
       {serverError && <p className="text-sm text-red-600">{serverError}</p>}
       <div className="flex flex-wrap gap-3 border-t border-zinc-100 pt-4">

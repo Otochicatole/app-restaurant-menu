@@ -47,6 +47,8 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
               description: product.description,
               price: product.price,
               groupId: product.groupId,
+              mediaUrl: product.mediaUrl,
+              mediaType: product.mediaType,
             }}
             onSubmit={handleSubmit}
             submitLabel="Guardar cambios"
