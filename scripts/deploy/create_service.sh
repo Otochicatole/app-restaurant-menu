@@ -2,7 +2,8 @@
 # Este script requiere permisos de superusuario (sudo)
 echo "Creando servicio Systemd para app-res (Next.js)..."
 
-PROJECT_ROOT=$(dirname $(pwd))
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 USER_NAME=$SUDO_USER
 if [ -z "$USER_NAME" ]; then
     USER_NAME=$(whoami)
