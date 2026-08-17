@@ -128,11 +128,11 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
       )}
 
       <AdminCard className="overflow-hidden">
-        <div className="border-b border-zinc-200 bg-zinc-50/70 px-3 py-3 sm:px-5">
+        <div className="overflow-x-auto border-b border-zinc-200 bg-zinc-50/70 px-3 py-3 sm:px-5">
           <p className="mb-2 px-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
             Aplicar a
           </p>
-          <div className="flex min-w-max gap-2 overflow-x-auto">
+          <div className="flex min-w-max gap-2">
             {FONT_TARGETS.map((target) => (
               <button
                 key={target}
@@ -164,9 +164,9 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
 
       <AdminCard className="overflow-hidden">
         <div className="divide-y divide-zinc-100">
-          <div className={`flex items-center gap-4 px-5 py-4 ${activeFontIdForTarget === null ? "bg-emerald-50" : ""}`}>
+          <div className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center ${activeFontIdForTarget === null ? "bg-emerald-50" : ""}`}>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-base font-semibold text-zinc-900">Fuente por defecto</p>
                 {activeFontIdForTarget === null && <span className="rounded-full bg-emerald-600 p-1 text-white"><Check size={12} /></span>}
               </div>
@@ -180,7 +180,7 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
               type="button"
               disabled={busyFontId !== null}
               onClick={() => handleSelect(null)}
-              className={adminSecondaryButtonClass}
+              className={`${adminSecondaryButtonClass} w-full sm:w-auto`}
             >
               {activeFontIdForTarget === null ? "En uso" : busyFontId === null ? "Aplicar" : "Aplicando..."}
             </button>
@@ -189,9 +189,9 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
           {visibleFonts.map((font) => {
             const isActive = font.id === activeFontIdForTarget;
             return (
-              <div key={font.id} className={`flex items-center gap-4 px-5 py-4 ${isActive ? "bg-emerald-50" : ""}`}>
+              <div key={font.id} className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center ${isActive ? "bg-emerald-50" : ""}`}>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-base font-semibold text-zinc-900">{font.name}</p>
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-800">{FONT_CATEGORY_LABELS[font.category]}</span>
                     <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-600">{font.source === "google" ? "Google" : "Propia"}</span>
@@ -199,11 +199,11 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
                   </div>
                   <p className="mt-0.5 truncate text-2xl leading-tight" style={{ fontFamily: font.fontFamily }}>Aa Bb Cc 0123</p>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" disabled={busyFontId !== null || isActive} onClick={() => handleSelect(font.id)} className={adminPrimaryButtonClass}>
+                <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+                  <button type="button" disabled={busyFontId !== null || isActive} onClick={() => handleSelect(font.id)} className={`${adminPrimaryButtonClass} flex-1 sm:flex-none`}>
                     {isActive ? "En uso" : busyFontId === font.id ? "Aplicando..." : "Aplicar"}
                   </button>
-                  <button type="button" disabled={isActive || deleting} onClick={() => setConfirmFont(font)} className={adminDangerButtonClass}>
+                  <button type="button" disabled={isActive || deleting} onClick={() => setConfirmFont(font)} className={`${adminDangerButtonClass} flex-1 sm:flex-none`}>
                     <Trash2 size={15} /> Eliminar
                   </button>
                 </div>
