@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "next start --port 8201",
     "lint": "eslint",
     "db:migrate": "bun x prisma migrate dev",
     "db:generate": "bun x prisma generate",

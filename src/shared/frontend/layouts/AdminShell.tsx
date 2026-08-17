@@ -21,6 +21,16 @@ export function AdminShell({ children, brandTitle, brandSubtitle }: { children: 
 
   const isActive = (item: (typeof navigation)[number]) => item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
+  const activeSection = navigation.find((item) => isActive(item)) ?? null;
+
+  const subpageLabel = (() => {
+    if (!activeSection || activeSection.href === pathname) return null;
+    if (pathname === "/admin/settings/fonts") return "Tipografía del menú";
+    if (pathname === "/admin/catalog/new") return "Nuevo producto";
+    if (/^\/admin\/catalog\/[^/]+\/edit$/.test(pathname)) return "Editar producto";
+    return null;
+  })();
+
   return (
     <div data-admin-panel className="min-h-screen bg-[#f5f7f3] text-zinc-900">
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-zinc-200/80 bg-emerald-950 px-5 py-6 text-white transition-transform lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
@@ -60,7 +70,10 @@ export function AdminShell({ children, brandTitle, brandSubtitle }: { children: 
         <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-[#f5f7f3]/90 backdrop-blur">
           <div className="flex h-16 items-center justify-between px-4 sm:px-8">
             <button type="button" className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Abrir menú"><Menu size={18} /></button>
-            <div className="hidden text-sm text-zinc-500 lg:block">Panel de administración <span className="mx-2 text-zinc-300">/</span> {navigation.find((item) => isActive(item))?.label ?? "Resumen"}</div>
+            <div className="hidden text-sm text-zinc-500 lg:block">
+              Panel de administración <span className="mx-2 text-zinc-300">/</span> {activeSection?.label ?? "Resumen"}
+              {subpageLabel && (<><span className="mx-2 text-zinc-300">/</span>{subpageLabel}</>)}
+            </div>
             <Link href="/" target="_blank" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Ver menú <ExternalLink size={15} /></Link>
           </div>
         </header>

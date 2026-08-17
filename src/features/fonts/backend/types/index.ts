@@ -2,6 +2,19 @@ export const FONT_CATEGORIES = ["serif", "sans-serif", "monospace", "display", "
 
 export type FontCategory = (typeof FONT_CATEGORIES)[number];
 
+export const FONT_TARGETS = ["global", "title", "subtitle", "group", "product", "featured"] as const;
+
+export type FontTarget = (typeof FONT_TARGETS)[number];
+
+export const FONT_TARGET_LABELS: Record<FontTarget, string> = {
+  global: "Global",
+  title: "Título",
+  subtitle: "Subtítulo",
+  group: "Grupos",
+  product: "Productos",
+  featured: "Destacados",
+};
+
 export const FONT_CATEGORY_LABELS: Record<FontCategory, string> = {
   serif: "Serif",
   "sans-serif": "Sans Serif",

@@ -6,8 +6,11 @@ import { AlertCircle, Check, Info, Trash2, Upload } from "lucide-react";
 import {
   FONT_CATEGORIES,
   FONT_CATEGORY_LABELS,
+  FONT_TARGETS,
+  FONT_TARGET_LABELS,
   type FontCategory,
   type FontDTO,
+  type FontTarget,
 } from "../types";
 import {
   AdminCard,
@@ -26,14 +29,15 @@ export interface FontActionResult {
 
 interface FontSettingsClientProps {
   fonts: FontDTO[];
-  activeFontId: string | null;
-  selectFont: (fontId: string | null) => Promise<FontActionResult>;
+  activeFontId: Record<FontTarget, string | null>;
+  selectFont: (target: FontTarget, fontId: string | null) => Promise<FontActionResult>;
   removeFont: (id: string) => Promise<FontActionResult>;
 }
 
 export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont }: FontSettingsClientProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | FontCategory>("all");
+  const [selectedTarget, setSelectedTarget] = useState<FontTarget>("global");
   const [busyFontId, setBusyFontId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmFont, setConfirmFont] = useState<FontDTO | null>(null);
@@ -41,6 +45,8 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const activeFontIdForTarget = activeFontId[selectedTarget] ?? null;
 
   const visibleFonts = useMemo(
     () => (filter === "all" ? fonts : fonts.filter((font) => font.category === filter)),
@@ -50,7 +56,7 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
   const handleSelect = async (fontId: string | null) => {
     setBusyFontId(fontId);
     setActionError(null);
-    const result = await selectFont(fontId);
+    const result = await selectFont(selectedTarget, fontId);
     if (result.success) {
       router.refresh();
     } else {
@@ -123,6 +129,26 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
 
       <AdminCard className="overflow-hidden">
         <div className="overflow-x-auto border-b border-zinc-200 bg-zinc-50/70 px-3 py-3 sm:px-5">
+          <p className="mb-2 px-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+            Aplicar a
+          </p>
+          <div className="flex min-w-max gap-2">
+            {FONT_TARGETS.map((target) => (
+              <button
+                key={target}
+                type="button"
+                onClick={() => { setSelectedTarget(target); setBusyFontId(null); setActionError(null); }}
+                className={`cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selectedTarget === target ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}
+              >
+                {FONT_TARGET_LABELS[target]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </AdminCard>
+
+      <AdminCard className="overflow-hidden">
+        <div className="overflow-x-auto border-b border-zinc-200 bg-zinc-50/70 px-3 py-3 sm:px-5">
           <div className="flex min-w-max gap-2">
             <button type="button" onClick={() => setFilter("all")} className={`cursor-pointer rounded-xl px-4 py-2.5 text-sm font-semibold transition ${filter === "all" ? "bg-emerald-950 text-white" : "text-zinc-600 hover:bg-white hover:text-zinc-950"}`}>
               Todas <span className="ml-1.5 text-xs opacity-70">{fonts.length}</span>
@@ -138,30 +164,34 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
 
       <AdminCard className="overflow-hidden">
         <div className="divide-y divide-zinc-100">
-          <div className={`flex items-center gap-4 px-5 py-4 ${activeFontId === null ? "bg-emerald-50" : ""}`}>
+          <div className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center ${activeFontIdForTarget === null ? "bg-emerald-50" : ""}`}>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-base font-semibold text-zinc-900">Fuente por defecto</p>
-                {activeFontId === null && <span className="rounded-full bg-emerald-600 p-1 text-white"><Check size={12} /></span>}
+                {activeFontIdForTarget === null && <span className="rounded-full bg-emerald-600 p-1 text-white"><Check size={12} /></span>}
               </div>
-              <p className="text-sm text-zinc-500">Usa la tipografía original del menú (Arial / sans-serif).</p>
+              <p className="text-sm text-zinc-500">
+                {selectedTarget === "global"
+                  ? "Usa la tipografía original del menú (Arial / sans-serif)."
+                  : "Hereda la fuente global del menú."}
+              </p>
             </div>
             <button
               type="button"
               disabled={busyFontId !== null}
               onClick={() => handleSelect(null)}
-              className={adminSecondaryButtonClass}
+              className={`${adminSecondaryButtonClass} w-full sm:w-auto`}
             >
-              {activeFontId === null ? "En uso" : busyFontId === null ? "Aplicar" : "Aplicando..."}
+              {activeFontIdForTarget === null ? "En uso" : busyFontId === null ? "Aplicar" : "Aplicando..."}
             </button>
           </div>
 
           {visibleFonts.map((font) => {
-            const isActive = font.id === activeFontId;
+            const isActive = font.id === activeFontIdForTarget;
             return (
-              <div key={font.id} className={`flex items-center gap-4 px-5 py-4 ${isActive ? "bg-emerald-50" : ""}`}>
+              <div key={font.id} className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center ${isActive ? "bg-emerald-50" : ""}`}>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-base font-semibold text-zinc-900">{font.name}</p>
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-800">{FONT_CATEGORY_LABELS[font.category]}</span>
                     <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-600">{font.source === "google" ? "Google" : "Propia"}</span>
@@ -169,11 +199,11 @@ export function FontSettingsClient({ fonts, activeFontId, selectFont, removeFont
                   </div>
                   <p className="mt-0.5 truncate text-2xl leading-tight" style={{ fontFamily: font.fontFamily }}>Aa Bb Cc 0123</p>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" disabled={busyFontId !== null || isActive} onClick={() => handleSelect(font.id)} className={adminPrimaryButtonClass}>
+                <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+                  <button type="button" disabled={busyFontId !== null || isActive} onClick={() => handleSelect(font.id)} className={`${adminPrimaryButtonClass} flex-1 sm:flex-none`}>
                     {isActive ? "En uso" : busyFontId === font.id ? "Aplicando..." : "Aplicar"}
                   </button>
-                  <button type="button" disabled={isActive || deleting} onClick={() => setConfirmFont(font)} className={adminDangerButtonClass}>
+                  <button type="button" disabled={isActive || deleting} onClick={() => setConfirmFont(font)} className={`${adminDangerButtonClass} flex-1 sm:flex-none`}>
                     <Trash2 size={15} /> Eliminar
                   </button>
                 </div>

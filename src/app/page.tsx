@@ -64,13 +64,18 @@ export default async function HomePage() {
                             width={140}
                             height={140}
                         />
-                        <h1 className="text-center text-desert font-bold text-[40px] sm:text-[60px] xl:text-[90px]">
+                        <h1
+                            className="text-center text-desert font-bold text-[40px] sm:text-[60px] xl:text-[90px]"
+                            style={{ fontFamily: "var(--font-menu-title)" }}
+                        >
                             {homePage.title}
                         </h1>
                         <div className="hidden xl:flex w-full items-center justify-center -mt-6">
                             <div className="border border-desert w-10 mx-5 mt-2"/>
                             <div
-                                className="text-center text-desert font-mono text-md mt-2 w-fit px-3 border-r-2 border-l-2 ">
+                                className="text-center text-desert font-mono text-md mt-2 w-fit px-3 border-r-2 border-l-2 "
+                                style={{ fontFamily: "var(--font-menu-subtitle)" }}
+                            >
                                 {homePage.description}
                             </div>
                             <div className="border border-desert w-10 mx-5 mt-2"/>
