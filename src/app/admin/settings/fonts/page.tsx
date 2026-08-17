@@ -1,17 +1,22 @@
-import { getActiveFont, getFonts, setActiveFont, deleteFont } from "@/features/fonts/backend/services/font.service";
+import { getFontSelection, getFonts, setFontForTarget, deleteFont } from "@/features/fonts/backend/services/font.service";
+import type { FontTarget } from "@/features/fonts/backend/types";
 import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
 import { FontSettingsClient, type FontActionResult } from "@/features/fonts/frontend/components/FontSettingsClient";
 import { revalidatePath } from "next/cache";
 
 export default async function AdminSettingsFontsPage() {
-  const [fonts, activeFont] = await Promise.all([getFonts(), getActiveFont()]);
+  const [fonts, selection] = await Promise.all([getFonts(), getFontSelection()]);
 
-  async function selectFont(fontId: string | null): Promise<FontActionResult> {
+  const activeFontId = Object.fromEntries(
+    (Object.keys(selection) as FontTarget[]).map((target) => [target, selection[target]?.id ?? null]),
+  ) as Record<FontTarget, string | null>;
+
+  async function selectFont(target: FontTarget, fontId: string | null): Promise<FontActionResult> {
     "use server";
     try {
       await ensureAdmin();
-      await setActiveFont(fontId);
+      await setFontForTarget(target, fontId);
       revalidatePath("/admin/settings/fonts");
       revalidatePath("/", "layout");
       return { success: true };
@@ -55,7 +60,7 @@ export default async function AdminSettingsFontsPage() {
       )}
       <FontSettingsClient
         fonts={fonts}
-        activeFontId={activeFont?.id ?? null}
+        activeFontId={activeFontId}
         selectFont={selectFont}
         removeFont={removeFont}
       />

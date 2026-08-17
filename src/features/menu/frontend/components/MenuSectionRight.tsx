@@ -11,7 +11,7 @@ export function MenuSectionRight({ group }: MenuSectionProps) {
 
     return (
         <section className="flex flex-col -mb-3 h-full pb-20 overflow-hidden">
-            <header className="flex text-white flex-col w-full bg-primary rounded-t-2xl rounded-b-lg px-6 p-3">
+            <header className="flex text-white flex-col w-full bg-primary rounded-t-2xl rounded-b-lg px-6 p-3" style={{ fontFamily: "var(--font-menu-group)" }}>
                 <h2 className="text-3xl font-bold tracking-widest">
                     {group.name}
                 </h2>

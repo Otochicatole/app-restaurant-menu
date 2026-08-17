@@ -22,6 +22,7 @@ export function MenuSectionMid({group, featured}: MenuSectionProps) {
                 borderBottomLeftRadius: 3,
                 borderBottomRightRadius: 32,
                 borderTopRightRadius: 32,
+                fontFamily: "var(--font-menu-group)",
             }}
                     className="flex text-white flex-col bg-primary w-fit px-6 p-3">
                 <h2 className="text-3xl font-bold tracking-widest">
@@ -39,7 +40,7 @@ export function MenuSectionMid({group, featured}: MenuSectionProps) {
                 <div className="flex w-full lg:border-r border-primary/50 pr-6">
                     <div className="flex flex-col max-w-100 gap-2 w-fit rounded-b-3xl rounded-r-3xl border-l border-b border-r border-primary/50 p-4">
                         {validFeatured.map((f, i) => (
-                            <article key={f.id} className={`px-10 py-4 sm:py-6 w-full rounded-xl border border-black/10 shadow-2xl ${bgColors[i % 3]}`}>
+                            <article key={f.id} className={`px-10 py-4 sm:py-6 w-full rounded-xl border border-black/10 shadow-2xl ${bgColors[i % 3]}`} style={{ fontFamily: "var(--font-menu-featured)" }}>
                                 <h1 className={`font-bold ${i === 0 ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-3xl'}`}>{f.product.name}</h1>
                                 <p className="font-semibold text-sm sm:text-md">${f.product.price.toFixed(2)}</p>
                             </article>

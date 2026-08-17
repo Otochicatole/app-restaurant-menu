@@ -33,6 +33,7 @@ export function ProductCard({ product }: ProductCardProps) {
                     }
                 }}
                 className={`flex items-center z-10 gap-6 border-b border-primary/20 py-2 px-4 scroll-mt-8 transition-colors duration-500 ${media ? "cursor-pointer" : ""} ${isHighlighted ? "bg-primary animate-pulse text-background" : "text-primary"}`}
+                style={{ fontFamily: "var(--font-menu-product)" }}
             >
                 <p className="font-bold h-fit">
                     ${product.price.toFixed(2)}
