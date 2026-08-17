@@ -145,6 +145,50 @@ async function main() {
     }
   }
 
+  const fontDefs = [
+    { name: "Playfair Display", category: "serif", source: "google", googleFamily: "Playfair Display", fontFamily: '"Playfair Display", serif', weights: "400;700" },
+    { name: "Lora", category: "serif", source: "google", googleFamily: "Lora", fontFamily: '"Lora", serif', weights: "400;700" },
+    { name: "Merriweather", category: "serif", source: "google", googleFamily: "Merriweather", fontFamily: '"Merriweather", serif', weights: "400;700" },
+    { name: "Cormorant Garamond", category: "serif", source: "google", googleFamily: "Cormorant Garamond", fontFamily: '"Cormorant Garamond", serif', weights: "400;700" },
+    { name: "Roboto", category: "sans-serif", source: "google", googleFamily: "Roboto", fontFamily: '"Roboto", sans-serif', weights: "400;700" },
+    { name: "Open Sans", category: "sans-serif", source: "google", googleFamily: "Open Sans", fontFamily: '"Open Sans", sans-serif', weights: "400;700" },
+    { name: "Montserrat", category: "sans-serif", source: "google", googleFamily: "Montserrat", fontFamily: '"Montserrat", sans-serif', weights: "400;700" },
+    { name: "Poppins", category: "sans-serif", source: "google", googleFamily: "Poppins", fontFamily: '"Poppins", sans-serif', weights: "400;700" },
+    { name: "Roboto Mono", category: "monospace", source: "google", googleFamily: "Roboto Mono", fontFamily: '"Roboto Mono", monospace', weights: "400;700" },
+    { name: "Space Mono", category: "monospace", source: "google", googleFamily: "Space Mono", fontFamily: '"Space Mono", monospace', weights: "400;700" },
+    { name: "Oswald", category: "display", source: "google", googleFamily: "Oswald", fontFamily: '"Oswald", sans-serif', weights: "400;700" },
+    { name: "Dancing Script", category: "script", source: "google", googleFamily: "Dancing Script", fontFamily: '"Dancing Script", cursive', weights: "400;700" },
+    { name: "Lobster", category: "script", source: "google", googleFamily: "Lobster", fontFamily: '"Lobster", cursive', weights: "400" },
+    { name: "Pacifico", category: "script", source: "google", googleFamily: "Pacifico", fontFamily: '"Pacifico", cursive', weights: "400" },
+    { name: "Bebas Neue", category: "display", source: "google", googleFamily: "Bebas Neue", fontFamily: '"Bebas Neue", sans-serif', weights: "400" },
+    { name: "Cinzel", category: "display", source: "google", googleFamily: "Cinzel", fontFamily: '"Cinzel", serif', weights: "400;700" },
+    { name: "Abril Fatface", category: "display", source: "google", googleFamily: "Abril Fatface", fontFamily: '"Abril Fatface", serif', weights: "400" },
+    { name: "Bangers", category: "display", source: "google", googleFamily: "Bangers", fontFamily: '"Bangers", cursive', weights: "400" },
+  ];
+
+  for (const def of fontDefs) {
+    await prisma.font.upsert({
+      where: { name: def.name },
+      update: {
+        category: def.category,
+        source: def.source,
+        googleFamily: def.googleFamily,
+        fontFamily: def.fontFamily,
+        weights: def.weights,
+      },
+      create: def,
+    });
+  }
+
+  const defaultFont = await prisma.font.findUnique({ where: { name: "Playfair Display" } });
+  if (defaultFont) {
+    await prisma.setting.upsert({
+      where: { key: "menu.activeFontId" },
+      update: { value: defaultFont.id },
+      create: { key: "menu.activeFontId", value: defaultFont.id },
+    });
+  }
+
   console.log("Seed completed successfully");
 }
 

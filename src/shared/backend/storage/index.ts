@@ -26,10 +26,17 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   gif: "image/gif",
   mp4: "video/mp4",
   webm: "video/webm",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
 };
 
 export const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 export const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+export const MAX_FONT_SIZE = 10 * 1024 * 1024;
+
+const FONT_EXTENSIONS = new Set(["woff", "woff2", "ttf", "otf"]);
 
 export function classifyMime(mimeType: string): MediaType | null {
   if (mimeType in IMAGE_MIME) return "image";
@@ -90,6 +97,17 @@ export async function fileExists(relativePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export function validateFontFile(file: { name: string; size: number }): { extension: string } {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!FONT_EXTENSIONS.has(extension)) {
+    throw new BadRequestError("Formato de fuente no soportado. Usá WOFF, WOFF2, TTF u OTF.");
+  }
+  if (file.size > MAX_FONT_SIZE) {
+    throw new BadRequestError("El archivo excede el tamaño máximo de 10MB.");
+  }
+  return { extension };
 }
 
 function resolveSafe(relativePath: string): string {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/shared/frontend/components/LogoutButton";
-import { BarChart3, BookOpen, ExternalLink, FolderKanban, Home, Menu, Star, UtensilsCrossed, X } from "lucide-react";
+import { BarChart3, BookOpen, ExternalLink, FolderKanban, Home, Menu, Settings, Star, UtensilsCrossed, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
@@ -12,6 +12,7 @@ const navigation = [
   { label: "Catálogo", href: "/admin/catalog", icon: BookOpen },
   { label: "Página principal", href: "/admin/home-page", icon: Home },
   { label: "Destacados", href: "/admin/featured-products", icon: Star },
+  { label: "Configuración", href: "/admin/settings", icon: Settings },
 ];
 
 export function AdminShell({ children, brandTitle, brandSubtitle }: { children: React.ReactNode; brandTitle: string; brandSubtitle: string }) {
