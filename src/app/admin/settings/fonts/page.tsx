@@ -6,7 +6,8 @@ import { FontSettingsClient, type FontActionResult } from "@/features/fonts/fron
 import { revalidatePath } from "next/cache";
 
 export default async function AdminSettingsFontsPage() {
-  const [fonts, selection] = await Promise.all([getFonts(), getFontSelection()]);
+  const account = await ensureAdmin();
+  const [fonts, selection] = await Promise.all([getFonts(account.tenantId!), getFontSelection(account.tenantId!)]);
 
   const activeFontId = Object.fromEntries(
     (Object.keys(selection) as FontTarget[]).map((target) => [target, selection[target]?.id ?? null]),
@@ -15,10 +16,10 @@ export default async function AdminSettingsFontsPage() {
   async function selectFont(target: FontTarget, fontId: string | null): Promise<FontActionResult> {
     "use server";
     try {
-      await ensureAdmin();
-      await setFontForTarget(target, fontId);
+      const current = await ensureAdmin();
+      await setFontForTarget(current.tenantId!, target, fontId);
       revalidatePath("/admin/settings/fonts");
-      revalidatePath("/", "layout");
+      revalidatePath(`/m/${current.tenantSlug}`, "layout");
       return { success: true };
     } catch (error) {
       return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo aplicar la fuente" } };
@@ -28,8 +29,8 @@ export default async function AdminSettingsFontsPage() {
   async function removeFont(id: string): Promise<FontActionResult> {
     "use server";
     try {
-      await ensureAdmin();
-      await deleteFont(id);
+      const current = await ensureAdmin();
+      await deleteFont(current.tenantId!, id);
       revalidatePath("/admin/settings/fonts");
       return { success: true };
     } catch (error) {
@@ -53,7 +54,7 @@ export default async function AdminSettingsFontsPage() {
         <style
           dangerouslySetInnerHTML={{
             __html: customFonts
-              .map((font) => `@font-face{font-family:'${font.name}';src:url('/api/fonts/${font.id}/file');font-weight:400;font-style:normal;font-display:swap;}`)
+                .map((font) => `@font-face{font-family:'${font.name}';src:url('/api/fonts/${font.id}/file');font-weight:400;font-style:normal;font-display:swap;}`)
               .join("\n"),
           }}
         />

@@ -24,6 +24,13 @@ export async function revokeAllAdminSessions(adminId: string): Promise<void> {
   });
 }
 
+export async function revokeAllAdminSessionsExcept(adminId: string, jti: string): Promise<void> {
+  await prisma.session.updateMany({
+    where: { adminId, jti: { not: jti }, revoked: false },
+    data: { revoked: true },
+  });
+}
+
 export async function isSessionValid(jti: string): Promise<boolean> {
   const session = await prisma.session.findUnique({ where: { jti } });
   if (!session) return false;

@@ -6,7 +6,8 @@ import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
 import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
 
 export default async function NewProductPage() {
-  const groups = await getGroups();
+  const account = await ensureAdmin();
+  const groups = await getGroups(account.tenantId!);
 
   async function handleSubmit(data: {
     name: string;
@@ -16,8 +17,8 @@ export default async function NewProductPage() {
   }) {
     "use server";
     try {
-      await ensureAdmin();
-      const product = await createProduct(data);
+      const current = await ensureAdmin();
+      const product = await createProduct(data, current.tenantId!, current.tenantSlug!);
       return { success: true, data: product };
     } catch (e) {
       return { success: false, error: { message: e instanceof Error ? e.message : "No se pudo crear el producto" } };

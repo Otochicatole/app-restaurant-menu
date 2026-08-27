@@ -12,9 +12,10 @@ interface EditProductPageProps {
 
 export default async function EditProductPage({ params }: EditProductPageProps) {
   const { id } = await params;
+  const account = await ensureAdmin();
   const [product, groups] = await Promise.all([
-    getProductById(id).catch(() => null),
-    getGroups(),
+    getProductById(id, account.tenantId!, account.tenantSlug!).catch(() => null),
+    getGroups(account.tenantId!),
   ]);
 
   if (!product) notFound();
@@ -27,8 +28,8 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   }) {
     "use server";
     try {
-      await ensureAdmin();
-      const updated = await updateProduct(id, data);
+      const current = await ensureAdmin();
+      const updated = await updateProduct(id, data, current.tenantId!, current.tenantSlug!);
       return { success: true, data: updated };
     } catch (e) {
       return { success: false, error: { message: e instanceof Error ? e.message : "No se pudo actualizar el producto" } };

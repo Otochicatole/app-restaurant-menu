@@ -21,8 +21,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const account = await ensureAdmin();
     const { id } = await params;
-    const group = await getGroupById(id);
+    const group = await getGroupById(id, account.tenantId!);
     return successResponse(group);
   } catch {
     return notFoundResponse("Group");
@@ -35,14 +36,14 @@ export async function PATCH(
 ) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
     const body = await req.json();
     const parsed = groupUpdateSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);
 
-    const group = await updateGroup(id, parsed.data);
+    const group = await updateGroup(id, parsed.data, account.tenantId!);
     return successResponse(group);
   } catch (error) {
     if (error instanceof AppError) {
@@ -58,10 +59,10 @@ export async function DELETE(
 ) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
-    await deleteGroup(id);
+    await deleteGroup(id, account.tenantId!);
     return successResponse(null, 200);
   } catch (error) {
     if (error instanceof AppError) {

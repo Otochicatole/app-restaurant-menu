@@ -13,11 +13,13 @@ import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csr
 
 export async function GET(req: NextRequest) {
   try {
+    const account = await ensureAdmin();
     const url = new URL(req.url);
     const groupId = url.searchParams.get("groupId") ?? undefined;
-    const products = await getProducts(groupId);
+    const products = await getProducts(account.tenantId!, account.tenantSlug!, groupId);
     return successResponse(products);
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
     return internalErrorResponse();
   }
 }
@@ -25,13 +27,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
 
     const body = await req.json();
     const parsed = productSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);
 
-    const product = await createProduct(parsed.data);
+    const product = await createProduct(parsed.data, account.tenantId!, account.tenantSlug!);
     return successResponse(product, 201);
   } catch (error) {
     if (error instanceof AppError) {

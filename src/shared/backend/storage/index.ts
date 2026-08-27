@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { BadRequestError } from "@/shared/backend/errors/app-error";
 
-export const STORAGE_DIR = path.join(process.cwd(), "storage");
+export const STORAGE_DIR = path.resolve(/* turbopackIgnore: true */ process.env.STORAGE_ROOT ?? path.join(process.cwd(), "storage"));
 
 export type MediaType = "image" | "video";
 
@@ -86,7 +86,7 @@ export async function deleteFile(relativePath: string): Promise<void> {
 
 export async function readFile(relativePath: string): Promise<Buffer> {
   const absolutePath = resolveSafe(relativePath);
-  return fs.readFile(absolutePath);
+  return fs.readFile(/* turbopackIgnore: true */ absolutePath);
 }
 
 export async function fileExists(relativePath: string): Promise<boolean> {
@@ -97,6 +97,25 @@ export async function fileExists(relativePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function deleteDirectory(relativePath: string): Promise<void> {
+  const absolutePath = resolveSafe(relativePath);
+  await fs.rm(absolutePath, { recursive: true, force: true });
+}
+
+export async function moveDirectory(relativePath: string, destinationRelativePath: string): Promise<void> {
+  const absolutePath = resolveSafe(relativePath);
+  const destination = resolveSafe(destinationRelativePath);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.rename(absolutePath, destination);
+}
+
+export async function moveFile(relativePath: string, destinationRelativePath: string): Promise<void> {
+  const absolutePath = resolveSafe(relativePath);
+  const destination = resolveSafe(destinationRelativePath);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.rename(absolutePath, destination);
 }
 
 export function validateFontFile(file: { name: string; size: number }): { extension: string } {

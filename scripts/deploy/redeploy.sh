@@ -24,13 +24,17 @@ fi
 
 echo "Preparando aplicacion..."
 cd "$PROJECT_ROOT"
-bun install
-bun x prisma migrate deploy
+bun install --frozen-lockfile
 bun x prisma generate
 bun run build
 
 echo "Deteniendo servicio..."
 sudo systemctl stop "$SERVICE"
+
+echo "Aplicando esquema y migrando archivos legacy..."
+bun x prisma migrate deploy
+bun run db:migrate-storage
+bun run db:seed
 
 echo "Iniciando servicio..."
 sudo systemctl start "$SERVICE"

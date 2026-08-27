@@ -21,8 +21,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const account = await ensureAdmin();
     const { id } = await params;
-    const product = await getProductById(id);
+    const product = await getProductById(id, account.tenantId!, account.tenantSlug!);
     return successResponse(product);
   } catch {
     return notFoundResponse("Product");
@@ -35,14 +36,14 @@ export async function PATCH(
 ) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
     const body = await req.json();
     const parsed = productUpdateSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);
 
-    const product = await updateProduct(id, parsed.data);
+    const product = await updateProduct(id, parsed.data, account.tenantId!, account.tenantSlug!);
     return successResponse(product);
   } catch (error) {
     if (error instanceof AppError) {
@@ -58,10 +59,10 @@ export async function DELETE(
 ) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
-    await deleteProduct(id);
+    await deleteProduct(id, account.tenantId!);
     return successResponse(null, 200);
   } catch (error) {
     if (error instanceof AppError) {

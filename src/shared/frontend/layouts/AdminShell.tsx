@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/shared/frontend/components/LogoutButton";
-import { BarChart3, BookOpen, ExternalLink, FolderKanban, Home, Menu, Settings, Star, UtensilsCrossed, X } from "lucide-react";
+import { BarChart3, BookOpen, ExternalLink, Home, Menu, Settings, Star, UtensilsCrossed, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
@@ -15,7 +15,7 @@ const navigation = [
   { label: "Configuración", href: "/admin/settings", icon: Settings },
 ];
 
-export function AdminShell({ children, brandTitle, brandSubtitle }: { children: React.ReactNode; brandTitle: string; brandSubtitle: string }) {
+export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { children: React.ReactNode; brandTitle: string; brandSubtitle: string; menuHref: string }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -74,7 +74,7 @@ export function AdminShell({ children, brandTitle, brandSubtitle }: { children: 
               Panel de administración <span className="mx-2 text-zinc-300">/</span> {activeSection?.label ?? "Resumen"}
               {subpageLabel && (<><span className="mx-2 text-zinc-300">/</span>{subpageLabel}</>)}
             </div>
-            <Link href="/" target="_blank" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Ver menú <ExternalLink size={15} /></Link>
+            <Link href={menuHref} target="_blank" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Ver menú <ExternalLink size={15} /></Link>
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>

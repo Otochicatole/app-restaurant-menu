@@ -1,5 +1,6 @@
 import { prisma } from "@/shared/backend/database/prisma";
 import type { FeaturedProductDTO } from "../types";
+import { NotFoundError } from "@/shared/backend/errors/app-error";
 
 function toDTO(row: {
   id: string;
@@ -23,8 +24,9 @@ function toDTO(row: {
   };
 }
 
-export async function getFeaturedProducts(): Promise<(FeaturedProductDTO | null)[]> {
+export async function getFeaturedProducts(tenantId: string): Promise<(FeaturedProductDTO | null)[]> {
   const featured = await prisma.featuredProduct.findMany({
+    where: { tenantId },
     include: { product: { include: { group: true } } },
     orderBy: { position: "asc" },
   });
@@ -36,14 +38,17 @@ export async function getFeaturedProducts(): Promise<(FeaturedProductDTO | null)
   return result;
 }
 
-export async function setFeaturedProduct(position: number, productId: string): Promise<void> {
-  await prisma.featuredProduct.upsert({
-    where: { position },
-    create: { position, productId },
-    update: { productId },
-  });
+export async function setFeaturedProduct(tenantId: string, position: number, productId: string): Promise<void> {
+  const product = await prisma.product.findFirst({ where: { id: productId, tenantId } });
+  if (!product) throw new NotFoundError("Product");
+  const existing = await prisma.featuredProduct.findFirst({ where: { tenantId, position } });
+  if (existing) {
+    await prisma.featuredProduct.update({ where: { id: existing.id }, data: { productId } });
+  } else {
+    await prisma.featuredProduct.create({ data: { tenantId, position, productId } });
+  }
 }
 
-export async function removeFeaturedProduct(position: number): Promise<void> {
-  await prisma.featuredProduct.deleteMany({ where: { position } });
+export async function removeFeaturedProduct(tenantId: string, position: number): Promise<void> {
+  await prisma.featuredProduct.deleteMany({ where: { tenantId, position } });
 }

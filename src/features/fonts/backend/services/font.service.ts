@@ -49,76 +49,68 @@ function toDTO(font: FontRow): FontDTO {
   };
 }
 
-export async function getFonts(): Promise<FontDTO[]> {
+export async function getFonts(tenantId: string): Promise<FontDTO[]> {
   const fonts = await prisma.font.findMany({
+    where: { OR: [{ tenantId: null }, { tenantId }] },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
   return fonts.map(toDTO);
 }
 
-export async function getFontForTarget(target: FontTarget): Promise<FontDTO | null> {
-  const setting = await prisma.setting.findUnique({ where: { key: FONT_SETTING_KEYS[target] } });
+export async function getFontForTarget(tenantId: string, target: FontTarget): Promise<FontDTO | null> {
+  const setting = await prisma.setting.findUnique({ where: { tenantId_key: { tenantId, key: FONT_SETTING_KEYS[target] } } });
   if (!setting?.value) return null;
-
-  const font = await prisma.font.findUnique({ where: { id: setting.value } });
-  if (!font) return null;
-  return toDTO(font);
+  const font = await prisma.font.findFirst({ where: { id: setting.value, OR: [{ tenantId: null }, { tenantId }] } });
+  return font ? toDTO(font) : null;
 }
 
-export async function getFontSelection(): Promise<Record<FontTarget, FontDTO | null>> {
+export async function getFontSelection(tenantId: string): Promise<Record<FontTarget, FontDTO | null>> {
   const keys = Object.values(FONT_SETTING_KEYS);
-  const settings = await prisma.setting.findMany({ where: { key: { in: keys } } });
-
+  const settings = await prisma.setting.findMany({ where: { tenantId, key: { in: keys } } });
   const fontIds = settings.map((setting) => setting.value).filter(Boolean);
   const fonts = fontIds.length > 0
-    ? await prisma.font.findMany({ where: { id: { in: fontIds } } })
+    ? await prisma.font.findMany({ where: { id: { in: fontIds }, OR: [{ tenantId: null }, { tenantId }] } })
     : [];
 
   const byId = new Map(fonts.map((font) => [font.id, font]));
   const valueByKey = new Map(settings.map((setting) => [setting.key, setting.value]));
-
-  return FONT_TARGETS.reduce<Record<FontTarget, FontDTO | null>>(
-    (acc, target) => {
-      const value = valueByKey.get(FONT_SETTING_KEYS[target]);
-      const font = value ? byId.get(value) ?? null : null;
-      acc[target] = font ? toDTO(font) : null;
-      return acc;
-    },
-    {} as Record<FontTarget, FontDTO | null>,
-  );
+  return FONT_TARGETS.reduce<Record<FontTarget, FontDTO | null>>((acc, target) => {
+    const value = valueByKey.get(FONT_SETTING_KEYS[target]);
+    const font = value ? byId.get(value) ?? null : null;
+    acc[target] = font ? toDTO(font) : null;
+    return acc;
+  }, {} as Record<FontTarget, FontDTO | null>);
 }
 
-export async function setFontForTarget(target: FontTarget, fontId: string | null): Promise<void> {
+export async function setFontForTarget(tenantId: string, target: FontTarget, fontId: string | null): Promise<void> {
   if (fontId) {
-    const font = await prisma.font.findUnique({ where: { id: fontId } });
+    const font = await prisma.font.findFirst({ where: { id: fontId, OR: [{ tenantId: null }, { tenantId }] } });
     if (!font) throw new NotFoundError("Font");
   }
-
   await prisma.setting.upsert({
-    where: { key: FONT_SETTING_KEYS[target] },
-    create: { key: FONT_SETTING_KEYS[target], value: fontId ?? "" },
+    where: { tenantId_key: { tenantId, key: FONT_SETTING_KEYS[target] } },
+    create: { tenantId, key: FONT_SETTING_KEYS[target], value: fontId ?? "" },
     update: { value: fontId ?? "" },
   });
 }
 
-export async function createCustomFont(input: {
+export async function createCustomFont(tenantId: string, input: {
   name: string;
   category: FontCategory;
   file: { name: string; size: number; buffer: Buffer };
 }): Promise<FontDTO> {
   const parsed = createCustomFontSchema.safeParse({ name: input.name, category: input.category });
-  if (!parsed.success) {
-    throw new BadRequestError(parsed.error.issues.map((issue) => issue.message).join(", "));
-  }
+  if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((issue) => issue.message).join(", "));
 
-  const existing = await prisma.font.findUnique({ where: { name: parsed.data.name } });
-  if (existing) throw new ConflictError("Ya existe una fuente con ese nombre.");
+  const existing = await prisma.font.findFirst({ where: { tenantId, name: parsed.data.name } });
+  const systemFont = await prisma.font.findFirst({ where: { tenantId: null, name: parsed.data.name } });
+  if (existing || systemFont) throw new ConflictError("Ya existe una fuente con ese nombre.");
 
   const { extension } = validateFontFile(input.file);
   const fallback = GENERIC_FALLBACK[parsed.data.category];
-
   const font = await prisma.font.create({
     data: {
+      tenantId,
       name: parsed.data.name,
       category: parsed.data.category,
       source: "custom",
@@ -127,35 +119,32 @@ export async function createCustomFont(input: {
     },
   });
 
-  const relativePath = `fonts/${font.id}.${extension}`;
-  await saveFile(relativePath, input.file.buffer);
-
-  const updated = await prisma.font.update({
-    where: { id: font.id },
-    data: { filePath: relativePath },
-  });
-
-  return toDTO(updated);
+  const relativePath = `tenants/${tenantId}/fonts/${font.id}.${extension}`;
+  try {
+    await saveFile(relativePath, input.file.buffer);
+    const updated = await prisma.font.update({ where: { id: font.id }, data: { filePath: relativePath } });
+    return toDTO(updated);
+  } catch (error) {
+    await prisma.font.delete({ where: { id: font.id } }).catch(() => undefined);
+    throw error;
+  }
 }
 
-export async function deleteFont(id: string): Promise<void> {
-  const font = await prisma.font.findUnique({ where: { id } });
+export async function deleteFont(tenantId: string, id: string): Promise<void> {
+  const font = await prisma.font.findFirst({ where: { id, tenantId } });
   if (!font) throw new NotFoundError("Font");
-
-  const active = await getFontSelection();
-  if (Object.values(active).some((font) => font?.id === id)) {
+  const active = await getFontSelection(tenantId);
+  if (Object.values(active).some((selected) => selected?.id === id)) {
     throw new ConflictError("No podés eliminar la fuente que está en uso. Elegí otra primero.");
   }
-
-  if (font.filePath) {
-    await deleteFile(font.filePath);
-  }
-
+  if (font.filePath) await deleteFile(font.filePath);
   await prisma.font.delete({ where: { id } });
 }
 
-export async function getFontFile(id: string): Promise<{ filePath: string; name: string }> {
-  const font = await prisma.font.findUnique({ where: { id } });
+export async function getFontFile(id: string, tenantId: string): Promise<{ filePath: string; name: string }> {
+  const font = await prisma.font.findFirst({ where: { id, tenantId } });
   if (!font?.filePath) throw new NotFoundError("Font");
   return { filePath: font.filePath, name: font.name };
 }
+
+export { FONT_SETTING_KEYS };

@@ -12,9 +12,11 @@ import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csr
 
 export async function GET() {
   try {
-    const fonts = await getFonts();
+    const account = await ensureAdmin();
+    const fonts = await getFonts(account.tenantId!);
     return successResponse(fonts);
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
     return internalErrorResponse();
   }
 }
@@ -22,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
 
     const formData = await req.formData();
     const name = formData.get("name");
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const font = await createCustomFont({
+    const font = await createCustomFont(account.tenantId!, {
       name,
       category: category as FontCategory,
       file: { name: file.name, size: file.size, buffer },

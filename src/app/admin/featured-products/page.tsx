@@ -6,16 +6,22 @@ import { FeaturedProductsForm } from "@/features/featured-products/frontend/comp
 import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
 
 export default async function AdminFeaturedProductsPage() {
-  const [products, featured] = await Promise.all([getProducts(), getFeaturedProducts()]);
+  const account = await ensureAdmin();
+  const [products, featured] = await Promise.all([
+    getProducts(account.tenantId!, account.tenantSlug!),
+    getFeaturedProducts(account.tenantId!),
+  ]);
 
   async function handleSave(featuredIds: (string | null)[]) {
     "use server";
     try {
-      await ensureAdmin();
+      const current = await ensureAdmin();
       await Promise.all(
         featuredIds.map((productId, index) => {
           const position = index + 1;
-          return productId ? setFeaturedProduct(position, productId) : removeFeaturedProduct(position);
+          return productId
+            ? setFeaturedProduct(current.tenantId!, position, productId)
+            : removeFeaturedProduct(current.tenantId!, position);
         }),
       );
       return { success: true };

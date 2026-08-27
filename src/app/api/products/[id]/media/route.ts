@@ -19,8 +19,9 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
+    const account = await ensureAdmin();
     const { id } = await params;
-    const media = await getProductMediaPath(id);
+    const media = await getProductMediaPath(id, account.tenantId!);
     if (!media) return notFoundResponse("Media");
 
     const buffer = await readFile(media.mediaPath);
@@ -41,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
     const formData = await req.formData();
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const product = await saveProductMedia(id, {
+    const product = await saveProductMedia(id, account.tenantId!, account.tenantSlug!, {
       type: file.type,
       size: file.size,
       buffer,
@@ -68,10 +69,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const { id } = await params;
 
-    const product = await removeProductMedia(id);
+    const product = await removeProductMedia(id, account.tenantId!, account.tenantSlug!);
     return successResponse(product);
   } catch (error) {
     if (error instanceof AppError) {

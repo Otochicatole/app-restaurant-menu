@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { loginSchema } from "@/features/auth/backend/schemas/login.schema";
-import { login, logout, getCurrentSession } from "@/features/auth/backend/services/auth.service";
+import { login, logout, getAuthenticatedAccount } from "@/features/auth/backend/services/auth.service";
 import {
   successResponse,
   validationErrorResponse,
@@ -26,7 +26,12 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return validationErrorResponse(parsed.error);
 
     const result = await login(parsed.data.email, parsed.data.password);
-    return successResponse({ email: result.email });
+    return successResponse({
+      email: result.email,
+      role: result.role,
+      tenantSlug: result.tenantSlug,
+      mustChangePassword: result.mustChangePassword,
+    });
   } catch (error) {
     if (error instanceof AppError) {
       return errorResponse(error.code, error.message, error.statusCode);
@@ -37,9 +42,9 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    const session = await getCurrentSession();
-    if (!session) return successResponse(null);
-    return successResponse({ email: session.email });
+    const account = await getAuthenticatedAccount();
+    if (!account) return successResponse(null);
+    return successResponse({ email: account.email, adminId: account.adminId, role: account.role, tenantSlug: account.tenantSlug, mustChangePassword: account.mustChangePassword });
   } catch {
     return internalErrorResponse();
   }

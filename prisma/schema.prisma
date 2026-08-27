@@ -7,13 +7,42 @@ datasource db {
   provider = "postgresql"
 }
 
+enum AdminRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 model Admin {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  sessions     Session[]
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
+  role               AdminRole @default(TENANT_ADMIN)
+  tenantId           String?   @unique
+  tenant             Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sessions           Session[]
+}
+
+model Tenant {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  admin     Admin?
+  homePage  HomePage?
+  groups    Group[]
+  fonts     Font[]
+  settings  Setting[]
 }
 
 model Session {
@@ -28,15 +57,23 @@ model Session {
 
 model Group {
   id          String    @id @default(cuid())
-  name        String    @unique
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
   description String    @default("")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  products    Product[]
+  products    Product[] @relation("GroupProducts")
+
+  @@unique([tenantId, name])
+  @@unique([id, tenantId])
+  @@index([tenantId])
 }
 
 model HomePage {
   id          String   @id @default(cuid())
+  tenantId    String   @unique
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title       String   @default("Fuzion")
   description String   @default("Desayunos y meriendas")
   createdAt   DateTime @default(now())
@@ -44,32 +81,44 @@ model HomePage {
 }
 
 model Product {
-  id          String           @id @default(cuid())
+  id          String            @id @default(cuid())
+  tenantId    String
   name        String
-  description String           @default("")
+  description String            @default("")
   price       Float
   groupId     String
-  sortOrder   Int              @default(0)
+  sortOrder   Int               @default(0)
   mediaPath   String?
   mediaType   String?
-  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  featured    FeaturedProduct[]
+  group       Group             @relation("GroupProducts", fields: [groupId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  featured    FeaturedProduct[] @relation("ProductFeatured")
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@index([tenantId, groupId])
 }
 
 model FeaturedProduct {
   id        String   @id @default(cuid())
-  position  Int      @unique
+  tenantId  String
+  position  Int
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation("ProductFeatured", fields: [productId, tenantId], references: [id, tenantId], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, position])
+  @@unique([id, tenantId])
+  @@index([tenantId])
 }
 
 model Font {
   id           String   @id @default(cuid())
-  name         String   @unique
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
   category     String
   source       String
   googleFamily String?
@@ -78,11 +127,18 @@ model Font {
   filePath     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
 }
 
 model Setting {
-  key       String   @id
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key       String
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@id([tenantId, key])
 }

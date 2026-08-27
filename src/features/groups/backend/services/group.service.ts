@@ -4,8 +4,9 @@ import type { GroupDTO } from "../types";
 import { NotFoundError } from "@/shared/backend/errors/app-error";
 import { deleteFile } from "@/shared/backend/storage";
 
-export async function getGroups(): Promise<GroupDTO[]> {
+export async function getGroups(tenantId: string): Promise<GroupDTO[]> {
   const groups = await prisma.group.findMany({
+    where: { tenantId },
     include: { _count: { select: { products: true } } },
     orderBy: { name: "asc" },
   });
@@ -19,12 +20,12 @@ export async function getGroups(): Promise<GroupDTO[]> {
   }));
 }
 
-export async function getGroupById(id: string): Promise<GroupDTO> {
+export async function getGroupById(id: string, tenantId: string): Promise<GroupDTO> {
   const group = await prisma.group.findUnique({
     where: { id },
     include: { _count: { select: { products: true } } },
   });
-  if (!group) throw new NotFoundError("Group");
+  if (!group || group.tenantId !== tenantId) throw new NotFoundError("Group");
   return {
     id: group.id,
     name: group.name,
@@ -35,8 +36,8 @@ export async function getGroupById(id: string): Promise<GroupDTO> {
   };
 }
 
-export async function createGroup(input: GroupInput): Promise<GroupDTO> {
-  const group = await prisma.group.create({ data: input });
+export async function createGroup(input: GroupInput, tenantId: string): Promise<GroupDTO> {
+  const group = await prisma.group.create({ data: { ...input, tenantId } });
   return {
     id: group.id,
     name: group.name,
@@ -47,9 +48,9 @@ export async function createGroup(input: GroupInput): Promise<GroupDTO> {
   };
 }
 
-export async function updateGroup(id: string, input: GroupUpdateInput): Promise<GroupDTO> {
+export async function updateGroup(id: string, input: GroupUpdateInput, tenantId: string): Promise<GroupDTO> {
   const existing = await prisma.group.findUnique({ where: { id } });
-  if (!existing) throw new NotFoundError("Group");
+  if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Group");
 
   const group = await prisma.group.update({ where: { id }, data: input });
   return {
@@ -61,12 +62,12 @@ export async function updateGroup(id: string, input: GroupUpdateInput): Promise<
   };
 }
 
-export async function deleteGroup(id: string): Promise<void> {
+export async function deleteGroup(id: string, tenantId: string): Promise<void> {
   const existing = await prisma.group.findUnique({ where: { id } });
-  if (!existing) throw new NotFoundError("Group");
+  if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Group");
 
   const products = await prisma.product.findMany({
-    where: { groupId: id },
+    where: { groupId: id, tenantId },
     select: { mediaPath: true },
   });
   for (const product of products) {
@@ -78,6 +79,6 @@ export async function deleteGroup(id: string): Promise<void> {
   await prisma.group.delete({ where: { id } });
 }
 
-export async function getGroupCount(): Promise<number> {
-  return prisma.group.count();
+export async function getGroupCount(tenantId: string): Promise<number> {
+  return prisma.group.count({ where: { tenantId } });
 }

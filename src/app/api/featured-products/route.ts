@@ -15,9 +15,11 @@ import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csr
 
 export async function GET() {
   try {
-    const featured = await getFeaturedProducts();
+    const account = await ensureAdmin();
+    const featured = await getFeaturedProducts(account.tenantId!);
     return successResponse(featured);
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
     return internalErrorResponse();
   }
 }
@@ -25,19 +27,19 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const body = await req.json();
     const { action, position, productId } = body;
 
     if (action === "set" && typeof position === "number" && typeof productId === "string") {
       if (position < 1 || position > 3) return errorResponse("INVALID_POSITION", "Position must be 1, 2, or 3", 400);
-      await setFeaturedProduct(position, productId);
+      await setFeaturedProduct(account.tenantId!, position, productId);
       return successResponse(null, 200);
     }
 
     if (action === "remove" && typeof position === "number") {
       if (position < 1 || position > 3) return errorResponse("INVALID_POSITION", "Position must be 1, 2, or 3", 400);
-      await removeFeaturedProduct(position);
+      await removeFeaturedProduct(account.tenantId!, position);
       return successResponse(null, 200);
     }
 

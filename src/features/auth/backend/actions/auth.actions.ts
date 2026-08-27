@@ -1,7 +1,7 @@
 "use server";
 
 import { loginSchema } from "../schemas/login.schema";
-import { login, logout, getCurrentSession } from "../services/auth.service";
+import { login, logout, getAuthenticatedAccount } from "../services/auth.service";
 import { AppError, ValidationError } from "@/shared/backend/errors/app-error";
 
 export async function loginAction(formData: FormData) {
@@ -12,7 +12,7 @@ export async function loginAction(formData: FormData) {
     });
 
     const result = await login(input.email, input.password);
-    return { success: true, data: { email: result.email } };
+    return { success: true, data: { email: result.email, role: result.role, tenantSlug: result.tenantSlug, mustChangePassword: result.mustChangePassword } };
   } catch (error) {
     if (error instanceof AppError) {
       return { success: false, error: { code: error.code, message: error.message } };
@@ -35,7 +35,7 @@ export async function logoutAction() {
 
 export async function getSessionAction() {
   try {
-    const session = await getCurrentSession();
+    const session = await getAuthenticatedAccount();
     if (!session) {
       return { success: true, data: null };
     }

@@ -6,13 +6,16 @@ import { AdminLayout } from "@/shared/frontend/layouts/AdminLayout";
 import { AdminCard, AdminPageHeader, AdminStatCard, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/shared/frontend/components/admin/AdminUI";
 import Link from "next/link";
 import { ArrowRight, BookOpen, FolderPlus, Home, Pencil, Star } from "lucide-react";
+import { requireTenantAdmin } from "@/features/auth/backend/services/auth.service";
 
 export default async function AdminDashboard() {
+  const account = await requireTenantAdmin();
+  const tenantId = account.tenantId!;
   const [productCount, groupCount, featured, homePage] = await Promise.all([
-    getProductCount(),
-    getGroupCount(),
-    getFeaturedProducts(),
-    getOrCreateHomePage(),
+    getProductCount(tenantId),
+    getGroupCount(tenantId),
+    getFeaturedProducts(tenantId),
+    getOrCreateHomePage(tenantId),
   ]);
 
   const featuredCount = featured.filter(Boolean).length;

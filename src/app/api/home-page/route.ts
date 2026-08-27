@@ -13,9 +13,11 @@ import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csr
 
 export async function GET() {
   try {
-    const homePage = await getOrCreateHomePage();
+    const account = await ensureAdmin();
+    const homePage = await getOrCreateHomePage(account.tenantId!);
     return successResponse(homePage);
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
     return internalErrorResponse();
   }
 }
@@ -23,11 +25,11 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     if (!validateOrigin(req)) return csrfErrorResponse();
-    await ensureAdmin();
+    const account = await ensureAdmin();
     const body = await req.json();
     const parsed = homePageUpdateSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);
-    const homePage = await updateHomePage(parsed.data);
+    const homePage = await updateHomePage(parsed.data, account.tenantId!);
     return successResponse(homePage);
   } catch (error) {
     if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);

@@ -5,13 +5,14 @@ import { HomePageForm } from "@/features/home-page/frontend/components/HomePageF
 import { AdminCard, AdminPageHeader } from "@/shared/frontend/components/admin/AdminUI";
 
 export default async function AdminHomePage() {
-  const homePage = await getOrCreateHomePage();
+  const account = await ensureAdmin();
+  const homePage = await getOrCreateHomePage(account.tenantId!);
 
   async function handleSubmit(data: { title: string; description: string }) {
     "use server";
     try {
-      await ensureAdmin();
-      const updated = await updateHomePage(data);
+      const current = await ensureAdmin();
+      const updated = await updateHomePage(data, current.tenantId!);
       return { success: true, data: updated };
     } catch (e) {
       return { success: false, error: { message: e instanceof Error ? e.message : "No se pudo actualizar" } };

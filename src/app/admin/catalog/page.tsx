@@ -8,16 +8,19 @@ import { revalidatePath } from "next/cache";
 import { ProductCatalogClient, type CatalogActionResult } from "./ProductCatalogClient";
 
 export default async function AdminProductsPage({ searchParams }: { searchParams: Promise<{ group?: string }> }) {
+  const account = await ensureAdmin();
+  const tenantId = account.tenantId!;
+  const tenantSlug = account.tenantSlug!;
   const [{ group }, [groups, products]] = await Promise.all([
     searchParams,
-    Promise.all([getGroups(), getProducts()]),
+    Promise.all([getGroups(tenantId), getProducts(tenantId, tenantSlug)]),
   ]);
 
   async function createCatalogGroup(data: { name: string; description: string }): Promise<CatalogActionResult<GroupDTO>> {
     "use server";
     try {
-      await ensureAdmin();
-      const created = await createGroup(data);
+      const current = await ensureAdmin();
+      const created = await createGroup(data, current.tenantId!);
       revalidatePath("/admin/catalog");
       return { success: true, data: created };
     } catch (error) {
@@ -28,8 +31,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function updateCatalogGroup(id: string, data: { name: string; description: string }): Promise<CatalogActionResult<GroupDTO>> {
     "use server";
     try {
-      await ensureAdmin();
-      const updated = await updateGroup(id, data);
+      const current = await ensureAdmin();
+      const updated = await updateGroup(id, data, current.tenantId!);
       revalidatePath("/admin/catalog");
       return { success: true, data: updated };
     } catch (error) {
@@ -40,8 +43,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function removeCatalogGroup(id: string): Promise<CatalogActionResult> {
     "use server";
     try {
-      await ensureAdmin();
-      await deleteGroup(id);
+      const current = await ensureAdmin();
+      await deleteGroup(id, current.tenantId!);
       revalidatePath("/admin/catalog");
       return { success: true };
     } catch (error) {
@@ -52,8 +55,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function createCatalogProduct(data: { name: string; description: string; price: number; groupId: string }): Promise<CatalogActionResult<ProductDTO>> {
     "use server";
     try {
-      await ensureAdmin();
-      const created = await createProduct(data);
+      const current = await ensureAdmin();
+      const created = await createProduct(data, current.tenantId!, current.tenantSlug!);
       revalidatePath("/admin/catalog");
       return { success: true, data: created };
     } catch (error) {
@@ -64,8 +67,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function updateCatalogProduct(id: string, data: { name: string; description: string; price: number; groupId: string }): Promise<CatalogActionResult<ProductDTO>> {
     "use server";
     try {
-      await ensureAdmin();
-      const updated = await updateProduct(id, data);
+      const current = await ensureAdmin();
+      const updated = await updateProduct(id, data, current.tenantId!, current.tenantSlug!);
       revalidatePath("/admin/catalog");
       return { success: true, data: updated };
     } catch (error) {
@@ -76,8 +79,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function removeCatalogProduct(id: string): Promise<CatalogActionResult> {
     "use server";
     try {
-      await ensureAdmin();
-      await deleteProduct(id);
+      const current = await ensureAdmin();
+      await deleteProduct(id, current.tenantId!);
       revalidatePath("/admin/catalog");
       return { success: true };
     } catch (error) {
@@ -88,10 +91,10 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   async function reorderCatalogProducts(groupId: string, productIds: string[]): Promise<CatalogActionResult> {
     "use server";
     try {
-      await ensureAdmin();
-      await updateProductOrder(groupId, productIds);
+      const current = await ensureAdmin();
+      await updateProductOrder(groupId, productIds, current.tenantId!);
       revalidatePath("/admin/catalog");
-      revalidatePath("/");
+      revalidatePath(`/m/${current.tenantSlug}`);
       return { success: true };
     } catch (error) {
       return { success: false, error: { message: error instanceof Error ? error.message : "No se pudo guardar el orden" } };

@@ -1,11 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { LoginForm } from "@/features/auth/frontend/components/LoginForm";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-
   return (
     <div data-admin-panel className="flex min-h-screen items-center justify-center bg-emerald-950 px-4 py-10">
       <div className="w-full max-w-md">
@@ -15,7 +12,7 @@ export default function AdminLoginPage() {
           <p className="mt-2 text-sm text-emerald-200">Iniciá sesión para administrar tu menú.</p>
         </div>
         <div className="rounded-3xl border border-white/10 bg-white p-6 shadow-2xl sm:p-8">
-          <LoginForm onSuccess={() => router.push("/admin")} />
+          <LoginForm />
         </div>
       </div>
     </div>

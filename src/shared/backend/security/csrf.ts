@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 const ALLOWED_ORIGINS = [
+  process.env.APP_URL,
   process.env.NEXT_PUBLIC_URL,
   process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`

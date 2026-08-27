@@ -1,5 +1,5 @@
 import { prisma } from "@/shared/backend/database/prisma";
-import type { HomePageInput, HomePageUpdateInput } from "../schemas/home-page.schema";
+import type { HomePageUpdateInput } from "../schemas/home-page.schema";
 import type { HomePageDTO } from "../types";
 
 function toDTO(row: { id: string; title: string; description: string; createdAt: Date; updatedAt: Date }): HomePageDTO {
@@ -12,21 +12,22 @@ function toDTO(row: { id: string; title: string; description: string; createdAt:
   };
 }
 
-export async function getOrCreateHomePage(): Promise<HomePageDTO> {
-  let homePage = await prisma.homePage.findFirst();
+export async function getOrCreateHomePage(tenantId: string, defaults?: { title?: string; description?: string }): Promise<HomePageDTO> {
+  let homePage = await prisma.homePage.findUnique({ where: { tenantId } });
   if (!homePage) {
     homePage = await prisma.homePage.create({
-      data: { title: "Fuzion", description: "Desayunos y meriendas" },
+      data: { tenantId, title: defaults?.title ?? "Fuzion", description: defaults?.description ?? "Desayunos y meriendas" },
     });
   }
   return toDTO(homePage);
 }
 
-export async function updateHomePage(input: HomePageUpdateInput): Promise<HomePageDTO> {
-  let homePage = await prisma.homePage.findFirst();
+export async function updateHomePage(input: HomePageUpdateInput, tenantId: string): Promise<HomePageDTO> {
+  let homePage = await prisma.homePage.findUnique({ where: { tenantId } });
   if (!homePage) {
     homePage = await prisma.homePage.create({
       data: {
+        tenantId,
         title: input.title ?? "Fuzion",
         description: input.description ?? "Desayunos y meriendas",
       },

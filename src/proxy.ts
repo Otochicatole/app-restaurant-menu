@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/shared/backend/auth/tokens";
 
 function buildCSP(): string {
-  const scriptSrc = "'self' 'unsafe-inline'"
-    + (process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
-
+  const scriptSrc = "'self' 'unsafe-inline'" + (process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -19,10 +17,9 @@ function buildCSP(): string {
   ].join("; ");
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const response = NextResponse.next();
-
   response.headers.set("Content-Security-Policy", buildCSP());
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
@@ -30,28 +27,22 @@ export function middleware(req: NextRequest) {
   response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
 
   if (process.env.NODE_ENV === "production") {
-    response.headers.set(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains"
-    );
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
 
-  if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/login")) {
-    const token = req.cookies.get("session")?.value;
-    if (!token) {
-      return NextResponse.redirect(new URL("/admin/login", req.url));
-    }
+  const protectedArea = pathname.startsWith("/admin") && !pathname.startsWith("/admin/login") || pathname.startsWith("/superadmin");
+  if (!protectedArea) return response;
 
-    return verifySessionToken(token).then(
-      () => {
-        response.headers.set("Cache-Control", "no-store");
-        return response;
-      },
-      () => NextResponse.redirect(new URL("/admin/login", req.url))
-    );
-  }
+  const token = req.cookies.get("session")?.value;
+  if (!token) return NextResponse.redirect(new URL("/admin/login", req.url));
 
-  return response;
+  return verifySessionToken(token).then(
+    () => {
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    },
+    () => NextResponse.redirect(new URL("/admin/login", req.url)),
+  );
 }
 
 export const config = {

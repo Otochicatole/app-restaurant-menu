@@ -5,7 +5,7 @@ import { useState } from "react";
 import { LogIn } from "lucide-react";
 
 interface LoginFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (data: { role?: string; mustChangePassword?: boolean }) => void;
 }
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
@@ -33,7 +33,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       const data = await res.json();
 
       if (data.success) {
-        if (onSuccess) onSuccess();
+        if (onSuccess) onSuccess(data.data ?? {});
+        else if (data.data?.role === "SUPER_ADMIN") router.push("/superadmin");
+        else if (data.data?.mustChangePassword) router.push("/admin/account/password");
         else router.push("/admin");
       } else {
         setError(data.error?.message ?? "No se pudo iniciar sesión");

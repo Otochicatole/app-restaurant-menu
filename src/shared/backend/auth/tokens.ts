@@ -1,10 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
-
-if (process.env.NODE_ENV === "production" && process.env.JWT_SECRET === "local-dev-jwt-secret-change-in-production") {
-  console.warn("[SECURITY] Using default JWT_SECRET in production. Set JWT_SECRET env var.");
+const secretValue = process.env.JWT_SECRET ?? (process.env.NODE_ENV === "production" ? "" : "local-dev-jwt-secret-change-in-development");
+if (secretValue.length < 32) {
+  throw new Error("JWT_SECRET debe tener al menos 32 caracteres.");
 }
+const JWT_SECRET = new TextEncoder().encode(secretValue);
+
 
 export interface SessionPayload {
   adminId: string;
