@@ -140,6 +140,7 @@ export function AdminConfirmModal({
   onConfirm,
   loading = false,
   confirmLabel = "Eliminar",
+  loadingLabel = "Eliminando...",
 }: {
   open: boolean;
   title: string;
@@ -148,6 +149,7 @@ export function AdminConfirmModal({
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
   confirmLabel?: string;
+  loadingLabel?: string;
 }) {
   return (
     <AdminModal open={open} title={title} description={description} onClose={loading ? () => undefined : onClose}>
@@ -156,7 +158,7 @@ export function AdminConfirmModal({
           Cancelar
         </button>
         <button type="button" className={adminDangerButtonClass} onClick={onConfirm} disabled={loading}>
-          {loading ? "Eliminando..." : confirmLabel}
+          {loading ? loadingLabel : confirmLabel}
         </button>
       </div>
     </AdminModal>
