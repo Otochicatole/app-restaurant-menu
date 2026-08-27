@@ -74,7 +74,7 @@ export function AdminStatCard({
 
 export function AdminEmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
-    <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center">
+    <div className="flex min-h-52 flex-col p-20 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><Plus size={20} /></div>
       <h2 className="mt-4 text-base font-semibold text-zinc-900">{title}</h2>
       <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">{description}</p>
