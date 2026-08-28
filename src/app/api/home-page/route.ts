@@ -1,38 +1,25 @@
 import { NextRequest } from "next/server";
-import { homePageUpdateSchema } from "@/features/home-page/backend/schemas/home-page.schema";
-import { getOrCreateHomePage, updateHomePage } from "@/features/home-page/backend/services/home-page.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
+import { requireTenantAdmin } from "@/modules/identity-access/server";
+import { menuCustomization, updateMenuHeaderSchema } from "@/modules/menu-customization/server";
+import { handleApiError, successResponse } from "@/platform/http/api-response";
+import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
 
 export async function GET() {
   try {
-    const account = await ensureAdmin();
-    const homePage = await getOrCreateHomePage(account.tenantId!);
-    return successResponse(homePage);
+    const actor = await requireTenantAdmin();
+    return successResponse(await menuCustomization.getHeader(actor.tenantId));
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleApiError(error);
   }
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const body = await req.json();
-    const parsed = homePageUpdateSchema.safeParse(body);
-    if (!parsed.success) return validationErrorResponse(parsed.error);
-    const homePage = await updateHomePage(parsed.data, account.tenantId!);
-    return successResponse(homePage);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const actor = await requireTenantAdmin();
+    const input = updateMenuHeaderSchema.parse(await request.json());
+    return successResponse(await menuCustomization.updateHeader(actor.tenantId, input));
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleApiError(error);
   }
 }

@@ -14,15 +14,23 @@
 /coverage
 /test-results
 /playwright-report
+/.playwright-storage
 .claude
 .idea
 .next
 .windsurf
 .agents
 dev.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
 
 # next.js
 /.next/
+/.next-e2e/
 /out/
 
 # production
@@ -37,7 +45,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-bun.lock
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -54,3 +61,4 @@ next-env.d.ts
 
 # uploaded media
 /storage
+/.deploy

@@ -1,42 +1,26 @@
 import { NextRequest } from "next/server";
-import { groupSchema } from "@/features/groups/backend/schemas/group.schema";
-import { getGroups, createGroup } from "@/features/groups/backend/services/group.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
+import { successResponse } from "@/platform/http/api-response";
+import { createGroupCommandSchema } from "@/modules/catalog/contracts";
+import { createGroup, listGroups } from "@/modules/catalog/server";
+import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
+import { handleCatalogApiError, requireCatalogScope } from "../catalog-route-support";
 
 export async function GET() {
   try {
-    const account = await ensureAdmin();
-    const groups = await getGroups(account.tenantId!);
-    return successResponse(groups);
+    const actor = await requireCatalogScope();
+    return successResponse(await listGroups({ tenantId: actor.tenantId }));
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-
-    const body = await req.json();
-    const parsed = groupSchema.safeParse(body);
-    if (!parsed.success) return validationErrorResponse(parsed.error);
-
-    const group = await createGroup(parsed.data, account.tenantId!);
-    return successResponse(group, 201);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const actor = await requireCatalogScope();
+    const command = createGroupCommandSchema.parse({ tenantId: actor.tenantId, input: await request.json() });
+    return successResponse(await createGroup(command), 201);
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }

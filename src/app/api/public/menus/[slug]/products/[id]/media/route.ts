@@ -1,20 +1,28 @@
 import { NextRequest } from "next/server";
-import { getActiveTenantBySlug } from "@/features/tenants/backend/services/tenant.service";
-import { getProductMediaPath } from "@/features/products/backend/services/product.service";
-import { contentTypeForPath, readFile } from "@/shared/backend/storage";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { notFoundResponse, errorResponse } from "@/shared/backend/responses";
+import { getProductMediaDescriptor, openProductMedia } from "@/modules/catalog/server";
+import { tenantManagement } from "@/modules/tenant-management/server";
+import { errorResponse, handleApiError } from "@/platform/http/api-response";
+import { createMediaResponse } from "@/platform/http/media-response";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> },
+) {
   try {
     const { slug, id } = await params;
-    const tenant = await getActiveTenantBySlug(slug);
-    const media = await getProductMediaPath(id, tenant.id);
-    if (!media) return notFoundResponse("Media");
-    const buffer = await readFile(media.mediaPath);
-    return new Response(new Uint8Array(buffer), { headers: { "Content-Type": contentTypeForPath(media.mediaPath), "Cache-Control": "public, max-age=31536000, immutable" } });
+    const tenant = await tenantManagement.resolveActiveTenant(slug);
+    const command = { tenantId: tenant.id, productId: id };
+    const descriptor = await getProductMediaDescriptor(command);
+    if (!descriptor) return errorResponse("NOT_FOUND", "Media not found", 404);
+
+    const response = await createMediaResponse({
+      request,
+      descriptor,
+      cacheControl: "public, max-age=0, must-revalidate",
+      open: (range) => openProductMedia({ ...command, ...(range ? { range } : {}) }),
+    });
+    return response ?? errorResponse("NOT_FOUND", "Media not found", 404);
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return notFoundResponse("Media");
+    return handleApiError(error);
   }
 }

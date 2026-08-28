@@ -1,83 +1,67 @@
 import { NextRequest } from "next/server";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
+import { errorResponse, successResponse } from "@/platform/http/api-response";
+import { productMediaCommandSchema, productMediaMetadataSchema, removeProductMediaCommandSchema, saveProductMediaCommandSchema } from "@/modules/catalog/contracts";
 import {
-  getProductMediaPath,
+  getProductMediaDescriptor,
+  openProductMedia,
   removeProductMedia,
   saveProductMedia,
-} from "@/features/products/backend/services/product.service";
-import {
-  successResponse,
-  notFoundResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
-import { contentTypeForPath, readFile } from "@/shared/backend/storage";
+} from "@/modules/catalog/server";
+import { createMediaResponse } from "@/platform/http/media-response";
+import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
+import { handleCatalogApiError, requireCatalogScope } from "../../../catalog-route-support";
 
-type Params = { params: Promise<{ id: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const account = await ensureAdmin();
-    const { id } = await params;
-    const media = await getProductMediaPath(id, account.tenantId!);
-    if (!media) return notFoundResponse("Media");
+    const [actor, { id }] = await Promise.all([requireCatalogScope(), params]);
+    const command = productMediaCommandSchema.parse({ tenantId: actor.tenantId, productId: id });
+    const descriptor = await getProductMediaDescriptor(command);
+    if (!descriptor) return errorResponse("NOT_FOUND", "Media not found", 404);
 
-    const buffer = await readFile(media.mediaPath);
-    return new Response(new Uint8Array(buffer), {
-      headers: {
-        "Content-Type": contentTypeForPath(media.mediaPath),
-        "Cache-Control": "public, max-age=31536000, immutable",
-      },
+    const response = await createMediaResponse({
+      request,
+      descriptor,
+      cacheControl: "private, max-age=0, must-revalidate",
+      open: (range) => openProductMedia({ ...command, ...(range ? { range } : {}) }),
     });
+    return response ?? errorResponse("NOT_FOUND", "Media not found", 404);
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return notFoundResponse("Media");
+    return handleCatalogApiError(error);
   }
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const { id } = await params;
-
-    const formData = await req.formData();
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const [actor, { id }, formData] = await Promise.all([requireCatalogScope(), params, request.formData()]);
     const file = formData.get("file");
-    if (!(file instanceof File)) {
-      return errorResponse("VALIDATION_ERROR", "Archivo no proporcionado", 422);
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const product = await saveProductMedia(id, account.tenantId!, account.tenantSlug!, {
-      type: file.type,
-      size: file.size,
-      buffer,
+    if (!(file instanceof File)) return errorResponse("VALIDATION_ERROR", "Archivo no proporcionado", 422);
+    productMediaMetadataSchema.parse({ type: file.type, size: file.size });
+    const command = saveProductMediaCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      productId: id,
+      file: { type: file.type, size: file.size, content: new Uint8Array(await file.arrayBuffer()) },
     });
-    return successResponse(product);
+    return successResponse(await saveProductMedia(command));
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const { id } = await params;
-
-    const product = await removeProductMedia(id, account.tenantId!, account.tenantSlug!);
-    return successResponse(product);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const [actor, { id }] = await Promise.all([requireCatalogScope(), params]);
+    const command = removeProductMediaCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      productId: id,
+    });
+    return successResponse(await removeProductMedia(command));
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }

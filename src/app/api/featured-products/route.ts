@@ -1,51 +1,36 @@
 import { NextRequest } from "next/server";
-import {
-  getFeaturedProducts,
-  setFeaturedProduct,
-  removeFeaturedProduct,
-} from "@/features/featured-products/backend/services/featured-product.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
-import {
-  successResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
+import { z } from "zod";
+import { requireTenantAdmin } from "@/modules/identity-access/server";
+import { merchandising, featuredPositionSchema } from "@/modules/merchandising/server";
+import { handleApiError, successResponse } from "@/platform/http/api-response";
+import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
+
+const mutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("set"), position: featuredPositionSchema, productId: z.string().min(1) }),
+  z.object({ action: z.literal("remove"), position: featuredPositionSchema }),
+]);
 
 export async function GET() {
   try {
-    const account = await ensureAdmin();
-    const featured = await getFeaturedProducts(account.tenantId!);
-    return successResponse(featured);
+    const actor = await requireTenantAdmin();
+    return successResponse(await merchandising.getHighlights(actor.tenantId));
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleApiError(error);
   }
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const body = await req.json();
-    const { action, position, productId } = body;
-
-    if (action === "set" && typeof position === "number" && typeof productId === "string") {
-      if (position < 1 || position > 3) return errorResponse("INVALID_POSITION", "Position must be 1, 2, or 3", 400);
-      await setFeaturedProduct(account.tenantId!, position, productId);
-      return successResponse(null, 200);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const actor = await requireTenantAdmin();
+    const mutation = mutationSchema.parse(await request.json());
+    if (mutation.action === "set") {
+      await merchandising.setHighlight(actor.tenantId, mutation.position, mutation.productId);
+    } else {
+      await merchandising.removeHighlight(actor.tenantId, mutation.position);
     }
-
-    if (action === "remove" && typeof position === "number") {
-      if (position < 1 || position > 3) return errorResponse("INVALID_POSITION", "Position must be 1, 2, or 3", 400);
-      await removeFeaturedProduct(account.tenantId!, position);
-      return successResponse(null, 200);
-    }
-
-    return errorResponse("BAD_REQUEST", "Invalid action", 400);
+    return successResponse(null);
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleApiError(error);
   }
 }

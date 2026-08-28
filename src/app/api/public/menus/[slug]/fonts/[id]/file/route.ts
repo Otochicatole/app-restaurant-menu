@@ -1,19 +1,31 @@
 import { NextRequest } from "next/server";
-import { getActiveTenantBySlug } from "@/features/tenants/backend/services/tenant.service";
-import { getFontFile } from "@/features/fonts/backend/services/font.service";
-import { contentTypeForPath, readFile } from "@/shared/backend/storage";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { notFoundResponse, errorResponse } from "@/shared/backend/responses";
+import { tenantManagement } from "@/modules/tenant-management/server";
+import { menuCustomization } from "@/modules/menu-customization/server";
+import { blobStore, contentTypeForKey } from "@/platform/storage";
+import { handleApiError } from "@/platform/http/api-response";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; id: string }> },
+) {
   try {
     const { slug, id } = await params;
-    const tenant = await getActiveTenantBySlug(slug);
-    const font = await getFontFile(id, tenant.id);
-    const buffer = await readFile(font.filePath);
-    return new Response(new Uint8Array(buffer), { headers: { "Content-Type": contentTypeForPath(font.filePath), "Cache-Control": "public, max-age=31536000, immutable" } });
+    const tenant = await tenantManagement.resolveActiveTenant(slug);
+    const asset = await menuCustomization.getCustomFontAsset(tenant.id, id);
+    const metadata = await blobStore.stat(asset.storageKey);
+    if (!metadata) return new Response(null, { status: 404 });
+    const etag = `W/"${metadata.size}-${metadata.updatedAt.getTime()}"`;
+    if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
+    const content = await blobStore.read(asset.storageKey);
+    return new Response(new Uint8Array(content), {
+      headers: {
+        "Content-Type": contentTypeForKey(asset.storageKey),
+        "Content-Length": String(content.length),
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        ETag: etag,
+      },
+    });
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return notFoundResponse("Font");
+    return handleApiError(error);
   }
 }

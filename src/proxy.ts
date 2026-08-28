@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "@/shared/backend/auth/tokens";
+import { verifySessionToken } from "@/modules/identity-access/server";
+import { getServerEnv } from "@/platform/config/server-env";
 
 function buildCSP(): string {
-  const scriptSrc = "'self' 'unsafe-inline'" + (process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
+  const scriptSrc = "'self' 'unsafe-inline'" + (getServerEnv().NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -26,7 +27,7 @@ export function proxy(req: NextRequest) {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
 
-  if (process.env.NODE_ENV === "production") {
+  if (getServerEnv().NODE_ENV === "production") {
     response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
 

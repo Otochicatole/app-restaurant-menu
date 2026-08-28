@@ -1,44 +1,35 @@
 import { NextRequest } from "next/server";
-import { productSchema } from "@/features/products/backend/schemas/product.schema";
-import { getProducts, createProduct } from "@/features/products/backend/services/product.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
+import { successResponse } from "@/platform/http/api-response";
+import { createProductCommandSchema, listProductsCommandSchema } from "@/modules/catalog/contracts";
+import { createProduct, listProducts } from "@/modules/catalog/server";
+import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
+import { handleCatalogApiError, requireCatalogScope } from "../catalog-route-support";
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const account = await ensureAdmin();
-    const url = new URL(req.url);
-    const groupId = url.searchParams.get("groupId") ?? undefined;
-    const products = await getProducts(account.tenantId!, account.tenantSlug!, groupId);
-    return successResponse(products);
+    const actor = await requireCatalogScope();
+    const command = listProductsCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      groupId: new URL(request.url).searchParams.get("groupId") ?? undefined,
+    });
+    return successResponse(await listProducts(command));
   } catch (error) {
-    if (error instanceof AppError) return errorResponse(error.code, error.message, error.statusCode);
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-
-    const body = await req.json();
-    const parsed = productSchema.safeParse(body);
-    if (!parsed.success) return validationErrorResponse(parsed.error);
-
-    const product = await createProduct(parsed.data, account.tenantId!, account.tenantSlug!);
-    return successResponse(product, 201);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const actor = await requireCatalogScope();
+    const command = createProductCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      input: await request.json(),
+    });
+    return successResponse(await createProduct(command), 201);
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }

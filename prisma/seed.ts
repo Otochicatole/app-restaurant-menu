@@ -1,8 +1,12 @@
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 import bcrypt from "bcryptjs";
+import { assertLocalSqliteUrl } from "../src/platform/config/sqlite-url";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL es obligatoria para ejecutar el seed.");
+assertLocalSqliteUrl(databaseUrl);
+const prisma = new PrismaClient({ adapter: new PrismaLibSql({ url: databaseUrl.trim(), timeout: 5_000 }) });
 
 const fontDefs = [
   ["Playfair Display", "serif", "Playfair Display", '"Playfair Display", serif', "400;700"],
@@ -26,7 +30,7 @@ const fontDefs = [
 ] as const;
 
 async function main() {
-  const email = process.env.SUPER_ADMIN_EMAIL;
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SUPER_ADMIN_PASSWORD;
   if (!email || !password) throw new Error("SUPER_ADMIN_EMAIL y SUPER_ADMIN_PASSWORD son obligatorios para ejecutar el seed.");
   if (password.length < 12) throw new Error("SUPER_ADMIN_PASSWORD debe tener al menos 12 caracteres.");

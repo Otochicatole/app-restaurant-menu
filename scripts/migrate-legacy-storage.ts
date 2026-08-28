@@ -1,8 +1,12 @@
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { fileExists, moveFile } from "../src/shared/backend/storage";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { blobStore } from "../src/platform/storage";
+import { assertLocalSqliteUrl } from "../src/platform/config/sqlite-url";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is required.");
+assertLocalSqliteUrl(databaseUrl);
+const prisma = new PrismaClient({ adapter: new PrismaLibSql({ url: databaseUrl.trim(), timeout: 5_000 }) });
 
 async function main() {
   const tenant = await prisma.tenant.findUnique({ where: { slug: "fuzion" } });
@@ -13,14 +17,14 @@ async function main() {
 
   for (const file of files) {
     const destination = `tenants/${tenant.id}/${file.kind === "product" ? "products" : "fonts"}/${file.path.split("/").pop()}`;
-    if (!(await fileExists(file.path)) && !(await fileExists(destination))) {
+    if (!(await blobStore.exists(file.path)) && !(await blobStore.exists(destination))) {
       throw new Error(`Archivo referenciado no encontrado: ${file.path}`);
     }
   }
 
   for (const file of files) {
     const destination = `tenants/${tenant.id}/${file.kind === "product" ? "products" : "fonts"}/${file.path.split("/").pop()}`;
-    if (file.path !== destination && await fileExists(file.path)) await moveFile(file.path, destination);
+    if (file.path !== destination && await blobStore.exists(file.path)) await blobStore.move(file.path, destination);
     if (file.kind === "product") await prisma.product.update({ where: { id: file.id }, data: { mediaPath: destination } });
     else await prisma.font.update({ where: { id: file.id }, data: { filePath: destination } });
   }

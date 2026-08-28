@@ -1,73 +1,50 @@
 import { NextRequest } from "next/server";
-import { productUpdateSchema } from "@/features/products/backend/schemas/product.schema";
-import {
-  getProductById,
-  updateProduct,
-  deleteProduct,
-} from "@/features/products/backend/services/product.service";
-import { ensureAdmin } from "@/features/auth/backend/services/auth.service";
-import {
-  successResponse,
-  notFoundResponse,
-  validationErrorResponse,
-  internalErrorResponse,
-  errorResponse,
-} from "@/shared/backend/responses";
-import { AppError } from "@/shared/backend/errors/app-error";
-import { validateOrigin, csrfErrorResponse } from "@/shared/backend/security/csrf";
+import { successResponse } from "@/platform/http/api-response";
+import { deleteProductCommandSchema, getProductCommandSchema, updateProductCommandSchema } from "@/modules/catalog/contracts";
+import { deleteProduct, getProduct, updateProduct } from "@/modules/catalog/server";
+import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
+import { handleCatalogApiError, requireCatalogScope } from "../../catalog-route-support";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
-    const account = await ensureAdmin();
-    const { id } = await params;
-    const product = await getProductById(id, account.tenantId!, account.tenantSlug!);
-    return successResponse(product);
-  } catch {
-    return notFoundResponse("Product");
+    const [actor, { id }] = await Promise.all([requireCatalogScope(), params]);
+    const command = getProductCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      productId: id,
+    });
+    return successResponse(await getProduct(command));
+  } catch (error) {
+    return handleCatalogApiError(error);
   }
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const { id } = await params;
-
-    const body = await req.json();
-    const parsed = productUpdateSchema.safeParse(body);
-    if (!parsed.success) return validationErrorResponse(parsed.error);
-
-    const product = await updateProduct(id, parsed.data, account.tenantId!, account.tenantSlug!);
-    return successResponse(product);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const [actor, { id }, input] = await Promise.all([requireCatalogScope(), params, request.json()]);
+    const command = updateProductCommandSchema.parse({
+      tenantId: actor.tenantId,
+      tenantSlug: actor.tenantSlug,
+      productId: id,
+      input,
+    });
+    return successResponse(await updateProduct(command));
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    if (!validateOrigin(req)) return csrfErrorResponse();
-    const account = await ensureAdmin();
-    const { id } = await params;
-
-    await deleteProduct(id, account.tenantId!);
-    return successResponse(null, 200);
+    if (!validateOrigin(request)) return csrfErrorResponse();
+    const [actor, { id }] = await Promise.all([requireCatalogScope(), params]);
+    const command = deleteProductCommandSchema.parse({ tenantId: actor.tenantId, productId: id });
+    await deleteProduct(command);
+    return successResponse(null);
   } catch (error) {
-    if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.statusCode);
-    }
-    return internalErrorResponse();
+    return handleCatalogApiError(error);
   }
 }
