@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 enum AdminRole {
@@ -53,6 +53,32 @@ model Session {
   expiresAt DateTime
   revoked   Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model LoginThrottle {
+  key             String    @id
+  failures        Int       @default(0)
+  windowStartedAt DateTime
+  blockedUntil    DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@index([updatedAt])
+}
+
+model AssetCleanupJob {
+  id          String   @id @default(cuid())
+  storageKey  String   @unique
+  deletePrefix Boolean @default(false)
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([availableAt])
 }
 
 model Group {
@@ -110,6 +136,7 @@ model FeaturedProduct {
   updatedAt DateTime @updatedAt
 
   @@unique([tenantId, position])
+  @@unique([tenantId, productId], map: "FeaturedProduct_tenant_product_key")
   @@unique([id, tenantId])
   @@index([tenantId])
 }
