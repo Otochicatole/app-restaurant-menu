@@ -3,8 +3,10 @@
 # dependencies
 /node_modules
 /.pnp
+.next-e2e
 .pnp.*
 .yarn/*
+test-results
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
