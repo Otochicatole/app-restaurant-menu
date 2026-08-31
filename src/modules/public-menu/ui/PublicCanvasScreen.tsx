@@ -10,7 +10,7 @@ const PublicCanvasStage = dynamic(() => import("./PublicCanvasStage").then((modu
 export function PublicCanvasScreen({ menu }: { menu: PublicCanvasMenuView }) {
   const [accessible, setAccessible] = useState(false);
   const textNodes = menu.document.nodes.filter((node): node is Extract<typeof node, { type: "text" }> => node.type === "text" && node.visible);
-  const fontFaces = Object.values(menu.assets).filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}");font-display:swap;}`).join("");
+  const fontFaces = Object.values(menu.assets).filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join("");
   return <main className="relative h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: menu.document.background }}>
     <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
     <PublicCanvasStage document={menu.document} assets={menu.assets} />

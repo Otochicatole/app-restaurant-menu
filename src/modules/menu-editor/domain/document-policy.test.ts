@@ -22,4 +22,11 @@ describe("menu editor document policy", () => {
     const normalized = validateCanvasDocument(legacyDocument);
     expect(normalized.canvasBounds).toEqual(template.initialViewport);
   });
+
+  it("accepts safe system font families and rejects arbitrary CSS values", () => {
+    const template = createTemplateDocument("Café");
+    const valid = validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "Georgia" } : node) });
+    expect(valid.nodes.find((node) => node.type === "text")?.fontFamily).toBe("Georgia");
+    expect(() => validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "url(javascript:alert(1))" } : node) })).toThrow();
+  });
 });

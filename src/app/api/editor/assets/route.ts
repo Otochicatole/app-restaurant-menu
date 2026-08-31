@@ -33,12 +33,13 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) return errorResponse("VALIDATION_ERROR", "Archivo no proporcionado", 422);
     const content = new Uint8Array(await file.arrayBuffer());
     const types = kind === "IMAGE" ? IMAGE_TYPES : FONT_TYPES;
-    if (!types.has(file.type)) throw new BadRequestError("Formato de archivo no soportado.");
+    const extension = extensionFor(file.type, file.name);
+    const extensionAllowedFont = kind === "FONT" && ["woff", "woff2", "ttf", "otf"].includes(extension) && (!file.type || file.type === "application/octet-stream");
+    if (!types.has(file.type) && !extensionAllowedFont) throw new BadRequestError("Formato de archivo no soportado.");
     const max = kind === "IMAGE" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size <= 0 || file.size > max) throw new BadRequestError("El archivo excede el tamaño máximo permitido.");
     const dimensions = kind === "IMAGE" ? imageDimensions(content, file.type) : null;
     if (kind === "IMAGE" && (!dimensions || dimensions.width > 8192 || dimensions.height > 8192)) throw new BadRequestError("La imagen no es válida o supera 8192×8192 píxeles.");
-    const extension = extensionFor(file.type, file.name);
     const storageKey = `tenants/${actor.tenantId}/editor-assets/${randomUUID()}.${extension}`;
     await blobStore.put(storageKey, Buffer.from(content));
     try {

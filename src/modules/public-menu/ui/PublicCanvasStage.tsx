@@ -49,7 +49,7 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
 
 function PublicNode({ node, asset }: { node: CanvasNode; asset?: PublicCanvasAsset }) {
   const common = { x: node.x, y: node.y, width: node.width, height: node.height, rotation: node.rotation, opacity: node.opacity, listening: Boolean(node.link), onTap: node.link ? () => { window.location.href = node.link!; } : undefined };
-  if (node.type === "text") return <Text {...common} text={node.text} fontSize={node.fontSize} fontFamily={asset?.fontFamily ?? "Arial"} fontStyle={node.fontStyle} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
+  if (node.type === "text") return <Text {...common} text={node.text} fontSize={node.fontSize} fontFamily={asset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} fontStyle={node.fontStyle} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <PublicImage {...common} url={asset?.url} />;
   if (node.type === "icon") return <Text {...common} text={iconGlyph(node.iconKey)} fontSize={Math.min(node.width, node.height)} align="center" verticalAlign="middle" fill={node.fill} />;
   if (node.shape === "ellipse") return <Ellipse {...common} radiusX={node.width / 2} radiusY={node.height / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;

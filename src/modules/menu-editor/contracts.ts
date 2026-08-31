@@ -4,6 +4,8 @@ const finiteNumber = z.number().finite();
 const id = z.string().trim().min(1).max(200);
 const color = z.string().regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/);
 const link = z.string().trim().max(2048).refine((value) => /^(https?:|mailto:|tel:)/i.test(value), "Link inválido").nullable();
+export const SYSTEM_FONT_FAMILIES = ["Arial", "Georgia", "Verdana", "Trebuchet MS", "Times New Roman", "Courier New", "Tahoma", "Impact"] as const;
+export const systemFontFamilySchema = z.enum(SYSTEM_FONT_FAMILIES);
 
 const nodeBase = z.object({
   id,
@@ -23,6 +25,7 @@ const textNode = nodeBase.extend({
   type: z.literal("text"),
   text: z.string().max(20_000),
   fontAssetId: id.nullable().default(null),
+  fontFamily: systemFontFamilySchema.optional(),
   fontSize: finiteNumber.positive().max(2_000).default(32),
   fontWeight: z.enum(["400", "500", "600", "700", "800", "900"]).default("400"),
   fontStyle: z.enum(["normal", "italic"]).default("normal"),
