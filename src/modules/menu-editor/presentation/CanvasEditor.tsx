@@ -44,7 +44,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   };
   const commit = (next: CanvasDocumentV1) => commitTransform(() => next);
   const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => node.id === id ? ({ ...node, ...patch } as CanvasNode) : node) }));
-  const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) ? ({ ...node, ...patch } as CanvasNode) : node) }));
+  const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
   const moveSelected = (ids: string[], delta: { x: number; y: number }) => commitTransform((current) => {
     const { x: dx, y: dy } = clampGroupDelta(current.nodes, ids, current.canvasBounds, delta);
     return { ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && !node.locked ? ({ ...node, x: node.x + dx, y: node.y + dy } as CanvasNode) : node) };
@@ -92,7 +92,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
       if (target.matches("input, textarea, select")) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length) { event.preventDefault(); commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id)) }); setSelectedIds([]); }
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length) { event.preventDefault(); commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -100,7 +100,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
 
   const addNode = (node: CanvasNode) => { commitTransform((current) => ({ ...current, nodes: [...current.nodes, node] })); setSelectedIds([node.id]); };
   const newNodeFrame = (preferredWidth: number, preferredHeight: number) => placeNodeInCanvas(document.canvasBounds, viewport, preferredWidth, preferredHeight);
-  const duplicate = () => { if (!selected) return; const bounds = document.canvasBounds; addNode({ ...selected, id: crypto.randomUUID(), x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - selected.width, selected.x + 24)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - selected.height, selected.y + 24)) }); };
+  const duplicate = () => { if (!selected || selected.locked) return; const bounds = document.canvasBounds; addNode({ ...selected, id: crypto.randomUUID(), x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - selected.width, selected.x + 24)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - selected.height, selected.y + 24)) }); };
   const moveLayer = (delta: number) => { if (!selectedIds.length) return; const index = document.nodes.findIndex((node) => node.id === selectedIds[0]); const nextIndex = Math.max(0, Math.min(document.nodes.length - 1, index + delta)); if (index < 0 || index === nextIndex) return; const nodes = [...document.nodes]; const [node] = nodes.splice(index, 1); nodes.splice(nextIndex, 0, node); commit({ ...document, nodes }); };
   const reorderLayer = (activeId: string, overId: string) => {
     const activeIndex = document.nodes.findIndex((node) => node.id === activeId);
@@ -108,7 +108,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
     if (activeIndex < 0 || overIndex < 0 || activeIndex === overIndex) return;
     commit({ ...document, nodes: arrayMove(document.nodes, activeIndex, overIndex) });
   };
-  const deleteSelected = () => { if (!selectedIds.length) return; commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id)) }); setSelectedIds([]); };
+  const deleteSelected = () => { if (!selectedIds.length) return; commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); };
   const addText = () => addNode({ id: crypto.randomUUID(), type: "text", ...newNodeFrame(360, 80), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Nuevo texto", fontAssetId: null, fontSize: 42, fontWeight: "600", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
   const addShape = (shape: "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star") => addNode({ id: crypto.randomUUID(), type: "shape", shape, ...newNodeFrame(260, 160), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#3A4824", stroke: null, strokeWidth: 0, cornerRadius: 18 });
   const addIcon = (iconKey: string) => addNode({ id: crypto.randomUUID(), type: "icon", iconKey, accessibleLabel: iconKey.replaceAll("-", " "), ...newNodeFrame(80, 80), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#B8790A", strokeWidth: 2 });
@@ -137,8 +137,8 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
     <div className="flex min-h-0 flex-1">
       <EditorToolsPanel background={document.background} images={assets.filter((asset) => asset.kind === "IMAGE")} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onAddImage={addImage} onUpload={uploadAsset} />
       {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
-      <main className="relative min-w-0 flex-1"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={setSelectedIds} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} />{selected?.type === "icon" && <IconInspector node={selected} onChange={(patch) => patchNode(selected.id, patch)} />}</aside>
+      <main className="relative min-w-0 flex-1"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={(ids) => setSelectedIds(ids.filter((id) => !document.nodes.find((node) => node.id === id)?.locked))} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
+      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} />{selected?.type === "icon" && <IconInspector node={selected} onChange={(patch) => (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} />}</aside>
     </div>
     </div>
   </>;
