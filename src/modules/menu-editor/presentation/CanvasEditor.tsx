@@ -2,10 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
+import { arrayMove } from "@dnd-kit/sortable";
 import { ArrowUp, Circle, ImagePlus, Layers3, Redo2, Square, Star, Trash2, Type, Undo2, Upload } from "lucide-react";
 import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView } from "../contracts";
 import { clampGroupDelta } from "../domain/canvas-geometry";
 import { placeNodeInCanvas } from "../domain/node-placement";
+import { LayersPanel } from "./LayersPanel";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
@@ -98,6 +100,12 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   const newNodeFrame = (preferredWidth: number, preferredHeight: number) => placeNodeInCanvas(document.canvasBounds, viewport, preferredWidth, preferredHeight);
   const duplicate = () => { if (!selected) return; const bounds = document.canvasBounds; addNode({ ...selected, id: crypto.randomUUID(), x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - selected.width, selected.x + 24)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - selected.height, selected.y + 24)) }); };
   const moveLayer = (delta: number) => { if (!selectedIds.length) return; const index = document.nodes.findIndex((node) => node.id === selectedIds[0]); const nextIndex = Math.max(0, Math.min(document.nodes.length - 1, index + delta)); if (index < 0 || index === nextIndex) return; const nodes = [...document.nodes]; const [node] = nodes.splice(index, 1); nodes.splice(nextIndex, 0, node); commit({ ...document, nodes }); };
+  const reorderLayer = (activeId: string, overId: string) => {
+    const activeIndex = document.nodes.findIndex((node) => node.id === activeId);
+    const overIndex = document.nodes.findIndex((node) => node.id === overId);
+    if (activeIndex < 0 || overIndex < 0 || activeIndex === overIndex) return;
+    commit({ ...document, nodes: arrayMove(document.nodes, activeIndex, overIndex) });
+  };
   const deleteSelected = () => { if (!selectedIds.length) return; commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id)) }); setSelectedIds([]); };
   const addText = () => addNode({ id: crypto.randomUUID(), type: "text", ...newNodeFrame(360, 80), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Nuevo texto", fontAssetId: null, fontSize: 42, fontWeight: "600", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
   const addShape = (shape: "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star") => addNode({ id: crypto.randomUUID(), type: "shape", shape, ...newNodeFrame(260, 160), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#3A4824", stroke: null, strokeWidth: 0, cornerRadius: 18 });
@@ -134,7 +142,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
         <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-600 hover:border-emerald-500"><Upload size={14} /> Subir imagen<input className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const form = new FormData(); form.set("kind", "IMAGE"); form.set("file", file); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); event.currentTarget.value = ""; }} /></label>
         <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-600 hover:border-emerald-500"><Upload size={14} /> Subir fuente<input className="hidden" type="file" accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const form = new FormData(); form.set("kind", "FONT"); form.set("file", file); form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); event.currentTarget.value = ""; }} /></label>
       </aside>
-      {layersOpen && <aside id="editor-layers" className="w-64 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 shadow-sm"><div className="mb-3 flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Capas</p><button type="button" className="text-xs text-zinc-500 hover:text-zinc-900" onClick={() => setLayersOpen(false)}>Cerrar</button></div><div className="space-y-1">{[...document.nodes].reverse().map((node) => <button key={node.id} type="button" className={`flex w-full items-center rounded px-2 py-1.5 text-left text-xs ${selectedIds.includes(node.id) ? "bg-emerald-100 text-emerald-900" : "hover:bg-zinc-100"}`} onClick={(event) => setSelectedIds((ids) => event.shiftKey ? ids.includes(node.id) ? ids.filter((id) => id !== node.id) : [...ids, node.id] : [node.id])}><span className="truncate">{node.type === "text" ? node.text : node.type === "image" ? "Imagen" : node.type === "shape" ? node.shape : node.iconKey}</span><span className="ml-auto text-[10px] text-zinc-400">{node.locked ? "Bloq." : ""}</span></button>)}</div></aside>}
+      {layersOpen && <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />}
       <main className="relative min-w-0 flex-1"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={setSelectedIds} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
       <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} /></aside>
     </div>
