@@ -85,9 +85,15 @@ export const canvasDocumentSchema = z.object({
     width: finiteNumber.positive().max(100_000),
     height: finiteNumber.positive().max(100_000),
   }),
+  canvasBounds: z.object({
+    x: finiteNumber.min(-100_000).max(100_000),
+    y: finiteNumber.min(-100_000).max(100_000),
+    width: finiteNumber.positive().max(100_000),
+    height: finiteNumber.positive().max(100_000),
+  }).optional(),
   nodes: z.array(canvasNodeSchema).max(2_000),
   groups: z.array(canvasGroupSchema).max(200),
-});
+}).transform((document) => ({ ...document, canvasBounds: document.canvasBounds ?? { ...document.initialViewport } }));
 
 export type CanvasDocumentV1 = z.infer<typeof canvasDocumentSchema>;
 

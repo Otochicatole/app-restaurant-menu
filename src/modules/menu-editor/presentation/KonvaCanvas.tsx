@@ -4,16 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
+import { cameraForViewport, clampGroupDelta, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
 
 type Viewport = CanvasDocumentV1["initialViewport"];
+type DragSession = {
+  activeId: string;
+  ids: string[];
+  starts: Record<string, { x: number; y: number }>;
+  delta: { x: number; y: number };
+};
 
-export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectMany, onChange, viewport, onViewportChange }: {
+export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, viewport, onViewportChange }: {
   document: CanvasDocumentV1;
   assets: Record<string, { url: string; kind: "IMAGE" | "FONT"; fontFamily: string | null }>;
   selectedIds: string[];
   onSelect: (id: string | null, additive: boolean) => void;
   onSelectMany: (ids: string[]) => void;
   onChange: (id: string, patch: Partial<CanvasNode>) => void;
+  onChangeMany: (ids: string[], delta: { x: number; y: number }) => void;
   viewport: Viewport;
   onViewportChange: (viewport: Viewport) => void;
 }) {
@@ -25,7 +33,9 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: Viewport } | null>(null);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const scale = Math.max(0.1, Math.min(8, Math.min(size.width / viewport.width, size.height / viewport.height)));
+  const dragSession = useRef<DragSession | null>(null);
+  const bounds = document.canvasBounds;
+  const { camera, scale } = cameraForViewport(viewport, bounds, size);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -53,12 +63,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   }, []);
 
   const zoomAt = (factor: number, pointer: { x: number; y: number }) => {
-    const nextScale = Math.max(0.1, Math.min(8, scale * factor));
-    const worldX = viewport.x + pointer.x / scale;
-    const worldY = viewport.y + pointer.y / scale;
-    const width = size.width / nextScale;
-    const height = size.height / nextScale;
-    onViewportChange({ x: worldX - pointer.x / nextScale, y: worldY - pointer.y / nextScale, width, height });
+    onViewportChange(zoomViewportAt(viewport, bounds, size, factor, pointer));
   };
   const pointer = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => event.target.getStage()?.getPointerPosition();
   const beginPan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -68,13 +73,13 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
     if (!position) return;
     event.evt.preventDefault();
     event.cancelBubble = true;
-    setPanStart({ x: position.x, y: position.y, viewport });
+    setPanStart({ x: position.x, y: position.y, viewport: camera });
   };
   const movePan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!panStart) return;
     const position = pointer(event);
     if (!position) return;
-    onViewportChange({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale });
+    onViewportChange(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, size).camera);
   };
   const beginSelection = (event: Konva.KonvaEventObject<MouseEvent>) => {
     if (spacePressed || event.evt.button !== 0 || event.target !== event.target.getStage()) return;
@@ -92,17 +97,60 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   const finishSelection = () => {
     if (!selectionStart || !selectionBox) return;
     if (selectionBox.width > 4 || selectionBox.height > 4) {
-      const left = viewport.x + selectionBox.x / scale;
-      const top = viewport.y + selectionBox.y / scale;
-      const right = left + selectionBox.width / scale;
-      const bottom = top + selectionBox.height / scale;
-      onSelectMany(document.nodes.filter((node) => node.visible && node.x < right && node.x + node.width > left && node.y < bottom && node.y + node.height > top).map((node) => node.id));
+      const selection = screenRectToWorld(selectionBox, camera, scale);
+      const right = selection.x + selection.width;
+      const bottom = selection.y + selection.height;
+      onSelectMany(document.nodes.filter((node) => node.visible && node.x < right && node.x + node.width > selection.x && node.y < bottom && node.y + node.height > selection.y).map((node) => node.id));
     }
     setSelectionStart(null);
     setSelectionBox(null);
   };
 
-  return <div ref={containerRef} className="h-full w-full overflow-hidden bg-zinc-200" onContextMenu={(event) => event.preventDefault()}>
+  const beginNodeDrag = (id: string, event: Konva.KonvaEventObject<DragEvent>) => {
+    event.cancelBubble = true;
+    const active = document.nodes.find((node) => node.id === id);
+    if (!active || active.locked) return;
+    const ids = (selectedIds.includes(id) ? selectedIds : [id]).filter((selectedId) => document.nodes.some((node) => node.id === selectedId && !node.locked));
+    const starts = Object.fromEntries(ids.map((selectedId) => {
+      const node = document.nodes.find((item) => item.id === selectedId)!;
+      return [selectedId, { x: node.x, y: node.y }];
+    }));
+    dragSession.current = { activeId: id, ids, starts, delta: { x: 0, y: 0 } };
+    event.target.position(starts[id]);
+  };
+
+  const moveNodeDrag = (id: string, event: Konva.KonvaEventObject<DragEvent>) => {
+    event.cancelBubble = true;
+    const session = dragSession.current;
+    if (!session || session.activeId !== id) return;
+    const start = session.starts[id];
+    if (!start) return;
+    const delta = clampGroupDelta(document.nodes, session.ids, bounds, { x: event.target.x() - start.x, y: event.target.y() - start.y });
+    session.delta = delta;
+    session.ids.forEach((selectedId) => {
+      const node = stageRef.current?.findOne(`#node-${selectedId}`);
+      const origin = session.starts[selectedId];
+      if (node && origin) node.position({ x: origin.x + delta.x, y: origin.y + delta.y });
+    });
+    transformerRef.current?.forceUpdate();
+    stageRef.current?.batchDraw();
+  };
+
+  const finishNodeDrag = (id: string, event: Konva.KonvaEventObject<DragEvent>) => {
+    event.cancelBubble = true;
+    const session = dragSession.current;
+    if (!session || session.activeId !== id) return;
+    const { ids, delta, starts } = session;
+    if (ids.length > 1) onChangeMany(ids, delta);
+    else {
+      const start = starts[id];
+      if (start) onChange(id, { x: start.x + delta.x, y: start.y + delta.y });
+    }
+    transformerRef.current?.forceUpdate();
+    dragSession.current = null;
+  };
+
+  return <div ref={containerRef} className="h-full w-full overflow-hidden" style={{ backgroundColor: document.background }} onContextMenu={(event) => event.preventDefault()}>
     <Stage
       ref={stageRef}
       width={size.width}
@@ -119,10 +167,11 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
         if (event.evt.ctrlKey || event.evt.deltaY !== 0) zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY });
       }}
     >
-      <Layer x={-viewport.x * scale} y={-viewport.y * scale} scaleX={scale} scaleY={scale}>
-        <Rect x={-100000} y={-100000} width={200000} height={200000} fill={document.background} listening={false} />
-        {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} />)}
-        <Transformer ref={transformerRef} rotateEnabled={true} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
+      <Layer x={-camera.x * scale} y={-camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}>
+        <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
+        <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
+        {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />)}
+        <Transformer id="selection-transformer" ref={transformerRef} rotateEnabled={true} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
       </Layer>
       {selectionBox && <Layer listening={false}><Rect x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} fill="rgba(16,185,129,0.16)" stroke="#10b981" dash={[6, 4]} strokeWidth={1} /></Layer>}
     </Stage>
@@ -130,8 +179,8 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   </div>;
 }
 
-function CanvasNodeView({ node, imageAsset, fontAsset, onSelect, onChange }: { node: CanvasNode; imageAsset?: { url: string }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void }) {
-  const common = { id: `node-${node.id}`, x: node.x, y: node.y, width: node.width, height: node.height, rotation: node.rotation, opacity: node.opacity, draggable: !node.locked, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { event.cancelBubble = true; onSelect(node.id, event.evt.shiftKey); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; onSelect(node.id, false); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => { event.cancelBubble = true; }, onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => { event.cancelBubble = true; onChange(node.id, { x: event.target.x(), y: event.target.y() }); }, onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = target.scaleX(); const scaleY = target.scaleY(); target.scaleX(1); target.scaleY(1); const patch: Partial<CanvasNode> = { x: target.x(), y: target.y(), width: Math.max(4, target.width() * scaleX), height: Math.max(4, target.height() * scaleY), rotation: target.rotation() }; if (node.type === "text") { onChange(node.id, { ...patch, fontSize: Math.max(1, node.fontSize * scaleY), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode>); } else onChange(node.id, patch); } };
+function CanvasNodeView({ node, selectedIds, imageAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; imageAsset?: { url: string }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
+  const common = { id: `node-${node.id}`, x: node.x, y: node.y, width: node.width, height: node.height, rotation: node.rotation, opacity: node.opacity, draggable: !node.locked, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { event.cancelBubble = true; if (event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (!selectedIds.includes(node.id)) onSelect(node.id, false); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = target.scaleX(); const scaleY = target.scaleY(); target.scaleX(1); target.scaleY(1); const patch: Partial<CanvasNode> = { x: target.x(), y: target.y(), width: Math.max(4, target.width() * scaleX), height: Math.max(4, target.height() * scaleY), rotation: target.rotation() }; if (node.type === "text") { onChange(node.id, { ...patch, fontSize: Math.max(1, node.fontSize * scaleY), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode>); } else onChange(node.id, patch); } };
   if (node.type === "text") return <Text {...common} text={node.text} fontSize={node.fontSize} fontStyle={node.fontStyle} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : "Arial")} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <LoadedImage {...common} url={imageAsset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "shape") {

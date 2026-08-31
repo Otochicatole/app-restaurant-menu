@@ -32,7 +32,8 @@ function documentFor(tenantName: string, description: string, groups: Array<{ id
     }
     y += 40;
   }
-  return canvasDocumentSchema.parse({ schemaVersion: 1, background: "#F3EEDC", initialViewport: { x: 0, y: 0, width: 1100, height: Math.max(900, y + 80) }, nodes, groups: [] });
+  const canvasBounds = { x: 0, y: 0, width: 1100, height: Math.max(900, y + 80) };
+  return canvasDocumentSchema.parse({ schemaVersion: 1, background: "#F3EEDC", initialViewport: { ...canvasBounds }, canvasBounds, nodes, groups: [] });
 }
 
 async function registerAsset(tenantId: string, kind: "IMAGE" | "FONT", name: string, storageKey: string, mimeType: string): Promise<string | null> {

@@ -2,15 +2,36 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text } from "react-konva";
+import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "@/modules/menu-editor/contracts";
+import { cameraForViewport, zoomViewportAt } from "../../menu-editor/ui/canvas-geometry";
 import type { PublicCanvasAsset } from "../contracts";
 
 export function PublicCanvasStage({ document, assets }: { document: CanvasDocumentV1; assets: Record<string, PublicCanvasAsset> }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 900, height: 640 });
   const [viewport, setViewport] = useState(document.initialViewport);
-  const scale = Math.max(0.1, Math.min(8, Math.min(size.width / viewport.width, size.height / viewport.height)));
-  const zoom = (factor: number) => setViewport((current) => ({ ...current, width: Math.max(80, Math.min(100_000, current.width / factor)), height: Math.max(80, Math.min(100_000, current.height / factor)) }));
+  const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: CanvasDocumentV1["initialViewport"] } | null>(null);
+  const bounds = document.canvasBounds;
+  const { camera, scale, fitScale } = cameraForViewport(viewport, bounds, size);
+  const zoomAt = (factor: number, point = { x: size.width / 2, y: size.height / 2 }) => {
+    setViewport(zoomViewportAt(viewport, bounds, size, factor, point));
+  };
+  const pointer = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => event.target.getStage()?.getPointerPosition();
+  const beginPan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const position = pointer(event);
+    if (!position) return;
+    const button = "button" in event.evt ? event.evt.button : 0;
+    if (button !== 0 && button !== 1) return;
+    event.evt.preventDefault();
+    setPanStart({ x: position.x, y: position.y, viewport: camera });
+  };
+  const movePan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    if (!panStart) return;
+    const position = pointer(event);
+    if (!position) return;
+    setViewport(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, size).camera);
+  };
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -18,11 +39,11 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  return <div ref={containerRef} className="h-full w-full touch-none bg-zinc-200" onContextMenu={(event) => event.preventDefault()}>
-    <Stage width={size.width} height={size.height} draggable onDragEnd={(event) => { const dx = event.target.x(); const dy = event.target.y(); setViewport((current) => ({ ...current, x: current.x - dx / scale, y: current.y - dy / scale })); event.target.position({ x: 0, y: 0 }); }} onWheel={(event) => { event.evt.preventDefault(); const factor = event.evt.deltaY > 0 ? 0.92 : 1.08; setViewport((current) => ({ ...current, width: Math.max(80, Math.min(100_000, current.width / factor)), height: Math.max(80, Math.min(100_000, current.height / factor)) })); }}>
-      <Layer x={-viewport.x * scale} y={-viewport.y * scale} scaleX={scale} scaleY={scale}><Rect x={-100000} y={-100000} width={200000} height={200000} fill={document.background} listening={false} />{document.nodes.filter((node) => node.visible).map((node) => <PublicNode key={node.id} node={node} asset={node.type === "image" ? assets[node.assetId] : node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} />)}</Layer>
+  return <div ref={containerRef} className="h-full w-full touch-none" style={{ backgroundColor: document.background }} onContextMenu={(event) => event.preventDefault()}>
+    <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={() => setPanStart(null)} onMouseLeave={() => setPanStart(null)} onTouchStart={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={movePan} onTouchEnd={() => setPanStart(null)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
+      <Layer x={-camera.x * scale} y={-camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{document.nodes.filter((node) => node.visible).map((node) => <PublicNode key={node.id} node={node} asset={node.type === "image" ? assets[node.assetId] : node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} />)}</Layer>
     </Stage>
-    <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoom(0.9)} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoom(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => setViewport(document.initialViewport)}>Restablecer</button></div>
+    <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm disabled:opacity-30" onClick={() => zoomAt(0.9)} disabled={scale <= fitScale} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoomAt(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => setViewport(bounds)}>Restablecer</button></div>
   </div>;
 }
 

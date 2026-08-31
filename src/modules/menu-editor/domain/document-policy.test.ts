@@ -14,4 +14,12 @@ describe("menu editor document policy", () => {
     expect(() => validateCanvasDocument({ ...template, nodes: [template.nodes[0], template.nodes[0]] })).toThrow("IDs duplicados");
     expect(() => validateCanvasDocument({ ...template, groups: [{ id: "g", name: "Grupo", nodeIds: ["missing"] }] })).toThrow("objeto inexistente");
   });
+
+  it("derives canvas bounds for legacy documents", () => {
+    const template = createTemplateDocument("Café");
+    const legacyDocument = { ...template } as unknown as Record<string, unknown>;
+    delete legacyDocument.canvasBounds;
+    const normalized = validateCanvasDocument(legacyDocument);
+    expect(normalized.canvasBounds).toEqual(template.initialViewport);
+  });
 });
