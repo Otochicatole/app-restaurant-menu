@@ -36,7 +36,9 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const dragSession = useRef<DragSession | null>(null);
   const bounds = document.canvasBounds;
-  const { camera, scale } = cameraForViewport(viewport, bounds, size);
+  const scenePadding = 40;
+  const sceneSize = { width: Math.max(1, size.width - scenePadding * 2), height: Math.max(1, size.height - scenePadding * 2) };
+  const { camera, scale } = cameraForViewport(viewport, bounds, sceneSize);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -64,7 +66,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   }, []);
 
   const zoomAt = (factor: number, pointer: { x: number; y: number }) => {
-    onViewportChange(zoomViewportAt(viewport, bounds, size, factor, pointer));
+    onViewportChange(zoomViewportAt(viewport, bounds, sceneSize, factor, { x: pointer.x - scenePadding, y: pointer.y - scenePadding }));
   };
   const pointer = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => event.target.getStage()?.getPointerPosition();
   const beginPan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -80,7 +82,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
     if (!panStart) return;
     const position = pointer(event);
     if (!position) return;
-    onViewportChange(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, size).camera);
+    onViewportChange(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, sceneSize).camera);
   };
   const beginSelection = (event: Konva.KonvaEventObject<MouseEvent>) => {
     if (spacePressed || event.evt.button !== 0 || event.target !== event.target.getStage()) return;
@@ -98,7 +100,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   const finishSelection = () => {
     if (!selectionStart || !selectionBox) return;
     if (selectionBox.width > 4 || selectionBox.height > 4) {
-      const selection = screenRectToWorld(selectionBox, camera, scale);
+      const selection = screenRectToWorld({ ...selectionBox, x: selectionBox.x - scenePadding, y: selectionBox.y - scenePadding }, camera, scale);
       const right = selection.x + selection.width;
       const bottom = selection.y + selection.height;
       onSelectMany(document.nodes.filter((node) => node.visible && !node.locked && node.x < right && node.x + node.width > selection.x && node.y < bottom && node.y + node.height > selection.y).map((node) => node.id));
@@ -177,7 +179,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
         if (event.evt.ctrlKey || event.evt.deltaY !== 0) zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY });
       }}
     >
-      <Layer x={-camera.x * scale} y={-camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}>
+      <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}>
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
         {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} spacePressed={spacePressed} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />)}
