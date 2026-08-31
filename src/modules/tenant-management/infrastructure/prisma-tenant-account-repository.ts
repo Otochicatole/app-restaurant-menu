@@ -68,6 +68,14 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
         await transaction.homePage.create({
           data: { tenantId: tenant.id, title: input.name, description: "Menú digital" },
         });
+        await transaction.menuProject.create({
+          data: {
+            tenantId: tenant.id,
+            draftJson: JSON.stringify(createTenantTemplate(input.name)),
+            schemaVersion: 1,
+            legacyFallback: false,
+          },
+        });
         return toListItem({ ...tenant, admin });
       });
     } catch (error) {
@@ -171,6 +179,19 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
       await transaction.tenant.delete({ where: { id: tenant.id } });
     });
   }
+}
+
+function createTenantTemplate(name: string) {
+  return {
+    schemaVersion: 1,
+    background: "#F3EEDC",
+    initialViewport: { x: -120, y: -80, width: 1240, height: 900 },
+    nodes: [
+      { id: "template-title", type: "text", x: 80, y: 70, width: 900, height: 100, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: name, fontAssetId: null, fontSize: 72, fontWeight: "800", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.1, letterSpacing: 0, fill: "#3A4824", semanticRole: "heading" },
+      { id: "template-subtitle", type: "text", x: 85, y: 190, width: 700, height: 56, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Diseñá tu carta desde este lienzo", fontAssetId: null, fontSize: 30, fontWeight: "400", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#AB5641", semanticRole: "paragraph" },
+    ],
+    groups: [],
+  };
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

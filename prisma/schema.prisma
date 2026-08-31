@@ -34,6 +34,8 @@ model Admin {
 model Tenant {
   id        String       @id @default(cuid())
   name      String
+  publicDescription String @default("Menú digital")
+  assetQuotaBytes Int @default(262144000)
   slug      String       @unique
   status    TenantStatus @default(ACTIVE)
   createdAt DateTime     @default(now())
@@ -43,6 +45,9 @@ model Tenant {
   groups    Group[]
   fonts     Font[]
   settings  Setting[]
+  menuProject MenuProject?
+  menuAssets MenuAsset[]
+  menuAssetReferences MenuAssetReference[]
 }
 
 model Session {
@@ -168,4 +173,66 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@id([tenantId, key])
+}
+
+enum MenuAssetKind {
+  IMAGE
+  FONT
+}
+
+enum MenuAssetReferenceScope {
+  DRAFT
+  PUBLISHED
+}
+
+model MenuProject {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  draftJson         String
+  draftRevision     Int      @default(0)
+  publishedJson     String?
+  publishedRevision Int?
+  publishedAt       DateTime?
+  schemaVersion     Int      @default(1)
+  legacyFallback    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  assetReferences   MenuAssetReference[]
+
+  @@unique([id, tenantId])
+}
+
+model MenuAsset {
+  id          String        @id @default(cuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind        MenuAssetKind
+  name        String
+  storageKey  String        @unique
+  mimeType    String
+  byteSize    Int
+  checksum    String
+  width       Int?
+  height      Int?
+  fontFamily  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  references  MenuAssetReference[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, kind])
+}
+
+model MenuAssetReference {
+  tenantId  String
+  projectId String
+  assetId   String
+  scope     MenuAssetReferenceScope
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project   MenuProject @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  asset     MenuAsset   @relation(fields: [assetId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@id([projectId, assetId, scope])
+  @@index([tenantId, scope])
 }

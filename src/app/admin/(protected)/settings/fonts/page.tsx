@@ -1,50 +1,10 @@
-import {
-  deleteMenuFontAction,
-  menuCustomization,
-  selectMenuFontAction,
-  type FontTarget,
-} from "@/modules/menu-customization/server";
 import { requireTenantAdmin } from "@/modules/identity-access/server";
-import { FontSettingsClient } from "@/modules/menu-customization/ui";
+import { menuEditor } from "@/modules/menu-editor/server";
+import { FontLibraryClient } from "@/modules/menu-editor/ui";
+import { AdminCard, AdminPageHeader } from "@/ui/admin/AdminPrimitives";
 
 export default async function AdminSettingsFontsPage() {
   const account = await requireTenantAdmin();
-  const [fonts, selection] = await Promise.all([
-    menuCustomization.listFonts(account.tenantId),
-    menuCustomization.getFontSelection(account.tenantId),
-  ]);
-
-  const activeFontId = Object.fromEntries(
-    (Object.keys(selection) as FontTarget[]).map((target) => [target, selection[target]?.id ?? null]),
-  ) as Record<FontTarget, string | null>;
-
-  const googleFonts = fonts.filter((font) => font.source === "google" && font.googleFamily);
-  const customFonts = fonts.filter((font) => font.source === "custom" && font.hasFile);
-
-  return (
-    <>
-      {googleFonts.map((font) => (
-        <link
-          key={font.id}
-          rel="stylesheet"
-          href={`https://fonts.googleapis.com/css2?family=${font.googleFamily!.replace(/ /g, "+")}:wght@${font.weights}&display=swap`}
-        />
-      ))}
-      {customFonts.length > 0 && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: customFonts
-                .map((font) => `@font-face{font-family:"${font.familyAlias}";src:url("/api/fonts/${font.id}/file");font-weight:400;font-style:normal;font-display:swap;}`)
-              .join("\n"),
-          }}
-        />
-      )}
-      <FontSettingsClient
-        fonts={fonts}
-        activeFontId={activeFontId}
-        selectFont={selectMenuFontAction}
-        removeFont={deleteMenuFontAction}
-      />
-    </>
-  );
+  const fonts = await menuEditor.listAssets(account.tenantId, "FONT");
+  return <div className="space-y-8"><AdminPageHeader eyebrow="Configuración" title="Fuentes propias" description="Subí las tipografías de tu marca y elegilas desde el inspector del editor." /><AdminCard className="p-6 sm:p-8"><FontLibraryClient initialAssets={fonts} /></AdminCard></div>;
 }

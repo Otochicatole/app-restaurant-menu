@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthenticatedAccount } from "@/modules/identity-access/server";
-import { menuCustomization } from "@/modules/menu-customization/server";
+import { menuEditor } from "@/modules/menu-editor/server";
 import { AdminShell } from "@/ui/admin/AdminShell";
 
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
@@ -9,11 +9,11 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   if (actor.kind === "super-admin") redirect("/superadmin");
   if (actor.mustChangePassword) redirect("/admin/account/password");
 
-  const header = await menuCustomization.getHeader(actor.tenantId);
+  const profile = await menuEditor.getProfile(actor.tenantId);
   return (
     <AdminShell
-      brandTitle={header.title}
-      brandSubtitle={header.description}
+      brandTitle={profile.name}
+      brandSubtitle={profile.publicDescription}
       menuHref={`/m/${actor.tenantSlug}`}
     >
       {children}

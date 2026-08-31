@@ -4,14 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { BarChart3, BookOpen, ExternalLink, Home, Menu, Settings, Star, UtensilsCrossed, X } from "lucide-react";
+import { ExternalLink, Layers3, Menu, Settings, UtensilsCrossed, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
-  { label: "Resumen", href: "/admin", exact: true, icon: BarChart3 },
-  { label: "Catálogo", href: "/admin/catalog", icon: BookOpen },
-  { label: "Página principal", href: "/admin/home-page", icon: Home },
-  { label: "Destacados", href: "/admin/featured-products", icon: Star },
+  { label: "Editor", href: "/admin", exact: true, icon: Layers3 },
   { label: "Configuración", href: "/admin/settings", icon: Settings },
 ];
 
@@ -20,16 +17,6 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isActive = (item: (typeof navigation)[number]) => item.exact ? pathname === item.href : pathname.startsWith(item.href);
-
-  const activeSection = navigation.find((item) => isActive(item)) ?? null;
-
-  const subpageLabel = (() => {
-    if (!activeSection || activeSection.href === pathname) return null;
-    if (pathname === "/admin/settings/fonts") return "Tipografía del menú";
-    if (pathname === "/admin/catalog/new") return "Nuevo producto";
-    if (/^\/admin\/catalog\/[^/]+\/edit$/.test(pathname)) return "Editar producto";
-    return null;
-  })();
 
   return (
     <div data-admin-panel className="min-h-screen bg-[#f5f7f3] text-zinc-900">
@@ -57,6 +44,10 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
                 </Link>
               );
             })}
+            <Link href={menuHref} target="_blank" rel="noreferrer" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-emerald-100 transition hover:bg-emerald-900 hover:text-white">
+              <ExternalLink size={17} />
+              Ver menú público
+            </Link>
           </nav>
           <div className="mt-auto rounded-2xl border border-emerald-800 bg-emerald-900/70 p-4">
             <p className="text-xs font-semibold text-white">Mantené tu menú actualizado</p>
@@ -66,17 +57,8 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
         </div>
       </aside>
       {mobileOpen && <button type="button" aria-label="Cerrar navegación" className="fixed inset-0 z-30 bg-zinc-950/40 lg:hidden" onClick={() => setMobileOpen(false)} />}
+      <button type="button" className="fixed right-4 top-4 z-30 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Abrir menú"><Menu size={18} /></button>
       <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-[#f5f7f3]/90 backdrop-blur">
-          <div className="flex h-16 items-center justify-between px-4 sm:px-8">
-            <button type="button" className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Abrir menú"><Menu size={18} /></button>
-            <div className="hidden text-sm text-zinc-500 lg:block">
-              Panel de administración <span className="mx-2 text-zinc-300">/</span> {activeSection?.label ?? "Resumen"}
-              {subpageLabel && (<><span className="mx-2 text-zinc-300">/</span>{subpageLabel}</>)}
-            </div>
-            <Link href={menuHref} target="_blank" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Ver menú <ExternalLink size={15} /></Link>
-          </div>
-        </header>
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
       </div>
     </div>
