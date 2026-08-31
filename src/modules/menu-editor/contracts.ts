@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isLucideIconKey } from "./domain/lucide-icon-catalog";
 
 const finiteNumber = z.number().finite();
 const id = z.string().trim().min(1).max(200);
@@ -61,7 +62,8 @@ const shapeNode = nodeBase.extend({
 
 const iconNode = nodeBase.extend({
   type: z.literal("icon"),
-  iconKey: z.string().regex(/^[a-z0-9-]+$/).max(80),
+  iconKey: z.string().regex(/^[a-z0-9-]+$/).max(80).refine(isLucideIconKey, "Icono Lucide inválido"),
+  accessibleLabel: z.string().trim().max(160).default(""),
   fill: color.default("#3A4824"),
   strokeWidth: finiteNumber.min(0.5).max(20).default(2),
 });

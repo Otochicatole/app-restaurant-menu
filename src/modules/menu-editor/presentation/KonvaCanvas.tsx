@@ -5,6 +5,7 @@ import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon,
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, clampGroupDelta, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
+import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 
 type Viewport = CanvasDocumentV1["initialViewport"];
 type DragSession = {
@@ -191,7 +192,7 @@ function CanvasNodeView({ node, selectedIds, imageAsset, fontAsset, onSelect, on
     if (node.shape === "star") return <Star {...common} numPoints={5} innerRadius={Math.min(node.width, node.height) / 4} outerRadius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
     return <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
   }
-  return <Text {...common} text={iconGlyph(node.iconKey)} fontSize={Math.min(node.width, node.height)} align="center" verticalAlign="middle" fill={node.fill} />;
+  return <LucideKonvaIcon iconKey={node.iconKey} color={node.fill} strokeWidth={node.strokeWidth} nodeProps={common} />;
 }
 
 function LoadedImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) {
@@ -204,9 +205,4 @@ function LoadedImage(props: Record<string, unknown> & { url?: string; cornerRadi
     image.src = props.url;
   }, [props.url]);
   return <KonvaImage {...props} image={image} cornerRadius={props.cornerRadius} />;
-}
-
-function iconGlyph(key: string): string {
-  const values: Record<string, string> = { star: "★", heart: "♥", coffee: "☕", leaf: "❧", check: "✓", circle: "●", arrow: "➜" };
-  return values[key] ?? "✦";
 }

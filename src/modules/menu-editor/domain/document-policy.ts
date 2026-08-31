@@ -1,8 +1,21 @@
 import { BadRequestError } from "@/platform/application/errors";
 import { canvasDocumentSchema, type CanvasDocumentV1 } from "../contracts";
+import { canonicalizeLucideIconKey, humanizeLucideIconName, isLucideIconKey } from "./lucide-icon-catalog";
 
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_NODE_COUNT = 2_000;
+
+export function normalizeLegacyCanvasDocument(input: unknown): unknown {
+  if (!input || typeof input !== "object" || !Array.isArray((input as { nodes?: unknown }).nodes)) return input;
+  const document = input as { nodes: unknown[] };
+  return { ...document, nodes: document.nodes.map((node) => {
+    if (!node || typeof node !== "object" || (node as { type?: string }).type !== "icon") return node;
+    const raw = String((node as { iconKey?: unknown }).iconKey ?? "");
+    const iconKey = isLucideIconKey(raw) ? canonicalizeLucideIconKey(raw) : "sparkles";
+    const accessibleLabel = String((node as { accessibleLabel?: unknown }).accessibleLabel ?? "").trim() || humanizeLucideIconName(iconKey);
+    return { ...(node as object), iconKey, accessibleLabel };
+  }) };
+}
 
 export function validateCanvasDocument(input: unknown): CanvasDocumentV1 {
   const document = canvasDocumentSchema.parse(input);

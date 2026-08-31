@@ -3,7 +3,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "@/platform/applic
 import { prisma } from "@/platform/database/prisma";
 import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
 import type { CanvasDocumentV1, MenuAssetKind, MenuAssetView, MenuProjectView, RestaurantProfile } from "../contracts";
-import { documentAssetIds, validateCanvasDocument } from "../domain/document-policy";
+import { documentAssetIds, normalizeLegacyCanvasDocument, validateCanvasDocument } from "../domain/document-policy";
 import type { MenuEditorRepository } from "../application/ports";
 
 export class PrismaMenuEditorRepository implements MenuEditorRepository {
@@ -41,7 +41,7 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
       const current = await transaction.menuProject.findUnique({ where: { tenantId } });
       if (!current) throw new NotFoundError("Menu project");
       if (current.draftRevision !== baseRevision) throw new ConflictError("Guardá el borrador más reciente antes de publicar.");
-      const document = validateCanvasDocument(JSON.parse(current.draftJson));
+      const document = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(current.draftJson)));
       await replaceReferences(transaction, tenantId, current.id, document, "PUBLISHED");
       return transaction.menuProject.update({
         where: { tenantId },
@@ -113,7 +113,7 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
 }
 
 function toProjectView(project: { draftJson: string; draftRevision: number; publishedJson: string | null; publishedRevision: number | null; publishedAt: Date | null; legacyFallback: boolean }): MenuProjectView {
-  const document = validateCanvasDocument(JSON.parse(project.draftJson));
+  const document = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(project.draftJson)));
   return {
     document,
     draftRevision: project.draftRevision,
