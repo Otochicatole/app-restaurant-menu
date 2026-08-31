@@ -78,7 +78,7 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
                   }}
                   title={desktopNavCollapsed ? item.label : undefined}
                   aria-current={active ? "page" : undefined}
-                  className="group grid h-12 w-72 shrink-0 grid-cols-[4rem_1fr] items-center whitespace-nowrap text-sm"
+                  className={`group grid h-12 w-72 shrink-0 grid-cols-[4rem_1fr] items-center whitespace-nowrap text-sm ${active && !desktopNavCollapsed ? "my-0.5 rounded-xl bg-emerald-50" : ""}`}
                 >
                   <span className="flex h-full items-center justify-center">
                     <span className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${active ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200" : "text-zinc-500 group-hover:bg-zinc-50 group-hover:text-emerald-700"}`}>
@@ -91,8 +91,6 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
                 </Link>
               );
             })}
-
-            <div className={`my-3 ml-16 mr-4 border-t border-zinc-200 transition-opacity duration-150 ${labelVisibility}`} />
 
             <Link
               href={menuHref}
