@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { ExternalLink, Layers3, Menu, Settings, UtensilsCrossed, X } from "lucide-react";
+import { ExternalLink, Layers3, Menu, MonitorCog, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
@@ -43,7 +43,7 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
                 aria-label={desktopNavCollapsed ? "Expandir navegación" : "Contraer navegación"}
                 title={desktopNavCollapsed ? "Expandir navegación" : "Contraer navegación"}
               >
-                <UtensilsCrossed size={18} strokeWidth={2.5} />
+                <MonitorCog size={18} strokeWidth={2.5} />
               </button>
             </div>
             <div className="flex min-w-0 items-center justify-between pr-4">
