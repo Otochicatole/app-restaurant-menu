@@ -7,10 +7,10 @@ function buildCSP(): string {
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "font-src 'self' data:",
     "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",

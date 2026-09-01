@@ -49,7 +49,6 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
           publishedJson: JSON.stringify(document),
           publishedRevision: current.draftRevision,
           publishedAt: new Date(),
-          legacyFallback: false,
         },
       });
     });
@@ -105,14 +104,12 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
 
   async updateProfile(tenantId: string, profile: RestaurantProfile): Promise<RestaurantProfile> {
     return prisma.$transaction(async (transaction) => {
-      const tenant = await transaction.tenant.update({ where: { id: tenantId }, data: profile, select: { name: true, publicDescription: true } });
-      await transaction.homePage.upsert({ where: { tenantId }, create: { tenantId, title: profile.name, description: profile.publicDescription }, update: { title: profile.name, description: profile.publicDescription } });
-      return tenant;
+      return transaction.tenant.update({ where: { id: tenantId }, data: profile, select: { name: true, publicDescription: true } });
     });
   }
 }
 
-function toProjectView(project: { draftJson: string; draftRevision: number; publishedJson: string | null; publishedRevision: number | null; publishedAt: Date | null; legacyFallback: boolean }): MenuProjectView {
+function toProjectView(project: { draftJson: string; draftRevision: number; publishedJson: string | null; publishedRevision: number | null; publishedAt: Date | null }): MenuProjectView {
   const document = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(project.draftJson)));
   return {
     document,
@@ -120,7 +117,6 @@ function toProjectView(project: { draftJson: string; draftRevision: number; publ
     publishedRevision: project.publishedRevision,
     publishedAt: project.publishedAt?.toISOString() ?? null,
     hasPublishedDocument: Boolean(project.publishedJson),
-    legacyFallback: project.legacyFallback,
   };
 }
 

@@ -41,10 +41,6 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   admin     Admin?
-  homePage  HomePage?
-  groups    Group[]
-  fonts     Font[]
-  settings  Setting[]
   menuProject MenuProject?
   menuAssets MenuAsset[]
   menuAssetReferences MenuAssetReference[]
@@ -86,95 +82,6 @@ model AssetCleanupJob {
   @@index([availableAt])
 }
 
-model Group {
-  id          String    @id @default(cuid())
-  tenantId    String
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name        String
-  description String    @default("")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  products    Product[] @relation("GroupProducts")
-
-  @@unique([tenantId, name])
-  @@unique([id, tenantId])
-  @@index([tenantId])
-}
-
-model HomePage {
-  id          String   @id @default(cuid())
-  tenantId    String   @unique
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  title       String   @default("Fuzion")
-  description String   @default("Desayunos y meriendas")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Product {
-  id          String            @id @default(cuid())
-  tenantId    String
-  name        String
-  description String            @default("")
-  price       Float
-  groupId     String
-  sortOrder   Int               @default(0)
-  mediaPath   String?
-  mediaType   String?
-  group       Group             @relation("GroupProducts", fields: [groupId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  featured    FeaturedProduct[] @relation("ProductFeatured")
-
-  @@unique([id, tenantId])
-  @@index([tenantId])
-  @@index([tenantId, groupId])
-}
-
-model FeaturedProduct {
-  id        String   @id @default(cuid())
-  tenantId  String
-  position  Int
-  productId String
-  product   Product  @relation("ProductFeatured", fields: [productId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tenantId, position])
-  @@unique([tenantId, productId], map: "FeaturedProduct_tenant_product_key")
-  @@unique([id, tenantId])
-  @@index([tenantId])
-}
-
-model Font {
-  id           String   @id @default(cuid())
-  tenantId     String?
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name         String
-  category     String
-  source       String
-  googleFamily String?
-  fontFamily   String
-  weights      String   @default("400;700")
-  filePath     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([tenantId, name])
-  @@index([tenantId])
-}
-
-model Setting {
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  key       String
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@id([tenantId, key])
-}
-
 enum MenuAssetKind {
   IMAGE
   FONT
@@ -195,7 +102,6 @@ model MenuProject {
   publishedRevision Int?
   publishedAt       DateTime?
   schemaVersion     Int      @default(1)
-  legacyFallback    Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   assetReferences   MenuAssetReference[]

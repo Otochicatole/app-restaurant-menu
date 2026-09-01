@@ -5,7 +5,7 @@ import { requireDisposableTestDatabase } from "../../scripts/require-test-databa
 
 const E2E_ID_PREFIX = "e2e-";
 const STORAGE_MARKER = ".playwright-storage-owner";
-const STORAGE_MARKER_CONTENT = "app-restaurant-menu:e2e:v1\n";
+const STORAGE_MARKER_CONTENT = "app-restaurant-menu:e2e:v2\n";
 
 export default async function globalTeardown() {
   const database = requireDisposableTestDatabase();

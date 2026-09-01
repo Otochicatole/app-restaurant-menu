@@ -1,13 +1,17 @@
 import { prisma } from "@/platform/database/prisma";
-import { canvasDocumentSchema, type CanvasDocumentV1 } from "@/modules/menu-editor/contracts";
+import { canvasDocumentSchema } from "@/modules/menu-editor/contracts";
 import type { PublicCanvasMenuView } from "../contracts";
 
 export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanvasMenuView | null> {
-  const tenant = await prisma.tenant.findFirst({ where: { slug, status: "ACTIVE" }, select: { id: true, name: true, slug: true, publicDescription: true } });
+  const tenant = await prisma.tenant.findFirst({
+    where: { slug, status: "ACTIVE" },
+    select: { id: true, name: true, slug: true, publicDescription: true },
+  });
   if (!tenant) return null;
-  const project = await prisma.menuProject.findUnique({ where: { tenantId: tenant.id } });
+  const project = await prisma.menuProject.findUnique({ where: { tenantId: tenant.id }, select: { publishedJson: true } });
   if (!project?.publishedJson) return null;
-  const document = canvasDocumentSchema.parse(JSON.parse(project.publishedJson)) as CanvasDocumentV1;
+
+  const document = canvasDocumentSchema.parse(JSON.parse(project.publishedJson));
   const ids = new Set<string>();
   for (const node of document.nodes) {
     if (node.type === "image") ids.add(node.assetId);
@@ -20,7 +24,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   for (const asset of assets) {
     assetMap[asset.id] = {
       id: asset.id,
-      kind: asset.kind as "IMAGE" | "FONT",
+      kind: asset.kind,
       name: asset.name,
       mimeType: asset.mimeType,
       url: `/api/public/menus/${encodeURIComponent(tenant.slug)}/assets/${encodeURIComponent(asset.id)}/file`,
@@ -30,11 +34,17 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   return { tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug }, profile: { name: tenant.name, description: tenant.publicDescription }, document, assets: assetMap };
 }
 
-export async function getPublicMenuMode(slug: string): Promise<"canvas" | "legacy" | "preparation" | null> {
+export async function getPublicMenuStatus(slug: string): Promise<"published" | "preparation" | null> {
   const tenant = await prisma.tenant.findFirst({ where: { slug, status: "ACTIVE" }, select: { id: true } });
   if (!tenant) return null;
-  const project = await prisma.menuProject.findUnique({ where: { tenantId: tenant.id }, select: { publishedJson: true, legacyFallback: true } });
-  if (project?.publishedJson) return "canvas";
-  if (project && !project.legacyFallback) return "preparation";
-  return "legacy";
+  const project = await prisma.menuProject.findUnique({ where: { tenantId: tenant.id }, select: { publishedJson: true } });
+  return project?.publishedJson ? "published" : "preparation";
+}
+
+export async function getPublicMenuMetadata(slug: string): Promise<{ title: string; description: string } | null> {
+  const tenant = await prisma.tenant.findFirst({
+    where: { slug, status: "ACTIVE" },
+    select: { name: true, publicDescription: true },
+  });
+  return tenant ? { title: tenant.name, description: tenant.publicDescription } : null;
 }

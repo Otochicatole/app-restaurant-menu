@@ -386,12 +386,20 @@ stop_candidate() {
 
 run_prisma_migrations() {
   local release="$1"
+  local storage_root
+  storage_root="$(read_dotenv_value STORAGE_ROOT "$SHARED_ENV" || true)"
+  if [[ -z "$storage_root" ]]; then
+    echo "ERROR: STORAGE_ROOT es obligatorio para ejecutar el preflight Canvas." >&2
+    return 1
+  fi
   ensure_sqlite_database_file
   configure_sqlite_wal_mode "$DATABASE_FILE"
-  echo "Aplicando migraciones SQLite de $release..."
+  echo "Ejecutando preflight y backfill Canvas de $release..."
   (
     cd -- "$release"
+    DATABASE_URL="$EXPECTED_DATABASE_URL" STORAGE_ROOT="$storage_root" bun run scripts/cutover-menu-editor.ts
     DATABASE_URL="$EXPECTED_DATABASE_URL" bun x prisma migrate deploy
+    DATABASE_URL="$EXPECTED_DATABASE_URL" bun x prisma generate
   )
   configure_sqlite_wal_mode "$DATABASE_FILE"
   validate_sqlite_database "$DATABASE_FILE"

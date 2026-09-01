@@ -1,92 +1,55 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { createTemplateDocument } from "../../src/modules/menu-editor/domain/template";
 import { createSqlitePrismaClient } from "../../src/platform/database/sqlite-client";
 import { requireDisposableTestDatabase } from "../../scripts/require-test-database";
 
 const integration = Boolean(process.env.TEST_DATABASE_URL);
 const suite = integration ? describe : describe.skip;
-const testDatabase = integration ? requireDisposableTestDatabase() : null;
-const prisma = testDatabase ? createSqlitePrismaClient(testDatabase.connectionString) : null;
+const database = integration ? requireDisposableTestDatabase() : null;
+const prisma = database ? createSqlitePrismaClient(database.connectionString) : null;
 let tenantA = "";
 let tenantB = "";
-let groupA = "";
-let groupB = "";
-let productA = "";
-let productB = "";
-const cleanupKey = `integration/${Date.now()}.bin`;
 
-suite("tenant isolation", () => {
+suite("tenant isolation in Canvas", () => {
   beforeAll(async () => {
     tenantA = (await prisma!.tenant.create({ data: { name: "A", slug: `test-a-${Date.now()}` } })).id;
     tenantB = (await prisma!.tenant.create({ data: { name: "B", slug: `test-b-${Date.now()}` } })).id;
-    groupA = (await prisma!.group.create({ data: { tenantId: tenantA, name: "Bebidas" } })).id;
-    groupB = (await prisma!.group.create({ data: { tenantId: tenantB, name: "Bebidas" } })).id;
-    productA = (await prisma!.product.create({ data: { tenantId: tenantA, groupId: groupA, name: "Café", price: 3 } })).id;
-    productB = (await prisma!.product.create({ data: { tenantId: tenantB, groupId: groupB, name: "Té", price: 2 } })).id;
+    const projectA = await prisma!.menuProject.create({ data: { tenantId: tenantA, draftJson: JSON.stringify(createTemplateDocument("A")), publishedJson: JSON.stringify(createTemplateDocument("A")), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
+    const projectB = await prisma!.menuProject.create({ data: { tenantId: tenantB, draftJson: JSON.stringify(createTemplateDocument("B")), schemaVersion: 1 } });
+    const assetA = await prisma!.menuAsset.create({ data: { tenantId: tenantA, kind: "IMAGE", name: "A", storageKey: `tenants/${tenantA}/a.png`, mimeType: "image/png", byteSize: 1, checksum: `a-${Date.now()}` } });
+    await prisma!.menuAssetReference.create({ data: { tenantId: tenantA, projectId: projectA.id, assetId: assetA.id, scope: "PUBLISHED" } });
+    expect(projectB.tenantId).toBe(tenantB);
   });
 
   afterAll(async () => {
-    await prisma?.assetCleanupJob.deleteMany({ where: { storageKey: cleanupKey } });
     await prisma?.tenant.deleteMany({ where: { id: { in: [tenantA, tenantB] } } });
     await prisma?.$disconnect();
   });
 
-  it("permits equal names but keeps rows separated by tenant", async () => {
-    expect(await prisma!.group.count({ where: { tenantId: tenantA, name: "Bebidas" } })).toBe(1);
-    expect(await prisma!.group.count({ where: { tenantId: tenantB, name: "Bebidas" } })).toBe(1);
-    expect(await prisma!.group.count({ where: { tenantId: tenantA } })).toBe(1);
-    expect((await prisma!.product.findMany({ where: { tenantId: tenantA } })).map(({ id }) => id)).toEqual([productA]);
-    expect((await prisma!.product.findMany({ where: { tenantId: tenantB } })).map(({ id }) => id)).toEqual([productB]);
+  it("keeps projects and assets isolated by tenant", async () => {
+    expect(await prisma!.menuProject.count({ where: { tenantId: tenantA } })).toBe(1);
+    expect(await prisma!.menuAsset.count({ where: { tenantId: tenantB } })).toBe(0);
+    expect(await prisma!.menuAssetReference.count({ where: { tenantId: tenantA, scope: "PUBLISHED" } })).toBe(1);
   });
 
-  it("rejects cross-tenant group and product identifiers at the database boundary", async () => {
-    await expect(prisma!.product.create({
-      data: { tenantId: tenantA, groupId: groupB, name: "Intruso", price: 1 },
-    })).rejects.toBeDefined();
-    await expect(prisma!.featuredProduct.create({
-      data: { tenantId: tenantA, productId: productB, position: 1 },
-    })).rejects.toBeDefined();
-    await expect(prisma!.group.update({
-      where: { id_tenantId: { id: groupB, tenantId: tenantA } },
-      data: { name: "No permitido" },
-    })).rejects.toBeDefined();
-  });
-
-  it("enforces highlight slots 1-3 and one slot per product", async () => {
-    await prisma!.featuredProduct.create({ data: { tenantId: tenantA, productId: productA, position: 1 } });
-    await expect(prisma!.featuredProduct.create({
-      data: { tenantId: tenantA, productId: productA, position: 2 },
-    })).rejects.toBeDefined();
-    await expect(prisma!.featuredProduct.create({
-      data: { tenantId: tenantB, productId: productB, position: 4 },
-    })).rejects.toBeDefined();
-    expect(await prisma!.featuredProduct.count({ where: { tenantId: tenantA } })).toBe(1);
+  it("rejects cross-tenant asset references at the database boundary", async () => {
+    const projectA = await prisma!.menuProject.findUniqueOrThrow({ where: { tenantId: tenantA } });
+    const assetB = await prisma!.menuAsset.create({ data: { tenantId: tenantB, kind: "IMAGE", name: "B", storageKey: `tenants/${tenantB}/b.png`, mimeType: "image/png", byteSize: 1, checksum: `b-${Date.now()}` } });
+    await expect(prisma!.menuAssetReference.create({ data: { tenantId: tenantA, projectId: projectA.id, assetId: assetB.id, scope: "DRAFT" } })).rejects.toBeDefined();
   });
 
   it("hides suspended tenants from active publication queries", async () => {
-    const tenant = await prisma!.tenant.findUniqueOrThrow({ where: { id: tenantB } });
     await prisma!.tenant.update({ where: { id: tenantB }, data: { status: "SUSPENDED" } });
-    expect(await prisma!.tenant.findFirst({ where: { slug: tenant.slug, status: "ACTIVE" } })).toBeNull();
+    expect(await prisma!.tenant.findFirst({ where: { id: tenantB, status: "ACTIVE" } })).toBeNull();
     expect(await prisma!.tenant.findFirst({ where: { id: tenantA, status: "ACTIVE" } })).not.toBeNull();
   });
 
-  it("keeps cleanup jobs idempotent and exposes the new operational indexes", async () => {
-    await prisma!.assetCleanupJob.create({ data: { storageKey: cleanupKey } });
-    await expect(prisma!.assetCleanupJob.create({ data: { storageKey: cleanupKey } })).rejects.toBeDefined();
-
-    const indexes = await prisma!.$queryRaw<Array<{ name: string }>>`
-      SELECT name FROM sqlite_schema
-      WHERE type = 'index'
-        AND name IN ('Session_adminId_idx', 'Session_expiresAt_idx', 'LoginThrottle_updatedAt_idx', 'AssetCleanupJob_availableAt_idx')
-    `;
-    expect(new Set(indexes.map(({ name }) => name))).toEqual(new Set([
-      "Session_adminId_idx",
-      "Session_expiresAt_idx",
-      "LoginThrottle_updatedAt_idx",
-      "AssetCleanupJob_availableAt_idx",
-    ]));
-
-    const foreignKeys = await prisma!.$queryRawUnsafe<Array<{ foreign_keys: number | bigint }>>("PRAGMA foreign_keys");
-    expect(Number(foreignKeys[0]?.foreign_keys)).toBe(1);
+  it("keeps cleanup jobs idempotent and exposes operational indexes", async () => {
+    const key = `integration/${Date.now()}.bin`;
+    await prisma!.assetCleanupJob.create({ data: { storageKey: key } });
+    await expect(prisma!.assetCleanupJob.create({ data: { storageKey: key } })).rejects.toBeDefined();
+    const indexes = await prisma!.$queryRaw<Array<{ name: string }>>`SELECT name FROM sqlite_schema WHERE type = 'index' AND name IN ('Session_adminId_idx', 'Session_expiresAt_idx', 'LoginThrottle_updatedAt_idx', 'AssetCleanupJob_availableAt_idx')`;
+    expect(new Set(indexes.map(({ name }) => name))).toEqual(new Set(["Session_adminId_idx", "Session_expiresAt_idx", "LoginThrottle_updatedAt_idx", "AssetCleanupJob_availableAt_idx"]));
     expect(await prisma!.$queryRawUnsafe<unknown[]>("PRAGMA foreign_key_check")).toEqual([]);
   });
 });

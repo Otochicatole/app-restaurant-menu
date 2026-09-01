@@ -65,15 +65,11 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
             mustChangePassword: true,
           },
         });
-        await transaction.homePage.create({
-          data: { tenantId: tenant.id, title: input.name, description: "Menú digital" },
-        });
         await transaction.menuProject.create({
           data: {
             tenantId: tenant.id,
             draftJson: JSON.stringify(createTenantTemplate(input.name)),
             schemaVersion: 1,
-            legacyFallback: false,
           },
         });
         return toListItem({ ...tenant, admin });
@@ -155,27 +151,8 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
         throw new ConflictError("La confirmación no coincide con el slug.");
       }
 
-      const [productAssets, fontAssets] = await Promise.all([
-        transaction.product.findMany({
-          where: { tenantId: tenant.id, mediaPath: { not: null } },
-          select: { mediaPath: true },
-        }),
-        transaction.font.findMany({
-          where: { tenantId: tenant.id, filePath: { not: null } },
-          select: { filePath: true },
-        }),
-      ]);
-      const storageKeys = [
-        ...productAssets.map((asset) => asset.mediaPath),
-        ...fontAssets.map((asset) => asset.filePath),
-      ].filter((key): key is string => Boolean(key));
       const tenantPrefix = `tenants/${tenant.id}`;
       await enqueueAssetCleanup(tenantPrefix, transaction, { deletePrefix: true });
-      for (const storageKey of new Set(storageKeys)) {
-        if (!storageKey.startsWith(`${tenantPrefix}/`)) {
-          await enqueueAssetCleanup(storageKey, transaction);
-        }
-      }
       await transaction.tenant.delete({ where: { id: tenant.id } });
     });
   }

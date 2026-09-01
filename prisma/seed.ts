@@ -8,27 +8,6 @@ if (!databaseUrl) throw new Error("DATABASE_URL es obligatoria para ejecutar el 
 assertLocalSqliteUrl(databaseUrl);
 const prisma = new PrismaClient({ adapter: new PrismaLibSql({ url: databaseUrl.trim(), timeout: 5_000 }) });
 
-const fontDefs = [
-  ["Playfair Display", "serif", "Playfair Display", '"Playfair Display", serif', "400;700"],
-  ["Lora", "serif", "Lora", '"Lora", serif', "400;700"],
-  ["Merriweather", "serif", "Merriweather", '"Merriweather", serif', "400;700"],
-  ["Cormorant Garamond", "serif", "Cormorant Garamond", '"Cormorant Garamond", serif', "400;700"],
-  ["Roboto", "sans-serif", "Roboto", '"Roboto", sans-serif', "400;700"],
-  ["Open Sans", "sans-serif", "Open Sans", '"Open Sans", sans-serif', "400;700"],
-  ["Montserrat", "sans-serif", "Montserrat", '"Montserrat", sans-serif', "400;700"],
-  ["Poppins", "sans-serif", "Poppins", '"Poppins", sans-serif', "400;700"],
-  ["Roboto Mono", "monospace", "Roboto Mono", '"Roboto Mono", monospace', "400;700"],
-  ["Space Mono", "monospace", "Space Mono", '"Space Mono", monospace', "400;700"],
-  ["Oswald", "display", "Oswald", '"Oswald", sans-serif', "400;700"],
-  ["Dancing Script", "script", "Dancing Script", '"Dancing Script", cursive', "400;700"],
-  ["Lobster", "script", "Lobster", '"Lobster", cursive', "400"],
-  ["Pacifico", "script", "Pacifico", '"Pacifico", cursive', "400"],
-  ["Bebas Neue", "display", "Bebas Neue", '"Bebas Neue", sans-serif', "400"],
-  ["Cinzel", "display", "Cinzel", '"Cinzel", serif', "400;700"],
-  ["Abril Fatface", "display", "Abril Fatface", '"Abril Fatface", serif', "400"],
-  ["Bangers", "display", "Bangers", '"Bangers", cursive', "400"],
-] as const;
-
 async function main() {
   const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SUPER_ADMIN_PASSWORD;
@@ -43,15 +22,6 @@ async function main() {
     update: { passwordHash, role: "SUPER_ADMIN", tenantId: null, mustChangePassword: false },
     create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false },
   });
-
-  for (const [name, category, googleFamily, fontFamily, weights] of fontDefs) {
-    const current = await prisma.font.findFirst({ where: { name, tenantId: null } });
-    if (current) {
-      await prisma.font.update({ where: { id: current.id }, data: { category, source: "google", googleFamily, fontFamily, weights } });
-    } else {
-      await prisma.font.create({ data: { name, category, source: "google", googleFamily, fontFamily, weights } });
-    }
-  }
 
   console.log("Seed completed successfully");
 }

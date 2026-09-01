@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text } from "react-konva";
 import type Konva from "konva";
-import type { CanvasDocumentV1, CanvasNode } from "@/modules/menu-editor/contracts";
-import { cameraForViewport, zoomViewportAt } from "../../menu-editor/ui/canvas-geometry";
+import type { CanvasDocumentV1, CanvasNode } from "@/modules/menu-editor/ui";
+import { cameraForViewport, LucideKonvaIcon, zoomViewportAt } from "@/modules/menu-editor/ui";
 import type { PublicCanvasAsset } from "../contracts";
-import { LucideKonvaIcon } from "@/modules/menu-editor/ui/LucideKonvaIcon";
 
 export function PublicCanvasStage({ document, assets }: { document: CanvasDocumentV1; assets: Record<string, PublicCanvasAsset> }) {
   const containerRef = useRef<HTMLDivElement>(null);

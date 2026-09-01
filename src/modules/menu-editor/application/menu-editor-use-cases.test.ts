@@ -7,9 +7,9 @@ function repository(): MenuEditorRepository {
   const document = createTemplateDocument("Café");
   return {
     getProject: vi.fn(async () => null),
-    ensureProject: vi.fn(async () => ({ document, draftRevision: 0, publishedRevision: null, publishedAt: null, hasPublishedDocument: false, legacyFallback: false })),
-    saveDraft: vi.fn(async () => ({ document, draftRevision: 1, publishedRevision: null, publishedAt: null, hasPublishedDocument: false, legacyFallback: false })),
-    publish: vi.fn(async () => ({ document, draftRevision: 1, publishedRevision: 1, publishedAt: new Date().toISOString(), hasPublishedDocument: true, legacyFallback: false })),
+    ensureProject: vi.fn(async () => ({ document, draftRevision: 0, publishedRevision: null, publishedAt: null, hasPublishedDocument: false })),
+    saveDraft: vi.fn(async () => ({ document, draftRevision: 1, publishedRevision: null, publishedAt: null, hasPublishedDocument: false })),
+    publish: vi.fn(async () => ({ document, draftRevision: 1, publishedRevision: 1, publishedAt: new Date().toISOString(), hasPublishedDocument: true })),
     listAssets: vi.fn(async () => [{ id: "font-1", kind: "FONT" as const, name: "Marca", mimeType: "font/woff2", byteSize: 10, width: null, height: null, fontFamily: null, url: "/font", createdAt: new Date().toISOString() }]),
     createAsset: vi.fn(async (input) => ({ id: "new", kind: input.kind, name: input.name, mimeType: input.mimeType, byteSize: input.byteSize, width: null, height: null, fontFamily: null, url: "/asset", createdAt: new Date().toISOString() })),
     deleteAsset: vi.fn(async () => undefined),

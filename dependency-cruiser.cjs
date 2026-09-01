@@ -1,9 +1,6 @@
 const businessModules = [
-  "admin-dashboard",
-  "catalog",
   "identity-access",
-  "menu-customization",
-  "merchandising",
+  "menu-editor",
   "public-menu",
   "tenant-management",
 ];

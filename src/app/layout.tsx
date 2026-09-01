@@ -19,17 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body
-        className="min-h-full flex flex-col"
-        style={{
-          "--font-menu": "Arial, Helvetica, sans-serif",
-          "--font-menu-title": "Arial, Helvetica, sans-serif",
-          "--font-menu-subtitle": "Arial, Helvetica, sans-serif",
-          "--font-menu-group": "Arial, Helvetica, sans-serif",
-          "--font-menu-product": "Arial, Helvetica, sans-serif",
-          "--font-menu-featured": "Arial, Helvetica, sans-serif",
-        } as React.CSSProperties}
-      >
+      <body className="min-h-full flex flex-col">
         {children}
       </body>
     </html>

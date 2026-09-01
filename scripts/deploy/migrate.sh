@@ -109,7 +109,7 @@ if (( service_was_active == 1 )); then
 fi
 
 trap - ERR INT TERM
-echo "Migraciones aplicadas y validadas. No se ejecutaron seeds ni migradores legacy."
+echo "Preflight Canvas, migraciones y validaciones completados. No se ejecutaron seeds."
 if [[ -n "$backup_path" ]]; then
   echo "Backup pre-migracion: $backup_path"
 fi

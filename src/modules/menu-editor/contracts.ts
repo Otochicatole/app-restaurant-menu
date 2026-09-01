@@ -123,7 +123,6 @@ export type MenuProjectView = {
   publishedRevision: number | null;
   publishedAt: string | null;
   hasPublishedDocument: boolean;
-  legacyFallback: boolean;
 };
 
 export type MenuAssetKind = "IMAGE" | "FONT";
