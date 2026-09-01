@@ -1,6 +1,5 @@
--- CreateTable
 CREATE TABLE "Font" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "source" TEXT NOT NULL,
@@ -8,21 +7,15 @@ CREATE TABLE "Font" (
     "fontFamily" TEXT NOT NULL,
     "weights" TEXT NOT NULL DEFAULT '400;700',
     "filePath" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Font_pkey" PRIMARY KEY ("id")
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
 );
 
--- CreateTable
 CREATE TABLE "Setting" (
-    "key" TEXT NOT NULL,
+    "key" TEXT NOT NULL PRIMARY KEY,
     "value" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Setting_pkey" PRIMARY KEY ("key")
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
 );
 
--- CreateIndex
 CREATE UNIQUE INDEX "Font_name_key" ON "Font"("name");

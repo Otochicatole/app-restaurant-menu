@@ -1,10 +1,19 @@
-#!/bin/bash
-# Iniciar y habilitar el servicio para que arranque con el sistema
-echo "Iniciando servicio..."
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-sudo systemctl start app-res.service
-sudo systemctl enable app-res.service
-echo "Servicio app-res iniciado y habilitado."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "$SCRIPT_DIR/common.sh"
 
-echo "Mostrando estado del servicio:"
-sudo systemctl status app-res.service --no-pager
+SERVICE="${APP_SERVICE:-app-res.service}"
+
+validate_deploy_root
+require_commands flock systemctl
+ensure_deploy_layout
+acquire_deploy_lock
+validate_shared_environment
+resolve_release "$CURRENT_LINK" >/dev/null
+
+echo "Iniciando y habilitando $SERVICE..."
+sudo systemctl enable --now "$SERVICE"
+sudo systemctl status "$SERVICE" --no-pager

@@ -1,3 +1,2 @@
--- AlterTable
-ALTER TABLE "Product" ADD COLUMN     "mediaPath" TEXT,
-ADD COLUMN     "mediaType" TEXT;
+ALTER TABLE "Product" ADD COLUMN "mediaPath" TEXT;
+ALTER TABLE "Product" ADD COLUMN "mediaType" TEXT;
