@@ -233,7 +233,7 @@ function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, 
     </InspectorSection>}
 
     {node.type === "shape" && <InspectorSection title="Estilo de la figura">
-      <label className="block text-xs font-medium">Color de relleno<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ fill: event.target.value })} /></label>
+      <AlphaColorField label="Color de relleno" value={node.fill ?? "#3A4824"} disabled={fieldDisabled} onChange={(value) => onChange({ fill: value })} />
       <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Grosor del borde" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /><label className="text-xs font-medium">Color del borde<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.stroke?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ stroke: event.target.value })} /></label></div>
       {node.shape === "rect" && <><NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, Math.min(Math.min(node.width, node.height) / 2, value)) })} /><input aria-label="Redondeado de esquinas" disabled={fieldDisabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max={Math.max(0, Math.min(node.width, node.height) / 2)} step="1" value={Math.min(node.cornerRadius, Math.max(0, Math.min(node.width, node.height) / 2))} onChange={(event) => onChange({ cornerRadius: Number(event.target.value) })} /></>}
     </InspectorSection>}
@@ -268,6 +268,24 @@ function InspectorSection({ title, children }: { title: string; children: ReactN
 }
 
 function NumberField({ label, value, onChange, disabled = false }: { label: string; value: number; onChange: (value: number) => void; disabled?: boolean }) { const safeValue = Number.isFinite(value) ? value : 0; return <label className="text-xs font-medium">{label}<input disabled={disabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400" type="number" value={Math.round(safeValue * 100) / 100} onChange={(event) => onChange(Number(event.target.value) || 0)} /></label>; }
+
+function AlphaColorField({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+  const normalized = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) ? value : "#3A4824";
+  const alpha = normalized.length === 9 ? parseInt(normalized.slice(7, 9), 16) / 255 : 1;
+  const base = normalized.slice(0, 7);
+  return <div>
+    <div className="flex items-center justify-between text-xs font-medium"><span>{label}</span><label className="flex items-center gap-1 text-[11px] font-normal text-zinc-500"><input aria-label={`Porcentaje de transparencia de ${label.toLowerCase()}`} disabled={disabled} className="w-14 rounded border border-zinc-200 px-1.5 py-1 text-right text-[11px] text-zinc-700 disabled:bg-zinc-100 disabled:text-zinc-400" type="number" min="0" max="100" step="1" value={Math.round(alpha * 100)} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value) / 100))} /><span>%</span></label></div>
+    <input aria-label={label} disabled={disabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={base} onChange={(event) => onChange(withColorAlpha(event.target.value, alpha))} />
+    <input aria-label={`Transparencia de ${label.toLowerCase()}`} disabled={disabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={alpha} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value)))} />
+  </div>;
+}
+
+function withColorAlpha(color: string, alpha: number): string {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
+  const base = color.slice(0, 7);
+  if (clamped >= 0.999) return base;
+  return `${base}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+}
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
   return { ...document, nodes: document.nodes.map((node) => { const width = Math.max(4, finiteOr(node.width, 4)); const height = Math.max(4, finiteOr(node.height, 4)); return { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode; }) };
