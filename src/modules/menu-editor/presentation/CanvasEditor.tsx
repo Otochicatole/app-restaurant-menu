@@ -12,7 +12,7 @@ import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer, TemplatePickerDr
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
 export function CanvasEditor({ project, initialAssets, initialTemplates, restaurantName, restaurantSlug }: { project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string }) {
-  const [document, setDocument] = useState(project.document);
+  const [document, setDocument] = useState(() => normalizeDocument(project.document));
   const [revision, setRevision] = useState(project.draftRevision);
   const [publishedRevision, setPublishedRevision] = useState(project.publishedRevision);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -51,7 +51,12 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => {
     if (node.id !== id) return node;
     const next = { ...node, ...patch } as CanvasNode;
-    if (next.type === "text" && ("text" in patch || "width" in patch || "fontSize" in patch || "lineHeight" in patch || "letterSpacing" in patch)) next.height = estimateTextHeight(next);
+    if (next.type === "text" && ("text" in patch || "width" in patch || "height" in patch || "fontSize" in patch || "lineHeight" in patch || "letterSpacing" in patch)) {
+      // A text box may be resized freely, but it must never become shorter than
+      // the wrapped content. Keeping the larger value also prevents the last
+      // line from being clipped after a Transformer operation.
+      next.height = Math.max(finiteOr(next.height, 4), estimateTextHeight(next));
+    }
     return next;
   }) }));
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
@@ -98,8 +103,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.matches("input, textarea, select")) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length) { event.preventDefault(); commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); }
@@ -337,14 +342,47 @@ function withColorAlpha(color: string, alpha: number): string {
 }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
-  return { ...document, nodes: document.nodes.map((node) => { const width = Math.max(4, finiteOr(node.width, 4)); const height = Math.max(4, finiteOr(node.height, 4)); return { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode; }) };
+  return { ...document, nodes: document.nodes.map((node) => {
+    const width = Math.max(4, finiteOr(node.width, 4));
+    const height = Math.max(4, finiteOr(node.height, 4));
+    const normalized = { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode;
+    if (normalized.type === "text") normalized.height = Math.max(normalized.height, estimateTextHeight(normalized));
+    return normalized;
+  }) };
 }
 
 function finiteOr(value: number, fallback: number): number { return Number.isFinite(value) ? value : fallback; }
 
 function estimateTextHeight(node: Extract<CanvasNode, { type: "text" }>): number {
-  const averageCharacterWidth = Math.max(1, node.fontSize * 0.55 + node.letterSpacing);
-  const charactersPerLine = Math.max(1, Math.floor(node.width / averageCharacterWidth));
-  const lines = node.text.split("\n").reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
+  const width = Math.max(4, finiteOr(node.width, 4));
+  const fontSize = Math.max(1, finiteOr(node.fontSize, 16));
+  const letterSpacing = finiteOr(node.letterSpacing, 0);
+  let measure: (value: string) => number = (value) => value.length * Math.max(1, fontSize * 0.55 + letterSpacing);
+  if (typeof window !== "undefined") {
+    const context = window.document.createElement("canvas").getContext("2d");
+    if (context) {
+      context.font = `${node.fontStyle} ${node.fontWeight} ${fontSize}px ${node.fontFamily ?? "Arial"}`;
+      measure = (value) => context.measureText(value).width + Math.max(0, value.length - 1) * letterSpacing;
+    }
+  }
+  const lines = node.text.split("\n").reduce((total, rawLine) => {
+    if (!rawLine) return total + 1;
+    const tokens = rawLine.split(/(\s+)/).filter(Boolean);
+    let lineWidth = 0;
+    let lineCount = 1;
+    for (const token of tokens) {
+      const tokenWidth = measure(token);
+      if (lineWidth > 0 && lineWidth + tokenWidth > width) {
+        lineCount += 1;
+        lineWidth = tokenWidth;
+      } else if (lineWidth === 0 && tokenWidth > width) {
+        const charactersPerLine = Math.max(1, Math.floor(width / Math.max(1, fontSize * 0.55 + letterSpacing)));
+        const chunks = Math.ceil(token.length / charactersPerLine);
+        lineCount += chunks - 1;
+        lineWidth = measure(token.slice(-charactersPerLine));
+      } else lineWidth += tokenWidth;
+    }
+    return total + lineCount;
+  }, 0);
   return Math.max(4, Math.ceil(lines * node.fontSize * node.lineHeight + 8));
 }
