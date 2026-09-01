@@ -14,11 +14,11 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
   const [viewport, setViewport] = useState(document.initialViewport);
   const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: CanvasDocumentV1["initialViewport"] } | null>(null);
   const bounds = document.canvasBounds;
-  const scenePadding = 40;
+  const scenePadding = 10;
   const sceneSize = { width: Math.max(1, size.width - scenePadding * 2), height: Math.max(1, size.height - scenePadding * 2) };
-  const { camera, scale, fitScale } = cameraForViewport(viewport, bounds, sceneSize);
+  const { camera, scale, fitScale } = cameraForViewport(viewport, bounds, sceneSize, 0.1, 8, "width");
   const zoomAt = (factor: number, point = { x: size.width / 2, y: size.height / 2 }) => {
-    setViewport(zoomViewportAt(viewport, bounds, sceneSize, factor, { x: point.x - scenePadding, y: point.y - scenePadding }));
+    setViewport(zoomViewportAt(viewport, bounds, sceneSize, factor, { x: point.x - scenePadding, y: point.y - scenePadding }, 0.1, 8, "width"));
   };
   const pointer = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => event.target.getStage()?.getPointerPosition();
   const beginPan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -33,7 +33,7 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
     if (!panStart) return;
     const position = pointer(event);
     if (!position) return;
-    setViewport(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, sceneSize).camera);
+    setViewport(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, sceneSize, 0.1, 8, "width").camera);
   };
   useEffect(() => {
     const el = containerRef.current;
@@ -42,7 +42,8 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  return <div ref={containerRef} className="h-full w-full touch-none" style={{ backgroundColor: document.background }} onContextMenu={(event) => event.preventDefault()}>
+  const displayBackground = document.background.endsWith("00") ? "#f5f7f3" : document.background;
+  return <div ref={containerRef} className="h-full w-full touch-none" style={{ backgroundColor: displayBackground }} onContextMenu={(event) => event.preventDefault()}>
     <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={() => setPanStart(null)} onMouseLeave={() => setPanStart(null)} onTouchStart={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={movePan} onTouchEnd={() => setPanStart(null)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
       <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{document.nodes.filter((node) => node.visible).map((node) => <PublicNode key={node.id} node={node} asset={node.type === "image" ? assets[node.assetId] : node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} />)}</Layer>
     </Stage>

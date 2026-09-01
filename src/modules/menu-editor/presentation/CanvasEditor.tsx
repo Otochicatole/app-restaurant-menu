@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Redo2, Trash2, Undo2 } from "lucide-react";
 import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView } from "../contracts";
-import { clampGroupDelta } from "../domain/canvas-geometry";
 import { placeNodeInCanvas } from "../domain/node-placement";
 import { LayersPanel } from "./LayersPanel";
 import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer } from "./EditorToolsPanel";
@@ -46,10 +45,7 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   const commit = (next: CanvasDocumentV1) => commitTransform(() => next);
   const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => node.id === id ? ({ ...node, ...patch } as CanvasNode) : node) }));
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
-  const moveSelected = (ids: string[], delta: { x: number; y: number }) => commitTransform((current) => {
-    const { x: dx, y: dy } = clampGroupDelta(current.nodes, ids, current.canvasBounds, delta);
-    return { ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && !node.locked ? ({ ...node, x: node.x + dx, y: node.y + dy } as CanvasNode) : node) };
-  });
+  const moveSelected = (ids: string[], delta: { x: number; y: number }) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && !node.locked ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }));
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
   const undo = () => { const previous = history.at(-1); if (!previous) return; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setDirty(true); setStatus("Cambios pendientes"); };
   const redo = () => { const next = future.at(-1); if (!next) return; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setDirty(true); setStatus("Cambios pendientes"); };

@@ -4,8 +4,9 @@ export type CanvasRect = { x: number; y: number; width: number; height: number }
 export type CanvasSize = { width: number; height: number };
 export type CanvasPoint = { x: number; y: number };
 
-export function cameraForViewport(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, minScale = 0.1, maxScale = 8) {
-  const fitScale = Math.max(minScale, Math.min(maxScale, Math.min(size.width / bounds.width, size.height / bounds.height)));
+export function cameraForViewport(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, minScale = 0.1, maxScale = 8, fitMode: "contain" | "cover" | "width" = "contain") {
+  const fitRatio = fitMode === "cover" ? Math.max(size.width / bounds.width, size.height / bounds.height) : fitMode === "width" ? size.width / bounds.width : Math.min(size.width / bounds.width, size.height / bounds.height);
+  const fitScale = Math.max(minScale, Math.min(maxScale, fitRatio));
   const requestedScale = Math.max(minScale, Math.min(maxScale, Math.min(size.width / viewport.width, size.height / viewport.height)));
   const scale = Math.min(maxScale, Math.max(fitScale, requestedScale));
   const width = size.width / scale;
@@ -21,8 +22,8 @@ export function cameraForViewport(viewport: CanvasRect, bounds: CanvasRect, size
   return { camera, scale, fitScale };
 }
 
-export function zoomViewportAt(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, factor: number, point: CanvasPoint, minScale = 0.1, maxScale = 8): CanvasRect {
-  const current = cameraForViewport(viewport, bounds, size, minScale, maxScale);
+export function zoomViewportAt(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, factor: number, point: CanvasPoint, minScale = 0.1, maxScale = 8, fitMode: "contain" | "cover" | "width" = "contain"): CanvasRect {
+  const current = cameraForViewport(viewport, bounds, size, minScale, maxScale, fitMode);
   const nextScale = Math.max(current.fitScale, Math.min(maxScale, current.scale * factor));
   const worldX = current.camera.x + point.x / current.scale;
   const worldY = current.camera.y + point.y / current.scale;
@@ -32,7 +33,7 @@ export function zoomViewportAt(viewport: CanvasRect, bounds: CanvasRect, size: C
     width: size.width / nextScale,
     height: size.height / nextScale,
   };
-  return cameraForViewport(next, bounds, size, minScale, maxScale).camera;
+  return cameraForViewport(next, bounds, size, minScale, maxScale, fitMode).camera;
 }
 
 export function screenRectToWorld(rect: CanvasRect, camera: CanvasRect, scale: number): CanvasRect {
@@ -42,14 +43,33 @@ export function screenRectToWorld(rect: CanvasRect, camera: CanvasRect, scale: n
 export function clampGroupDelta(nodes: CanvasNode[], ids: string[], bounds: CanvasRect, delta: CanvasPoint): CanvasPoint {
   const moving = nodes.filter((node) => ids.includes(node.id) && !node.locked);
   if (!moving.length) return delta;
-  const minX = Math.min(...moving.map((node) => node.x));
-  const minY = Math.min(...moving.map((node) => node.y));
-  const maxX = Math.max(...moving.map((node) => node.x + node.width));
-  const maxY = Math.max(...moving.map((node) => node.y + node.height));
+  const rotated = moving.map(rotatedNodeBounds);
+  const minX = Math.min(...rotated.map((rect) => rect.x));
+  const minY = Math.min(...rotated.map((rect) => rect.y));
+  const maxX = Math.max(...rotated.map((rect) => rect.x + rect.width));
+  const maxY = Math.max(...rotated.map((rect) => rect.y + rect.height));
   return {
     x: clampDelta(delta.x, bounds.x - minX, bounds.x + bounds.width - maxX),
     y: clampDelta(delta.y, bounds.y - minY, bounds.y + bounds.height - maxY),
   };
+}
+
+function rotatedNodeBounds(node: CanvasNode): CanvasRect {
+  if (!node.rotation) return { x: node.x, y: node.y, width: node.width, height: node.height };
+  const angle = (node.rotation * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const points = [
+    { x: 0, y: 0 },
+    { x: node.width, y: 0 },
+    { x: node.width, y: node.height },
+    { x: 0, y: node.height },
+  ].map((point) => ({ x: node.x + point.x * cos - point.y * sin, y: node.y + point.x * sin + point.y * cos }));
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function clamp(value: number, min: number, max: number): number {

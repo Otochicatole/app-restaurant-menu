@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
-import { cameraForViewport, clampGroupDelta, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
+import { cameraForViewport, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 
 type Viewport = CanvasDocumentV1["initialViewport"];
@@ -128,7 +128,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
     if (!session || session.activeId !== id) return;
     const start = session.starts[id];
     if (!start) return;
-    const delta = clampGroupDelta(document.nodes, session.ids, bounds, { x: event.target.x() - start.x, y: event.target.y() - start.y });
+    const delta = { x: event.target.x() - start.x, y: event.target.y() - start.y };
     session.delta = delta;
     session.ids.forEach((selectedId) => {
       const node = stageRef.current?.findOne(`#node-${selectedId}`);

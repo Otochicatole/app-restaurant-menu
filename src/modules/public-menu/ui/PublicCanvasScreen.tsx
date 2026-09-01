@@ -13,7 +13,8 @@ export function PublicCanvasScreen({ menu }: { menu: PublicCanvasMenuView }) {
   const iconNodes = menu.document.nodes.filter((node): node is Extract<typeof node, { type: "icon" }> => node.type === "icon" && node.visible);
   const accessibleNodes = [...textNodes, ...iconNodes];
   const fontFaces = Object.values(menu.assets).filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join("");
-  return <main className="relative h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: menu.document.background }}>
+  const displayBackground = menu.document.background.endsWith("00") ? "#f5f7f3" : menu.document.background;
+  return <main className="relative h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: displayBackground }}>
     <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
     <PublicCanvasStage document={menu.document} assets={menu.assets} />
     <div className="absolute bottom-4 right-4 z-10 flex gap-2"><button type="button" onClick={() => setAccessible((value) => !value)} className="rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-800 shadow">{accessible ? "Ocultar texto" : "Ver contenido en texto"}</button></div>
