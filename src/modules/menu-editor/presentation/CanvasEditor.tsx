@@ -43,7 +43,12 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
     setStatus("Cambios pendientes");
   };
   const commit = (next: CanvasDocumentV1) => commitTransform(() => next);
-  const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => node.id === id ? ({ ...node, ...patch } as CanvasNode) : node) }));
+  const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => {
+    if (node.id !== id) return node;
+    const next = { ...node, ...patch } as CanvasNode;
+    if (next.type === "text" && ("text" in patch || "width" in patch || "fontSize" in patch || "lineHeight" in patch || "letterSpacing" in patch)) next.height = estimateTextHeight(next);
+    return next;
+  }) }));
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
   const moveSelected = (ids: string[], delta: { x: number; y: number }) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && !node.locked ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }));
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
@@ -292,3 +297,10 @@ function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
 }
 
 function finiteOr(value: number, fallback: number): number { return Number.isFinite(value) ? value : fallback; }
+
+function estimateTextHeight(node: Extract<CanvasNode, { type: "text" }>): number {
+  const averageCharacterWidth = Math.max(1, node.fontSize * 0.55 + node.letterSpacing);
+  const charactersPerLine = Math.max(1, Math.floor(node.width / averageCharacterWidth));
+  const lines = node.text.split("\n").reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
+  return Math.max(4, Math.ceil(lines * node.fontSize * node.lineHeight + 8));
+}
