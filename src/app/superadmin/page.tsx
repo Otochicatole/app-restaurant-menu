@@ -1,66 +1,11 @@
-import { requireSuperAdmin } from "@/modules/identity-access/server";
-import {
-  createTenantAction,
-  deleteTenantAction,
-  resetTenantPasswordAction,
-  setTenantStatusAction,
-  tenantManagement,
-  updateTenantAction,
-} from "@/modules/tenant-management/server";
-import { TenantManager } from "@/modules/tenant-management/ui";
-import { LogoutButton } from "@/modules/identity-access/ui";
-import { ShieldCheck, UtensilsCrossed } from "lucide-react";
 import { menuTemplates } from "@/modules/menu-editor/server";
-import { TemplateModerationPanel } from "@/modules/menu-editor/ui";
+import { tenantManagement } from "@/modules/tenant-management/server";
+import { BarChart3, PanelsTopLeft, ShieldCheck, Store } from "lucide-react";
 
-export default async function SuperAdminPage() {
-  await requireSuperAdmin();
-  const [rows, pendingTemplates] = await Promise.all([tenantManagement.listTenants(), menuTemplates.listPending()]);
-
-  return (
-    <div data-admin-panel className="min-h-screen bg-[#f5f7f3] text-zinc-900">
-      <header className="border-b border-emerald-900 bg-emerald-950 text-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-8 sm:py-5">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-200 text-emerald-950"><UtensilsCrossed size={18} strokeWidth={2.5} /></span>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">Plataforma</p>
-              <p className="mt-1 text-sm font-semibold text-white sm:text-base">Administración de cuentas</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden text-xs font-medium text-emerald-200 md:block">Sesión de superadministrador</span>
-            <div className="w-auto sm:w-40"><LogoutButton /></div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">
-        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Centro de control</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">Administración general</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">Creá y administrá las cuentas que consumen tu aplicación desde un único lugar.</p>
-          </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
-            <ShieldCheck size={20} className="shrink-0 text-emerald-700" />
-            <div>
-              <p className="text-sm font-semibold">Acceso protegido</p>
-              <p className="mt-0.5 text-xs text-emerald-700">Solo visible para el superadministrador</p>
-            </div>
-          </div>
-        </div>
-
-        <TenantManager
-          tenants={rows}
-          createTenant={createTenantAction}
-          updateTenant={updateTenantAction}
-          toggleTenant={setTenantStatusAction}
-          resetPassword={resetTenantPasswordAction}
-          deleteTenant={deleteTenantAction}
-        />
-        <TemplateModerationPanel initialTemplates={pendingTemplates} />
-      </main>
-    </div>
-  );
+export default async function SuperAdminDashboardPage() {
+  const [tenants, templates] = await Promise.all([tenantManagement.listTenants(), menuTemplates.listForSuperadmin({ tab: "all", query: "", page: 1, pageSize: 24 })]);
+  const pending = templates.items.filter((template) => template.status === "PENDING").length;
+  return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10"><div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard</p><h1 className="text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">Resumen de la plataforma</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">Consultá el estado general de tus restaurantes y de la biblioteca de plantillas.</p></div><div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900"><ShieldCheck size={20} className="shrink-0 text-emerald-700" /><div><p className="text-sm font-semibold">Acceso protegido</p><p className="mt-0.5 text-xs text-emerald-700">Solo visible para el superadministrador</p></div></div></div><div className="grid gap-4 sm:grid-cols-3"><SummaryCard icon={<Store size={18} />} label="Clientes registrados" value={tenants.length} detail="Cuentas administradas" /><SummaryCard icon={<PanelsTopLeft size={18} />} label="Plantillas disponibles" value={templates.total} detail="Sistema y comunidad" /><SummaryCard icon={<BarChart3 size={18} />} label="Pendientes de revisión" value={pending} detail="Requieren moderación" /></div></main>;
 }
+
+function SummaryCard({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: number; detail: string }) { return <article className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800">{icon}</span><span className="text-2xl font-semibold text-zinc-950">{value}</span></div><p className="mt-4 text-sm font-semibold text-zinc-800">{label}</p><p className="mt-1 text-xs text-zinc-500">{detail}</p></article>; }

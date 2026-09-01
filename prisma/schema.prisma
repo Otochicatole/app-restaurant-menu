@@ -181,7 +181,6 @@ model MenuTemplate {
 
   @@index([visibility, status])
   @@index([tenantId, status])
-  @@unique([id, tenantId])
 }
 
 model MenuTemplateAsset {

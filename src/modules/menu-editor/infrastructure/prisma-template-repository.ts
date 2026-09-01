@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { prisma } from "@/platform/database/prisma";
 import { blobStore } from "@/platform/storage";
+import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
 import { documentAssetIds, validateCanvasDocument } from "../domain/document-policy";
 import { presetAsView, TEMPLATE_PRESETS } from "../domain/template-presets";
-import type { CanvasDocumentV1, MenuTemplateView } from "../contracts";
+import type { CanvasDocumentV1, MenuTemplateView, SuperadminTemplateList, SuperadminTemplateQuery, SuperadminTemplateView } from "../contracts";
 import type { TemplateCreateInput, TemplateRepository } from "../application/template-ports";
 
 export class PrismaTemplateRepository implements TemplateRepository {
@@ -99,10 +100,40 @@ export class PrismaTemplateRepository implements TemplateRepository {
     return rows.map(toView);
   }
 
-  async moderate(templateId: string, action: "publish" | "reject" | "archive", reason?: string): Promise<MenuTemplateView> {
+  async listForSuperadmin(input: SuperadminTemplateQuery): Promise<SuperadminTemplateList> {
+    const status: "PUBLISHED" | "PENDING" | "REJECTED" | "ARCHIVED" | undefined = input.tab === "published" ? "PUBLISHED" : input.tab === "pending" ? "PENDING" : input.tab === "rejected" ? "REJECTED" : input.tab === "archived" ? "ARCHIVED" : undefined;
+    const scope = input.tab === "system" ? { isSystem: true } : input.tab === "all" ? { OR: [{ isSystem: true }, { visibility: "PUBLIC" as const }] } : { isSystem: false, visibility: "PUBLIC" as const };
+    const rows = await prisma.menuTemplate.findMany({
+      where: { AND: [scope, ...(status ? [{ status }] : []), ...(input.query ? [{ OR: [{ name: { contains: input.query } }, { description: { contains: input.query } }, { tenant: { name: { contains: input.query } } }, { tenant: { slug: { contains: input.query } } }] }] : [])] },
+      include: { tenant: { select: { id: true, name: true, slug: true } } },
+      orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+    });
+    const items: SuperadminTemplateView[] = rows.map((row) => ({ ...toView(row), owner: row.tenant ? { tenantId: row.tenant.id, name: row.tenant.name, slug: row.tenant.slug } : null }));
+    for (const preset of TEMPLATE_PRESETS) {
+      if (input.tab !== "all" && input.tab !== "system") continue;
+      if (input.query && !`${preset.name} ${preset.description}`.toLocaleLowerCase().includes(input.query.toLocaleLowerCase())) continue;
+      if (!items.some((item) => item.id === preset.id)) items.push({ ...presetAsView(preset), owner: null });
+    }
+    items.sort((left, right) => Number(right.isSystem) - Number(left.isSystem) || right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
+    const start = (input.page - 1) * input.pageSize;
+    return { items: items.slice(start, start + input.pageSize), total: items.length, page: input.page, pageSize: input.pageSize };
+  }
+
+  async deletePublic(templateId: string): Promise<void> {
+    await prisma.$transaction(async (transaction) => {
+      const template = await transaction.menuTemplate.findFirst({ where: { id: templateId, visibility: "PUBLIC", isSystem: false }, include: { assets: { select: { storageKey: true } } } });
+      if (!template) throw new NotFoundError("Plantilla");
+      for (const asset of template.assets) await enqueueAssetCleanup(asset.storageKey, transaction);
+      await transaction.menuTemplate.delete({ where: { id: template.id } });
+    });
+  }
+
+  async moderate(templateId: string, action: "publish" | "reject" | "archive" | "restore", reason?: string): Promise<MenuTemplateView> {
     const template = await prisma.menuTemplate.findUnique({ where: { id: templateId } });
     if (!template || template.visibility !== "PUBLIC" || template.isSystem) throw new NotFoundError("Plantilla");
-    const status = action === "publish" ? "PUBLISHED" : action === "reject" ? "REJECTED" : "ARCHIVED";
+    const validTransitions = { publish: "PENDING", reject: "PENDING", archive: "PUBLISHED", restore: "ARCHIVED" } as const;
+    if (template.status !== validTransitions[action]) throw new ConflictError("La plantilla no está en un estado válido para esta acción.");
+    const status = action === "publish" || action === "restore" ? "PUBLISHED" : action === "reject" ? "REJECTED" : "ARCHIVED";
     const row = await prisma.menuTemplate.update({ where: { id: templateId }, data: { status, rejectionReason: action === "reject" ? reason ?? null : null, publishedAt: action === "publish" ? new Date() : null } });
     return toView(row);
   }

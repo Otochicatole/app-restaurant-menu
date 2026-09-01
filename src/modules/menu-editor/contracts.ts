@@ -163,3 +163,22 @@ export type MenuTemplateView = {
   createdAt: string;
   updatedAt: string;
 };
+
+export const superadminTemplateTabSchema = z.enum(["all", "system", "published", "pending", "rejected", "archived"]);
+export const superadminTemplateQuerySchema = z.object({
+  tab: superadminTemplateTabSchema.default("all"),
+  query: z.string().trim().max(120).default(""),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(24).default(24),
+});
+export type SuperadminTemplateTab = z.infer<typeof superadminTemplateTabSchema>;
+export type SuperadminTemplateQuery = z.infer<typeof superadminTemplateQuerySchema>;
+export type SuperadminTemplateView = MenuTemplateView & {
+  owner: { tenantId: string; name: string; slug: string } | null;
+};
+export type SuperadminTemplateList = {
+  items: SuperadminTemplateView[];
+  total: number;
+  page: number;
+  pageSize: number;
+};

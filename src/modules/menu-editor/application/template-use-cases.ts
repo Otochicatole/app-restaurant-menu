@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BadRequestError } from "@/platform/application/errors";
-import { createTemplateSchema, templateIdSchema, type CreateTemplateCommand } from "../contracts";
+import { createTemplateSchema, superadminTemplateQuerySchema, templateIdSchema, type CreateTemplateCommand } from "../contracts";
 import { validateCanvasDocument } from "../domain/document-policy";
 import type { TemplateRepository } from "./template-ports";
 
@@ -25,7 +25,9 @@ export function createTemplateUseCases(repository: TemplateRepository) {
     },
     delete(tenantId: string, templateId: string) { return repository.deletePrivate(z.string().min(1).parse(tenantId), templateIdSchema.parse(templateId)); },
     listPending() { return repository.listPending(); },
-    moderate(templateId: string, action: "publish" | "reject" | "archive", reason?: string) {
+    listForSuperadmin(input: unknown) { return repository.listForSuperadmin(superadminTemplateQuerySchema.parse(input)); },
+    deletePublic(templateId: string) { return repository.deletePublic(templateIdSchema.parse(templateId)); },
+    moderate(templateId: string, action: "publish" | "reject" | "archive" | "restore", reason?: string) {
       if (action === "reject" && !reason?.trim()) throw new BadRequestError("Indica un motivo de rechazo.");
       return repository.moderate(templateIdSchema.parse(templateId), action, reason?.trim());
     },
