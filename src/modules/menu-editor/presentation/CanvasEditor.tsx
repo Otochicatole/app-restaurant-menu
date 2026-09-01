@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Redo2, Trash2, Undo2 } from "lucide-react";
 import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView } from "../contracts";
@@ -137,42 +137,140 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
       <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setImagesOpen(open); setIconsOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
       {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <ImagePickerDrawer images={assets.filter((asset) => asset.kind === "IMAGE")} onClose={() => setImagesOpen(false)} onSelect={addImage} onDelete={deleteAsset} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={(ids) => setSelectedIds(ids.filter((id) => !document.nodes.find((node) => node.id === id)?.locked))} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} />{selected && <><NodeNameInspector node={selected} onChange={(name) => (!selected.locked) && patchNode(selected.id, { name })} /><OpacityControl node={selected} onChange={(opacity) => (!selected.locked) && patchNode(selected.id, { opacity })} /></>}{selected?.type === "icon" && <IconInspector node={selected} onChange={(patch) => (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} />}{selected?.type === "shape" && selected.shape === "rect" && <ShapeInspector node={selected} onChange={(patch) => (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} />}</aside>
+      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
     </div>
     </div>
   </>;
 }
 
-function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void }) {
-  if (!node) return <div className="space-y-5"><div><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Lienzo</p><p className="mt-1 text-sm font-semibold">Tamaño de la carta pública</p><p className="mt-1 text-xs leading-5 text-zinc-500">Define el área real de la hoja. La vista inicial se guarda por separado.</p></div><div className="grid grid-cols-2 gap-2"><NumberField label="Ancho" value={document.canvasBounds.width} onChange={(value) => onCanvasSizeChange("width", value)} /><NumberField label="Alto" value={document.canvasBounds.height} onChange={(value) => onCanvasSizeChange("height", value)} /></div><div className="flex flex-wrap gap-2"><button className="rounded border border-zinc-200 px-2 py-1.5 text-xs" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1920); }}>Vertical</button><button className="rounded border border-zinc-200 px-2 py-1.5 text-xs" onClick={() => { onCanvasSizeChange("width", 1920); onCanvasSizeChange("height", 1080); }}>Horizontal</button><button className="rounded border border-zinc-200 px-2 py-1.5 text-xs" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1080); }}>Cuadrado</button></div></div>;
-  if (selectedCount > 1) return <div className="space-y-4"><div><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Selección múltiple</p><p className="mt-1 text-sm font-semibold">{selectedCount} objetos seleccionados</p></div><p className="text-xs leading-5 text-zinc-500">Las propiedades aplicadas se actualizan en todos los objetos seleccionados.</p><div className="grid grid-cols-2 gap-2"><NumberField label="Ancho" value={node.width} onChange={(value) => onChangeSelected({ width: value })} /><NumberField label="Alto" value={node.height} onChange={(value) => onChangeSelected({ height: value })} /></div><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={node.locked} onChange={(event) => onChangeSelected({ locked: event.target.checked })} /> Bloquear selección</label><label className="block text-xs font-medium">Enlace<input className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" type="url" placeholder="https://..." value={node.link ?? ""} onChange={(event) => onChangeSelected({ link: event.target.value || null })} /></label><button className="flex w-full items-center justify-center gap-2 rounded border border-red-200 px-3 py-2 text-xs text-red-700" onClick={onDelete}><Trash2 size={14} /> Eliminar selección</button></div>;
-  return <div className="space-y-4"><div><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Propiedades</p><p className="mt-1 text-sm font-semibold">{node.type === "text" ? "Texto" : node.type === "image" ? "Imagen" : node.type === "shape" ? node.shape : "Icono"}</p></div><div className="grid grid-cols-2 gap-2"><NumberField label="X" value={node.x} onChange={(value) => onChange({ x: value })} /><NumberField label="Y" value={node.y} onChange={(value) => onChange({ y: value })} /><NumberField label="Ancho" value={node.width} onChange={(value) => onChange({ width: value })} /><NumberField label="Alto" value={node.height} onChange={(value) => onChange({ height: value })} /></div><div className="flex gap-2"><button className="flex-1 rounded border border-zinc-200 px-2 py-1.5 text-xs" onClick={() => onMoveLayer(1)}>Subir capa</button><button className="flex-1 rounded border border-zinc-200 px-2 py-1.5 text-xs" onClick={() => onMoveLayer(-1)}>Bajar capa</button></div><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={node.locked} onChange={(event) => onChange({ locked: event.target.checked })} /> Bloquear objeto</label>{node.type === "text" && <><label className="block text-xs font-medium">Contenido<textarea className="mt-1 min-h-24 w-full rounded-lg border border-zinc-200 p-2 text-sm" value={node.text} onChange={(event) => onChange({ text: event.target.value })} /></label><NumberField label="Tamaño" value={node.fontSize} onChange={(value) => onChange({ fontSize: value })} /><label className="block text-xs font-medium">Fuente<select className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" value={node.fontAssetId ? `asset:${node.fontAssetId}` : `system:${node.fontFamily ?? "Arial"}`} onChange={(event) => { const value = event.target.value; onChange(value.startsWith("asset:") ? { fontAssetId: value.slice(6), fontFamily: undefined } : { fontAssetId: null, fontFamily: value.slice(7) as typeof SYSTEM_FONT_FAMILIES[number] }); }}><optgroup label="Fuentes del sistema">{SYSTEM_FONT_FAMILIES.map((family) => <option key={family} value={`system:${family}`} style={{ fontFamily: family }}>{family}</option>)}</optgroup><optgroup label="Fuentes subidas">{assets.filter((asset) => asset.kind === "FONT").map((asset) => <option key={asset.id} value={`asset:${asset.id}`}>{asset.name}</option>)}</optgroup></select></label><label className="block text-xs font-medium">Enlace<input className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" type="url" placeholder="https://..." value={node.link ?? ""} onChange={(event) => onChange({ link: event.target.value || null })} /></label><label className="block text-xs font-medium">Color<input className="mt-1 h-9 w-full rounded border border-zinc-200" type="color" value={node.fill} onChange={(event) => onChange({ fill: event.target.value })} /></label></>}{node.type === "shape" && <label className="block text-xs font-medium">Color<input className="mt-1 h-9 w-full rounded border border-zinc-200" type="color" value={node.fill ?? "#3A4824"} onChange={(event) => onChange({ fill: event.target.value })} /></label>}{node.type === "image" && <label className="block text-xs font-medium">Ajuste<select className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" value={node.fit} onChange={(event) => onChange({ fit: event.target.value as "contain" | "cover" | "stretch" })}><option value="contain">Contener</option><option value="cover">Cubrir</option><option value="stretch">Estirar</option></select></label>}<div className="flex gap-2"><button className="flex-1 rounded border border-emerald-200 px-2 py-1.5 text-xs text-emerald-800" onClick={onDuplicate}>Duplicar</button><button className="flex-1 rounded border border-red-200 px-2 py-1.5 text-xs text-red-700" onClick={onDelete}><Trash2 size={14} className="mr-1 inline" /> Eliminar</button></div></div>;
+function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void; onRename: (name: string) => void; onOpacityChange: (opacity: number) => void }) {
+  if (!node) {
+    return <div className="space-y-5">
+      <InspectorSection title="Lienzo">
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">Tamaño de la carta pública</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">Define el área real de la hoja. La vista inicial se guarda por separado.</p>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <NumberField label="Ancho" value={document.canvasBounds.width} onChange={(value) => onCanvasSizeChange("width", value)} />
+          <NumberField label="Alto" value={document.canvasBounds.height} onChange={(value) => onCanvasSizeChange("height", value)} />
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1920); }}>Vertical</button>
+          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1920); onCanvasSizeChange("height", 1080); }}>Horizontal</button>
+          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1080); }}>Cuadrado</button>
+        </div>
+      </InspectorSection>
+    </div>;
+  }
+
+  if (selectedCount > 1) {
+    return <div className="space-y-5">
+      <div className="border-b border-zinc-200 pb-4">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Selección múltiple</p>
+        <p className="mt-1 text-base font-semibold text-zinc-900">{selectedCount} objetos seleccionados</p>
+        <p className="mt-1 text-xs leading-5 text-zinc-500">Los cambios compatibles se aplican a todos los objetos seleccionados.</p>
+      </div>
+      <InspectorSection title="Transformación">
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField label="Ancho" value={node.width} onChange={(value) => onChangeSelected({ width: value })} />
+          <NumberField label="Alto" value={node.height} onChange={(value) => onChangeSelected({ height: value })} />
+        </div>
+        <label className="mt-3 block text-xs font-medium">Opacidad <span className="float-right text-zinc-500">{Math.round((Number.isFinite(node.opacity) ? node.opacity : 1) * 100)}%</span><input aria-label="Opacidad de la selección" className="mt-1 w-full accent-emerald-700" type="range" min="0" max="1" step="0.01" value={Number.isFinite(node.opacity) ? node.opacity : 1} onChange={(event) => onChangeSelected({ opacity: Number(event.target.value) })} /></label>
+      </InspectorSection>
+      <InspectorSection title="Estado">
+        <label className="flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.locked} onChange={(event) => onChangeSelected({ locked: event.target.checked })} /> Bloquear selección</label>
+        <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.visible} onChange={(event) => onChangeSelected({ visible: event.target.checked })} /> Mostrar objetos</label>
+      </InspectorSection>
+      <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50" onClick={onDelete}><Trash2 size={14} /> Eliminar selección</button>
+    </div>;
+  }
+
+  const typeLabel = node.type === "text" ? "Texto" : node.type === "image" ? "Imagen" : node.type === "shape" ? ({ rect: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", triangle: "Triángulo", star: "Estrella" }[node.shape]) : "Icono";
+  const fieldDisabled = node.locked;
+  return <div className="space-y-5">
+    <div className="border-b border-zinc-200 pb-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Propiedades</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-zinc-900">{typeLabel}</h2>
+        <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-500">{node.id.slice(0, 8)}</span>
+      </div>
+    </div>
+
+    <InspectorSection title="Identificación">
+      <label className="block text-xs font-medium text-zinc-700">Nombre de la capa<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400" value={node.name ?? ""} placeholder="Ej. Título principal" onChange={(event) => onRename(event.target.value)} /></label>
+    </InspectorSection>
+
+    <InspectorSection title="Transformación">
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField label="X" value={node.x} disabled={fieldDisabled} onChange={(value) => onChange({ x: value })} />
+        <NumberField label="Y" value={node.y} disabled={fieldDisabled} onChange={(value) => onChange({ y: value })} />
+        <NumberField label="Ancho" value={node.width} disabled={fieldDisabled} onChange={(value) => onChange({ width: value })} />
+        <NumberField label="Alto" value={node.height} disabled={fieldDisabled} onChange={(value) => onChange({ height: value })} />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <NumberField label="Rotación" value={node.rotation} disabled={fieldDisabled} onChange={(value) => onChange({ rotation: value })} />
+        <label className="text-xs font-medium">Escala<input className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-xs text-zinc-500" value="Normalizada" readOnly /></label>
+      </div>
+    </InspectorSection>
+
+    <InspectorSection title="Capa y visibilidad">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={fieldDisabled} onClick={() => onMoveLayer(1)}>Subir capa</button>
+        <button type="button" className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={fieldDisabled} onClick={() => onMoveLayer(-1)}>Bajar capa</button>
+      </div>
+      <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.locked} onChange={(event) => onChange({ locked: event.target.checked })} /> Bloquear objeto</label>
+      <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input disabled={fieldDisabled} type="checkbox" checked={node.visible} onChange={(event) => onChange({ visible: event.target.checked })} /> Mostrar objeto</label>
+      <label className="mt-3 block text-xs font-medium">Opacidad <span className="float-right text-zinc-500">{Math.round((Number.isFinite(node.opacity) ? node.opacity : 1) * 100)}%</span><input aria-label="Opacidad del objeto" disabled={fieldDisabled} className="mt-1 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={Number.isFinite(node.opacity) ? node.opacity : 1} onChange={(event) => onOpacityChange(Number(event.target.value))} /></label>
+    </InspectorSection>
+
+    {node.type === "text" && <InspectorSection title="Contenido y tipografía">
+      <label className="block text-xs font-medium">Contenido<textarea disabled={fieldDisabled} className="mt-1 min-h-24 w-full resize-y rounded-md border border-zinc-200 p-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" value={node.text} onChange={(event) => onChange({ text: event.target.value })} /></label>
+      <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Tamaño" value={node.fontSize} disabled={fieldDisabled} onChange={(value) => onChange({ fontSize: value })} /><label className="text-xs font-medium">Peso<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontWeight} onChange={(event) => onChange({ fontWeight: event.target.value as typeof node.fontWeight })}><option value="400">Regular</option><option value="500">Medio</option><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option><option value="900">Black</option></select></label></div>
+      <label className="mt-3 block text-xs font-medium">Fuente<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontAssetId ? `asset:${node.fontAssetId}` : `system:${node.fontFamily ?? "Arial"}`} onChange={(event) => { const value = event.target.value; onChange(value.startsWith("asset:") ? { fontAssetId: value.slice(6), fontFamily: undefined } : { fontAssetId: null, fontFamily: value.slice(7) as typeof SYSTEM_FONT_FAMILIES[number] }); }}><optgroup label="Fuentes del sistema">{SYSTEM_FONT_FAMILIES.map((family) => <option key={family} value={`system:${family}`} style={{ fontFamily: family }}>{family}</option>)}</optgroup><optgroup label="Fuentes subidas">{assets.filter((asset) => asset.kind === "FONT").map((asset) => <option key={asset.id} value={`asset:${asset.id}`}>{asset.name}</option>)}</optgroup></select></label>
+      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Alineación<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.align} onChange={(event) => onChange({ align: event.target.value as typeof node.align })}><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label className="text-xs font-medium">Estilo<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontStyle} onChange={(event) => onChange({ fontStyle: event.target.value as typeof node.fontStyle })}><option value="normal">Normal</option><option value="italic">Cursiva</option></select></label></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Rol semántico<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.semanticRole} onChange={(event) => onChange({ semanticRole: event.target.value as typeof node.semanticRole })}><option value="none">Ninguno</option><option value="heading">Encabezado</option><option value="paragraph">Párrafo</option><option value="label">Etiqueta</option><option value="price">Precio</option></select></label><label className="text-xs font-medium">Color<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label></div>
+    </InspectorSection>}
+
+    {node.type === "shape" && <InspectorSection title="Estilo de la figura">
+      <label className="block text-xs font-medium">Color de relleno<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ fill: event.target.value })} /></label>
+      <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Grosor del borde" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /><label className="text-xs font-medium">Color del borde<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.stroke?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ stroke: event.target.value })} /></label></div>
+      {node.shape === "rect" && <><NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, Math.min(Math.min(node.width, node.height) / 2, value)) })} /><input aria-label="Redondeado de esquinas" disabled={fieldDisabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max={Math.max(0, Math.min(node.width, node.height) / 2)} step="1" value={Math.min(node.cornerRadius, Math.max(0, Math.min(node.width, node.height) / 2))} onChange={(event) => onChange({ cornerRadius: Number(event.target.value) })} /></>}
+    </InspectorSection>}
+
+    {node.type === "image" && <InspectorSection title="Imagen">
+      <label className="block text-xs font-medium">Ajuste<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fit} onChange={(event) => onChange({ fit: event.target.value as typeof node.fit })}><option value="contain">Contener</option><option value="cover">Cubrir</option><option value="stretch">Estirar</option></select></label>
+      <label className="mt-3 block text-xs font-medium">Texto alternativo<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" value={node.alt} placeholder="Describe la imagen" onChange={(event) => onChange({ alt: event.target.value })} /></label>
+      <NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, value) })} />
+    </InspectorSection>}
+
+    {node.type === "icon" && <InspectorSection title="Icono">
+      <label className="block text-xs font-medium">Nombre accesible<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" value={node.accessibleLabel} onChange={(event) => onChange({ accessibleLabel: event.target.value })} /></label>
+      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Color<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label><NumberField label="Grosor" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /></div>
+    </InspectorSection>}
+
+    <InspectorSection title="Interacción">
+      <label className="block text-xs font-medium">Enlace<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" type="url" placeholder="https://..." value={node.link ?? ""} onChange={(event) => onChange({ link: event.target.value || null })} /></label>
+    </InspectorSection>
+
+    <div className="grid grid-cols-2 gap-2 pt-1">
+      <button type="button" className="rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-40" disabled={fieldDisabled} onClick={onDuplicate}>Duplicar</button>
+      <button type="button" className="flex items-center justify-center gap-1 rounded-md border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50" onClick={onDelete}><Trash2 size={14} /> Eliminar</button>
+    </div>
+  </div>;
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { const safeValue = Number.isFinite(value) ? value : 0; return <label className="text-xs font-medium">{label}<input className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" type="number" value={Math.round(safeValue * 100) / 100} onChange={(event) => onChange(Number(event.target.value) || 0)} /></label>; }
+function InspectorSection({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="border-b border-zinc-100 pb-5 last:border-b-0">
+    <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-400">{title}</h3>
+    {children}
+  </section>;
+}
+
+function NumberField({ label, value, onChange, disabled = false }: { label: string; value: number; onChange: (value: number) => void; disabled?: boolean }) { const safeValue = Number.isFinite(value) ? value : 0; return <label className="text-xs font-medium">{label}<input disabled={disabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400" type="number" value={Math.round(safeValue * 100) / 100} onChange={(event) => onChange(Number(event.target.value) || 0)} /></label>; }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
   return { ...document, nodes: document.nodes.map((node) => { const width = Math.max(4, finiteOr(node.width, 4)); const height = Math.max(4, finiteOr(node.height, 4)); return { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode; }) };
 }
 
 function finiteOr(value: number, fallback: number): number { return Number.isFinite(value) ? value : fallback; }
-
-function IconInspector({ node, onChange }: { node: Extract<CanvasNode, { type: "icon" }>; onChange: (patch: Partial<CanvasNode>) => void }) {
-  return <div className="mt-5 space-y-3 border-t border-zinc-200 pt-4"><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Estilo del icono</p><label className="block text-xs font-medium">Nombre accesible<input className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" value={node.accessibleLabel} onChange={(event) => onChange({ accessibleLabel: event.target.value })} /></label><label className="block text-xs font-medium">Color<input className="mt-1 h-9 w-full rounded border border-zinc-200" type="color" value={node.fill} onChange={(event) => onChange({ fill: event.target.value })} /></label><NumberField label="Grosor del trazo" value={node.strokeWidth} onChange={(value) => onChange({ strokeWidth: value })} /><label className="block text-xs font-medium">Enlace<input className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs" type="url" placeholder="https://..." value={node.link ?? ""} onChange={(event) => onChange({ link: event.target.value || null })} /></label></div>;
-}
-
-function ShapeInspector({ node, onChange }: { node: Extract<CanvasNode, { type: "shape" }>; onChange: (patch: Partial<CanvasNode>) => void }) {
-  const maxRadius = Math.max(0, Math.min(node.width, node.height) / 2);
-  const radius = Math.min(Number.isFinite(node.cornerRadius) ? node.cornerRadius : 0, maxRadius);
-  return <div className="mt-5 space-y-3 border-t border-zinc-200 pt-4"><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Esquinas</p><NumberField label="Redondeado" value={radius} onChange={(value) => onChange({ cornerRadius: Math.max(0, Math.min(maxRadius, value)) })} /><input aria-label="Redondeado de esquinas" className="w-full accent-emerald-700" type="range" min="0" max={maxRadius} step="1" value={radius} onChange={(event) => onChange({ cornerRadius: Number(event.target.value) })} /><p className="text-[11px] text-zinc-500">Máximo recomendado: {Math.round(maxRadius)} px</p></div>;
-}
-
-
-function OpacityControl({ node, onChange }: { node: CanvasNode; onChange: (opacity: number) => void }) {
-  const opacity = Number.isFinite(node.opacity) ? node.opacity : 1;
-  return <label className="mt-3 block text-xs">Opacidad <span className="float-right text-zinc-500">{Math.round(opacity * 100)}%</span><input aria-label="Opacidad del objeto" disabled={node.locked} className="mt-1 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={opacity} onChange={(event) => onChange(Number(event.target.value))} /></label>;
-}
-
-function NodeNameInspector({ node, onChange }: { node: CanvasNode; onChange: (name: string) => void }) {
-  return <label className="mt-4 block border-t border-zinc-200 pt-4 text-xs font-medium">Nombre de la capa<input disabled={node.locked} className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-xs disabled:bg-zinc-100 disabled:text-zinc-400" value={node.name ?? ""} placeholder="Nombre personalizado" onChange={(event) => onChange(event.target.value)} /></label>;
-}
