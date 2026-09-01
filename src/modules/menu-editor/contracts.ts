@@ -10,6 +10,7 @@ export const systemFontFamilySchema = z.enum(SYSTEM_FONT_FAMILIES);
 
 const nodeBase = z.object({
   id,
+  name: z.string().trim().max(120).optional(),
   x: finiteNumber,
   y: finiteNumber,
   width: finiteNumber.positive().max(100_000),

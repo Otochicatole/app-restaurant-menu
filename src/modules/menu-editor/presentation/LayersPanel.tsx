@@ -137,6 +137,7 @@ function LayerPreview({ node }: { node: CanvasNode }) {
 }
 
 function getLayerLabel(node: CanvasNode): string {
+  if (node.name?.trim()) return node.name.trim();
   if (node.type === "text") return node.text.trim() || "Texto vacío";
   if (node.type === "image") return node.alt.trim() || "Imagen";
   if (node.type === "shape") return shapeLabels[node.shape];
