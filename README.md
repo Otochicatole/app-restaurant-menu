@@ -8,6 +8,10 @@ El código está organizado como monolito modular por capacidades en `src/module
 
 `src/app` es el composition root HTTP/Next.js, `src/platform` contiene adaptadores técnicos y `src/ui` conserva únicamente UI realmente compartida. ESLint y dependency-cruiser bloquean imports profundos, ciclos, dependencias de frameworks en dominio/aplicación y dependencias de plataforma hacia negocio.
 
+## Plantillas Canvas
+
+El editor incluye tres presets globales (Minimalista vertical, Cafetería y Gourmet) y permite guardar el borrador de cada restaurante como plantilla privada. Una plantilla puede enviarse a la comunidad para moderación desde `/superadmin`; sólo las plantillas públicas aprobadas aparecen para otros restaurantes. Las miniaturas se generan desde el documento Canvas y los assets públicos se clonan para mantener el aislamiento entre tenants. Aplicar una plantilla reemplaza únicamente el borrador y se puede deshacer; la publicación vigente sólo cambia al pulsar **Publicar**.
+
 ## Configuración
 
 Copiá `.env.example` a `.env` y definí `DATABASE_URL`, `JWT_SECRET`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `APP_URL` y `STORAGE_ROOT`. La contraseña del superadministrador debe tener al menos 12 caracteres y el secreto JWT al menos 32. Dejá `TRUST_PROXY=false` salvo que la aplicación sólo sea accesible detrás de un proxy que sanee los headers reenviados.

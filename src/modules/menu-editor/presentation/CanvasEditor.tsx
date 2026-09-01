@@ -4,14 +4,14 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Redo2, Trash2, Undo2 } from "lucide-react";
-import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView } from "../contracts";
+import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
 import { placeNodeInCanvas } from "../domain/node-placement";
 import { LayersPanel } from "./LayersPanel";
-import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
+import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
-export function CanvasEditor({ project, initialAssets, restaurantName, restaurantSlug }: { project: MenuProjectView; initialAssets: MenuAssetView[]; restaurantName: string; restaurantSlug: string }) {
+export function CanvasEditor({ project, initialAssets, initialTemplates, restaurantName, restaurantSlug }: { project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string }) {
   const [document, setDocument] = useState(project.document);
   const [revision, setRevision] = useState(project.draftRevision);
   const [publishedRevision, setPublishedRevision] = useState(project.publishedRevision);
@@ -19,7 +19,9 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   const [layersOpen, setLayersOpen] = useState(true);
   const [iconsOpen, setIconsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [assets, setAssets] = useState(initialAssets);
+  const [templates, setTemplates] = useState(initialTemplates);
   const [history, setHistory] = useState<CanvasDocumentV1[]>([]);
   const [future, setFuture] = useState<CanvasDocumentV1[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -27,6 +29,9 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   const [status, setStatus] = useState("Guardado");
   const [conflict, setConflict] = useState(false);
   const [viewport, setViewport] = useState(project.document.initialViewport);
+  const [modal, setModal] = useState<EditorModalState>(null);
+  const [modalName, setModalName] = useState("");
+  const [modalDescription, setModalDescription] = useState("");
 
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
   const fontFaces = useMemo(() => assets.filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join(""), [assets]);
@@ -82,8 +87,11 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
   const overwriteServerVersion = async () => {
     const response = await fetch("/api/editor/project");
     const payload = await response.json();
-    if (!response.ok || !payload.success || !window.confirm("Esto reemplaza el borrador del servidor con tu trabajo local. ¿Continuar?")) return;
-    const save = await fetch("/api/editor/project", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: payload.data.draftRevision, document }) });
+    if (!response.ok || !payload.success) return;
+    setModal({ kind: "overwrite", serverRevision: payload.data.draftRevision });
+  };
+  const confirmOverwrite = async (serverRevision: number) => {
+    const save = await fetch("/api/editor/project", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: serverRevision, document }) });
     const saved = await save.json();
     if (save.ok && saved.success) { setRevision(saved.data.draftRevision); setDirty(false); setConflict(false); setStatus("Guardado"); }
   };
@@ -125,6 +133,30 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
     const payload = await response.json();
     if (response.ok && payload.success) { setPublishedRevision(payload.data.publishedRevision); setStatus("Publicado"); } else setStatus(payload.error?.message ?? "No se pudo publicar");
   };
+  const applyTemplate = async (template: MenuTemplateView) => {
+    if ((dirty || history.length > 0)) { setModal({ kind: "apply", template }); return; }
+    await performApplyTemplate(template);
+  };
+  const performApplyTemplate = async (template: MenuTemplateView) => {
+    setStatus("Aplicando plantilla...");
+    const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision }) });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) { setStatus(payload.error?.message ?? "No se pudo aplicar la plantilla"); return; }
+    const nextProject = payload.data as MenuProjectView;
+    setHistory((items) => [...items.slice(-99), document]); setFuture([]); setDocument(nextProject.document); setRevision(nextProject.draftRevision); setPublishedRevision(nextProject.publishedRevision); setViewport(nextProject.document.initialViewport); setDirty(false); setStatus("Plantilla aplicada"); setSelectedIds([]);
+  };
+  const saveTemplate = async (submitPublic: boolean) => { setModalName(""); setModalDescription(""); setModal({ kind: "save", submitPublic }); };
+  const performSaveTemplate = async (submitPublic: boolean, name: string, description: string) => {
+    const response = await fetch("/api/editor/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, submitPublic, document }) });
+    const payload = await response.json();
+    if (response.ok && payload.success) { setTemplates((items) => [payload.data, ...items]); setStatus(submitPublic ? "Enviada a revisión" : "Plantilla guardada"); } else setStatus(payload.error?.message ?? "No se pudo guardar la plantilla");
+  };
+  const deleteTemplate = async (template: MenuTemplateView) => { setModal({ kind: "delete", template }); };
+  const performDeleteTemplate = async (template: MenuTemplateView) => {
+    const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (response.ok && payload.success) { setTemplates((items) => items.filter((item) => item.id !== template.id)); setStatus("Plantilla eliminada"); } else setStatus(payload.error?.message ?? "No se pudo eliminar la plantilla");
+  };
 
   return <>
     <div className="flex min-h-[70dvh] flex-col justify-center gap-4 p-6 md:hidden">
@@ -139,13 +171,25 @@ export function CanvasEditor({ project, initialAssets, restaurantName, restauran
       <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40" onClick={publish} disabled={dirty || saving || conflict || publishedRevision === revision}>Publicar</button></div>
     </header>
     <div className="flex min-h-0 flex-1">
-      <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setImagesOpen(open); setIconsOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
-      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <ImagePickerDrawer images={assets.filter((asset) => asset.kind === "IMAGE")} onClose={() => setImagesOpen(false)} onSelect={addImage} onDelete={deleteAsset} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
+      <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
+      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <ImagePickerDrawer images={assets.filter((asset) => asset.kind === "IMAGE")} onClose={() => setImagesOpen(false)} onSelect={addImage} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={(ids) => setSelectedIds(ids.filter((id) => !document.nodes.find((node) => node.id === id)?.locked))} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
       <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
     </div>
     </div>
+    {modal && <EditorModal state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { setModal(null); await confirmOverwrite(serverRevision); }} />}
   </>;
+}
+
+type EditorModalData = { kind: "apply"; template: MenuTemplateView } | { kind: "save"; submitPublic: boolean } | { kind: "delete"; template: MenuTemplateView } | { kind: "overwrite"; serverRevision: number };
+type EditorModalState = EditorModalData | null;
+
+function EditorModal({ state, name, description, onNameChange, onDescriptionChange, onClose, onApply, onSave, onDelete, onOverwrite }: { state: EditorModalData; name: string; description: string; onNameChange: (value: string) => void; onDescriptionChange: (value: string) => void; onClose: () => void; onApply: (template: MenuTemplateView) => Promise<void>; onSave: (submitPublic: boolean, name: string, description: string) => Promise<void>; onDelete: (template: MenuTemplateView) => Promise<void>; onOverwrite: (revision: number) => Promise<void> }) {
+  const isApply = state.kind === "apply";
+  const isDelete = state.kind === "delete";
+  const isSave = state.kind === "save";
+  const title = isApply ? "Aplicar plantilla" : isDelete ? "Eliminar plantilla" : isSave ? (state.submitPublic ? "Enviar a la comunidad" : "Guardar plantilla") : "Sobrescribir borrador";
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title"><h2 id="editor-modal-title" className="text-base font-semibold text-zinc-900">{title}</h2>{isApply && <p className="mt-2 text-sm leading-6 text-zinc-600">“{state.template.name}” reemplazará el borrador actual. La publicación vigente no se modificará.</p>}{isDelete && <p className="mt-2 text-sm leading-6 text-zinc-600">Se eliminará “{state.template.name}”. Esta acción no se puede deshacer.</p>}{state.kind === "overwrite" && <p className="mt-2 text-sm leading-6 text-zinc-600">Esto reemplazará el borrador guardado con tu trabajo local.</p>}{isSave && <div className="mt-4 space-y-3"><label className="block text-xs font-medium">Nombre<input autoFocus className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm" value={name} onChange={(event) => onNameChange(event.target.value)} /></label><label className="block text-xs font-medium">Descripción<textarea className="mt-1 min-h-20 w-full resize-y rounded-md border border-zinc-200 px-3 py-2 text-sm" value={description} onChange={(event) => onDescriptionChange(event.target.value)} /></label></div>}<div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg border border-zinc-200 px-3 py-2 text-xs" onClick={onClose}>Cancelar</button>{isApply && <button type="button" className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onApply(state.template)}>Aplicar</button>}{isDelete && <button type="button" className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onDelete(state.template)}>Eliminar</button>}{isSave && <button type="button" disabled={!name.trim()} className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" onClick={() => void onSave(state.submitPublic, name, description)}>{state.submitPublic ? "Enviar" : "Guardar"}</button>}{state.kind === "overwrite" && <button type="button" className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onOverwrite(state.serverRevision)}>Sobrescribir</button>}</div></div></div>;
 }
 
 function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void; onRename: (name: string) => void; onOpacityChange: (opacity: number) => void }) {

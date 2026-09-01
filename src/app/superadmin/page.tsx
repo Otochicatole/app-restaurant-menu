@@ -10,10 +10,12 @@ import {
 import { TenantManager } from "@/modules/tenant-management/ui";
 import { LogoutButton } from "@/modules/identity-access/ui";
 import { ShieldCheck, UtensilsCrossed } from "lucide-react";
+import { menuTemplates } from "@/modules/menu-editor/server";
+import { TemplateModerationPanel } from "@/modules/menu-editor/ui";
 
 export default async function SuperAdminPage() {
   await requireSuperAdmin();
-  const rows = await tenantManagement.listTenants();
+  const [rows, pendingTemplates] = await Promise.all([tenantManagement.listTenants(), menuTemplates.listPending()]);
 
   return (
     <div data-admin-panel className="min-h-screen bg-[#f5f7f3] text-zinc-900">
@@ -57,6 +59,7 @@ export default async function SuperAdminPage() {
           resetPassword={resetTenantPasswordAction}
           deleteTenant={deleteTenantAction}
         />
+        <TemplateModerationPanel initialTemplates={pendingTemplates} />
       </main>
     </div>
   );

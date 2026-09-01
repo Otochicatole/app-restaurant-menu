@@ -138,3 +138,28 @@ export type MenuAssetView = {
   url: string;
   createdAt: string;
 };
+
+export const templateVisibilitySchema = z.enum(["PRIVATE", "PUBLIC"]);
+export const templateStatusSchema = z.enum(["DRAFT", "PENDING", "PUBLISHED", "REJECTED", "ARCHIVED"]);
+export const createTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).default(""),
+  submitPublic: z.boolean().default(false),
+});
+export const templateIdSchema = z.string().trim().min(1).max(200);
+export type MenuTemplateVisibility = z.infer<typeof templateVisibilitySchema>;
+export type MenuTemplateStatus = z.infer<typeof templateStatusSchema>;
+export type CreateTemplateCommand = z.infer<typeof createTemplateSchema>;
+export type MenuTemplateView = {
+  id: string;
+  name: string;
+  description: string;
+  visibility: MenuTemplateVisibility;
+  status: MenuTemplateStatus;
+  isSystem: boolean;
+  tenantId: string | null;
+  document: CanvasDocumentV1;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};

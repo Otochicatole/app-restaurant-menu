@@ -2,6 +2,7 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 import bcrypt from "bcryptjs";
 import { assertLocalSqliteUrl } from "../src/platform/config/sqlite-url";
+import { TEMPLATE_PRESETS } from "../src/modules/menu-editor/domain/template-presets";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL es obligatoria para ejecutar el seed.");
@@ -23,7 +24,16 @@ async function main() {
     create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false },
   });
 
-  console.log("Seed completed successfully");
+  const systemPublishedAt = new Date("2026-01-01T00:00:00.000Z");
+  for (const preset of TEMPLATE_PRESETS) {
+    await prisma.menuTemplate.upsert({
+      where: { id: preset.id },
+      update: { name: preset.name, description: preset.description, documentJson: JSON.stringify(preset.document), schemaVersion: preset.document.schemaVersion, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, tenantId: null, publishedAt: systemPublishedAt },
+      create: { id: preset.id, name: preset.name, description: preset.description, documentJson: JSON.stringify(preset.document), schemaVersion: preset.document.schemaVersion, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, publishedAt: systemPublishedAt },
+    });
+  }
+
+  console.log(`Seed completed successfully (${TEMPLATE_PRESETS.length} system templates)`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); }).finally(async () => { await prisma.$disconnect(); });

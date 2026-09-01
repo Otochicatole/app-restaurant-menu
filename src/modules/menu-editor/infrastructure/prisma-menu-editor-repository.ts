@@ -80,6 +80,8 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
       if (!asset) throw new NotFoundError("Asset");
       const references = await transaction.menuAssetReference.count({ where: { tenantId, assetId } });
       if (references > 0) throw new ConflictError("No podés eliminar un asset que usa el menú.");
+      const templateReferences = await transaction.menuTemplateAssetReference.count({ where: { tenantId, assetId } });
+      if (templateReferences > 0) throw new ConflictError("No podés eliminar un asset usado por una plantilla privada.");
       await enqueueAssetCleanup(asset.storageKey, transaction);
       await transaction.menuAsset.delete({ where: { id: asset.id } });
     });

@@ -28,8 +28,8 @@ const client = createClient({ url: databaseUrl.trim() });
 try {
   const legacy = await client.execute(`SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('Group', 'Product', 'FeaturedProduct', 'HomePage', 'Font', 'Setting')`);
   if (legacy.rows.length) throw new Error(`La migración no eliminó todas las tablas legacy: ${legacy.rows.map((row) => String(row.name)).join(", ")}`);
-  const required = await client.execute(`SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('Admin', 'Tenant', 'Session', 'LoginThrottle', 'AssetCleanupJob', 'MenuProject', 'MenuAsset', 'MenuAssetReference')`);
-  if (required.rows.length !== 8) throw new Error("Faltan tablas del modelo Canvas después de la migración.");
+  const required = await client.execute(`SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('Admin', 'Tenant', 'Session', 'LoginThrottle', 'AssetCleanupJob', 'MenuProject', 'MenuAsset', 'MenuAssetReference', 'MenuTemplate', 'MenuTemplateAsset', 'MenuTemplateAssetReference')`);
+  if (required.rows.length !== 11) throw new Error("Faltan tablas del modelo Canvas o plantillas después de la migración.");
   const projects = await client.execute(`SELECT tenantId, publishedJson FROM MenuProject`);
   for (const row of projects.rows) {
     const project = await client.execute({ sql: "SELECT draftJson FROM MenuProject WHERE tenantId = ?", args: [row.tenantId] });
@@ -40,6 +40,10 @@ try {
   }
   const missing = await client.execute(`SELECT r.projectId, r.assetId FROM MenuAssetReference r LEFT JOIN MenuAsset a ON a.id = r.assetId AND a.tenantId = r.tenantId WHERE a.id IS NULL`);
   if (missing.rows.length) throw new Error("Hay referencias Canvas a assets inexistentes.");
+  const templates = await client.execute(`SELECT id, documentJson FROM MenuTemplate`);
+  for (const row of templates.rows) validateCanvasDocument(canvasDocumentSchema.parse(JSON.parse(String(row.documentJson))));
+  const missingTemplateAssets = await client.execute(`SELECT r.templateId, r.assetId FROM MenuTemplateAssetReference r LEFT JOIN MenuAsset a ON a.id = r.assetId AND a.tenantId = r.tenantId WHERE a.id IS NULL`);
+  if (missingTemplateAssets.rows.length) throw new Error("Hay referencias de plantillas a assets inexistentes.");
 } finally {
   client.close();
 }

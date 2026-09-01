@@ -44,6 +44,8 @@ model Tenant {
   menuProject MenuProject?
   menuAssets MenuAsset[]
   menuAssetReferences MenuAssetReference[]
+  menuTemplates MenuTemplate[]
+  menuTemplateAssetReferences MenuTemplateAssetReference[]
 }
 
 model Session {
@@ -92,6 +94,19 @@ enum MenuAssetReferenceScope {
   PUBLISHED
 }
 
+enum MenuTemplateVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum MenuTemplateStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
 model MenuProject {
   id                String   @id @default(cuid())
   tenantId          String   @unique
@@ -107,6 +122,7 @@ model MenuProject {
   assetReferences   MenuAssetReference[]
 
   @@unique([id, tenantId])
+
 }
 
 model MenuAsset {
@@ -125,6 +141,7 @@ model MenuAsset {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   references  MenuAssetReference[]
+  templateReferences MenuTemplateAssetReference[]
 
   @@unique([id, tenantId])
   @@index([tenantId, kind])
@@ -141,4 +158,57 @@ model MenuAssetReference {
 
   @@id([projectId, assetId, scope])
   @@index([tenantId, scope])
+}
+
+model MenuTemplate {
+  id           String                @id @default(cuid())
+  tenantId     String?
+  tenant       Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  description  String                @default("")
+  documentJson String
+  schemaVersion Int                  @default(1)
+  visibility   MenuTemplateVisibility @default(PRIVATE)
+  status       MenuTemplateStatus    @default(DRAFT)
+  isSystem     Boolean               @default(false)
+  rejectionReason String?
+  submittedAt  DateTime?
+  publishedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  assets       MenuTemplateAsset[]
+  references   MenuTemplateAssetReference[]
+
+  @@index([visibility, status])
+  @@index([tenantId, status])
+  @@unique([id, tenantId])
+}
+
+model MenuTemplateAsset {
+  id          String        @id @default(cuid())
+  templateId  String
+  template    MenuTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  kind        MenuAssetKind
+  name        String
+  storageKey  String        @unique
+  mimeType    String
+  byteSize    Int
+  checksum    String
+  width       Int?
+  height      Int?
+  fontFamily  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model MenuTemplateAssetReference {
+  tenantId   String
+  templateId String
+  assetId    String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template   MenuTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  asset      MenuAsset    @relation(fields: [assetId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@id([templateId, assetId])
+  @@index([tenantId, assetId])
 }
