@@ -1,6 +1,5 @@
 import { prisma } from "@/platform/database/prisma";
 import { canvasDocumentSchema, type CanvasDocumentV1 } from "@/modules/menu-editor/contracts";
-import { normalizeLegacyCanvasDocument } from "@/modules/menu-editor/server";
 import type { PublicCanvasMenuView } from "../contracts";
 
 export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanvasMenuView | null> {
@@ -8,7 +7,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   if (!tenant) return null;
   const project = await prisma.menuProject.findUnique({ where: { tenantId: tenant.id } });
   if (!project?.publishedJson) return null;
-  const document = canvasDocumentSchema.parse(normalizeLegacyCanvasDocument(JSON.parse(project.publishedJson))) as CanvasDocumentV1;
+  const document = canvasDocumentSchema.parse(JSON.parse(project.publishedJson)) as CanvasDocumentV1;
   const ids = new Set<string>();
   for (const node of document.nodes) {
     if (node.type === "image") ids.add(node.assetId);
