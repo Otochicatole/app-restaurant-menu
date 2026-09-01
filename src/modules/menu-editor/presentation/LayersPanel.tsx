@@ -53,7 +53,7 @@ export function LayersPanel({ nodes, selectedIds, onReorder, onSelect }: LayersP
   };
 
   return (
-    <aside id="editor-layers" className="w-64 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 shadow-sm">
+    <aside id="editor-layers" className="w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 shadow-sm">
       <div className="mb-2">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Capas</p>
