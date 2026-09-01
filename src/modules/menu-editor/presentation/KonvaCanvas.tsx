@@ -36,9 +36,6 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: Viewport } | null>(null);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [editingText, setEditingText] = useState<{ id: string; value: string } | null>(null);
-  const editingRef = useRef<HTMLDivElement>(null);
-  const editingValueRef = useRef("");
   const dragSession = useRef<DragSession | null>(null);
   const bounds = document.canvasBounds;
   const scenePadding = 40;
@@ -69,7 +66,7 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
   }, [selectedIds, document.nodes]);
 
   useEffect(() => {
-    const isFormTarget = (event: KeyboardEvent) => Boolean((event.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable='true']"));
+    const isFormTarget = (event: KeyboardEvent) => Boolean((event.target as HTMLElement | null)?.closest("input, textarea, select"));
     const down = (event: KeyboardEvent) => { if (isFormTarget(event)) return; if (event.code === "Space") { event.preventDefault(); setSpacePressed(true); } };
     const up = (event: KeyboardEvent) => { if (isFormTarget(event)) return; if (event.code === "Space") { event.preventDefault(); setSpacePressed(false); setPanStart(null); } };
     window.addEventListener("keydown", down);
@@ -176,55 +173,6 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
     dragSession.current = null;
   };
 
-  const beginTextEdit = (id: string, event: Konva.KonvaEventObject<MouseEvent>) => {
-    const node = document.nodes.find((item) => item.id === id);
-    if (!node || node.type !== "text" || node.locked) return;
-    event.cancelBubble = true;
-    editingValueRef.current = node.text;
-    setEditingText({ id, value: node.text });
-    window.requestAnimationFrame(() => {
-      const editor = editingRef.current;
-      if (!editor) return;
-      editor.focus();
-      const selection = window.getSelection();
-      const range = window.document.createRange();
-      range.selectNodeContents(editor);
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    });
-  };
-
-  const finishTextEdit = (save: boolean) => {
-    if (!editingText) return;
-    if (save) {
-      const node = document.nodes.find((item) => item.id === editingText.id);
-      const value = editingValueRef.current;
-      if (node?.type === "text" && node.text !== value) onChange(node.id, { text: value });
-    }
-    setEditingText(null);
-  };
-
-  const editingNode = editingText ? document.nodes.find((node) => node.id === editingText.id) : undefined;
-  const editingStyle = editingNode?.type === "text" ? {
-    left: scenePadding + (finiteOr(editingNode.x, 0) - camera.x) * scale,
-    top: scenePadding + (finiteOr(editingNode.y, 0) - camera.y) * scale,
-    width: Math.max(4, finiteOr(editingNode.width, 4)) * scale,
-    height: Math.max(4, finiteOr(editingNode.height, 4)) * scale,
-    transform: `rotate(${finiteOr(editingNode.rotation, 0)}deg)`,
-    fontFamily: assets[editingNode.fontAssetId ?? ""]?.fontFamily
-      ?? (editingNode.fontAssetId ? `editor-font-${editingNode.fontAssetId}` : editingNode.fontFamily ?? "Arial"),
-    fontSize: Math.max(1, finiteOr(editingNode.fontSize, 16)) * scale,
-    fontWeight: editingNode.fontWeight,
-    fontStyle: editingNode.fontStyle,
-    textDecoration: editingNode.textDecoration,
-    lineHeight: editingNode.lineHeight,
-    letterSpacing: finiteOr(editingNode.letterSpacing, 0) * scale,
-    textAlign: editingNode.align,
-    color: editingNode.fill,
-    opacity: Math.max(0, Math.min(1, finiteOr(editingNode.opacity, 1))),
-  } : undefined;
-
   return <div ref={containerRef} className={`relative h-full w-full overflow-hidden ${spacePressed ? panStart ? "cursor-grabbing" : "cursor-grab" : "cursor-default"}`} style={{ backgroundColor: document.background, cursor: spacePressed ? panStart ? "grabbing" : "grab" : "default" }} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <Stage
       ref={stageRef}
@@ -254,54 +202,19 @@ export function KonvaCanvas({ document, assets, selectedIds, onSelect, onSelectM
       <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}>
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
-        {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} editingTextId={editingText?.id} spacePressed={spacePressed} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onEditText={beginTextEdit} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />)}
+        {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} spacePressed={spacePressed} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />)}
         <Transformer id="selection-transformer" ref={transformerRef} rotateEnabled={true} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
       </Layer>
       {selectionBox && <Layer listening={false}><Rect x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} fill="rgba(16,185,129,0.16)" stroke="#10b981" dash={[6, 4]} strokeWidth={1} /></Layer>}
     </Stage>
-    {editingText && editingNode?.type === "text" && editingStyle && <div
-      ref={editingRef}
-      role="textbox"
-      aria-label="Editar texto"
-      contentEditable
-      suppressContentEditableWarning
-      spellCheck
-      onInput={(event) => { editingValueRef.current = event.currentTarget.innerText.replace(/\r\n/g, "\n"); }}
-      onBlur={() => finishTextEdit(true)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") { event.preventDefault(); finishTextEdit(false); }
-        else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finishTextEdit(true); }
-      }}
-      style={{
-        position: "absolute",
-        boxSizing: "border-box",
-        zIndex: 20,
-        padding: 0,
-        margin: 0,
-        overflow: "visible",
-        outline: "1px solid #3b82f6",
-        border: "none",
-        borderRadius: 0,
-        background: "transparent",
-        whiteSpace: "pre-wrap",
-        overflowWrap: "break-word",
-        wordBreak: "break-word",
-        cursor: "text",
-        userSelect: "text",
-        transformOrigin: "top left",
-        ...editingStyle,
-        height: "auto",
-        minHeight: editingStyle.height,
-      }}
-    >{editingText.value}</div>}
     <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-white/90 px-2 py-1 text-xs text-zinc-600 shadow">{Math.round(scale * 100)}%</div>
   </div>;
 }
 
-function CanvasNodeView({ node, selectedIds, editingTextId, spacePressed, imageAsset, fontAsset, onSelect, onChange, onEditText, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; editingTextId?: string; spacePressed: boolean; imageAsset?: { url: string }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onEditText: (id: string, event: Konva.KonvaEventObject<MouseEvent>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
+function CanvasNodeView({ node, selectedIds, spacePressed, imageAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; spacePressed: boolean; imageAsset?: { url: string }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
   const nodeX = finiteOr(node.x, 0); const nodeY = finiteOr(node.y, 0); const nodeWidth = Math.max(4, finiteOr(node.width, 4)); const nodeHeight = Math.max(4, finiteOr(node.height, 4)); const nodeRotation = finiteOr(node.rotation, 0); const nodeOpacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
-  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: !node.locked, draggable: !node.locked && !spacePressed, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (!selectedIds.includes(node.id)) onSelect(node.id, false); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const patch: Partial<CanvasNode> = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)), rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { onChange(node.id, { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode>); } else onChange(node.id, patch); } };
-  if (node.type === "text") return <Text {...common} opacity={editingTextId === node.id ? 0 : nodeOpacity} onDblClick={(event) => onEditText(node.id, event)} text={node.text} wrap="word" fontSize={node.fontSize} fontStyle={node.fontStyle} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
+  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: !node.locked, draggable: !node.locked && !spacePressed, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (!selectedIds.includes(node.id)) onSelect(node.id, false); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const patch: Partial<CanvasNode> = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)), rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
+  if (node.type === "text") return <Text {...common} text={node.text} wrap="word" fontSize={node.fontSize} fontStyle={node.fontStyle} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <LoadedImage {...common} url={imageAsset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "shape") {
     if (node.shape === "ellipse") return <Ellipse {...common} radiusX={node.width / 2} radiusY={node.height / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;

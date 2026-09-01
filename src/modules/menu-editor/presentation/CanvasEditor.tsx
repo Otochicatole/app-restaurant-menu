@@ -51,12 +51,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => {
     if (node.id !== id) return node;
     const next = { ...node, ...patch } as CanvasNode;
-    if (next.type === "text" && ("text" in patch || "width" in patch || "height" in patch || "fontSize" in patch || "lineHeight" in patch || "letterSpacing" in patch)) {
-      // A text box may be resized freely, but it must never become shorter than
-      // the wrapped content. Keeping the larger value also prevents the last
-      // line from being clipped after a Transformer operation.
-      next.height = Math.max(finiteOr(next.height, 4), estimateTextHeight(next));
-    }
+    if (next.type === "text" && ("text" in patch || "width" in patch || "fontSize" in patch || "lineHeight" in patch || "letterSpacing" in patch)) next.height = estimateTextHeight(next);
     return next;
   }) }));
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
@@ -346,7 +341,6 @@ function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
     const width = Math.max(4, finiteOr(node.width, 4));
     const height = Math.max(4, finiteOr(node.height, 4));
     const normalized = { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode;
-    if (normalized.type === "text") normalized.height = Math.max(normalized.height, estimateTextHeight(normalized));
     return normalized;
   }) };
 }
