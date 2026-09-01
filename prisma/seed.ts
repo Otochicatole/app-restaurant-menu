@@ -3,6 +3,7 @@ import { PrismaLibSql } from "@prisma/adapter-libsql";
 import bcrypt from "bcryptjs";
 import { assertLocalSqliteUrl } from "../src/platform/config/sqlite-url";
 import { TEMPLATE_PRESETS } from "../src/modules/menu-editor/domain/template-presets";
+import { createTemplateDocument } from "../src/modules/menu-editor/domain/template";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL es obligatoria para ejecutar el seed.");
@@ -15,13 +16,37 @@ async function main() {
   if (!email || !password) throw new Error("SUPER_ADMIN_EMAIL y SUPER_ADMIN_PASSWORD son obligatorios para ejecutar el seed.");
   if (password.length < 12) throw new Error("SUPER_ADMIN_PASSWORD debe tener al menos 12 caracteres.");
 
+  const tenantId = process.env.SEED_RESTAURANT_ID?.trim() || "tenant-fuzion";
+  const tenantName = process.env.SEED_RESTAURANT_NAME?.trim() || "Fuzion";
+  const tenantSlug = process.env.SEED_RESTAURANT_SLUG?.trim().toLowerCase() || "fuzion";
+  const tenantEmail = (process.env.SEED_RESTAURANT_ADMIN_EMAIL?.trim().toLowerCase() || "admin@fuzion.local");
+  const tenantPassword = process.env.SEED_RESTAURANT_ADMIN_PASSWORD || "FuzionAdmin2026!";
+  if (tenantPassword.length < 12) throw new Error("SEED_RESTAURANT_ADMIN_PASSWORD debe tener al menos 12 caracteres.");
+  const existingTenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const seedTenantId = existingTenant?.id ?? tenantId;
+
   const existing = await prisma.admin.findUnique({ where: { email } });
   if (existing?.role === "TENANT_ADMIN") throw new Error("El correo del superadministrador ya pertenece a un cliente.");
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.admin.upsert({
-    where: { email },
-    update: { passwordHash, role: "SUPER_ADMIN", tenantId: null, mustChangePassword: false },
-    create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false },
+  await prisma.admin.upsert({ where: { email }, update: { passwordHash, role: "SUPER_ADMIN", tenantId: null, mustChangePassword: false }, create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false } });
+
+  const tenantPasswordHash = await bcrypt.hash(tenantPassword, 12);
+  const tenantAdminId = `admin-${seedTenantId}`;
+  await prisma.$transaction(async (transaction) => {
+    const tenant = await transaction.tenant.upsert({
+      where: { id: seedTenantId },
+      update: { name: tenantName, slug: tenantSlug, publicDescription: `Menú digital de ${tenantName}`, status: "ACTIVE" },
+      create: { id: seedTenantId, name: tenantName, slug: tenantSlug, publicDescription: `Menú digital de ${tenantName}`, status: "ACTIVE" },
+    });
+    const existingTenantAdmin = await transaction.admin.findUnique({ where: { tenantId: tenant.id }, select: { id: true } });
+    if (existingTenantAdmin) await transaction.admin.update({ where: { id: existingTenantAdmin.id }, data: { email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", mustChangePassword: false } });
+    else await transaction.admin.create({ data: { id: tenantAdminId, email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", tenantId: tenant.id, mustChangePassword: false } });
+    const initialDocument = createTemplateDocument(tenantName);
+    await transaction.menuProject.upsert({
+      where: { tenantId: tenant.id },
+      update: { schemaVersion: initialDocument.schemaVersion },
+      create: { tenantId: tenant.id, draftJson: JSON.stringify(initialDocument), schemaVersion: initialDocument.schemaVersion },
+    });
   });
 
   const systemPublishedAt = new Date("2026-01-01T00:00:00.000Z");
@@ -34,6 +59,8 @@ async function main() {
   }
 
   console.log(`Seed completed successfully (${TEMPLATE_PRESETS.length} system templates)`);
+  console.log(`Superadmin: ${email}`);
+  console.log(`Restaurant admin: ${tenantEmail} (${tenantSlug})`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); }).finally(async () => { await prisma.$disconnect(); });

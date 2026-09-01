@@ -27,6 +27,8 @@ bun run db:seed
 bun run dev
 ```
 
+`bun run db:seed` es idempotente: crea/actualiza el superadmin definido por `SUPER_ADMIN_EMAIL` y prepara un restaurante Canvas de desarrollo (`Fuzion`, slug `fuzion`) con `admin@fuzion.local` y contraseña `FuzionAdmin2026!`. Podés personalizarlo con `SEED_RESTAURANT_NAME`, `SEED_RESTAURANT_SLUG`, `SEED_RESTAURANT_ADMIN_EMAIL` y `SEED_RESTAURANT_ADMIN_PASSWORD`. También siembra los presets globales Minimalista vertical, Cafetería y Gourmet.
+
 Para una base existente, ejecutá `bun run db:cutover`. Crea un backup, convierte los datos legacy a documentos Canvas, publica la primera versión de cada restaurante, aplica la migración destructiva y regenera Prisma Client.
 
 La verificación rápida es `bun run check`. Para reproducir CI, migrá primero la base de pruebas y ejecutá la verificación completa:
