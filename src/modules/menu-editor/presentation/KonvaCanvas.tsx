@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text, Transformer } from "react-konva";
+import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Shape, Star, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
-import { hasAllStrokeSides, rectangleBorderSegments } from "../domain/rectangle-border";
+import { drawRectanglePath, rectangleBorderGeometryForNode } from "../domain/rectangle-border";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 import type { CanvasDropItem } from "./EditorToolsPanel";
 
@@ -233,11 +233,8 @@ function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed,
     if (node.shape === "arrow") return <Arrow {...common} points={[0, node.height / 2, node.width, node.height / 2]} stroke={node.stroke ?? node.fill ?? undefined} fill={node.fill ?? undefined} strokeWidth={Math.max(1, node.strokeWidth || 3)} pointerLength={12} pointerWidth={12} />;
     if (node.shape === "triangle") return <RegularPolygon {...common} sides={3} radius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
     if (node.shape === "star") return <Star {...common} numPoints={5} innerRadius={Math.min(node.width, node.height) / 4} outerRadius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
-    if (!hasAllStrokeSides(node.strokeSides)) return <>
-      <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={undefined} strokeWidth={0} />
-      {node.stroke && node.strokeWidth > 0 && rectangleBorderSegments(node.width, node.height, node.cornerRadius, node.strokeSides).map((points, index) => <Line key={`rect-border-${node.id}-${index}`} name={`node-border-${node.id}`} x={nodeX} y={nodeY} rotation={nodeRotation} opacity={nodeOpacity} points={points} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} lineCap="butt" lineJoin="round" listening={false} />)}
-    </>;
-    return <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
+    const geometry = rectangleBorderGeometryForNode(node);
+    return <Shape {...common} fill={node.fill ?? "transparent"} stroke={node.stroke && node.strokeWidth > 0 && node.strokeSides.length ? node.stroke : undefined} strokeWidth={node.strokeWidth} lineCap="butt" lineJoin="round" sceneFunc={(context, shape) => { drawRectanglePath(context, geometry.fillPath); context.fillShape(shape); for (const path of geometry.borderPaths) { drawRectanglePath(context, path); context.strokeShape(shape); } }} />;
   }
   return <LucideKonvaIcon iconKey={node.iconKey} color={node.fill} strokeWidth={node.strokeWidth} nodeProps={common} />;
 }

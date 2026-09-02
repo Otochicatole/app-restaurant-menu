@@ -1,5 +1,5 @@
 import { BadRequestError } from "@/platform/application/errors";
-import { canvasDocumentSchema, type CanvasDocumentV1 } from "../contracts";
+import { CORNER_RADII, canvasDocumentSchema, type CanvasDocumentV1 } from "../contracts";
 import { canonicalizeLucideIconKey, humanizeLucideIconName, isLucideIconKey } from "./lucide-icon-catalog";
 
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
@@ -9,7 +9,15 @@ export function normalizeLegacyCanvasDocument(input: unknown): unknown {
   if (!input || typeof input !== "object" || !Array.isArray((input as { nodes?: unknown }).nodes)) return input;
   const document = input as { nodes: unknown[] };
   return { ...document, nodes: document.nodes.map((node) => {
-    if (!node || typeof node !== "object" || (node as { type?: string }).type !== "icon") return node;
+    if (!node || typeof node !== "object") return node;
+    if ((node as { type?: string }).type === "shape") {
+      const shape = node as { cornerRadius?: unknown; cornerRadii?: unknown };
+      if (shape.cornerRadii === undefined && typeof shape.cornerRadius === "number") {
+        return { ...(node as object), cornerRadii: Object.fromEntries(CORNER_RADII.map((corner) => [corner, shape.cornerRadius])) };
+      }
+      return node;
+    }
+    if ((node as { type?: string }).type !== "icon") return node;
     const raw = String((node as { iconKey?: unknown }).iconKey ?? "");
     const iconKey = isLucideIconKey(raw) ? canonicalizeLucideIconKey(raw) : "sparkles";
     const accessibleLabel = String((node as { accessibleLabel?: unknown }).accessibleLabel ?? "").trim() || humanizeLucideIconName(iconKey);

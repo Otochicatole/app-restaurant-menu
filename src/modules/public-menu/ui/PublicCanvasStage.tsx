@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text } from "react-konva";
+import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Shape, Star, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "@/modules/menu-editor/ui";
-import { cameraForViewport, hasAllStrokeSides, LucideKonvaIcon, rectangleBorderSegments, zoomViewportAt } from "@/modules/menu-editor/ui";
+import { cameraForViewport, drawRectanglePath, LucideKonvaIcon, rectangleBorderGeometryForNode, zoomViewportAt } from "@/modules/menu-editor/ui";
 import type { PublicCanvasAsset } from "../contracts";
 
 export function PublicCanvasStage({ document, assets }: { document: CanvasDocumentV1; assets: Record<string, PublicCanvasAsset> }) {
@@ -53,22 +53,19 @@ export function PublicCanvasStage({ document, assets }: { document: CanvasDocume
 function PublicNode({ node, asset }: { node: CanvasNode; asset?: PublicCanvasAsset }) {
   const common = { x: node.x, y: node.y, width: node.width, height: node.height, rotation: node.rotation, opacity: node.opacity, listening: Boolean(node.link), onTap: node.link ? () => { window.location.href = node.link!; } : undefined };
   if (node.type === "text") return <Text {...common} text={node.text} wrap="word" fontSize={node.fontSize} fontFamily={asset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} fontStyle={node.fontStyle} fontWeight={node.fontWeight} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
-  if (node.type === "image") return <PublicImage {...common} url={asset?.url} />;
+  if (node.type === "image") return <PublicImage {...common} url={asset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "icon") return <LucideKonvaIcon iconKey={node.iconKey} color={node.fill} strokeWidth={node.strokeWidth} nodeProps={common} />;
   if (node.shape === "ellipse") return <Ellipse {...common} radiusX={node.width / 2} radiusY={node.height / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
   if (node.shape === "line") return <Line {...common} points={[0, node.height / 2, node.width, node.height / 2]} stroke={node.stroke ?? node.fill ?? undefined} strokeWidth={Math.max(1, node.strokeWidth || 3)} />;
   if (node.shape === "arrow") return <Arrow {...common} points={[0, node.height / 2, node.width, node.height / 2]} stroke={node.stroke ?? node.fill ?? undefined} fill={node.fill ?? undefined} strokeWidth={Math.max(1, node.strokeWidth || 3)} pointerLength={12} pointerWidth={12} />;
   if (node.shape === "triangle") return <RegularPolygon {...common} sides={3} radius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
   if (node.shape === "star") return <Star {...common} numPoints={5} innerRadius={Math.min(node.width, node.height) / 4} outerRadius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
-  if (!hasAllStrokeSides(node.strokeSides)) return <>
-    <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={undefined} strokeWidth={0} />
-    {node.stroke && node.strokeWidth > 0 && rectangleBorderSegments(node.width, node.height, node.cornerRadius, node.strokeSides).map((points, index) => <Line key={`rect-border-${node.id}-${index}`} x={node.x} y={node.y} rotation={node.rotation} opacity={node.opacity} points={points} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} lineCap="butt" lineJoin="round" listening={false} />)}
-  </>;
-  return <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
+  const geometry = rectangleBorderGeometryForNode(node);
+  return <Shape {...common} fill={node.fill ?? "transparent"} stroke={node.stroke && node.strokeWidth > 0 && node.strokeSides.length ? node.stroke : undefined} strokeWidth={node.strokeWidth} lineCap="butt" lineJoin="round" sceneFunc={(context, shape) => { drawRectanglePath(context, geometry.fillPath); context.fillShape(shape); for (const path of geometry.borderPaths) { drawRectanglePath(context, path); context.strokeShape(shape); } }} />;
 }
 
-function PublicImage(props: Record<string, unknown> & { url?: string }) {
+function PublicImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) {
   const [image, setImage] = useState<HTMLImageElement>();
   useEffect(() => { if (!props.url) return; const image = new window.Image(); image.crossOrigin = "anonymous"; image.onload = () => setImage(image); image.src = props.url; }, [props.url]);
-  return <KonvaImage {...props} image={image} />;
+  return <KonvaImage {...props} image={image} cornerRadius={props.cornerRadius} />;
 }

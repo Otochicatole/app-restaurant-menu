@@ -39,6 +39,21 @@ describe("menu editor document policy", () => {
     expect(shape?.type === "shape" ? shape.strokeSides : undefined).toEqual(["top", "left"]);
   });
 
+  it("copies the legacy cornerRadius to all rectangle corners", () => {
+    const template = createTemplateDocument("Café");
+    const legacyDocument = structuredClone(template) as unknown as { nodes: Array<Record<string, unknown>> };
+    legacyDocument.nodes.forEach((node) => {
+      if (node.type === "shape" && node.shape === "rect") {
+        delete node.cornerRadii;
+        node.cornerRadius = 24;
+      }
+    });
+    const normalized = validateCanvasDocument(legacyDocument);
+    const shape = normalized.nodes.find((node) => node.type === "shape" && node.shape === "rect");
+    expect(shape?.type === "shape" ? shape.cornerRadii : undefined).toEqual({ topLeft: 24, topRight: 24, bottomRight: 24, bottomLeft: 24 });
+    expect(shape?.type === "shape" ? "cornerRadius" in shape : false).toBe(false);
+  });
+
   it("accepts safe system font families and rejects arbitrary CSS values", () => {
     const template = createTemplateDocument("Café");
     const valid = validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "Georgia" } : node) });

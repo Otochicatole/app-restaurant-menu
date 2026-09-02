@@ -1,40 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { STROKE_SIDES } from "../contracts";
-import { hasAllStrokeSides, rectangleBorderSegments, toggleStrokeSide } from "./rectangle-border";
+import { allCornerRadii, hasAllStrokeSides, normalizeRectangleRadii, rectangleBorderGeometry, toggleStrokeSide } from "./rectangle-border";
 
-describe("rectangle border sides", () => {
+describe("rectangle border geometry", () => {
   it("keeps side toggles in canonical order and supports arbitrary combinations", () => {
     expect(toggleStrokeSide(["left"], "top")).toEqual(["top", "left"]);
     expect(toggleStrokeSide(["top", "left"], "left")).toEqual(["top"]);
     expect(hasAllStrokeSides([...STROKE_SIDES])).toBe(true);
   });
 
-  it("returns one straight segment per active side without a radius", () => {
-    expect(rectangleBorderSegments(100, 60, 0, ["top", "bottom"])).toEqual([
-      [0, 0, 100, 0],
-      [100, 60, 0, 60],
-    ]);
+  it("returns no border path when no side is active", () => {
+    const geometry = rectangleBorderGeometry(100, 60, allCornerRadii(10), []);
+    expect(geometry.borderPaths).toEqual([]);
+    expect(geometry.fillPath.some((command) => command.type === "arc")).toBe(true);
   });
 
-  it("adds rounded corner points for every active side", () => {
-    const segments = rectangleBorderSegments(100, 60, 10, ["top", "right"]);
-    expect(segments).toHaveLength(1);
-    expect(segments[0].slice(0, 2)[0]).toBeCloseTo(0);
-    expect(segments[0].slice(0, 2)[1]).toBeCloseTo(10);
-    expect(segments[0].slice(-2)[0]).toBeCloseTo(90);
-    expect(segments[0].slice(-2)[1]).toBeCloseTo(60);
+  it("keeps the two rounded corners of a right-only border", () => {
+    const geometry = rectangleBorderGeometry(100, 60, allCornerRadii(10), ["right"]);
+    expect(geometry.borderPaths).toHaveLength(1);
+    expect(geometry.borderPaths[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "arc", radius: 10, startAngle: -Math.PI / 2, endAngle: 0 }),
+      expect.objectContaining({ type: "arc", radius: 10, startAngle: 0, endAngle: Math.PI / 2 }),
+    ]));
+    expect(geometry.borderPaths[0][0]).toEqual({ type: "moveTo", x: 90, y: 0 });
   });
 
-  it("keeps the rounded halves for a side whose neighbors are inactive", () => {
-    const segments = rectangleBorderSegments(100, 60, 10, ["right"]);
-    expect(segments).toHaveLength(1);
-    expect(segments[0].slice(0, 2)[0]).toBeCloseTo(90);
-    expect(segments[0].slice(0, 2)[1]).toBeCloseTo(0);
-    expect(segments[0].slice(-2)[0]).toBeCloseTo(90);
-    expect(segments[0].slice(-2)[1]).toBeCloseTo(60);
+  it("uses independent radii for each corner and keeps zero-radius corners square", () => {
+    const geometry = rectangleBorderGeometry(100, 60, { topLeft: 12, topRight: 20, bottomRight: 30, bottomLeft: 0 }, ["top", "right", "bottom", "left"]);
+    expect(geometry.radii).toEqual({ topLeft: 12, topRight: 20, bottomRight: 30, bottomLeft: 0 });
+    expect(geometry.fillPath.filter((command) => command.type === "arc")).toHaveLength(3);
+  });
+
+  it("reduces radii proportionally using CSS overlap constraints", () => {
+    expect(normalizeRectangleRadii(100, 60, allCornerRadii(80))).toEqual({ topLeft: 30, topRight: 30, bottomRight: 30, bottomLeft: 30 });
+    expect(normalizeRectangleRadii(100, 60, { topLeft: 80, topRight: 0, bottomRight: 0, bottomLeft: 0 }).topLeft).toBe(60);
   });
 
   it("keeps connected partial borders in one continuous run", () => {
-    expect(rectangleBorderSegments(100, 60, 10, ["right", "bottom", "left"])).toHaveLength(1);
+    expect(rectangleBorderGeometry(100, 60, allCornerRadii(10), ["right", "bottom", "left"]).borderPaths).toHaveLength(1);
   });
 });

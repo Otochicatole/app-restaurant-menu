@@ -10,8 +10,17 @@ export const systemFontFamilySchema = z.enum(SYSTEM_FONT_FAMILIES);
 export const STROKE_SIDES = ["top", "right", "bottom", "left"] as const;
 export const strokeSideSchema = z.enum(STROKE_SIDES);
 export type StrokeSide = z.infer<typeof strokeSideSchema>;
+export const CORNER_RADII = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
+export const cornerRadiusKeySchema = z.enum(CORNER_RADII);
+export type CornerRadiusKey = z.infer<typeof cornerRadiusKeySchema>;
 
 const strokeSidesSchema = z.array(strokeSideSchema).max(STROKE_SIDES.length).refine((sides) => new Set(sides).size === sides.length, "Los lados del borde no pueden repetirse").transform((sides) => STROKE_SIDES.filter((side) => sides.includes(side)));
+const cornerRadiiSchema = z.object({
+  topLeft: finiteNumber.min(0).max(10_000),
+  topRight: finiteNumber.min(0).max(10_000),
+  bottomRight: finiteNumber.min(0).max(10_000),
+  bottomLeft: finiteNumber.min(0).max(10_000),
+});
 
 const nodeBase = z.object({
   id,
@@ -64,7 +73,9 @@ const shapeNode = nodeBase.extend({
   stroke: color.nullable().default(null),
   strokeWidth: finiteNumber.min(0).max(500).default(0),
   strokeSides: strokeSidesSchema.default([...STROKE_SIDES]),
-  cornerRadius: finiteNumber.min(0).max(10_000).default(0),
+  cornerRadii: cornerRadiiSchema.optional(),
+  /** @deprecated Only accepted while reading documents created before cornerRadii. */
+  cornerRadius: finiteNumber.min(0).max(10_000).optional(),
 });
 
 const iconNode = nodeBase.extend({
@@ -76,11 +87,6 @@ const iconNode = nodeBase.extend({
 });
 
 export const canvasNodeSchema = z.discriminatedUnion("type", [textNode, imageNode, shapeNode, iconNode]);
-export type CanvasNode = z.infer<typeof canvasNodeSchema>;
-export type CanvasTextNode = z.infer<typeof textNode>;
-export type CanvasImageNode = z.infer<typeof imageNode>;
-export type CanvasShapeNode = z.infer<typeof shapeNode>;
-export type CanvasIconNode = z.infer<typeof iconNode>;
 
 export const canvasGroupSchema = z.object({
   id,
@@ -88,7 +94,7 @@ export const canvasGroupSchema = z.object({
   nodeIds: z.array(id).max(2_000),
 });
 
-export const canvasDocumentSchema = z.object({
+const canvasDocumentInputSchema = z.object({
   schemaVersion: z.literal(1),
   background: color.default("#F3EEDC"),
   initialViewport: z.object({
@@ -105,9 +111,34 @@ export const canvasDocumentSchema = z.object({
   }).optional(),
   nodes: z.array(canvasNodeSchema).max(2_000),
   groups: z.array(canvasGroupSchema).max(200),
-}).transform((document) => ({ ...document, canvasBounds: document.canvasBounds ?? { ...document.initialViewport } }));
+});
 
-export type CanvasDocumentV1 = z.infer<typeof canvasDocumentSchema>;
+function normalizeShapeNode(node: z.output<typeof shapeNode>) {
+  const { cornerRadius, cornerRadii, ...canonicalNode } = node;
+  const legacyRadius = cornerRadius ?? 0;
+  return {
+    ...canonicalNode,
+    cornerRadii: cornerRadii ?? {
+      topLeft: legacyRadius,
+      topRight: legacyRadius,
+      bottomRight: legacyRadius,
+      bottomLeft: legacyRadius,
+    },
+  };
+}
+
+export const canvasDocumentSchema = canvasDocumentInputSchema.transform((document) => ({
+  ...document,
+  canvasBounds: document.canvasBounds ?? { ...document.initialViewport },
+  nodes: document.nodes.map((node) => node.type === "shape" ? normalizeShapeNode(node) : node),
+}));
+
+export type CanvasDocumentV1 = z.output<typeof canvasDocumentSchema>;
+export type CanvasNode = CanvasDocumentV1["nodes"][number];
+export type CanvasTextNode = Extract<CanvasNode, { type: "text" }>;
+export type CanvasImageNode = Extract<CanvasNode, { type: "image" }>;
+export type CanvasShapeNode = Extract<CanvasNode, { type: "shape" }>;
+export type CanvasIconNode = Extract<CanvasNode, { type: "icon" }>;
 
 export const saveDocumentSchema = z.object({
   baseRevision: z.number().int().nonnegative(),

@@ -51,4 +51,24 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await page.getByRole("button", { name: "Todos", exact: true }).click();
   await expect(right).toHaveAttribute("aria-pressed", "true");
   await expect(bottom).toHaveAttribute("aria-pressed", "true");
+
+  const topLeft = page.getByRole("spinbutton", { name: "Arriba izquierda" });
+  const topRight = page.getByRole("spinbutton", { name: "Arriba derecha" });
+  const bottomRight = page.getByRole("spinbutton", { name: "Abajo derecha" });
+  const bottomLeft = page.getByRole("spinbutton", { name: "Abajo izquierda" });
+  await topLeft.fill("12");
+  await topRight.fill("24");
+  await bottomRight.fill("36");
+  await bottomLeft.fill("48");
+  await expect(topLeft).toHaveValue("12");
+  await expect(topRight).toHaveValue("24");
+  await expect(bottomRight).toHaveValue("36");
+  await expect(bottomLeft).toHaveValue("48");
+
+  await page.getByRole("spinbutton", { name: "Valor común" }).fill("18");
+  await page.getByRole("button", { name: "Igualar esquinas" }).click();
+  await expect(topLeft).toHaveValue("18");
+  await expect(topRight).toHaveValue("18");
+  await expect(bottomRight).toHaveValue("18");
+  await expect(bottomLeft).toHaveValue("18");
 });
