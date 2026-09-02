@@ -13,7 +13,7 @@ require_commands flock
 ensure_deploy_layout
 acquire_deploy_lock
 
-if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$SERVICE"; then
+if [[ "${DEPLOY_MODE:-auto}" != "manual" ]] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$SERVICE"; then
   echo "Deteniendo $SERVICE..."
   sudo systemctl stop "$SERVICE"
   exit 0

@@ -16,7 +16,7 @@ acquire_deploy_lock
 
 # A checkout without the `current` release link is the supported manual mode.
 # It does not require systemd and keeps the same persistent SQLite paths.
-if [[ ! -L "$CURRENT_LINK" ]]; then
+if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
   MANUAL_ENV="$DEPLOY_PROJECT_ROOT/.env"
   if [[ ! -f "$MANUAL_ENV" ]]; then
     echo "ERROR: falta $MANUAL_ENV para el modo manual." >&2

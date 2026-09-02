@@ -10,6 +10,13 @@ DEPLOY_REF="${DEPLOY_REF:-origin/main}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8201/api/health}"
 CANDIDATE_PORT="${CANDIDATE_PORT:-8202}"
 
+# A checkout without a `current` release link is the manual deployment mode.
+# Dispatch before acquiring the release lock so the manual flow can stop and
+# start its process using the same lock safely.
+if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
+  exec bash "$SCRIPT_DIR/manual-redeploy.sh"
+fi
+
 release_dir=""
 release_id=""
 previous_release=""

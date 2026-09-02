@@ -27,7 +27,7 @@ bun run db:seed
 bun run dev
 ```
 
-En Windows o en un host sin systemd podés preparar el despliegue local con `bun run deploy:local` (SQLite en `storage/app.db`, migraciones, Prisma Client y build) y levantarlo con `bun run deploy:local:start` en el puerto 8201. Los alias `deploy:manual` y `deploy:manual:start` expresan el mismo flujo para un VPS sin releases. En VPS, `scripts/deploy/start.sh` y `stop.sh` detectan un checkout manual sin enlace `current` y administran directamente el proceso, su PID, logs y health-check; cuando existe un release systemd usan el servicio configurado.
+En Windows o en un host sin systemd podés preparar el despliegue local con `bun run deploy:local` (SQLite en `storage/app.db`, migraciones, Prisma Client y build) y levantarlo con `bun run deploy:local:start` en el puerto 8201. Los alias `deploy:manual` y `deploy:manual:start` expresan el mismo flujo para un VPS sin releases. Para actualizar un checkout manual con backup, migraciones, build, health-check y reinicio usá `DEPLOY_MODE=manual bash scripts/deploy/redeploy.sh`. En VPS, `scripts/deploy/start.sh` y `stop.sh` detectan un checkout manual sin enlace `current` y administran directamente el proceso, su PID, logs y health-check; cuando existe un release systemd usan el servicio configurado.
 
 `bun run db:seed` es idempotente: crea/actualiza el superadmin definido por `SUPER_ADMIN_EMAIL` y prepara un restaurante Canvas de desarrollo (`Fuzion`, slug `fuzion`) con `admin@fuzion.local` y contraseña `FuzionAdmin2026!`. Podés personalizarlo con `SEED_RESTAURANT_NAME`, `SEED_RESTAURANT_SLUG`, `SEED_RESTAURANT_ADMIN_EMAIL` y `SEED_RESTAURANT_ADMIN_PASSWORD`. También siembra los presets globales Minimalista vertical, Cafetería y Gourmet.
 
