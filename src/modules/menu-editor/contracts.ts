@@ -7,6 +7,11 @@ const color = z.string().regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/);
 const link = z.string().trim().max(2048).refine((value) => /^(https?:|mailto:|tel:)/i.test(value), "Link inválido").nullable();
 export const SYSTEM_FONT_FAMILIES = ["Arial", "Georgia", "Verdana", "Trebuchet MS", "Times New Roman", "Courier New", "Tahoma", "Impact"] as const;
 export const systemFontFamilySchema = z.enum(SYSTEM_FONT_FAMILIES);
+export const STROKE_SIDES = ["top", "right", "bottom", "left"] as const;
+export const strokeSideSchema = z.enum(STROKE_SIDES);
+export type StrokeSide = z.infer<typeof strokeSideSchema>;
+
+const strokeSidesSchema = z.array(strokeSideSchema).max(STROKE_SIDES.length).refine((sides) => new Set(sides).size === sides.length, "Los lados del borde no pueden repetirse").transform((sides) => STROKE_SIDES.filter((side) => sides.includes(side)));
 
 const nodeBase = z.object({
   id,
@@ -58,6 +63,7 @@ const shapeNode = nodeBase.extend({
   fill: color.nullable().default("#3A4824"),
   stroke: color.nullable().default(null),
   strokeWidth: finiteNumber.min(0).max(500).default(0),
+  strokeSides: strokeSidesSchema.default([...STROKE_SIDES]),
   cornerRadius: finiteNumber.min(0).max(10_000).default(0),
 });
 

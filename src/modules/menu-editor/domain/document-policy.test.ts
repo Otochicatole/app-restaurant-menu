@@ -23,6 +23,22 @@ describe("menu editor document policy", () => {
     expect(normalized.canvasBounds).toEqual(template.initialViewport);
   });
 
+  it("defaults legacy shape borders to all sides", () => {
+    const template = createTemplateDocument("Café");
+    const legacyDocument = structuredClone(template) as unknown as { nodes: Array<Record<string, unknown>> };
+    legacyDocument.nodes.forEach((node) => { if (node.type === "shape") delete node.strokeSides; });
+    const normalized = validateCanvasDocument(legacyDocument);
+    const shape = normalized.nodes.find((node) => node.type === "shape");
+    expect(shape?.type === "shape" ? shape.strokeSides : undefined).toEqual(["top", "right", "bottom", "left"]);
+  });
+
+  it("normalizes shape border sides to canonical order", () => {
+    const template = createTemplateDocument("Café");
+    const normalized = validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "shape" ? { ...node, strokeSides: ["left", "top"] } : node) });
+    const shape = normalized.nodes.find((node) => node.type === "shape");
+    expect(shape?.type === "shape" ? shape.strokeSides : undefined).toEqual(["top", "left"]);
+  });
+
   it("accepts safe system font families and rejects arbitrary CSS values", () => {
     const template = createTemplateDocument("Café");
     const valid = validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "Georgia" } : node) });

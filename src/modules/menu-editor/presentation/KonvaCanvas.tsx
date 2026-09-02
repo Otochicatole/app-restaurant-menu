@@ -5,6 +5,7 @@ import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon,
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
+import { hasAllStrokeSides, rectangleBorderSegments } from "../domain/rectangle-border";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 import type { CanvasDropItem } from "./EditorToolsPanel";
 
@@ -158,7 +159,11 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
     session.ids.forEach((selectedId) => {
       const node = stageRef.current?.findOne(`#node-${selectedId}`);
       const origin = session.starts[selectedId];
-      if (node && origin) node.position({ x: origin.x + delta.x, y: origin.y + delta.y });
+      if (node && origin) {
+        const position = { x: origin.x + delta.x, y: origin.y + delta.y };
+        node.position(position);
+        stageRef.current?.find(`.node-border-${selectedId}`).forEach((borderNode) => borderNode.position(position));
+      }
     });
     transformerRef.current?.forceUpdate();
     stageRef.current?.batchDraw();
@@ -228,7 +233,11 @@ function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed,
     if (node.shape === "arrow") return <Arrow {...common} points={[0, node.height / 2, node.width, node.height / 2]} stroke={node.stroke ?? node.fill ?? undefined} fill={node.fill ?? undefined} strokeWidth={Math.max(1, node.strokeWidth || 3)} pointerLength={12} pointerWidth={12} />;
     if (node.shape === "triangle") return <RegularPolygon {...common} sides={3} radius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
     if (node.shape === "star") return <Star {...common} numPoints={5} innerRadius={Math.min(node.width, node.height) / 4} outerRadius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
-    return <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
+    if (!hasAllStrokeSides(node.strokeSides)) return <>
+      <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={undefined} strokeWidth={0} />
+      {node.stroke && node.strokeWidth > 0 && rectangleBorderSegments(node.width, node.height, node.cornerRadius, node.strokeSides).map((points, index) => <Line key={`rect-border-${node.id}-${index}`} name={`node-border-${node.id}`} x={nodeX} y={nodeY} rotation={nodeRotation} opacity={nodeOpacity} points={points} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} lineCap="butt" lineJoin="round" listening={false} />)}
+    </>;
+    return <Rect {...common} cornerRadius={node.cornerRadius} fill={node.fill ?? "transparent"} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
   }
   return <LucideKonvaIcon iconKey={node.iconKey} color={node.fill} strokeWidth={node.strokeWidth} nodeProps={common} />;
 }

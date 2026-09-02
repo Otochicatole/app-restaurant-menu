@@ -1,4 +1,4 @@
-import dynamicIconImports from "lucide-react/dynamicIconImports";
+import dynamicIconImports from "lucide-react/dynamicIconImports.mjs";
 
 /**
  * Canonical Lucide icon names generated from lucide-react 1.34.0.

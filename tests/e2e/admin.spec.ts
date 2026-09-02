@@ -27,3 +27,28 @@ test("tenant admin can open the icon library and image library", async ({ page }
   await page.getByRole("button", { name: "Imágenes" }).click();
   await expect(page.getByText("Café E2E").last()).toBeVisible();
 });
+
+test("tenant admin can choose rectangle border sides", async ({ page }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+
+  const top = page.getByRole("button", { name: "Borde arriba" });
+  const right = page.getByRole("button", { name: "Borde derecha" });
+  const bottom = page.getByRole("button", { name: "Borde abajo" });
+  const left = page.getByRole("button", { name: "Borde izquierda" });
+  await expect(top).toHaveAttribute("aria-pressed", "true");
+  await expect(right).toHaveAttribute("aria-pressed", "true");
+  await expect(bottom).toHaveAttribute("aria-pressed", "true");
+  await expect(left).toHaveAttribute("aria-pressed", "true");
+
+  await right.click();
+  await bottom.click();
+  await expect(right).toHaveAttribute("aria-pressed", "false");
+  await expect(bottom).toHaveAttribute("aria-pressed", "false");
+  await expect(top).toHaveAttribute("aria-pressed", "true");
+  await expect(left).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Todos", exact: true }).click();
+  await expect(right).toHaveAttribute("aria-pressed", "true");
+  await expect(bottom).toHaveAttribute("aria-pressed", "true");
+});

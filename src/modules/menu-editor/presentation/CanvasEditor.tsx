@@ -4,8 +4,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Grid2X2, Redo2, Trash2, Undo2 } from "lucide-react";
-import { SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
+import { STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView, type StrokeSide } from "../contracts";
 import { placeNodeInCanvas } from "../domain/node-placement";
+import { hasAllStrokeSides, toggleStrokeSide } from "../domain/rectangle-border";
 import { LayersPanel } from "./LayersPanel";
 import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
 
@@ -124,7 +125,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   };
   const deleteSelected = () => { if (!selectedIds.length) return; commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); };
   const addText = (point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "text", ...newNodeFrame(360, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Nuevo texto", fontAssetId: null, fontSize: 42, fontWeight: "600", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
-  const addShape = (shape: "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star", point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "shape", shape, ...newNodeFrame(260, 160, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#3A4824", stroke: null, strokeWidth: 0, cornerRadius: 18 });
+  const addShape = (shape: "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star", point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "shape", shape, ...newNodeFrame(260, 160, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#3A4824", stroke: null, strokeWidth: 0, strokeSides: [...STROKE_SIDES], cornerRadius: 18 });
   const addIcon = (iconKey: string, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "icon", iconKey, accessibleLabel: iconKey.replaceAll("-", " "), ...newNodeFrame(80, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#B8790A", strokeWidth: 2 });
   const addImage = (asset: MenuAssetView, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "image", assetId: asset.id, ...newNodeFrame(280, 180, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: asset.name });
   const handleCanvasDrop = (item: CanvasDropItem, point: { x: number; y: number }) => { if (item.kind === "text") addText(point); if (item.kind === "shape" && item.shape) addShape(item.shape, point); if (item.kind === "icon" && item.iconKey) addIcon(item.iconKey, point); if (item.kind === "image" && item.assetId) { const asset = assets.find((candidate) => candidate.id === item.assetId); if (asset) addImage(asset, point); } };
@@ -288,7 +289,7 @@ function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, 
     {node.type === "shape" && <InspectorSection title="Estilo de la figura">
       <AlphaColorField label="Color de relleno" value={node.fill ?? "#3A4824"} disabled={fieldDisabled} onChange={(value) => onChange({ fill: value })} />
       <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Grosor del borde" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /><label className="text-xs font-medium">Color del borde<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.stroke?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ stroke: event.target.value })} /></label></div>
-      {node.shape === "rect" && <><NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, Math.min(Math.min(node.width, node.height) / 2, value)) })} /><input aria-label="Redondeado de esquinas" disabled={fieldDisabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max={Math.max(0, Math.min(node.width, node.height) / 2)} step="1" value={Math.min(node.cornerRadius, Math.max(0, Math.min(node.width, node.height) / 2))} onChange={(event) => onChange({ cornerRadius: Number(event.target.value) })} /></>}
+      {node.shape === "rect" && <><RectBorderSidesField value={node.strokeSides} disabled={fieldDisabled} onChange={(strokeSides) => onChange({ strokeSides })} /><NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, Math.min(Math.min(node.width, node.height) / 2, value)) })} /><input aria-label="Redondeado de esquinas" disabled={fieldDisabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max={Math.max(0, Math.min(node.width, node.height) / 2)} step="1" value={Math.min(node.cornerRadius, Math.max(0, Math.min(node.width, node.height) / 2))} onChange={(event) => onChange({ cornerRadius: Number(event.target.value) })} /></>}
     </InspectorSection>}
 
     {node.type === "image" && <InspectorSection title="Imagen">
@@ -338,6 +339,15 @@ function withColorAlpha(color: string, alpha: number): string {
   const base = color.slice(0, 7);
   if (clamped >= 0.999) return base;
   return `${base}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+}
+
+function RectBorderSidesField({ value, disabled, onChange }: { value: StrokeSide[]; disabled: boolean; onChange: (value: StrokeSide[]) => void }) {
+  const allSelected = hasAllStrokeSides(value);
+  const labels: Record<StrokeSide, string> = { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" };
+  return <div className="mt-3">
+    <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">Lados del borde</span><button type="button" disabled={disabled} className="text-[11px] font-medium text-emerald-800 hover:underline disabled:opacity-40" onClick={() => onChange(allSelected ? [] : [...STROKE_SIDES])}>{allSelected ? "Ninguno" : "Todos"}</button></div>
+    <div className="mt-2 grid grid-cols-2 gap-1.5" role="group" aria-label="Lados del borde del rectángulo">{STROKE_SIDES.map((side) => <button key={side} type="button" disabled={disabled} aria-pressed={value.includes(side)} aria-label={`Borde ${labels[side].toLowerCase()}`} className={`rounded-md border px-2 py-2 text-[11px] font-medium transition disabled:opacity-40 ${value.includes(side) ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"}`} onClick={() => onChange(toggleStrokeSide(value, side))}>{labels[side]}</button>)}</div>
+  </div>;
 }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
