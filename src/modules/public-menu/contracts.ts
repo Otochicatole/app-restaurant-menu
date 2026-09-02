@@ -2,11 +2,13 @@ import type { CanvasDocumentV1 } from "@/modules/menu-editor/ui";
 
 export type PublicCanvasAsset = {
   id: string;
-  kind: "IMAGE" | "FONT";
+  kind: "IMAGE" | "VIDEO" | "FONT";
   name: string;
   mimeType: string;
   url: string;
-  fontFamily: string | null;
+  width?: number | null;
+  height?: number | null;
+  fontFamily?: string | null;
 };
 
 export type PublicCanvasMenuView = {

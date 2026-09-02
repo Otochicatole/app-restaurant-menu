@@ -40,6 +40,7 @@ const nodeBase = z.object({
 const textNode = nodeBase.extend({
   type: z.literal("text"),
   text: z.string().max(20_000),
+  modalAssetId: id.nullable().default(null),
   fontAssetId: id.nullable().default(null),
   fontFamily: systemFontFamilySchema.optional(),
   fontSize: finiteNumber.positive().max(2_000).default(32),
@@ -144,7 +145,10 @@ export const saveDocumentSchema = z.object({
   baseRevision: z.number().int().nonnegative(),
   document: canvasDocumentSchema,
 });
-export const publishDocumentSchema = z.object({ baseRevision: z.number().int().nonnegative() });
+export const publishDocumentSchema = z.object({
+  baseRevision: z.number().int().nonnegative(),
+  document: canvasDocumentSchema,
+});
 export const profileSchema = z.object({
   name: z.string().trim().min(1).max(100),
   publicDescription: z.string().trim().max(500),
@@ -162,7 +166,7 @@ export type MenuProjectView = {
   hasPublishedDocument: boolean;
 };
 
-export type MenuAssetKind = "IMAGE" | "FONT";
+export type MenuAssetKind = "IMAGE" | "VIDEO" | "FONT";
 export type MenuAssetView = {
   id: string;
   kind: MenuAssetKind;

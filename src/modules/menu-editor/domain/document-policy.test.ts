@@ -3,10 +3,12 @@ import { createTemplateDocument } from "./template";
 import { documentAssetIds, validateCanvasDocument } from "./document-policy";
 
 describe("menu editor document policy", () => {
-  it("accepts the template and extracts image/font assets", () => {
+  it("accepts the template and extracts image/font/modal assets", () => {
     const template = createTemplateDocument("Café");
-    const document = validateCanvasDocument({ ...template, nodes: [...template.nodes, { ...template.nodes[0], id: "image", type: "image", assetId: "asset-image", alt: "Plato", fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 0 }, { ...template.nodes[0], id: "fonted", fontAssetId: "asset-font" }] });
-    expect(documentAssetIds(document)).toEqual(new Set(["asset-image", "asset-font"]));
+    const document = validateCanvasDocument({ ...template, nodes: [...template.nodes, { ...template.nodes[0], id: "image", type: "image", assetId: "asset-image", alt: "Plato", fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 0 }, { ...template.nodes[0], id: "fonted", fontAssetId: "asset-font", modalAssetId: "asset-video" }] });
+    expect(documentAssetIds(document)).toEqual(new Set(["asset-image", "asset-font", "asset-video"]));
+    const modalText = document.nodes.find((node) => node.id === "fonted");
+    expect(modalText?.type === "text" ? modalText.modalAssetId : undefined).toBe("asset-video");
   });
 
   it("rejects duplicate ids and dangling groups", () => {
@@ -21,6 +23,15 @@ describe("menu editor document policy", () => {
     delete legacyDocument.canvasBounds;
     const normalized = validateCanvasDocument(legacyDocument);
     expect(normalized.canvasBounds).toEqual(template.initialViewport);
+  });
+
+  it("defaults legacy text modal assets to null", () => {
+    const template = createTemplateDocument("Café");
+    const legacyDocument = structuredClone(template) as unknown as { nodes: Array<Record<string, unknown>> };
+    legacyDocument.nodes.forEach((node) => { if (node.type === "text") delete node.modalAssetId; });
+    const normalized = validateCanvasDocument(legacyDocument);
+    const text = normalized.nodes.find((node) => node.type === "text");
+    expect(text?.type === "text" ? text.modalAssetId : undefined).toBeNull();
   });
 
   it("defaults legacy shape borders to all sides", () => {

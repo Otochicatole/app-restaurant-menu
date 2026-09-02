@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BadRequestError, NotFoundError } from "@/platform/application/errors";
-import { profileSchema, saveDocumentSchema, type CanvasDocumentV1, type MenuAssetKind, type PublishDocumentCommand, type RestaurantProfile, type SaveDocumentCommand } from "../contracts";
-import { documentAssetIds, documentFontAssetIds, documentImageAssetIds, validateCanvasDocument } from "../domain/document-policy";
+import { profileSchema, publishDocumentSchema, saveDocumentSchema, type CanvasDocumentV1, type MenuAssetKind, type PublishDocumentCommand, type RestaurantProfile, type SaveDocumentCommand } from "../contracts";
+import { documentAssetIds, documentFontAssetIds, documentImageAssetIds, documentModalAssetIds, validateCanvasDocument } from "../domain/document-policy";
 import type { MenuEditorRepository } from "./ports";
 
 export function createMenuEditorUseCases(repository: MenuEditorRepository) {
@@ -19,8 +19,10 @@ export function createMenuEditorUseCases(repository: MenuEditorRepository) {
     },
     async publish(tenantId: string, input: PublishDocumentCommand) {
       const id = z.string().min(1).parse(tenantId);
-      const command = z.object({ baseRevision: z.number().int().nonnegative() }).parse(input);
-      return repository.publish(id, command.baseRevision);
+      const command = publishDocumentSchema.parse(input);
+      const document = validateCanvasDocument(command.document);
+      await validateReferencedAssets(repository, id, document);
+      return repository.publish(id, command.baseRevision, document);
     },
     listAssets(tenantId: string, kind?: MenuAssetKind) {
       return repository.listAssets(z.string().min(1).parse(tenantId), kind);
@@ -54,5 +56,6 @@ async function validateReferencedAssets(repository: MenuEditorRepository, tenant
     if (!asset) throw new NotFoundError("Asset");
     if (documentImageAssetIds(document).has(id) && asset.kind !== "IMAGE") throw new BadRequestError("El objeto de imagen referencia una fuente.");
     if (documentFontAssetIds(document).has(id) && asset.kind !== "FONT") throw new BadRequestError("El texto referencia una imagen.");
+    if (documentModalAssetIds(document).has(id) && asset.kind !== "IMAGE" && asset.kind !== "VIDEO") throw new BadRequestError("El modal del texto referencia un asset incompatible.");
   }
 }

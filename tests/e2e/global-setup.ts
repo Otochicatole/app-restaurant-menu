@@ -31,7 +31,7 @@ export default async function globalSetup() {
     const tenant = await createTenantFixture(prisma, { id: FIXTURE_IDS.tenant, adminId: FIXTURE_IDS.tenantAdmin, name: "E2E Café", ...E2E.tenantAdmin, mustChangePassword: false });
     const imageKey = `tenants/${tenant.id}/editor-assets/cafe-fixture.png`;
     await writeFixtureAsset(storageRoot, imageKey);
-    const image = await prisma.menuAsset.create({ data: { id: "e2e-asset-cafe", tenantId: tenant.id, kind: "IMAGE", name: "Café E2E", storageKey: imageKey, mimeType: "image/png", byteSize: 68, checksum: "e2e-cafe-checksum" } });
+    const image = await prisma.menuAsset.create({ data: { id: "e2e-asset-cafe", tenantId: tenant.id, kind: "IMAGE", name: "Café E2E", storageKey: imageKey, mimeType: "image/png", byteSize: 68, checksum: "e2e-cafe-checksum", width: 1, height: 1 } });
     const document = createCanvasFixture(tenant.name, image.id);
     const project = await prisma.menuProject.create({ data: { id: "e2e-project-cafe", tenantId: tenant.id, draftJson: JSON.stringify(document), publishedJson: JSON.stringify(document), draftRevision: 0, publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
     await prisma.menuAssetReference.create({ data: { tenantId: tenant.id, projectId: project.id, assetId: image.id, scope: "DRAFT" } });
@@ -46,7 +46,7 @@ export default async function globalSetup() {
 
 function createCanvasFixture(name: string, imageId?: string) {
   const document = createTemplateDocument(name);
-  const nodes: CanvasNode[] = [...document.nodes, { id: `${name}-product`, name: "Café E2E", type: "text", x: 120, y: 560, width: 500, height: 50, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Café E2E", fontAssetId: null, fontFamily: "Arial", fontSize: 34, fontWeight: "700", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "label" }];
+  const nodes: CanvasNode[] = [...document.nodes, { id: `${name}-product`, name: "Café E2E", type: "text", x: 120, y: 560, width: 500, height: 50, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Café E2E", modalAssetId: imageId ?? null, fontAssetId: null, fontFamily: "Arial", fontSize: 34, fontWeight: "700", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "label" }];
   if (imageId) nodes.push({ id: `${name}-image`, name: "Imagen Café E2E", type: "image", assetId: imageId, x: 700, y: 540, width: 240, height: 160, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 8, alt: "Café E2E" });
   return { ...document, nodes };
 }

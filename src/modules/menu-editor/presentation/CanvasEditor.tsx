@@ -1,14 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Grid2X2, Redo2, Trash2, Undo2 } from "lucide-react";
 import { CORNER_RADII, STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type CornerRadiusKey, type MenuAssetView, type MenuProjectView, type MenuTemplateView, type StrokeSide } from "../contracts";
 import { placeNodeInCanvas } from "../domain/node-placement";
 import { allCornerRadii, hasAllStrokeSides, toggleStrokeSide } from "../domain/rectangle-border";
 import { LayersPanel } from "./LayersPanel";
-import { EditorToolsPanel, IconPickerDrawer, ImagePickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
+import { EditorToolsPanel, IconPickerDrawer, MediaPickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
+import { CanvasStage } from "../ui/CanvasStage";
+import { MediaModal, type MediaModalAsset } from "@/ui/MediaModal";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
@@ -20,6 +22,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [layersOpen, setLayersOpen] = useState(true);
   const [iconsOpen, setIconsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
+  const [mediaPickerMode, setMediaPickerMode] = useState<"insert" | "modal">("insert");
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [assets, setAssets] = useState(initialAssets);
   const [templates, setTemplates] = useState(initialTemplates);
@@ -27,6 +30,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [future, setFuture] = useState<CanvasDocumentV1[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [status, setStatus] = useState("Guardado");
   const [conflict, setConflict] = useState(false);
   const [viewport, setViewport] = useState(project.document.initialViewport);
@@ -34,12 +38,17 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [modalName, setModalName] = useState("");
   const [modalDescription, setModalDescription] = useState("");
   const [gridEnabled, setGridEnabled] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAsset, setPreviewAsset] = useState<MediaModalAsset | null>(null);
+  const editVersionRef = useRef(0);
+  const publishingRef = useRef(false);
 
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
   const fontFaces = useMemo(() => assets.filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join(""), [assets]);
   const selected = document.nodes.find((node) => node.id === selectedIds[0]) ?? null;
 
   const commitTransform = (transform: (current: CanvasDocumentV1) => CanvasDocumentV1) => {
+    editVersionRef.current += 1;
     setDocument((current) => {
       const next = normalizeDocument(transform(current));
       setHistory((items) => [...items.slice(-99), current]);
@@ -62,12 +71,14 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? ({ ...node, ...patch } as CanvasNode) : node) }));
   const moveSelected = (ids: string[], delta: { x: number; y: number }) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && !node.locked ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }));
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
-  const undo = () => { const previous = history.at(-1); if (!previous) return; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setDirty(true); setStatus("Cambios pendientes"); };
-  const redo = () => { const next = future.at(-1); if (!next) return; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setDirty(true); setStatus("Cambios pendientes"); };
+  const undo = () => { const previous = history.at(-1); if (!previous) return; editVersionRef.current += 1; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setDirty(true); setStatus("Cambios pendientes"); };
+  const redo = () => { const next = future.at(-1); if (!next) return; editVersionRef.current += 1; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setDirty(true); setStatus("Cambios pendientes"); };
 
   useEffect(() => {
-    if (!dirty || saving || conflict) return;
+    if (!dirty || saving || publishing || conflict) return;
     const timer = window.setTimeout(async () => {
+      if (publishingRef.current) return;
+      const savedEditVersion = editVersionRef.current;
       setSaving(true); setStatus("Guardando...");
       try {
         const response = await fetch("/api/editor/project", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
@@ -76,12 +87,14 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
           if (response.status === 409) setConflict(true);
           throw new Error(payload.error?.message ?? "No se pudo guardar");
         }
-        setRevision(payload.data.draftRevision); setDirty(false); setStatus("Guardado");
+        setRevision(payload.data.draftRevision);
+        if (editVersionRef.current === savedEditVersion) { setDirty(false); setStatus("Guardado"); }
+        else { setDirty(true); setStatus("Cambios pendientes"); }
       } catch (error) { setStatus(error instanceof Error ? error.message : "No se pudo guardar"); }
       finally { setSaving(false); }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [dirty, document, revision, saving, conflict]);
+  }, [dirty, document, revision, saving, publishing, conflict]);
 
   const reloadServerVersion = async () => {
     const response = await fetch("/api/editor/project");
@@ -124,19 +137,38 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     commit({ ...document, nodes: arrayMove(document.nodes, activeIndex, overIndex) });
   };
   const deleteSelected = () => { if (!selectedIds.length) return; commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); };
-  const addText = (point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "text", ...newNodeFrame(360, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Nuevo texto", fontAssetId: null, fontSize: 42, fontWeight: "600", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
+  const addText = (point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "text", ...newNodeFrame(360, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: "Nuevo texto", modalAssetId: null, fontAssetId: null, fontSize: 42, fontWeight: "600", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
   const addShape = (shape: "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star", point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "shape", shape, ...newNodeFrame(260, 160, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#3A4824", stroke: null, strokeWidth: 0, strokeSides: [...STROKE_SIDES], cornerRadii: allCornerRadii(18) });
   const addIcon = (iconKey: string, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "icon", iconKey, accessibleLabel: iconKey.replaceAll("-", " "), ...newNodeFrame(80, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fill: "#B8790A", strokeWidth: 2 });
   const addImage = (asset: MenuAssetView, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "image", assetId: asset.id, ...newNodeFrame(280, 180, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: asset.name });
   const handleCanvasDrop = (item: CanvasDropItem, point: { x: number; y: number }) => { if (item.kind === "text") addText(point); if (item.kind === "shape" && item.shape) addShape(item.shape, point); if (item.kind === "icon" && item.iconKey) addIcon(item.iconKey, point); if (item.kind === "image" && item.assetId) { const asset = assets.find((candidate) => candidate.id === item.assetId); if (asset) addImage(asset, point); } };
-  const uploadAsset = async (kind: "IMAGE" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
+  const uploadAsset = async (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
+  const openModalMediaPicker = () => { setMediaPickerMode("modal"); setImagesOpen(true); setIconsOpen(false); setTemplatesOpen(false); setLayersOpen(true); };
+  const selectMedia = (asset: MenuAssetView) => { if (mediaPickerMode === "modal" && selected?.type === "text") { patchNode(selected.id, { modalAssetId: asset.id }); setImagesOpen(false); return; } if (asset.kind === "IMAGE") addImage(asset); };
   const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`/api/editor/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
   const publish = async () => {
-    if (dirty || saving) return;
+    if (saving || publishingRef.current || conflict) return;
+    const publishedEditVersion = editVersionRef.current;
+    publishingRef.current = true;
+    setPublishing(true);
     setStatus("Publicando...");
-    const response = await fetch("/api/editor/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision }) });
-    const payload = await response.json();
-    if (response.ok && payload.success) { setPublishedRevision(payload.data.publishedRevision); setStatus("Publicado"); } else setStatus(payload.error?.message ?? "No se pudo publicar");
+    try {
+      const response = await fetch("/api/editor/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        if (response.status === 409) setConflict(true);
+        throw new Error(payload.error?.message ?? "No se pudo publicar");
+      }
+      setRevision(payload.data.draftRevision);
+      setPublishedRevision(payload.data.publishedRevision);
+      if (editVersionRef.current === publishedEditVersion) { setDirty(false); setStatus("Publicado"); }
+      else { setDirty(true); setStatus("Publicado; hay cambios pendientes"); }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "No se pudo publicar");
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
+    }
   };
   const applyTemplate = async (template: MenuTemplateView) => {
     if ((dirty || history.length > 0)) { setModal({ kind: "apply", template }); return; }
@@ -173,15 +205,17 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-4 shadow-sm backdrop-blur">
       <div className="flex min-w-0 items-center gap-3"><h1 className="sr-only">Resumen del menú</h1><p className="truncate text-sm font-semibold text-zinc-900">Editor de {restaurantName}</p><span className="hidden rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-500 sm:inline-flex">{status}</span></div>
-      <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-emerald-700" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40" onClick={publish} disabled={dirty || saving || conflict || publishedRevision === revision}>Publicar</button></div>
+      <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-emerald-700" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button><button className="rounded-lg border border-emerald-200 px-3 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" onClick={() => setPreviewOpen(true)}>Vista previa</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40" onClick={publish} disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}>Publicar</button></div>
     </header>
     <div className="flex min-h-0 flex-1">
-      <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
-      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <ImagePickerDrawer images={assets.filter((asset) => asset.kind === "IMAGE")} onClose={() => setImagesOpen(false)} onSelect={addImage} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
+      <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
+      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <MediaPickerDrawer images={assets.filter((asset) => asset.kind === "IMAGE" || asset.kind === "VIDEO")} onClose={() => setImagesOpen(false)} onSelect={selectMedia} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} showGrid={gridEnabled} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={(ids) => setSelectedIds(ids.filter((id) => !document.nodes.find((node) => node.id === id)?.locked))} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
+      <aside className="w-72 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
     </div>
     </div>
+    {previewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><div className="relative h-[min(90vh,720px)] w-[min(92vw,1100px)] overflow-hidden rounded-xl bg-zinc-100 shadow-2xl" role="dialog" aria-modal="true" aria-label="Vista previa del menú"><button type="button" className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-800 shadow" onClick={() => setPreviewOpen(false)}>Cerrar vista previa</button><CanvasStage document={document} assets={assetMap} onTextModalOpen={setPreviewAsset} /></div></div>}
+    <MediaModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
     {modal && <EditorModal state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { setModal(null); await confirmOverwrite(serverRevision); }} />}
   </>;
 }
@@ -197,7 +231,7 @@ function EditorModal({ state, name, description, onNameChange, onDescriptionChan
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title"><h2 id="editor-modal-title" className="text-base font-semibold text-zinc-900">{title}</h2>{isApply && <p className="mt-2 text-sm leading-6 text-zinc-600">“{state.template.name}” reemplazará el borrador actual. La publicación vigente no se modificará.</p>}{isDelete && <p className="mt-2 text-sm leading-6 text-zinc-600">Se eliminará “{state.template.name}”. Esta acción no se puede deshacer.</p>}{state.kind === "overwrite" && <p className="mt-2 text-sm leading-6 text-zinc-600">Esto reemplazará el borrador guardado con tu trabajo local.</p>}{isSave && <div className="mt-4 space-y-3"><label className="block text-xs font-medium">Nombre<input autoFocus className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm" value={name} onChange={(event) => onNameChange(event.target.value)} /></label><label className="block text-xs font-medium">Descripción<textarea className="mt-1 min-h-20 w-full resize-y rounded-md border border-zinc-200 px-3 py-2 text-sm" value={description} onChange={(event) => onDescriptionChange(event.target.value)} /></label></div>}<div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg border border-zinc-200 px-3 py-2 text-xs" onClick={onClose}>Cancelar</button>{isApply && <button type="button" className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onApply(state.template)}>Aplicar</button>}{isDelete && <button type="button" className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onDelete(state.template)}>Eliminar</button>}{isSave && <button type="button" disabled={!name.trim()} className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" onClick={() => void onSave(state.submitPublic, name, description)}>{state.submitPublic ? "Enviar" : "Guardar"}</button>}{state.kind === "overwrite" && <button type="button" className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onOverwrite(state.serverRevision)}>Sobrescribir</button>}</div></div></div>;
 }
 
-function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void; onRename: (name: string) => void; onOpacityChange: (opacity: number) => void }) {
+function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onOpenModalMedia: () => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void; onRename: (name: string) => void; onOpacityChange: (opacity: number) => void }) {
   if (!node) {
     return <div className="space-y-5">
       <InspectorSection title="Lienzo">
@@ -242,6 +276,7 @@ function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, 
 
   const typeLabel = node.type === "text" ? "Texto" : node.type === "image" ? "Imagen" : node.type === "shape" ? ({ rect: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", triangle: "Triángulo", star: "Estrella" }[node.shape]) : "Icono";
   const fieldDisabled = node.locked;
+  const modalAsset = node.type === "text" && node.modalAssetId ? assets.find((asset) => asset.id === node.modalAssetId) : undefined;
   return <div className="space-y-5">
     <div className="border-b border-zinc-200 pb-4">
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Propiedades</p>
@@ -284,6 +319,12 @@ function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, 
       <label className="mt-3 block text-xs font-medium">Fuente<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontAssetId ? `asset:${node.fontAssetId}` : `system:${node.fontFamily ?? "Arial"}`} onChange={(event) => { const value = event.target.value; onChange(value.startsWith("asset:") ? { fontAssetId: value.slice(6), fontFamily: undefined } : { fontAssetId: null, fontFamily: value.slice(7) as typeof SYSTEM_FONT_FAMILIES[number] }); }}><optgroup label="Fuentes del sistema">{SYSTEM_FONT_FAMILIES.map((family) => <option key={family} value={`system:${family}`} style={{ fontFamily: family }}>{family}</option>)}</optgroup><optgroup label="Fuentes subidas">{assets.filter((asset) => asset.kind === "FONT").map((asset) => <option key={asset.id} value={`asset:${asset.id}`}>{asset.name}</option>)}</optgroup></select></label>
       <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Alineación<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.align} onChange={(event) => onChange({ align: event.target.value as typeof node.align })}><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label className="text-xs font-medium">Estilo<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontStyle} onChange={(event) => onChange({ fontStyle: event.target.value as typeof node.fontStyle })}><option value="normal">Normal</option><option value="italic">Cursiva</option></select></label></div>
       <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Rol semántico<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.semanticRole} onChange={(event) => onChange({ semanticRole: event.target.value as typeof node.semanticRole })}><option value="none">Ninguno</option><option value="heading">Encabezado</option><option value="paragraph">Párrafo</option><option value="label">Etiqueta</option><option value="price">Precio</option></select></label><label className="text-xs font-medium">Color<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label></div>
+    </InspectorSection>}
+
+    {node.type === "text" && <InspectorSection title="Al hacer clic">
+      <p className="text-xs leading-5 text-zinc-500">Abrí una imagen o video en un modal desde el menú público.</p>
+      <div className={`mt-2 rounded-md px-2.5 py-2 ${modalAsset ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`} aria-live="polite"><p className="truncate text-xs font-semibold">{modalAsset?.name ?? "Sin multimedia asociada"}</p><p className="mt-0.5 text-[10px] opacity-75">{modalAsset ? modalAsset.kind === "VIDEO" ? "Video" : "Imagen" : "Elegí un archivo para habilitar el clic."}</p></div>
+      <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={fieldDisabled} className="rounded-md border border-emerald-200 px-2 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-40" onClick={onOpenModalMedia}>{node.modalAssetId ? "Cambiar multimedia" : "Elegir multimedia"}</button><button type="button" disabled={fieldDisabled || !node.modalAssetId} className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-40" onClick={() => onChange({ modalAssetId: null })}>Quitar</button></div>
     </InspectorSection>}
 
     {node.type === "shape" && <InspectorSection title="Estilo de la figura">

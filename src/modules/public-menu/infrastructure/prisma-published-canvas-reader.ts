@@ -16,9 +16,10 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   for (const node of document.nodes) {
     if (node.type === "image") ids.add(node.assetId);
     if (node.type === "text" && node.fontAssetId) ids.add(node.fontAssetId);
+    if (node.type === "text" && node.modalAssetId) ids.add(node.modalAssetId);
   }
   const assets = ids.size
-    ? await prisma.menuAsset.findMany({ where: { tenantId: tenant.id, id: { in: [...ids] }, references: { some: { tenantId: tenant.id, scope: "PUBLISHED" } } } })
+    ? await prisma.menuAsset.findMany({ where: { tenantId: tenant.id, id: { in: [...ids] } } })
     : [];
   const assetMap: PublicCanvasMenuView["assets"] = {};
   for (const asset of assets) {
@@ -28,6 +29,8 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
       name: asset.name,
       mimeType: asset.mimeType,
       url: `/api/public/menus/${encodeURIComponent(tenant.slug)}/assets/${encodeURIComponent(asset.id)}/file`,
+      width: asset.width,
+      height: asset.height,
       fontFamily: asset.fontFamily ?? (asset.kind === "FONT" ? `"editor-font-${asset.id}"` : null),
     };
   }

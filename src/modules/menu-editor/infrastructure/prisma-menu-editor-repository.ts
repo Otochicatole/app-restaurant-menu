@@ -36,21 +36,27 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
     return toProjectView(project);
   }
 
-  async publish(tenantId: string, baseRevision: number): Promise<MenuProjectView> {
+  async publish(tenantId: string, baseRevision: number, document: CanvasDocumentV1): Promise<MenuProjectView> {
     const project = await prisma.$transaction(async (transaction) => {
       const current = await transaction.menuProject.findUnique({ where: { tenantId } });
       if (!current) throw new NotFoundError("Menu project");
       if (current.draftRevision !== baseRevision) throw new ConflictError("Guardá el borrador más reciente antes de publicar.");
-      const document = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(current.draftJson)));
+      const draftJson = JSON.stringify(document);
+      const draftChanged = current.draftJson !== draftJson;
+      const nextRevision = current.draftRevision + (draftChanged ? 1 : 0);
+      await replaceReferences(transaction, tenantId, current.id, document, "DRAFT");
       await replaceReferences(transaction, tenantId, current.id, document, "PUBLISHED");
-      return transaction.menuProject.update({
-        where: { tenantId },
+      const updated = await transaction.menuProject.updateMany({
+        where: { tenantId, draftRevision: baseRevision },
         data: {
-          publishedJson: JSON.stringify(document),
-          publishedRevision: current.draftRevision,
+          ...(draftChanged ? { draftJson, draftRevision: { increment: 1 }, schemaVersion: document.schemaVersion } : {}),
+          publishedJson: draftJson,
+          publishedRevision: nextRevision,
           publishedAt: new Date(),
         },
       });
+      if (updated.count !== 1) throw new ConflictError("El documento cambió en otra pestaña.");
+      return transaction.menuProject.findUniqueOrThrow({ where: { tenantId } });
     });
     return toProjectView(project);
   }
@@ -88,11 +94,16 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
   }
 
   async getAsset(tenantId: string, assetId: string, scope: "private" | "published") {
+    if (scope === "published") {
+      const project = await prisma.menuProject.findUnique({ where: { tenantId }, select: { publishedJson: true } });
+      if (!project?.publishedJson) return null;
+      const publishedDocument = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(project.publishedJson)));
+      if (!documentAssetIds(publishedDocument).has(assetId)) return null;
+    }
     const asset = await prisma.menuAsset.findFirst({
       where: {
         id: assetId,
         tenantId,
-        ...(scope === "published" ? { references: { some: { tenantId, scope: "PUBLISHED" } } } : {}),
       },
     });
     return asset ? { storageKey: asset.storageKey, mimeType: asset.mimeType, name: asset.name } : null;

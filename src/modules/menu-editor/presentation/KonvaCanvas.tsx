@@ -19,7 +19,7 @@ type DragSession = {
 
 export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect, onSelectMany, onDropItem, onChange, onChangeMany, viewport, onViewportChange }: {
   document: CanvasDocumentV1;
-  assets: Record<string, { url: string; kind: "IMAGE" | "FONT"; fontFamily: string | null }>;
+  assets: Record<string, { url: string; kind: "IMAGE" | "VIDEO" | "FONT"; fontFamily: string | null }>;
   selectedIds: string[];
   showGrid: boolean;
   onSelect: (id: string | null, additive: boolean) => void;

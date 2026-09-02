@@ -26,10 +26,10 @@ describe("menu editor use cases", () => {
     const document = createTemplateDocument("Café");
     await service.getProject("tenant", document);
     await service.saveDraft("tenant", { baseRevision: 0, document });
-    await service.publish("tenant", { baseRevision: 1 });
+    await service.publish("tenant", { baseRevision: 1, document });
     expect(repo.ensureProject).toHaveBeenCalled();
     expect(repo.saveDraft).toHaveBeenCalledWith("tenant", 0, document);
-    expect(repo.publish).toHaveBeenCalledWith("tenant", 1);
+    expect(repo.publish).toHaveBeenCalledWith("tenant", 1, document);
   });
 
   it("checks asset kind and exposes profile/assets operations", async () => {

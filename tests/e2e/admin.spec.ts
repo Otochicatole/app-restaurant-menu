@@ -28,6 +28,47 @@ test("tenant admin can open the icon library and image library", async ({ page }
   await expect(page.getByText("Café E2E").last()).toBeVisible();
 });
 
+test("tenant admin can associate media, publish it immediately, and open it publicly", async ({ page, context }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Texto", exact: true }).click();
+  await expect(page.getByText("Al hacer clic")).toBeVisible();
+  await page.getByRole("button", { name: "Elegir multimedia" }).click();
+  await page.locator("#editor-images").getByRole("button", { name: /Café E2E/ }).click();
+  await expect(page.getByRole("button", { name: "Quitar" })).toBeEnabled();
+  await expect(page.getByText("Cambios pendientes")).toBeVisible();
+
+  const publish = page.getByRole("button", { name: "Publicar" });
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await expect(page.getByText("Publicado", { exact: true })).toBeVisible();
+
+  const publicPage = await context.newPage();
+  await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
+  await publicPage.getByRole("button", { name: "Ver contenido en texto" }).click();
+  await publicPage.getByRole("button", { name: "Nuevo texto", exact: true }).last().click();
+  await expect(publicPage.getByRole("dialog", { name: "Café E2E" })).toBeVisible();
+  await publicPage.getByRole("button", { name: "Cerrar multimedia" }).click();
+  await publicPage.close();
+
+  await page.reload();
+  await page.getByText("Nuevo texto", { exact: true }).first().click();
+  await expect(page.getByRole("button", { name: "Cambiar multimedia" })).toBeVisible();
+  await page.getByRole("button", { name: "Vista previa" }).click();
+  const preview = page.getByRole("dialog", { name: "Vista previa del menú" });
+  await expect(preview).toBeVisible();
+  const previewCanvas = preview.locator("canvas").first();
+  const canvasBox = await previewCanvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  if (canvasBox) {
+    const scale = (canvasBox.width - 20) / 1240;
+    await previewCanvas.click({ position: { x: 10 + 370 * scale, y: 10 + 585 * scale } });
+  }
+  await expectLoadedCenteredImage(page, "Café E2E");
+  await page.getByRole("button", { name: "Cerrar multimedia" }).click();
+  await page.getByRole("button", { name: "Cerrar vista previa" }).click();
+  await expect(page.getByRole("dialog", { name: "Vista previa del menú" })).toHaveCount(0);
+});
+
 test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
   await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
@@ -72,3 +113,19 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await expect(bottomRight).toHaveValue("18");
   await expect(bottomLeft).toHaveValue("18");
 });
+
+async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {
+  const dialog = page.getByRole("dialog", { name });
+  const image = dialog.getByRole("img", { name });
+  await expect(dialog).toBeVisible();
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+
+  const viewport = page.viewportSize();
+  const box = await dialog.boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(box).not.toBeNull();
+  if (!viewport || !box) return;
+  expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+  expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+}

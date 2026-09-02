@@ -3,6 +3,8 @@ import { getPublicCanvasMenu, getPublicMenuMetadata, getPublicMenuStatusCached }
 import { PublicCanvasScreen } from "@/modules/public-menu/ui";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const metadata = await getPublicMenuMetadata((await params).slug);
   return metadata ?? { title: "Carta no encontrada", description: "La carta solicitada no existe." };

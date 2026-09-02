@@ -86,6 +86,7 @@ model AssetCleanupJob {
 
 enum MenuAssetKind {
   IMAGE
+  VIDEO
   FONT
 }
 

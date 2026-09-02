@@ -1,0 +1,2 @@
+-- MenuAsset.kind is stored as TEXT in SQLite. VIDEO is accepted by the
+-- application contract and requires no table rewrite.

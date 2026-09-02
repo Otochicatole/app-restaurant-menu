@@ -7,6 +7,10 @@ test("public menu renders the published Canvas and accessible text", async ({ pa
   await expect(page.getByText("Café E2E").first()).toBeAttached();
   await page.getByRole("button", { name: "Ver contenido en texto" }).click();
   await expect(page.getByText("Café E2E").last()).toBeVisible();
+  await page.getByRole("button", { name: "Café E2E" }).last().click();
+  await expect(page.getByRole("dialog", { name: "Café E2E" })).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar multimedia" }).click();
+  await expect(page.getByRole("dialog", { name: "Café E2E" })).toHaveCount(0);
 });
 
 test("forced-password account cannot enter the editor before changing its password", async ({ page }) => {

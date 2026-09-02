@@ -54,6 +54,7 @@ export function documentAssetIds(document: CanvasDocumentV1): Set<string> {
   for (const node of document.nodes) {
     if (node.type === "image") ids.add(node.assetId);
     if (node.type === "text" && node.fontAssetId) ids.add(node.fontAssetId);
+    if (node.type === "text" && node.modalAssetId) ids.add(node.modalAssetId);
   }
   return ids;
 }
@@ -64,4 +65,8 @@ export function documentImageAssetIds(document: CanvasDocumentV1): Set<string> {
 
 export function documentFontAssetIds(document: CanvasDocumentV1): Set<string> {
   return new Set(document.nodes.flatMap((node) => node.type === "text" && node.fontAssetId ? [node.fontAssetId] : []));
+}
+
+export function documentModalAssetIds(document: CanvasDocumentV1): Set<string> {
+  return new Set(document.nodes.flatMap((node) => node.type === "text" && node.modalAssetId ? [node.modalAssetId] : []));
 }

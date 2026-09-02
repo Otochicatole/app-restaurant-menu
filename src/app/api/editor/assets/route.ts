@@ -9,13 +9,14 @@ import { errorResponse, handleApiError, successResponse } from "@/platform/http/
 import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const VIDEO_TYPES = new Set(["video/mp4", "video/webm"]);
 const FONT_TYPES = new Set(["font/woff", "font/woff2", "font/ttf", "font/otf", "application/font-woff", "application/font-woff2", "application/x-font-ttf", "application/vnd.ms-opentype"]);
 
 export async function GET(request: NextRequest) {
   try {
     const actor = await requireTenantAdmin();
     const kind = new URL(request.url).searchParams.get("kind");
-    if (kind && kind !== "IMAGE" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
+    if (kind && kind !== "IMAGE" && kind !== "VIDEO" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
     return successResponse(await menuEditor.listAssets(actor.tenantId, kind as MenuAssetKind | undefined));
   } catch (error) {
     return handleApiError(error);
@@ -28,15 +29,15 @@ export async function POST(request: NextRequest) {
     const actor = await requireTenantAdmin();
     const form = await request.formData();
     const kind = form.get("kind");
-    if (kind !== "IMAGE" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
+    if (kind !== "IMAGE" && kind !== "VIDEO" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
     const file = form.get("file");
     if (!(file instanceof File)) return errorResponse("VALIDATION_ERROR", "Archivo no proporcionado", 422);
     const content = new Uint8Array(await file.arrayBuffer());
-    const types = kind === "IMAGE" ? IMAGE_TYPES : FONT_TYPES;
+    const types = kind === "IMAGE" ? IMAGE_TYPES : kind === "VIDEO" ? VIDEO_TYPES : FONT_TYPES;
     const extension = extensionFor(file.type, file.name);
     const extensionAllowedFont = kind === "FONT" && ["woff", "woff2", "ttf", "otf"].includes(extension) && (!file.type || file.type === "application/octet-stream");
     if (!types.has(file.type) && !extensionAllowedFont) throw new BadRequestError("Formato de archivo no soportado.");
-    const max = kind === "IMAGE" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    const max = kind === "IMAGE" ? 5 * 1024 * 1024 : kind === "VIDEO" ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size <= 0 || file.size > max) throw new BadRequestError("El archivo excede el tamaño máximo permitido.");
     const dimensions = kind === "IMAGE" ? imageDimensions(content, file.type) : null;
     if (kind === "IMAGE" && (!dimensions || dimensions.width > 8192 || dimensions.height > 8192)) throw new BadRequestError("La imagen no es válida o supera 8192×8192 píxeles.");
@@ -86,6 +87,6 @@ function imageDimensions(bytes: Uint8Array, mimeType: string): { width: number; 
 }
 
 function extensionFor(type: string, name: string): string {
-  const known: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "font/woff": "woff", "font/woff2": "woff2", "font/ttf": "ttf", "font/otf": "otf" };
+  const known: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm", "font/woff": "woff", "font/woff2": "woff2", "font/ttf": "ttf", "font/otf": "otf" };
   return known[type] ?? (name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin");
 }
