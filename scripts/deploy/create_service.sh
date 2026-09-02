@@ -14,21 +14,13 @@ require_commands findmnt flock sqlite3 systemctl
 ensure_deploy_layout
 acquire_deploy_lock
 assert_local_database_filesystem
+prepare_shared_environment
 
 if [[ -z "$BUN_PATH" ]]; then
   echo "ERROR: bun no encontrado en PATH." >&2
   exit 1
 fi
 
-if [[ ! -f "$SHARED_ENV" ]]; then
-  if [[ -f "$DEPLOY_PROJECT_ROOT/.env" ]]; then
-    echo "Inicializando configuracion compartida desde el checkout..."
-    install -m 600 -- "$DEPLOY_PROJECT_ROOT/.env" "$SHARED_ENV"
-  else
-    echo "ERROR: falta $SHARED_ENV. Copia y ajusta .env.example antes de crear el servicio." >&2
-    exit 1
-  fi
-fi
 chmod 600 -- "$SHARED_ENV"
 validate_shared_environment
 

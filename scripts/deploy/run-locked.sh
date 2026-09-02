@@ -14,6 +14,7 @@ validate_deploy_root
 require_commands flock
 ensure_deploy_layout
 acquire_deploy_lock
+prepare_shared_environment
 validate_shared_environment
 
 if [[ ! -L "$CURRENT_LINK" ]]; then
