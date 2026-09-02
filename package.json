@@ -8,7 +8,7 @@
     "build": "prisma generate && next build",
     "clean:e2e": "bun -e \"import { rm } from 'node:fs/promises'; await rm('.next-e2e', { recursive: true, force: true })\"",
     "build:e2e": "bun run clean:e2e && cross-env NEXT_DIST_DIR=.next-e2e prisma generate && cross-env NEXT_DIST_DIR=.next-e2e next build",
-    "start": "next start --hostname 127.0.0.1 --port 8201",
+    "start": "next start --hostname 0.0.0.0 --port 8201",
     "start:e2e": "cross-env NEXT_DIST_DIR=.next-e2e next start --hostname 127.0.0.1 --port 3100",
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
