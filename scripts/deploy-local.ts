@@ -18,6 +18,9 @@ process.env.DATABASE_URL = databaseUrl;
 process.env.STORAGE_ROOT = storageRoot;
 
 await mkdir(storageRoot, { recursive: true });
+const databasePath = databaseUrl.slice("file:".length);
+const absoluteDatabasePath = path.isAbsolute(databasePath) ? databasePath : path.resolve(projectRoot, databasePath);
+await mkdir(path.dirname(absoluteDatabasePath), { recursive: true });
 await run("x", "prisma", "migrate", "deploy");
 await run("x", "prisma", "generate");
 await run("run", "build");

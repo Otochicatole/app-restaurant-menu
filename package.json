@@ -19,6 +19,8 @@
     "db:cutover": "bun run scripts/db-cutover.ts",
     "deploy:local": "bun run scripts/deploy-local.ts",
     "deploy:local:start": "bun run scripts/deploy-local.ts --serve",
+    "deploy:manual": "bun run scripts/deploy-local.ts",
+    "deploy:manual:start": "bun run scripts/deploy-local.ts --serve",
     "storage:cleanup": "bun run scripts/drain-asset-cleanup.ts",
     "test": "bun x vitest run",
     "test:unit": "bun x vitest run src",
