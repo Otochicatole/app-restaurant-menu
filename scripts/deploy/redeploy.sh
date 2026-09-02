@@ -85,21 +85,13 @@ require_commands bun curl findmnt flock git readlink sed sha256sum sqlite3 syste
 ensure_deploy_layout
 acquire_deploy_lock
 assert_local_database_filesystem
+prepare_shared_environment
 
 if ! git -C "$DEPLOY_PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "ERROR: $DEPLOY_PROJECT_ROOT no es un repositorio Git." >&2
   exit 1
 fi
 
-if [[ ! -f "$SHARED_ENV" ]]; then
-  if [[ -f "$DEPLOY_PROJECT_ROOT/.env" ]]; then
-    echo "Inicializando configuracion compartida desde el checkout..."
-    install -m 600 -- "$DEPLOY_PROJECT_ROOT/.env" "$SHARED_ENV"
-  else
-    echo "ERROR: falta $SHARED_ENV. Crealo antes de desplegar." >&2
-    exit 1
-  fi
-fi
 validate_shared_environment
 
 echo "Actualizando referencias remotas sin modificar el checkout..."

@@ -27,6 +27,8 @@ bun run db:seed
 bun run dev
 ```
 
+En Windows o en un host sin systemd podés preparar el despliegue local con `bun run deploy:local` (SQLite en `storage/app.db`, migraciones, Prisma Client y build) y levantarlo con `bun run deploy:local:start` en el puerto 8201. Los scripts de `scripts/deploy/` quedan reservados para el despliegue Linux con systemd y SQLite persistente compartido.
+
 `bun run db:seed` es idempotente: crea/actualiza el superadmin definido por `SUPER_ADMIN_EMAIL` y prepara un restaurante Canvas de desarrollo (`Fuzion`, slug `fuzion`) con `admin@fuzion.local` y contraseña `FuzionAdmin2026!`. Podés personalizarlo con `SEED_RESTAURANT_NAME`, `SEED_RESTAURANT_SLUG`, `SEED_RESTAURANT_ADMIN_EMAIL` y `SEED_RESTAURANT_ADMIN_PASSWORD`. También siembra los presets globales Minimalista vertical, Cafetería y Gourmet.
 
 Para una base existente, ejecutá `bun run db:cutover`. Crea un backup, convierte los datos legacy a documentos Canvas, publica la primera versión de cada restaurante, aplica la migración destructiva y regenera Prisma Client.
@@ -46,7 +48,7 @@ Los reemplazos y borrados encolan la limpieza física después del commit de bas
 
 ## Despliegue
 
-Los scripts de `scripts/deploy` construyen releases inmutables por commit bajo `APP_RELEASE_ROOT` (por defecto, la ruta absoluta `.deploy` dentro del proyecto), serializan deploys, migraciones, backups y comandos operativos con `flock`, y activan el release mediante el symlink atómico `current`. En producción se recomienda `APP_RELEASE_ROOT=/opt/app-res`.
+Los scripts de `scripts/deploy` construyen releases inmutables por commit bajo `APP_RELEASE_ROOT` (por defecto, la ruta absoluta `.deploy` dentro del proyecto), serializan deploys, migraciones, backups y comandos operativos con `flock`, y activan el release mediante el symlink atómico `current`. Antes de validar, sincronizan `DATABASE_URL` y `STORAGE_ROOT` en `.deploy/shared/.env` con las rutas persistentes canónicas del release, conservando el resto de la configuración. En producción se recomienda `APP_RELEASE_ROOT=/opt/app-res`.
 
 La configuración, `shared/database/app.db`, sus archivos WAL/SHM, los backups y `shared/storage` viven fuera de cada release. Todo debe estar en un disco local persistente: SQLite no se admite sobre NFS, CIFS, volúmenes de red ni despliegues con más de una instancia/host escritor. El directorio de la base debe ser escribible para que SQLite pueda crear `-wal` y `-shm`.
 

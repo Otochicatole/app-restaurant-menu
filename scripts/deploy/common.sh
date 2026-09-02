@@ -74,6 +74,47 @@ read_dotenv_value() {
   printf '%s' "$value"
 }
 
+prepare_shared_environment() {
+  local temporary
+
+  if [[ ! -f "$SHARED_ENV" ]]; then
+    if [[ -f "$DEPLOY_PROJECT_ROOT/.env" ]]; then
+      echo "Inicializando configuracion compartida desde el checkout..."
+      install -m 600 -- "$DEPLOY_PROJECT_ROOT/.env" "$SHARED_ENV"
+    else
+      echo "ERROR: falta la configuracion compartida $SHARED_ENV." >&2
+      echo "       Crea $DEPLOY_PROJECT_ROOT/.env antes de desplegar." >&2
+      return 1
+    fi
+  fi
+
+  # Keep credentials and application settings untouched, but always derive the
+  # two persistence paths from APP_RELEASE_ROOT. This prevents an old copied
+  # .env (for example one pointing at storage/app.db or PostgreSQL) from
+  # blocking deploys or, worse, making a release use a different database.
+  temporary="$(mktemp "$SHARED_DIR/.env.XXXXXX")"
+  awk -v database_url="$EXPECTED_DATABASE_URL" -v storage_root="$STORAGE_DIR" '
+    BEGIN { database_seen = 0; storage_seen = 0 }
+    /^[[:space:]]*DATABASE_URL[[:space:]]*=/ {
+      print "DATABASE_URL=" database_url
+      database_seen = 1
+      next
+    }
+    /^[[:space:]]*STORAGE_ROOT[[:space:]]*=/ {
+      print "STORAGE_ROOT=" storage_root
+      storage_seen = 1
+      next
+    }
+    { print }
+    END {
+      if (!database_seen) print "DATABASE_URL=" database_url
+      if (!storage_seen) print "STORAGE_ROOT=" storage_root
+    }
+  ' "$SHARED_ENV" > "$temporary"
+  chmod 600 -- "$temporary"
+  mv -f -- "$temporary" "$SHARED_ENV"
+}
+
 validate_shared_environment() {
   local configured_database configured_storage
 

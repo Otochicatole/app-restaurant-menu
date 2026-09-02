@@ -11,6 +11,7 @@ validate_deploy_root
 require_commands flock systemctl
 ensure_deploy_layout
 acquire_deploy_lock
+prepare_shared_environment
 validate_shared_environment
 resolve_release "$CURRENT_LINK" >/dev/null
 

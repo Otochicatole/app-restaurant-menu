@@ -68,6 +68,7 @@ require_commands bun curl findmnt flock readlink sed sha256sum sqlite3 systemctl
 ensure_deploy_layout
 acquire_deploy_lock
 assert_local_database_filesystem
+prepare_shared_environment
 validate_shared_environment
 release="$(resolve_release "$requested_release")"
 
