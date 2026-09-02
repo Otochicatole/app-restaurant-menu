@@ -16,12 +16,22 @@ describe("rectangle border sides", () => {
     ]);
   });
 
-  it("adds rounded corner points only where neighboring sides meet", () => {
+  it("adds rounded corner points for every active side", () => {
     const segments = rectangleBorderSegments(100, 60, 10, ["top", "right"]);
     expect(segments).toHaveLength(1);
-    expect(segments[0].slice(0, 2)).toEqual([10, 0]);
-    expect(segments[0].slice(-2)[0]).toBe(100);
-    expect(segments[0].slice(-2)[1]).toBe(50);
+    expect(segments[0].slice(0, 2)[0]).toBeCloseTo(0);
+    expect(segments[0].slice(0, 2)[1]).toBeCloseTo(10);
+    expect(segments[0].slice(-2)[0]).toBeCloseTo(90);
+    expect(segments[0].slice(-2)[1]).toBeCloseTo(60);
+  });
+
+  it("keeps the rounded halves for a side whose neighbors are inactive", () => {
+    const segments = rectangleBorderSegments(100, 60, 10, ["right"]);
+    expect(segments).toHaveLength(1);
+    expect(segments[0].slice(0, 2)[0]).toBeCloseTo(90);
+    expect(segments[0].slice(0, 2)[1]).toBeCloseTo(0);
+    expect(segments[0].slice(-2)[0]).toBeCloseTo(90);
+    expect(segments[0].slice(-2)[1]).toBeCloseTo(60);
   });
 
   it("keeps connected partial borders in one continuous run", () => {

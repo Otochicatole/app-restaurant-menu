@@ -12,23 +12,25 @@ export function toggleStrokeSide(sides: readonly StrokeSide[], side: StrokeSide)
 }
 
 /**
- * Returns continuous perimeter runs, matching a div with border-radius and
- * selected border-* sides. Each rounded corner belongs to only one run.
+ * Returns continuous perimeter runs for selected border-* sides. Every active
+ * side includes its adjacent rounded corner halves, even when the neighboring
+ * side is inactive; shared corners are still emitted only once.
  */
 export function rectangleBorderSegments(width: number, height: number, radius: number, sides: readonly StrokeSide[]): number[][] {
   const active = new Set(sides);
   const safeWidth = Math.max(0, width);
   const safeHeight = Math.max(0, height);
   const safeRadius = Math.min(Math.max(0, radius), safeWidth / 2, safeHeight / 2);
+  const hasRadius = safeRadius > 0;
   const pieces: { active: boolean; points: Point[] }[] = [
     { active: active.has("top"), points: [{ x: safeRadius, y: 0 }, { x: safeWidth - safeRadius, y: 0 }] },
-    { active: active.has("top") && active.has("right"), points: arcPoints(safeWidth - safeRadius, safeRadius, safeRadius, -Math.PI / 2, 0) },
+    { active: hasRadius && (active.has("top") || active.has("right")), points: arcPoints(safeWidth - safeRadius, safeRadius, safeRadius, -Math.PI / 2, 0) },
     { active: active.has("right"), points: [{ x: safeWidth, y: safeRadius }, { x: safeWidth, y: safeHeight - safeRadius }] },
-    { active: active.has("right") && active.has("bottom"), points: arcPoints(safeWidth - safeRadius, safeHeight - safeRadius, safeRadius, 0, Math.PI / 2) },
+    { active: hasRadius && (active.has("right") || active.has("bottom")), points: arcPoints(safeWidth - safeRadius, safeHeight - safeRadius, safeRadius, 0, Math.PI / 2) },
     { active: active.has("bottom"), points: [{ x: safeWidth - safeRadius, y: safeHeight }, { x: safeRadius, y: safeHeight }] },
-    { active: active.has("bottom") && active.has("left"), points: arcPoints(safeRadius, safeHeight - safeRadius, safeRadius, Math.PI / 2, Math.PI) },
+    { active: hasRadius && (active.has("bottom") || active.has("left")), points: arcPoints(safeRadius, safeHeight - safeRadius, safeRadius, Math.PI / 2, Math.PI) },
     { active: active.has("left"), points: [{ x: 0, y: safeHeight - safeRadius }, { x: 0, y: safeRadius }] },
-    { active: active.has("left") && active.has("top"), points: arcPoints(safeRadius, safeRadius, safeRadius, Math.PI, Math.PI * 1.5) },
+    { active: hasRadius && (active.has("left") || active.has("top")), points: arcPoints(safeRadius, safeRadius, safeRadius, Math.PI, Math.PI * 1.5) },
   ];
   if (!pieces.some((piece) => piece.active)) return [];
   if (pieces.every((piece) => piece.active)) return [flatten(pieces.flatMap((piece) => piece.points))];
