@@ -17,6 +17,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
     if (node.type === "image") ids.add(node.assetId);
     if (node.type === "text" && node.fontAssetId) ids.add(node.fontAssetId);
     if (node.type === "text" && node.modalAssetId) ids.add(node.modalAssetId);
+    if (node.type === "shape" && node.shape === "rect" && node.backgroundImage) ids.add(node.backgroundImage.assetId);
   }
   const assets = ids.size
     ? await prisma.menuAsset.findMany({ where: { tenantId: tenant.id, id: { in: [...ids] } } })

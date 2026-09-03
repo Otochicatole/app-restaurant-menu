@@ -5,8 +5,8 @@ import { documentAssetIds, validateCanvasDocument } from "./document-policy";
 describe("menu editor document policy", () => {
   it("accepts the template and extracts image/font/modal assets", () => {
     const template = createTemplateDocument("Café");
-    const document = validateCanvasDocument({ ...template, nodes: [...template.nodes, { ...template.nodes[0], id: "image", type: "image", assetId: "asset-image", alt: "Plato", fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 0 }, { ...template.nodes[0], id: "fonted", fontAssetId: "asset-font", modalAssetId: "asset-video" }] });
-    expect(documentAssetIds(document)).toEqual(new Set(["asset-image", "asset-font", "asset-video"]));
+    const document = validateCanvasDocument({ ...template, nodes: [...template.nodes, { ...template.nodes[0], id: "image", type: "image", assetId: "asset-image", alt: "Plato", fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 0 }, { ...template.nodes[0], id: "fonted", fontAssetId: "asset-font", modalAssetId: "asset-video" }, { ...template.nodes.find((node) => node.type === "shape")!, id: "background-shape", shape: "rect", backgroundImage: { assetId: "asset-background", fit: "cover", positionX: 0.5, positionY: 0.5, opacity: 1 } }] });
+    expect(documentAssetIds(document)).toEqual(new Set(["asset-image", "asset-font", "asset-video", "asset-background"]));
     const modalText = document.nodes.find((node) => node.id === "fonted");
     expect(modalText?.type === "text" ? modalText.modalAssetId : undefined).toBe("asset-video");
   });
@@ -70,5 +70,10 @@ describe("menu editor document policy", () => {
     const valid = validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "Georgia" } : node) });
     expect(valid.nodes.find((node) => node.type === "text")?.fontFamily).toBe("Georgia");
     expect(() => validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "text" ? { ...node, fontFamily: "url(javascript:alert(1))" } : node) })).toThrow();
+  });
+
+  it("rejects advanced rectangle backgrounds on other figures", () => {
+    const template = createTemplateDocument("Café");
+    expect(() => validateCanvasDocument({ ...template, nodes: template.nodes.map((node) => node.type === "shape" ? { ...node, shape: "ellipse", fillGradient: { angle: 90, stops: [{ color: "#000000", offset: 0 }, { color: "#ffffff", offset: 1 }] } } : node) })).toThrow("solo están disponibles para rectángulos");
   });
 });

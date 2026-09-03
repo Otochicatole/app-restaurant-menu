@@ -92,6 +92,20 @@ export function drawRectanglePath(context: RectanglePathContext, commands: reado
   }
 }
 
+/** Converts the shared canvas geometry to a native Konva/SVG path. */
+export function rectanglePathToSvg(commands: readonly RectanglePathCommand[]): string {
+  return commands.map((command) => {
+    if (command.type === "moveTo") return `M ${command.x} ${command.y}`;
+    if (command.type === "lineTo") return `L ${command.x} ${command.y}`;
+    if (command.type === "closePath") return "Z";
+    const endX = command.centerX + Math.cos(command.endAngle) * command.radius;
+    const endY = command.centerY + Math.sin(command.endAngle) * command.radius;
+    const sweep = command.endAngle >= command.startAngle ? 1 : 0;
+    const largeArc = Math.abs(command.endAngle - command.startAngle) > Math.PI ? 1 : 0;
+    return `A ${command.radius} ${command.radius} 0 ${largeArc} ${sweep} ${endX} ${endY}`;
+  }).join(" ");
+}
+
 function roundedRectanglePath(width: number, height: number, radii: CornerRadii): RectanglePathCommand[] {
   return [
     { type: "moveTo", x: radii.topLeft, y: 0 },

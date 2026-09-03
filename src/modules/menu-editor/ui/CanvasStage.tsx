@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Shape, Star, Stage, Text } from "react-konva";
+import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, zoomViewportAt } from "../domain/canvas-geometry";
-import { drawRectanglePath, rectangleBorderGeometryForNode } from "../domain/rectangle-border";
+import { RectangleVisual } from "./RectangleVisual";
 import { LucideKonvaIcon } from "./LucideKonvaIcon";
 import type { MediaModalAsset } from "@/ui/MediaModal";
 
@@ -48,12 +48,7 @@ function CanvasStageNode({ node, assets, onTextModalOpen }: { node: CanvasNode; 
   if (node.shape === "arrow") return <Arrow {...common} points={[0, node.height / 2, node.width, node.height / 2]} stroke={node.stroke ?? node.fill ?? undefined} fill={node.fill ?? undefined} strokeWidth={Math.max(1, node.strokeWidth || 3)} pointerLength={12} pointerWidth={12} />;
   if (node.shape === "triangle") return <RegularPolygon {...common} sides={3} radius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
   if (node.shape === "star") return <Star {...common} numPoints={5} innerRadius={Math.min(node.width, node.height) / 4} outerRadius={Math.min(node.width, node.height) / 2} fill={node.fill ?? undefined} stroke={node.stroke ?? undefined} strokeWidth={node.strokeWidth} />;
-  const geometry = rectangleBorderGeometryForNode(node);
-  return <ShapeNode {...common} geometry={geometry} fill={node.fill ?? "transparent"} stroke={node.stroke && node.strokeWidth > 0 && node.strokeSides.length ? node.stroke : undefined} strokeWidth={node.strokeWidth} />;
-}
-
-function ShapeNode({ geometry, ...props }: { geometry: ReturnType<typeof rectangleBorderGeometryForNode>; [key: string]: unknown }) {
-  return <Shape {...props} sceneFunc={(context, shape) => { drawRectanglePath(context, geometry.fillPath); context.fillShape(shape); for (const path of geometry.borderPaths) { drawRectanglePath(context, path); context.strokeShape(shape); } }} />;
+  return <RectangleVisual node={node} backgroundAsset={node.backgroundImage ? assets[node.backgroundImage.assetId] : undefined} nodeProps={common} />;
 }
 
 function CanvasStageImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) { const [image, setImage] = useState<HTMLImageElement>(); useEffect(() => { if (!props.url) return; const image = new window.Image(); image.crossOrigin = "anonymous"; image.onload = () => setImage(image); image.src = props.url; }, [props.url]); return <KonvaImage {...props} image={image} cornerRadius={props.cornerRadius} />; }

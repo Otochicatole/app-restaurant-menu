@@ -153,6 +153,7 @@ async function assertTenantAssets(transaction: Parameters<Parameters<typeof pris
 function remapDocumentAssets(document: CanvasDocumentV1, remap: Map<string, string>): CanvasDocumentV1 {
   return { ...document, nodes: document.nodes.map((node) => {
     if (node.type === "image") return { ...node, assetId: remap.get(node.assetId) ?? node.assetId };
+    if (node.type === "shape" && node.shape === "rect" && node.backgroundImage) return { ...node, backgroundImage: { ...node.backgroundImage, assetId: remap.get(node.backgroundImage.assetId) ?? node.backgroundImage.assetId } };
     if (node.type !== "text") return node;
     return { ...node, fontAssetId: node.fontAssetId ? remap.get(node.fontAssetId) ?? node.fontAssetId : null, modalAssetId: node.modalAssetId ? remap.get(node.modalAssetId) ?? node.modalAssetId : null };
   }) };

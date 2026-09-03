@@ -114,6 +114,32 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await expect(bottomLeft).toHaveValue("18");
 });
 
+test("tenant admin can configure a rectangle gradient and background image", async ({ page }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+
+  await page.getByRole("button", { name: "Agregar degradado" }).click();
+  await expect(page.getByRole("button", { name: "Quitar degradado" })).toBeVisible();
+  await page.getByRole("button", { name: "Degradado hacia derecha" }).click();
+  await expect(page.getByRole("spinbutton", { name: "Ángulo del degradado" })).toHaveValue("90");
+
+  await page.getByRole("button", { name: "Elegir imagen de fondo" }).click();
+  await page.locator("#editor-images").getByRole("button", { name: /Café E2E/ }).click();
+  await expect(page.getByText("Café E2E").last()).toBeVisible();
+  await page.getByRole("combobox", { name: "Ajuste de imagen de fondo" }).selectOption("contain");
+  await page.getByRole("spinbutton", { name: "Posición horizontal porcentaje" }).fill("25");
+  await page.getByRole("spinbutton", { name: "Posición vertical porcentaje" }).fill("75");
+  const imageOpacity = page.getByRole("spinbutton", { name: "Opacidad de imagen porcentaje" });
+  await imageOpacity.fill("60");
+  await expect(page.getByText("Cambios pendientes")).toBeVisible();
+
+  await page.getByRole("button", { name: "Deshacer" }).click();
+  await expect(imageOpacity).toHaveValue("100");
+  await page.getByRole("button", { name: "Rehacer" }).click();
+  await expect(imageOpacity).toHaveValue("60");
+  await expect(page.getByRole("button", { name: "Quitar imagen de fondo" })).toBeVisible();
+});
+
 async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name });
   const image = dialog.getByRole("img", { name });

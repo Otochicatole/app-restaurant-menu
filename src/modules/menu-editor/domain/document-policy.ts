@@ -35,6 +35,9 @@ export function validateCanvasDocument(input: unknown): CanvasDocumentV1 {
     if (node.x < -100_000 || node.x > 100_000 || node.y < -100_000 || node.y > 100_000 || node.x + node.width > 100_000 || node.y + node.height > 100_000) {
       throw new BadRequestError("La posición de un objeto está fuera de los límites permitidos.");
     }
+    if (node.type === "shape" && node.shape !== "rect" && (node.fillGradient || node.backgroundImage)) {
+      throw new BadRequestError("Los fondos avanzados solo están disponibles para rectángulos.");
+    }
   }
   const groupIds = new Set<string>();
   for (const group of document.groups) {
@@ -55,6 +58,7 @@ export function documentAssetIds(document: CanvasDocumentV1): Set<string> {
     if (node.type === "image") ids.add(node.assetId);
     if (node.type === "text" && node.fontAssetId) ids.add(node.fontAssetId);
     if (node.type === "text" && node.modalAssetId) ids.add(node.modalAssetId);
+    if (node.type === "shape" && node.shape === "rect" && node.backgroundImage) ids.add(node.backgroundImage.assetId);
   }
   return ids;
 }
@@ -69,4 +73,8 @@ export function documentFontAssetIds(document: CanvasDocumentV1): Set<string> {
 
 export function documentModalAssetIds(document: CanvasDocumentV1): Set<string> {
   return new Set(document.nodes.flatMap((node) => node.type === "text" && node.modalAssetId ? [node.modalAssetId] : []));
+}
+
+export function documentBackgroundImageAssetIds(document: CanvasDocumentV1): Set<string> {
+  return new Set(document.nodes.flatMap((node) => node.type === "shape" && node.shape === "rect" && node.backgroundImage ? [node.backgroundImage.assetId] : []));
 }

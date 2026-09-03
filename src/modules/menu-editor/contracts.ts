@@ -21,6 +21,21 @@ const cornerRadiiSchema = z.object({
   bottomRight: finiteNumber.min(0).max(10_000),
   bottomLeft: finiteNumber.min(0).max(10_000),
 });
+const gradientStopSchema = z.object({
+  color,
+  offset: finiteNumber.min(0).max(1),
+});
+const fillGradientSchema = z.object({
+  angle: finiteNumber.min(0).max(360),
+  stops: z.tuple([gradientStopSchema, gradientStopSchema]).refine(([first, second]) => first.offset <= second.offset, "Las paradas del degradado deben estar ordenadas"),
+});
+const backgroundImageSchema = z.object({
+  assetId: id,
+  fit: z.enum(["cover", "contain", "stretch"]),
+  positionX: finiteNumber.min(0).max(1),
+  positionY: finiteNumber.min(0).max(1),
+  opacity: finiteNumber.min(0).max(1),
+});
 
 const nodeBase = z.object({
   id,
@@ -75,6 +90,8 @@ const shapeNode = nodeBase.extend({
   strokeWidth: finiteNumber.min(0).max(500).default(0),
   strokeSides: strokeSidesSchema.default([...STROKE_SIDES]),
   cornerRadii: cornerRadiiSchema.optional(),
+  fillGradient: fillGradientSchema.nullable().default(null),
+  backgroundImage: backgroundImageSchema.nullable().default(null),
   /** @deprecated Only accepted while reading documents created before cornerRadii. */
   cornerRadius: finiteNumber.min(0).max(10_000).optional(),
 });
@@ -140,6 +157,8 @@ export type CanvasTextNode = Extract<CanvasNode, { type: "text" }>;
 export type CanvasImageNode = Extract<CanvasNode, { type: "image" }>;
 export type CanvasShapeNode = Extract<CanvasNode, { type: "shape" }>;
 export type CanvasIconNode = Extract<CanvasNode, { type: "icon" }>;
+export type FillGradient = z.output<typeof fillGradientSchema>;
+export type RectangleBackgroundImage = z.output<typeof backgroundImageSchema>;
 
 export const saveDocumentSchema = z.object({
   baseRevision: z.number().int().nonnegative(),
