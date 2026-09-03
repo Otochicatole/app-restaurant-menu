@@ -176,6 +176,53 @@ test("properties stay readable and keep object actions visible while scrolling",
   await inspector.screenshot({ path: testInfo.outputPath("properties-sections.png") });
 });
 
+test("tenant admin can copy and paste selected objects with keyboard shortcuts", async ({ page }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+
+  const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
+  const layerName = `Copia rápida ${Date.now()}`;
+  await inspector.getByRole("textbox", { name: "Nombre de la capa" }).fill(layerName);
+  await inspector.getByRole("textbox", { name: "Código HEX de color de relleno" }).fill("#0459c8");
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  const originalX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+
+  const layerRows = page.locator("#editor-layers").getByText(layerName, { exact: true });
+  await expect(layerRows).toHaveCount(1);
+  await layerRows.first().click();
+  await page.keyboard.press("Control+C");
+  await expect(page.getByText("Objeto copiado", { exact: true })).toBeVisible();
+  await page.keyboard.press("Control+V");
+  await expect(page.getByText("Objeto pegado", { exact: true })).toBeVisible();
+  await expect(layerRows).toHaveCount(2);
+  await expect(inspector.getByRole("textbox", { name: "Código HEX de color de relleno" })).toHaveValue("#0459c8");
+
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  await expect(inspector.getByRole("spinbutton", { name: "X", exact: true })).toHaveValue(String(originalX + 24));
+  await layerRows.first().click();
+  await page.keyboard.press("Control+V");
+  await expect(layerRows).toHaveCount(3);
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  await expect(inspector.getByRole("spinbutton", { name: "X", exact: true })).toHaveValue(String(originalX + 48));
+
+  await page.keyboard.press("Control+Z");
+  await expect(layerRows).toHaveCount(2);
+  await layerRows.first().click();
+  await page.keyboard.press("Control+Z");
+  await expect(layerRows).toHaveCount(1);
+
+  await layerRows.first().click();
+  const nameInput = inspector.getByRole("textbox", { name: "Nombre de la capa" });
+  const layerCount = await page.locator("#editor-layers [aria-pressed]").count();
+  await nameInput.fill("Campo");
+  await nameInput.press("Control+A");
+  await nameInput.press("Control+C");
+  await nameInput.press("End");
+  await nameInput.press("Control+V");
+  await expect(nameInput).toHaveValue("CampoCampo");
+  await expect(page.locator("#editor-layers [aria-pressed]")).toHaveCount(layerCount);
+});
+
 async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name });
   const image = dialog.getByRole("img", { name });

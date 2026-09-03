@@ -46,7 +46,7 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
   }
 
   if (selectedCount > 1) {
-    return <InspectorLayout title={selectedCount + " objetos"} description="Las propiedades compartidas se aplican a los objetos desbloqueados." footer={<button type="button" className={buttonClass + " w-full border-red-200 text-red-700 hover:bg-red-50"} onClick={onDelete}><Trash2 size={14} aria-hidden="true" />Eliminar selección</button>}>
+    return <InspectorLayout title={selectedCount + " objetos"} description="Las propiedades compartidas se aplican a los objetos desbloqueados." footer={<div className="space-y-2"><button type="button" className={buttonClass + " w-full border-red-200 text-red-700 hover:bg-red-50"} onClick={onDelete}><Trash2 size={14} aria-hidden="true" />Eliminar selección</button><ClipboardShortcutHint /></div>}>
       <InspectorSection title="Tamaño y opacidad" icon={<Scan size={16} />} defaultOpen>
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Ancho" unit="px" value={node.width} onChange={(value) => onChangeSelected({ width: value })} />
@@ -73,9 +73,12 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
       </div>
       {(disabled || !node.visible) && <p className="mt-2 text-xs leading-5 text-amber-800">{disabled ? "Objeto bloqueado. Desbloquealo para editar." : "Objeto oculto en el menú."}</p>}
     </>}
-    footer={<div className="grid grid-cols-2 gap-2">
-      <button type="button" className={buttonClass} disabled={disabled} onClick={onDuplicate}><Copy size={14} aria-hidden="true" />Duplicar</button>
-      <button type="button" className={buttonClass + " border-red-200 text-red-700 hover:bg-red-50"} disabled={disabled} onClick={onDelete}><Trash2 size={14} aria-hidden="true" />Eliminar</button>
+    footer={<div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={buttonClass} disabled={disabled} onClick={onDuplicate}><Copy size={14} aria-hidden="true" />Duplicar</button>
+        <button type="button" className={buttonClass + " border-red-200 text-red-700 hover:bg-red-50"} disabled={disabled} onClick={onDelete}><Trash2 size={14} aria-hidden="true" />Eliminar</button>
+      </div>
+      <ClipboardShortcutHint />
     </div>}>
     {node.type === "text" && <InspectorSection title="Texto y tipografía" icon={<Type size={16} />} defaultOpen>
       <label className={labelClass}>Contenido<textarea disabled={disabled} className={fieldClass + " min-h-24 resize-y text-sm"} value={node.text} onChange={(event) => onChange({ text: event.target.value })} /></label>
@@ -174,6 +177,10 @@ function InspectorLayout({ title, description, header, footer, children }: { tit
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4" data-inspector-scroll>{children}</div>
     {footer && <footer className="shrink-0 border-t border-zinc-200 bg-white p-3">{footer}</footer>}
   </div>;
+}
+
+function ClipboardShortcutHint() {
+  return <p className="text-center text-[10px] leading-4 text-zinc-400"><kbd className="font-sans">Ctrl/⌘ + C</kbd> copiar · <kbd className="font-sans">Ctrl/⌘ + V</kbd> pegar</p>;
 }
 
 function InspectorSection({ title, description, icon, defaultOpen = false, children }: { title: string; description?: string; icon: ReactNode; defaultOpen?: boolean; children: ReactNode }) {

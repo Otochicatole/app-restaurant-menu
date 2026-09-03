@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Grid2X2, Redo2, Undo2 } from "lucide-react";
 import { STROKE_SIDES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
+import { copyCanvasSelection, pasteCanvasSelection, type CanvasClipboardSnapshot } from "../domain/canvas-clipboard";
 import { placeNodeInCanvas } from "../domain/node-placement";
 import { allCornerRadii } from "../domain/rectangle-border";
 import { CanvasInspector } from "./CanvasInspector";
@@ -41,8 +42,11 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [gridEnabled, setGridEnabled] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<MediaModalAsset | null>(null);
+  const [clipboardNotice, setClipboardNotice] = useState<string | null>(null);
   const editVersionRef = useRef(0);
   const publishingRef = useRef(false);
+  const canvasClipboardRef = useRef<{ snapshot: CanvasClipboardSnapshot; pasteSequence: number } | null>(null);
+  const clipboardNoticeTimerRef = useRef<number | null>(null);
 
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
   const fontFaces = useMemo(() => assets.filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join(""), [assets]);
@@ -74,6 +78,47 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
   const undo = () => { const previous = history.at(-1); if (!previous) return; editVersionRef.current += 1; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setDirty(true); setStatus("Cambios pendientes"); };
   const redo = () => { const next = future.at(-1); if (!next) return; editVersionRef.current += 1; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setDirty(true); setStatus("Cambios pendientes"); };
+
+  const showClipboardNotice = (message: string) => {
+    if (clipboardNoticeTimerRef.current !== null) window.clearTimeout(clipboardNoticeTimerRef.current);
+    setClipboardNotice(message);
+    clipboardNoticeTimerRef.current = window.setTimeout(() => {
+      setClipboardNotice(null);
+      clipboardNoticeTimerRef.current = null;
+    }, 1_600);
+  };
+  const appendClipboardSnapshot = (snapshot: CanvasClipboardSnapshot, pasteSequence: number) => {
+    const pasted = pasteCanvasSelection(snapshot, document.canvasBounds, () => crypto.randomUUID(), pasteSequence);
+    if (!pasted.nodes.length) return 0;
+    commitTransform((current) => ({
+      ...current,
+      nodes: [...current.nodes, ...pasted.nodes],
+      groups: [...current.groups, ...pasted.groups],
+    }));
+    setSelectedIds(pasted.nodes.map((node) => node.id));
+    return pasted.nodes.length;
+  };
+  const copySelection = () => {
+    const snapshot = copyCanvasSelection(document, selectedIds);
+    if (!snapshot) return false;
+    canvasClipboardRef.current = { snapshot, pasteSequence: 0 };
+    showClipboardNotice(snapshot.nodes.length === 1 ? "Objeto copiado" : `${snapshot.nodes.length} objetos copiados`);
+    return true;
+  };
+  const pasteSelection = () => {
+    const clipboard = canvasClipboardRef.current;
+    if (!clipboard) return false;
+    const pasteSequence = clipboard.pasteSequence + 1;
+    const pastedCount = appendClipboardSnapshot(clipboard.snapshot, pasteSequence);
+    if (!pastedCount) return false;
+    clipboard.pasteSequence = pasteSequence;
+    showClipboardNotice(pastedCount === 1 ? "Objeto pegado" : `${pastedCount} objetos pegados`);
+    return true;
+  };
+
+  useEffect(() => () => {
+    if (clipboardNoticeTimerRef.current !== null) window.clearTimeout(clipboardNoticeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!dirty || saving || publishing || conflict) return;
@@ -119,8 +164,12 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
+      const commandKey = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (commandKey && key === "c" && copySelection()) { event.preventDefault(); return; }
+      if (commandKey && key === "v" && pasteSelection()) { event.preventDefault(); return; }
+      if (commandKey && key === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
+      if (commandKey && key === "y") { event.preventDefault(); redo(); return; }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length) { event.preventDefault(); commit({ ...document, nodes: document.nodes.filter((node) => !selectedIds.includes(node.id) || node.locked) }); setSelectedIds((ids) => ids.filter((id) => document.nodes.find((node) => node.id === id)?.locked)); }
     };
     window.addEventListener("keydown", handler);
@@ -129,7 +178,11 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
 
   const addNode = (node: CanvasNode) => { commitTransform((current) => ({ ...current, nodes: [...current.nodes, node] })); setSelectedIds([node.id]); };
   const newNodeFrame = (preferredWidth: number, preferredHeight: number, point?: { x: number; y: number }) => { const frame = point ? { x: point.x - preferredWidth / 2, y: point.y - preferredHeight / 2, width: preferredWidth, height: preferredHeight } : placeNodeInCanvas(document.canvasBounds, viewport, preferredWidth, preferredHeight); return { x: finiteOr(frame.x, document.canvasBounds.x + document.canvasBounds.width / 2 - preferredWidth / 2), y: finiteOr(frame.y, document.canvasBounds.y + document.canvasBounds.height / 2 - preferredHeight / 2), width: finiteOr(frame.width, preferredWidth), height: finiteOr(frame.height, preferredHeight) }; };
-  const duplicate = () => { if (!selected || selected.locked) return; const bounds = document.canvasBounds; addNode({ ...selected, id: crypto.randomUUID(), x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - selected.width, selected.x + 24)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - selected.height, selected.y + 24)) }); };
+  const duplicate = () => {
+    if (!selected || selected.locked) return;
+    const snapshot = copyCanvasSelection(document, [selected.id]);
+    if (snapshot) appendClipboardSnapshot(snapshot, 1);
+  };
   const moveLayer = (delta: number) => { if (!selectedIds.length) return; const index = document.nodes.findIndex((node) => node.id === selectedIds[0]); const nextIndex = Math.max(0, Math.min(document.nodes.length - 1, index + delta)); if (index < 0 || index === nextIndex) return; const nodes = [...document.nodes]; const [node] = nodes.splice(index, 1); nodes.splice(nextIndex, 0, node); commit({ ...document, nodes }); };
   const reorderLayer = (activeId: string, overId: string) => {
     const activeIndex = document.nodes.findIndex((node) => node.id === activeId);
@@ -216,6 +269,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
     </div>
     </div>
+    {clipboardNotice && <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-2 text-xs font-semibold text-white shadow-xl">{clipboardNotice}</div>}
     {previewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><div className="relative h-[min(90vh,720px)] w-[min(92vw,1100px)] overflow-hidden rounded-xl bg-zinc-100 shadow-2xl" role="dialog" aria-modal="true" aria-label="Vista previa del menú"><button type="button" className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-800 shadow" onClick={() => setPreviewOpen(false)}>Cerrar vista previa</button><CanvasStage document={document} assets={assetMap} onTextModalOpen={setPreviewAsset} /></div></div>}
     <MediaModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
     {modal && <EditorModal state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { setModal(null); await confirmOverwrite(serverRevision); }} />}
