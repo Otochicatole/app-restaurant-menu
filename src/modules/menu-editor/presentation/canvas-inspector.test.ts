@@ -65,6 +65,21 @@ describe("CanvasInspector", () => {
     expect(within(interaction).getByText("Se abre en una pestaña nueva.")).not.toBeNull();
   });
 
+  it("accepts pasted hexadecimal colors for fills, borders and text", () => {
+    const shapeProps = inspectorProps();
+    const shapeView = render(React.createElement(CanvasInspector, shapeProps));
+    fireEvent.change(screen.getByRole("textbox", { name: "Código HEX de color de relleno" }), { target: { value: "#0459c8" } });
+    expect(shapeProps.onChange).toHaveBeenCalledWith({ fill: "#0459c8" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Código HEX de color del borde" }), { target: { value: "#123abc" } });
+    expect(shapeProps.onChange).toHaveBeenCalledWith({ stroke: "#123abc" });
+
+    shapeView.unmount();
+    const textProps = inspectorProps({ node: textNode });
+    render(React.createElement(CanvasInspector, textProps));
+    fireEvent.change(screen.getByRole("textbox", { name: "Código HEX de color del texto" }), { target: { value: "#0459c8" } });
+    expect(textProps.onChange).toHaveBeenCalledWith({ fill: "#0459c8" });
+  });
+
   it("keeps unlock accessible and prevents edits to a locked object", async () => {
     const props = inspectorProps({ node: { ...rectangle, locked: true } });
     render(React.createElement(CanvasInspector, props));

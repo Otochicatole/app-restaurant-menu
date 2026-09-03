@@ -151,6 +151,10 @@ test("properties stay readable and keep object actions visible while scrolling",
   const duplicate = inspector.getByRole("button", { name: "Duplicar", exact: true });
   const nameBox = await name.boundingBox();
   const actionBox = await duplicate.boundingBox();
+  const fillHex = inspector.getByRole("textbox", { name: "Código HEX de color de relleno" });
+  await fillHex.fill("#0459c8");
+  await expect(fillHex).toHaveValue("#0459c8");
+  await expect(page.getByText("Cambios pendientes")).toBeVisible();
   await inspector.getByRole("button", { name: "Agregar degradado" }).click();
   await inspector.getByRole("slider", { name: "Posición final del degradado" }).scrollIntoViewIfNeeded();
 

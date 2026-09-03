@@ -4,6 +4,7 @@ import { useId, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, Copy, Eye, EyeOff, Layers, LockKeyhole, MousePointer2, Paintbrush, Scan, SlidersHorizontal, Square, Trash2, Type, Unlock } from "lucide-react";
 import { STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type CornerRadiusKey, type FillGradient, type MenuAssetView, type RectangleBackgroundImage, type StrokeSide } from "../contracts";
 import { allCornerRadii, hasAllStrokeSides, toggleStrokeSide } from "../domain/rectangle-border";
+import { HexColorInput } from "./HexColorInput";
 
 type InspectorProps = {
   node: CanvasNode | null;
@@ -25,7 +26,6 @@ type InspectorProps = {
 const fieldClass = "mt-1.5 min-w-0 w-full rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-xs text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400";
 const labelClass = "block min-w-0 text-xs font-medium text-zinc-700";
 const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:opacity-40";
-const colorClass = "mt-1.5 h-9 w-full cursor-pointer rounded-md border border-zinc-300 bg-white p-1 disabled:opacity-40";
 
 export function CanvasInspector({ node, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: InspectorProps) {
   if (!node) {
@@ -86,7 +86,7 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
         <label className={labelClass}>Alineación<select disabled={disabled} className={fieldClass} value={node.align} onChange={(event) => onChange({ align: event.target.value as typeof node.align })}><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label>
         <label className={labelClass}>Estilo<select disabled={disabled} className={fieldClass} value={node.fontStyle} onChange={(event) => onChange({ fontStyle: event.target.value as typeof node.fontStyle })}><option value="normal">Normal</option><option value="italic">Cursiva</option></select></label>
       </div>
-      <label className={labelClass + " mt-3"}>Color del texto<input disabled={disabled} className={colorClass} type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label>
+      <div className="mt-3"><ColorField label="Color del texto" value={node.fill} disabled={disabled} onChange={(fill) => onChange({ fill })} /></div>
     </InspectorSection>}
 
     {node.type === "shape" && <>
@@ -97,7 +97,7 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
       <InspectorSection title="Borde" icon={<Square size={16} />} description={node.stroke && node.strokeWidth > 0 ? node.strokeWidth + " px" : "Sin borde visible"} defaultOpen={Boolean(node.stroke && node.strokeWidth > 0)}>
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Grosor del borde" unit="px" value={node.strokeWidth} disabled={disabled} onChange={(strokeWidth) => onChange({ strokeWidth })} />
-          <label className={labelClass}>Color del borde<input disabled={disabled} className={colorClass} type="color" value={node.stroke?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ stroke: event.target.value })} /></label>
+          <ColorField label="Color del borde" value={node.stroke ?? "#3A4824"} disabled={disabled} onChange={(stroke) => onChange({ stroke })} />
         </div>
         {node.shape === "rect" && <RectBorderSidesField value={node.strokeSides} disabled={disabled} onChange={(strokeSides) => onChange({ strokeSides })} />}
       </InspectorSection>
@@ -113,7 +113,7 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
 
     {node.type === "icon" && <InspectorSection title="Estilo del icono" icon={<Paintbrush size={16} />} defaultOpen>
       <div className="grid grid-cols-2 gap-3">
-        <label className={labelClass}>Color<input disabled={disabled} className={colorClass} type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label>
+        <ColorField label="Color" value={node.fill} disabled={disabled} onChange={(fill) => onChange({ fill })} />
         <NumberField label="Grosor" unit="px" value={node.strokeWidth} disabled={disabled} onChange={(strokeWidth) => onChange({ strokeWidth })} />
       </div>
     </InspectorSection>}
@@ -194,18 +194,29 @@ function NumberField({ label, value, onChange, disabled = false, unit }: { label
   return <label className={labelClass}><span className="flex items-center justify-between gap-2"><span>{label}</span>{unit && <span className="text-[11px] font-normal text-zinc-500">{unit}</span>}</span><input aria-label={label} disabled={disabled} className={fieldClass} type="number" step="any" value={Math.round(safeValue * 100) / 100} onChange={(event) => onChange(Number(event.target.value) || 0)} /></label>;
 }
 
+function ColorField({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+  const normalized = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) ? value : "#3A4824";
+  const alpha = normalized.length === 9 ? parseInt(normalized.slice(7, 9), 16) / 255 : 1;
+  return <div>
+    <p className="text-xs font-medium text-zinc-700">{label}</p>
+    <div className="mt-1.5 flex items-start gap-2">
+      <input aria-label={label} disabled={disabled} className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-zinc-300 bg-white p-1 disabled:opacity-40" type="color" value={normalized.slice(0, 7)} onChange={(event) => onChange(withColorAlpha(event.target.value, alpha))} />
+      <HexColorInput label={label} value={normalized} disabled={disabled} onChange={onChange} />
+    </div>
+  </div>;
+}
+
 function AlphaColorField({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
   const normalized = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) ? value : "#3A4824";
   const alpha = normalized.length === 9 ? parseInt(normalized.slice(7, 9), 16) / 255 : 1;
   const base = normalized.slice(0, 7);
   return <div>
     <p className="text-xs font-semibold text-zinc-800">{label}</p>
-    <div className="mt-2 flex items-center gap-3">
+    <div className="mt-2 flex items-start gap-2">
       <input aria-label={label} disabled={disabled} className="h-10 w-12 shrink-0 cursor-pointer rounded-md border border-zinc-300 bg-white p-1 disabled:opacity-40" type="color" value={base} onChange={(event) => onChange(withColorAlpha(event.target.value, alpha))} />
-      <span className="font-mono text-xs uppercase text-zinc-600">{base}</span>
-      <label className="ml-auto w-20 text-xs text-zinc-600">Opacidad<input aria-label={"Porcentaje de transparencia de " + label.toLowerCase()} disabled={disabled} className={fieldClass + " text-right"} type="number" min="0" max="100" step="1" value={Math.round(alpha * 100)} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value) / 100))} /></label>
-      <span className="pt-5 text-xs text-zinc-500">%</span>
+      <HexColorInput label={label} value={base} disabled={disabled} allowAlpha={false} onChange={(color) => onChange(withColorAlpha(color, alpha))} />
     </div>
+    <label className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-600"><span>Opacidad</span><span className="flex items-center gap-1.5"><input aria-label={"Porcentaje de transparencia de " + label.toLowerCase()} disabled={disabled} className="w-16 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-right text-xs disabled:bg-zinc-100" type="number" min="0" max="100" step="1" value={Math.round(alpha * 100)} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value) / 100))} /><span>%</span></span></label>
     <input aria-label={"Transparencia de " + label.toLowerCase()} disabled={disabled} className="mt-3 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={alpha} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value)))} />
   </div>;
 }
