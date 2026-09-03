@@ -13,10 +13,10 @@ const textNode = document.nodes.find((node) => node.type === "text")!;
 
 function inspectorProps(overrides: Partial<React.ComponentProps<typeof CanvasInspector>> = {}): React.ComponentProps<typeof CanvasInspector> {
   return {
-    node: rectangle, selectedCount: 1, document, assets: [], onCanvasSizeChange: vi.fn(),
+    node: rectangle, group: null, selectedCount: 1, document, assets: [], onCanvasSizeChange: vi.fn(),
     onOpenModalMedia: vi.fn(), onOpenBackgroundImage: vi.fn(), onChange: vi.fn(),
     onChangeSelected: vi.fn(), onDuplicate: vi.fn(), onMoveLayer: vi.fn(), onDelete: vi.fn(),
-    onRename: vi.fn(), onOpacityChange: vi.fn(), ...overrides,
+    onRename: vi.fn(), onOpacityChange: vi.fn(), onGroupChange: vi.fn(), onUngroup: vi.fn(), ...overrides,
   };
 }
 
@@ -97,6 +97,26 @@ describe("CanvasInspector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Vertical" }));
     expect(props.onCanvasSizeChange).toHaveBeenNthCalledWith(1, "width", 1080);
     expect(props.onCanvasSizeChange).toHaveBeenNthCalledWith(2, "height", 1920);
+  });
+
+  it("shows group-specific controls without resize or rotation actions", async () => {
+    const group = { id: "group", name: "Encabezado", nodeIds: [textNode.id], parentGroupId: null, layerOrder: 0, visible: true, locked: false };
+    const groupDocument = { ...document, nodes: document.nodes.map((node) => node.id === textNode.id ? { ...node, groupId: group.id } : node), groups: [group] };
+    const props = inspectorProps({ node: null, group, selectedCount: 1, document: groupDocument });
+    render(React.createElement(CanvasInspector, props));
+
+    expect(screen.getByRole("heading", { name: "Grupo" })).not.toBeNull();
+    expect(screen.getByText("1 capa en este árbol.")).not.toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Ancho" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre del grupo" }), { target: { value: "Promociones" } });
+    fireEvent.blur(screen.getByRole("textbox", { name: "Nombre del grupo" }));
+    expect(props.onGroupChange).toHaveBeenCalledWith({ name: "Promociones" });
+    await userEvent.click(screen.getByRole("button", { name: "Ocultar grupo" }));
+    expect(props.onGroupChange).toHaveBeenCalledWith({ visible: false });
+    await userEvent.click(screen.getByRole("button", { name: "Bloquear grupo" }));
+    expect(props.onGroupChange).toHaveBeenCalledWith({ locked: true });
+    await userEvent.click(screen.getByRole("button", { name: "Desagrupar y conservar capas" }));
+    expect(props.onUngroup).toHaveBeenCalledOnce();
   });
 
   it("keeps bulk editing separate from single-object controls", () => {

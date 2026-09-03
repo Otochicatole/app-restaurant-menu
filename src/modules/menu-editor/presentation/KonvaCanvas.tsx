@@ -5,6 +5,7 @@ import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon,
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
+import { canvasGroupBounds, descendantNodeIds, groupLayerState, nodeLayerState, outermostGroupId } from "../domain/layer-tree";
 import { RectangleVisual } from "../ui/RectangleVisual";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 import type { CanvasDropItem } from "./EditorToolsPanel";
@@ -15,18 +16,21 @@ type DragSession = {
   ids: string[];
   starts: Record<string, { x: number; y: number }>;
   delta: { x: number; y: number };
+  includeLocked: boolean;
 };
 
-export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect, onSelectMany, onDropItem, onChange, onChangeMany, viewport, onViewportChange }: {
+export function KonvaCanvas({ document, assets, selectedIds, selectedGroupId, deepSelectedId, showGrid, onSelect, onSelectMany, onDropItem, onChange, onChangeMany, viewport, onViewportChange }: {
   document: CanvasDocumentV1;
   assets: Record<string, { url: string; kind: "IMAGE" | "VIDEO" | "FONT"; fontFamily: string | null }>;
   selectedIds: string[];
+  selectedGroupId: string | null;
+  deepSelectedId: string | null;
   showGrid: boolean;
-  onSelect: (id: string | null, additive: boolean) => void;
+  onSelect: (id: string | null, additive: boolean, deep?: boolean) => void;
   onSelectMany: (ids: string[]) => void;
   onDropItem: (item: CanvasDropItem, point: { x: number; y: number }) => void;
   onChange: (id: string, patch: Partial<CanvasNode>) => void;
-  onChangeMany: (ids: string[], delta: { x: number; y: number }) => void;
+  onChangeMany: (ids: string[], delta: { x: number; y: number }, includeLocked?: boolean) => void;
   viewport: Viewport;
   onViewportChange: (viewport: Viewport) => void;
 }) {
@@ -40,6 +44,10 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const dragSession = useRef<DragSession | null>(null);
   const bounds = document.canvasBounds;
+  const selectedGroup = selectedGroupId ? document.groups.find((group) => group.id === selectedGroupId) ?? null : null;
+  const selectedGroupIds = selectedGroup ? descendantNodeIds(document, selectedGroup.id) : [];
+  const selectedGroupState = selectedGroup ? groupLayerState(document, selectedGroup) : null;
+  const selectedBounds = selectedGroup ? canvasGroupBounds(document, selectedGroup.id) : null;
   const scenePadding = 40;
   const sceneSize = { width: Math.max(1, size.width - scenePadding * 2), height: Math.max(1, size.height - scenePadding * 2) };
   const { camera, scale } = cameraForViewport(viewport, bounds, sceneSize);
@@ -62,10 +70,10 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
     const stage = stageRef.current;
     const transformer = transformerRef.current;
     if (!stage || !transformer) return;
-    const nodes = selectedIds.filter((id) => !document.nodes.find((node) => node.id === id)?.locked).map((id) => stage.findOne(`#node-${id}`)).filter((node): node is Konva.Node => Boolean(node));
+    const nodes = selectedGroupId ? [] : selectedIds.filter((id) => !nodeLayerState(document, id).effectiveLocked).map((id) => stage.findOne(`#node-${id}`)).filter((node): node is Konva.Node => Boolean(node));
     transformer.nodes(nodes);
     transformer.getLayer()?.batchDraw();
-  }, [selectedIds, document.nodes]);
+  }, [selectedIds, selectedGroupId, document]);
 
   useEffect(() => {
     const isFormTarget = (event: KeyboardEvent) => Boolean((event.target as HTMLElement | null)?.closest("input, textarea, select"));
@@ -114,7 +122,10 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
       const selection = screenRectToWorld({ ...selectionBox, x: selectionBox.x - scenePadding, y: selectionBox.y - scenePadding }, camera, scale);
       const right = selection.x + selection.width;
       const bottom = selection.y + selection.height;
-      onSelectMany(document.nodes.filter((node) => node.visible && !node.locked && node.x < right && node.x + node.width > selection.x && node.y < bottom && node.y + node.height > selection.y).map((node) => node.id));
+      onSelectMany(document.nodes.filter((node) => {
+        const state = nodeLayerState(document, node);
+        return state.effectiveVisible && !state.effectiveLocked && node.x < right && node.x + node.width > selection.x && node.y < bottom && node.y + node.height > selection.y;
+      }).map((node) => node.id));
     }
     setSelectionStart(null);
     setSelectionBox(null);
@@ -134,13 +145,19 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
   const beginNodeDrag = (id: string, event: Konva.KonvaEventObject<DragEvent>) => {
     event.cancelBubble = true;
     const active = document.nodes.find((node) => node.id === id);
-    if (!active || active.locked) return;
-    const ids = (selectedIds.includes(id) ? selectedIds : [id]).filter((selectedId) => document.nodes.some((node) => node.id === selectedId && !node.locked));
+    if (!active) return;
+    const movingGroupId = selectedGroupId && selectedGroupIds.includes(id) ? selectedGroupId : deepSelectedId === id ? null : outermostGroupId(document, id);
+    const movingGroupState = movingGroupId ? groupLayerState(document, movingGroupId) : null;
+    if (movingGroupState?.effectiveLocked || (!movingGroupId && nodeLayerState(document, active).effectiveLocked)) return;
+    const includeLocked = Boolean(movingGroupId);
+    const ids = movingGroupId
+      ? descendantNodeIds(document, movingGroupId)
+      : (selectedIds.includes(id) ? selectedIds : [id]).filter((selectedId) => !nodeLayerState(document, selectedId).effectiveLocked);
     const starts = Object.fromEntries(ids.map((selectedId) => {
       const node = document.nodes.find((item) => item.id === selectedId)!;
       return [selectedId, { x: node.x, y: node.y }];
     }));
-    dragSession.current = { activeId: id, ids, starts, delta: { x: 0, y: 0 } };
+    dragSession.current = { activeId: id, ids, starts, delta: { x: 0, y: 0 }, includeLocked };
     event.target.position(starts[id]);
   };
 
@@ -165,6 +182,7 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
         stageRef.current?.find(`.node-border-${selectedId}`).forEach((borderNode) => borderNode.position(position));
       }
     });
+    if (session.includeLocked && selectedBounds) stageRef.current?.findOne("#selected-group-outline")?.position({ x: selectedBounds.x + delta.x, y: selectedBounds.y + delta.y });
     transformerRef.current?.forceUpdate();
     stageRef.current?.batchDraw();
   };
@@ -173,8 +191,8 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
     event.cancelBubble = true;
     const session = dragSession.current;
     if (!session || session.activeId !== id) return;
-    const { ids, delta, starts } = session;
-    if (ids.length > 1) onChangeMany(ids, delta);
+    const { ids, delta, starts, includeLocked } = session;
+    if (ids.length > 1 || includeLocked) onChangeMany(ids, delta, includeLocked);
     else {
       const start = starts[id];
       if (start) onChange(id, { x: start.x + delta.x, y: start.y + delta.y });
@@ -195,7 +213,7 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
           return;
         }
         if (event.target === event.target.getStage()) {
-          onSelect(null, false);
+          onSelect(null, false, false);
           beginSelection(event);
         }
       }}
@@ -213,8 +231,17 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
         {showGrid && <GridOverlay bounds={bounds} scale={scale} />}
-        {document.nodes.filter((node) => node.visible).map((node) => <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} showGrid={showGrid} gridBounds={bounds} spacePressed={spacePressed} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} backgroundAsset={node.type === "shape" && node.shape === "rect" && node.backgroundImage ? assets[node.backgroundImage.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />)}
-        <Transformer id="selection-transformer" ref={transformerRef} rotateEnabled={true} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
+        {document.nodes.filter((node) => nodeLayerState(document, node).effectiveVisible).map((node) => {
+          const state = nodeLayerState(document, node);
+          const outerGroupId = outermostGroupId(document, node.id);
+          const outerGroupState = outerGroupId ? groupLayerState(document, outerGroupId) : null;
+          const deepSelected = !selectedGroupId && deepSelectedId === node.id;
+          const canUseOuterGroup = Boolean(outerGroupId && !outerGroupState?.effectiveLocked);
+          const interactive = deepSelected ? !state.effectiveLocked : canUseOuterGroup || !state.effectiveLocked;
+          return <CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} showGrid={showGrid} gridBounds={bounds} spacePressed={spacePressed} interactive={interactive} draggable={interactive && !spacePressed} selectOuterGroup={Boolean(outerGroupId && !selectedGroupId && deepSelectedId !== node.id)} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} backgroundAsset={node.type === "shape" && node.shape === "rect" && node.backgroundImage ? assets[node.backgroundImage.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />;
+        })}
+        {selectedBounds && selectedGroupState?.effectiveVisible && <Rect id="selected-group-outline" x={selectedBounds.x} y={selectedBounds.y} width={selectedBounds.width} height={selectedBounds.height} stroke="#059669" strokeWidth={2 / scale} dash={[8 / scale, 5 / scale]} listening={false} />}
+        <Transformer id="selection-transformer" ref={transformerRef} rotateEnabled={!selectedGroupId} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
       </Layer>
       {selectionBox && <Layer listening={false}><Rect x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} fill="rgba(16,185,129,0.16)" stroke="#10b981" dash={[6, 4]} strokeWidth={1} /></Layer>}
     </Stage>
@@ -222,9 +249,9 @@ export function KonvaCanvas({ document, assets, selectedIds, showGrid, onSelect,
   </div>;
 }
 
-function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed, imageAsset, backgroundAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; showGrid: boolean; gridBounds: CanvasDocumentV1["canvasBounds"]; spacePressed: boolean; imageAsset?: { url: string }; backgroundAsset?: { url: string; width?: number | null; height?: number | null }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
+function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed, interactive, draggable, selectOuterGroup, imageAsset, backgroundAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; showGrid: boolean; gridBounds: CanvasDocumentV1["canvasBounds"]; spacePressed: boolean; interactive: boolean; draggable: boolean; selectOuterGroup: boolean; imageAsset?: { url: string }; backgroundAsset?: { url: string; width?: number | null; height?: number | null }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean, deep?: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
   const nodeX = finiteOr(node.x, 0); const nodeY = finiteOr(node.y, 0); const nodeWidth = Math.max(4, finiteOr(node.width, 4)); const nodeHeight = Math.max(4, finiteOr(node.height, 4)); const nodeRotation = finiteOr(node.rotation, 0); const nodeOpacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
-  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: !node.locked, draggable: !node.locked && !spacePressed, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (!selectedIds.includes(node.id)) onSelect(node.id, false); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) }; const snappedFrame = showGrid ? snapFrameToGrid(frame, gridBounds, gridSpacing(gridBounds)) : frame; const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
+  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: interactive, draggable, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (selectOuterGroup || event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey, false); }, onDblClick: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; onSelect(node.id, false, true); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (selectOuterGroup || !selectedIds.includes(node.id)) onSelect(node.id, false, false); }, onDblTap: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; onSelect(node.id, false, true); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) }; const snappedFrame = showGrid ? snapFrameToGrid(frame, gridBounds, gridSpacing(gridBounds)) : frame; const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
   if (node.type === "text") return <Text {...common} text={node.text} wrap="word" fontSize={node.fontSize} fontStyle={node.fontStyle} fontVariant={`normal ${node.fontWeight}`} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <LoadedImage {...common} url={imageAsset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "shape") {

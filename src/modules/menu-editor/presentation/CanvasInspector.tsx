@@ -1,13 +1,15 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, Copy, Eye, EyeOff, Layers, LockKeyhole, MousePointer2, Paintbrush, Scan, SlidersHorizontal, Square, Trash2, Type, Unlock } from "lucide-react";
-import { STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type CornerRadiusKey, type FillGradient, type MenuAssetView, type RectangleBackgroundImage, type StrokeSide } from "../contracts";
+import { STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode, type CornerRadiusKey, type FillGradient, type MenuAssetView, type RectangleBackgroundImage, type StrokeSide } from "../contracts";
+import { descendantNodeIds, groupLayerState, nodeLayerState } from "../domain/layer-tree";
 import { allCornerRadii, hasAllStrokeSides, toggleStrokeSide } from "../domain/rectangle-border";
 import { HexColorInput } from "./HexColorInput";
 
 type InspectorProps = {
   node: CanvasNode | null;
+  group: CanvasGroup | null;
   selectedCount: number;
   document: CanvasDocumentV1;
   assets: MenuAssetView[];
@@ -21,13 +23,38 @@ type InspectorProps = {
   onDelete: () => void;
   onRename: (name: string) => void;
   onOpacityChange: (opacity: number) => void;
+  onGroupChange: (patch: Partial<Pick<CanvasGroup, "name" | "visible" | "locked">>) => void;
+  onUngroup: () => void;
 };
 
 const fieldClass = "mt-1.5 min-w-0 w-full rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-xs text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400";
 const labelClass = "block min-w-0 text-xs font-medium text-zinc-700";
 const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:opacity-40";
 
-export function CanvasInspector({ node, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: InspectorProps) {
+export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
+  if (group) {
+    const state = groupLayerState(document, group);
+    const descendants = descendantNodeIds(document, group.id);
+    return <InspectorLayout title="Grupo" description={`${descendants.length} ${descendants.length === 1 ? "capa" : "capas"} en este árbol.`}
+      header={<>
+        <div className="mt-3 flex items-end gap-2">
+          <GroupNameField key={group.name} value={group.name} disabled={state.effectiveLocked} onCommit={(name) => onGroupChange({ name })} />
+          <button type="button" className={buttonClass + " shrink-0 px-2"} aria-label={group.visible ? "Ocultar grupo" : "Mostrar grupo"} title={group.visible ? "Ocultar grupo" : "Mostrar grupo"} onClick={() => onGroupChange({ visible: !group.visible })}>{group.visible ? <Eye size={16} /> : <EyeOff size={16} />}</button>
+          <button type="button" className={buttonClass + (group.locked ? " shrink-0 border-amber-300 bg-amber-50 px-2 text-amber-800" : " shrink-0 px-2")} aria-label={group.locked ? "Desbloquear grupo" : "Bloquear grupo"} title={group.locked ? "Desbloquear grupo" : "Bloquear grupo"} onClick={() => onGroupChange({ locked: !group.locked })}>{group.locked ? <LockKeyhole size={16} /> : <Unlock size={16} />}</button>
+        </div>
+        {(state.inheritedHidden || state.inheritedLocked) && <p className="mt-2 text-xs leading-5 text-amber-800">{state.inheritedHidden ? "Oculto" : "Bloqueado"} por un grupo superior. El estado propio se conserva.</p>}
+      </>}
+      footer={<div className="space-y-2"><button type="button" className={buttonClass + " w-full"} disabled={state.effectiveLocked} onClick={onDuplicate}><Copy size={14} aria-hidden="true" />Duplicar grupo</button><button type="button" className={buttonClass + " w-full border-red-200 text-red-700 hover:bg-red-50"} disabled={state.effectiveLocked} onClick={onUngroup}><Layers size={14} aria-hidden="true" />Desagrupar y conservar capas</button><ClipboardShortcutHint /></div>}>
+      <InspectorSection title="Estado del grupo" icon={<Layers size={16} />} description="Ocultar o bloquear el grupo no cambia el estado individual de sus capas." defaultOpen>
+        <label className="flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={group.visible} onChange={(event) => onGroupChange({ visible: event.target.checked })} />Mostrar grupo</label>
+        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={group.locked} onChange={(event) => onGroupChange({ locked: event.target.checked })} />Bloquear grupo</label>
+      </InspectorSection>
+      <InspectorSection title="Orden" icon={<Layers size={16} />} defaultOpen>
+        <div className="grid grid-cols-2 gap-2"><button type="button" className={buttonClass} disabled={state.effectiveLocked} onClick={() => onMoveLayer(1)}><ArrowUp size={14} />Adelante</button><button type="button" className={buttonClass} disabled={state.effectiveLocked} onClick={() => onMoveLayer(-1)}><ArrowDown size={14} />Atrás</button></div>
+      </InspectorSection>
+    </InspectorLayout>;
+  }
+
   if (!node) {
     return <InspectorLayout title="Lienzo" description="Seleccioná un objeto para editar sus propiedades.">
       <InspectorSection title="Tamaño de la carta" icon={<Scan size={16} />} description="El área visible de tu menú público." defaultOpen>
@@ -62,16 +89,17 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
   }
 
   const typeLabel = node.type === "text" ? "Texto" : node.type === "image" ? "Imagen" : node.type === "shape" ? ({ rect: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", triangle: "Triángulo", star: "Estrella" }[node.shape]) : "Icono";
-  const disabled = node.locked;
+  const layerState = nodeLayerState(document, node);
+  const disabled = layerState.effectiveLocked;
   const modalAsset = node.type === "text" && node.modalAssetId ? assets.find((asset) => asset.id === node.modalAssetId) : undefined;
   return <InspectorLayout title={typeLabel}
     header={<>
       <div className="mt-3 flex items-end gap-2">
         <label className={labelClass + " flex-1"}>Nombre de la capa<input disabled={disabled} className={fieldClass} value={node.name ?? ""} placeholder={"Ej. " + typeLabel.toLowerCase() + " principal"} onChange={(event) => onRename(event.target.value)} /></label>
         <button type="button" className={buttonClass + " shrink-0 px-2"} disabled={disabled} aria-label={node.visible ? "Ocultar objeto" : "Mostrar objeto"} title={node.visible ? "Ocultar objeto" : "Mostrar objeto"} onClick={() => onChange({ visible: !node.visible })}>{node.visible ? <Eye size={16} /> : <EyeOff size={16} />}</button>
-        <button type="button" className={buttonClass + (disabled ? " shrink-0 border-amber-300 bg-amber-50 px-2 text-amber-800" : " shrink-0 px-2")} aria-label={disabled ? "Desbloquear objeto" : "Bloquear objeto"} title={disabled ? "Desbloquear objeto" : "Bloquear objeto"} onClick={() => onChange({ locked: !node.locked })}>{disabled ? <LockKeyhole size={16} /> : <Unlock size={16} />}</button>
+        <button type="button" className={buttonClass + (node.locked ? " shrink-0 border-amber-300 bg-amber-50 px-2 text-amber-800" : " shrink-0 px-2")} aria-label={node.locked ? "Desbloquear objeto" : "Bloquear objeto"} title={layerState.inheritedLocked && !node.locked ? "Bloqueado por un grupo superior" : node.locked ? "Desbloquear objeto" : "Bloquear objeto"} onClick={() => onChange({ locked: !node.locked })}>{node.locked ? <LockKeyhole size={16} /> : <Unlock size={16} />}</button>
       </div>
-      {(disabled || !node.visible) && <p className="mt-2 text-xs leading-5 text-amber-800">{disabled ? "Objeto bloqueado. Desbloquealo para editar." : "Objeto oculto en el menú."}</p>}
+      {(disabled || !layerState.effectiveVisible) && <p className="mt-2 text-xs leading-5 text-amber-800">{layerState.inheritedLocked ? "Objeto bloqueado por un grupo superior." : node.locked ? "Objeto bloqueado. Desbloquealo para editar." : layerState.inheritedHidden ? "Objeto oculto por un grupo superior." : "Objeto oculto en el menú."}</p>}
     </>}
     footer={<div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
@@ -164,6 +192,18 @@ export function CanvasInspector({ node, selectedCount, document, assets, onCanva
       {node.type === "icon" && <label className={labelClass}>Nombre accesible<input disabled={disabled} className={fieldClass} value={node.accessibleLabel} onChange={(event) => onChange({ accessibleLabel: event.target.value })} /></label>}
     </InspectorSection>}
   </InspectorLayout>;
+}
+
+function GroupNameField({ value, disabled, onCommit }: { value: string; disabled: boolean; onCommit(name: string): void }) {
+  const [draft, setDraft] = useState(value);
+  const cancelBlur = useRef(false);
+  const finish = () => {
+    if (cancelBlur.current) { cancelBlur.current = false; return; }
+    const name = draft.trim();
+    if (name && name !== value) onCommit(name);
+    else setDraft(value);
+  };
+  return <label className={labelClass + " flex-1"}>Nombre del grupo<input className={fieldClass} disabled={disabled} value={draft} maxLength={100} onChange={(event) => setDraft(event.target.value)} onBlur={finish} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { cancelBlur.current = true; setDraft(value); event.currentTarget.blur(); } }} /></label>;
 }
 
 function InspectorLayout({ title, description, header, footer, children }: { title: string; description?: string; header?: ReactNode; footer?: ReactNode; children: ReactNode }) {

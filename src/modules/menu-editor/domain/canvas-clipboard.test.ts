@@ -16,6 +16,7 @@ const text = (id: string, x: number, y: number, groupId: string | null = null): 
   visible: true,
   locked: false,
   groupId,
+  layerOrder: 0,
   link: "https://example.com",
   text: id,
   modalAssetId: "modal-asset",
@@ -46,6 +47,7 @@ const rectangle = (id: string, x: number, y: number): CanvasNode => ({
   visible: true,
   locked: false,
   groupId: null,
+  layerOrder: 0,
   link: null,
   fill: "#112233",
   stroke: "#aabbcc",
@@ -98,19 +100,20 @@ describe("canvas clipboard", () => {
   it("pastes a selection with fresh IDs, exact styling, and one shared offset", () => {
     const source = documentWith(
       [text("back", 100, 150, "group"), rectangle("front", 300, 250)],
-      [{ id: "group", name: "Card", nodeIds: ["back", "front"] }],
+      [{ id: "group", name: "Card", nodeIds: ["back", "front"], parentGroupId: null, layerOrder: 0, visible: true, locked: false }],
     );
     source.nodes[1].groupId = "group";
     const snapshot = copyCanvasSelection(source, ["front", "back"]);
     if (!snapshot) throw new Error("Expected snapshot");
     const ids = ["back-copy", "front-copy", "group-copy"];
     let nextId = 0;
-    const pasted = pasteCanvasSelection(snapshot, bounds, () => ids[nextId++]!, 1);
+    const pasted = pasteCanvasSelection(snapshot, source, () => ids[nextId++]!, 1);
 
     expect(pasted.nodes.map((node) => node.id)).toEqual(["back-copy", "front-copy"]);
     expect(pasted.nodes.map((node) => [node.x, node.y])).toEqual([[124, 174], [324, 274]]);
     expect(pasted.nodes.every((node) => node.groupId === "group-copy")).toBe(true);
-    expect(pasted.groups).toEqual([{ id: "group-copy", name: "Card", nodeIds: ["back-copy", "front-copy"] }]);
+    expect(pasted.groups).toEqual([{ id: "group-copy", name: "Card", nodeIds: ["back-copy", "front-copy"], parentGroupId: null, layerOrder: 1, visible: true, locked: false }]);
+    expect(pasted.rootGroupIds).toEqual(["group-copy"]);
     expect({ ...pasted.nodes[1], id: "front", x: 300, y: 250, groupId: "group" }).toEqual(source.nodes[1]);
     expect(snapshot.nodes.map((node) => [node.x, node.y])).toEqual([[100, 150], [300, 250]]);
   });
@@ -119,7 +122,7 @@ describe("canvas clipboard", () => {
     const snapshot = copyCanvasSelection(
       documentWith(
         [text("a", 10, 20, "group"), text("b", 200, 20, "group")],
-        [{ id: "group", name: "Pair", nodeIds: ["a", "b"] }],
+        [{ id: "group", name: "Pair", nodeIds: ["a", "b"], parentGroupId: null, layerOrder: 0, visible: true, locked: false }],
       ),
       ["a"],
     );
@@ -133,7 +136,41 @@ describe("canvas clipboard", () => {
     const atEdge = copyCanvasSelection(documentWith([text("edge", 900, 760)]), ["edge"]);
     if (!centered || !atEdge) throw new Error("Expected snapshots");
 
-    expect(pasteCanvasSelection(centered, bounds, () => "copy-1", 2).nodes[0]).toMatchObject({ x: 148, y: 148 });
-    expect(pasteCanvasSelection(atEdge, bounds, () => "copy-2", 1).nodes[0]).toMatchObject({ x: 876, y: 736 });
+    expect(pasteCanvasSelection(centered, documentWith([text("existing", 0, 0)]), () => "copy-1", 2).nodes[0]).toMatchObject({ x: 148, y: 148 });
+    expect(pasteCanvasSelection(atEdge, documentWith([]), () => "copy-2", 1).nodes[0]).toMatchObject({ x: 876, y: 736 });
+  });
+
+  it("copies nested and empty groups and pastes the root as a sibling when its parent still exists", () => {
+    const source = documentWith(
+      [text("member", 80, 90, "outer")],
+      [
+        { id: "parent", name: "Parent", nodeIds: [], parentGroupId: null, layerOrder: 0, visible: true, locked: false },
+        { id: "outer", name: "Outer", nodeIds: ["member"], parentGroupId: "parent", layerOrder: 0, visible: false, locked: true },
+        { id: "empty", name: "Empty", nodeIds: [], parentGroupId: "outer", layerOrder: 1, visible: true, locked: false },
+      ],
+    );
+    const snapshot = copyCanvasSelection(source, ["member"], "outer");
+    if (!snapshot) throw new Error("Expected nested snapshot");
+    expect(snapshot.groups.map((group) => group.id)).toEqual(["outer", "empty"]);
+
+    const ids = ["member-copy", "outer-copy", "empty-copy"];
+    let nextId = 0;
+    const pasted = pasteCanvasSelection(snapshot, source, () => ids[nextId++]!, 1);
+    expect(pasted.rootGroupIds).toEqual(["outer-copy"]);
+    expect(pasted.groups).toEqual([
+      { id: "outer-copy", name: "Outer", nodeIds: ["member-copy"], parentGroupId: "parent", layerOrder: 1, visible: false, locked: true },
+      { id: "empty-copy", name: "Empty", nodeIds: [], parentGroupId: "outer-copy", layerOrder: 1, visible: true, locked: false },
+    ]);
+    expect(pasted.nodes[0]).toMatchObject({ id: "member-copy", groupId: "outer-copy", x: 104, y: 114 });
+  });
+
+  it("copies and pastes a completely empty group", () => {
+    const source = documentWith([], [{ id: "empty", name: "Empty", nodeIds: [], parentGroupId: null, layerOrder: 0, visible: true, locked: false }]);
+    const snapshot = copyCanvasSelection(source, [], "empty");
+    if (!snapshot) throw new Error("Expected empty group snapshot");
+    const pasted = pasteCanvasSelection(snapshot, source, () => "empty-copy", 1);
+    expect(pasted.nodes).toEqual([]);
+    expect(pasted.rootGroupIds).toEqual(["empty-copy"]);
+    expect(pasted.groups[0]).toMatchObject({ id: "empty-copy", parentGroupId: null, layerOrder: 1 });
   });
 });

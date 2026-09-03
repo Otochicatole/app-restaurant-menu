@@ -49,6 +49,7 @@ const nodeBase = z.object({
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
   groupId: id.nullable().default(null),
+  layerOrder: finiteNumber.int().min(0).max(100_000).optional(),
   link,
 });
 
@@ -110,6 +111,10 @@ export const canvasGroupSchema = z.object({
   id,
   name: z.string().trim().min(1).max(100),
   nodeIds: z.array(id).max(2_000),
+  parentGroupId: id.nullable().optional(),
+  layerOrder: finiteNumber.int().min(0).max(100_000).optional(),
+  visible: z.boolean().optional(),
+  locked: z.boolean().optional(),
 });
 
 const canvasDocumentInputSchema = z.object({
@@ -129,13 +134,119 @@ const canvasDocumentInputSchema = z.object({
   }).optional(),
   nodes: z.array(canvasNodeSchema).max(2_000),
   groups: z.array(canvasGroupSchema).max(200),
-});
+}).superRefine(validateLayerHierarchyInput);
+
+type CanvasDocumentInput = z.output<typeof canvasDocumentInputSchema>;
+
+function validateLayerHierarchyInput(document: z.input<typeof canvasDocumentInputSchema>, context: z.RefinementCtx) {
+  const nodeIds = new Set<string>();
+  document.nodes.forEach((node, index) => {
+    if (nodeIds.has(node.id)) context.addIssue({ code: "custom", message: "El documento contiene IDs duplicados de objetos.", path: ["nodes", index, "id"] });
+    nodeIds.add(node.id);
+  });
+
+  const groupIds = new Set<string>();
+  document.groups.forEach((group, index) => {
+    if (groupIds.has(group.id)) context.addIssue({ code: "custom", message: "El documento contiene IDs de grupos duplicados.", path: ["groups", index, "id"] });
+    groupIds.add(group.id);
+  });
+
+  const listedParents = new Map<string, string>();
+  document.groups.forEach((group, groupIndex) => {
+    if (group.parentGroupId && !groupIds.has(group.parentGroupId)) context.addIssue({ code: "custom", message: "Un grupo referencia un grupo padre inexistente.", path: ["groups", groupIndex, "parentGroupId"] });
+    if (group.parentGroupId === group.id) context.addIssue({ code: "custom", message: "Un grupo no puede contenerse a sí mismo.", path: ["groups", groupIndex, "parentGroupId"] });
+    const localIds = new Set<string>();
+    group.nodeIds.forEach((nodeId, nodeIndex) => {
+      if (!nodeIds.has(nodeId)) context.addIssue({ code: "custom", message: "Un grupo referencia un objeto inexistente.", path: ["groups", groupIndex, "nodeIds", nodeIndex] });
+      if (localIds.has(nodeId) || listedParents.has(nodeId)) context.addIssue({ code: "custom", message: "Un objeto no puede pertenecer a más de un grupo.", path: ["groups", groupIndex, "nodeIds", nodeIndex] });
+      localIds.add(nodeId);
+      listedParents.set(nodeId, group.id);
+    });
+  });
+
+  document.nodes.forEach((node, index) => {
+    if (node.groupId && !groupIds.has(node.groupId)) context.addIssue({ code: "custom", message: "Un objeto referencia un grupo inexistente.", path: ["nodes", index, "groupId"] });
+    const listedParent = listedParents.get(node.id);
+    if (node.groupId && listedParent && node.groupId !== listedParent) context.addIssue({ code: "custom", message: "La pertenencia del objeto no coincide con su grupo.", path: ["nodes", index, "groupId"] });
+  });
+
+  const groupMap = new Map(document.groups.map((group) => [group.id, group]));
+  document.groups.forEach((group, index) => {
+    const visited = new Set([group.id]);
+    let parentId = group.parentGroupId ?? null;
+    while (parentId) {
+      if (visited.has(parentId)) {
+        context.addIssue({ code: "custom", message: "La jerarquía de grupos contiene un ciclo.", path: ["groups", index, "parentGroupId"] });
+        break;
+      }
+      visited.add(parentId);
+      parentId = groupMap.get(parentId)?.parentGroupId ?? null;
+    }
+  });
+}
+
+function normalizeCanvasLayers(document: CanvasDocumentInput) {
+  const groupIds = new Set(document.groups.map((group) => group.id));
+  const listedParents = new Map<string, string>();
+  document.groups.forEach((group) => group.nodeIds.forEach((nodeId) => listedParents.set(nodeId, group.id)));
+
+  const nodes = document.nodes.map((node, index) => ({
+    ...node,
+    groupId: node.groupId ?? listedParents.get(node.id) ?? null,
+    layerOrder: node.layerOrder ?? index,
+  }));
+  let groups = document.groups.map((group) => ({
+    ...group,
+    parentGroupId: group.parentGroupId ?? null,
+    layerOrder: group.layerOrder ?? 0,
+    visible: group.visible ?? true,
+    locked: group.locked ?? false,
+    nodeIds: [] as string[],
+  }));
+  const rankCache = new Map<string, number>();
+  const groupRank = (groupId: string, visiting = new Set<string>()): number => {
+    const cached = rankCache.get(groupId);
+    if (cached !== undefined) return cached;
+    if (visiting.has(groupId)) return document.nodes.length;
+    const nextVisiting = new Set(visiting).add(groupId);
+    const nodeRanks = nodes.flatMap((node, index) => node.groupId === groupId ? [index] : []);
+    const childRanks = groups.flatMap((group) => group.parentGroupId === groupId ? [groupRank(group.id, nextVisiting)] : []);
+    const groupIndex = groups.findIndex((group) => group.id === groupId);
+    const rank = nodeRanks.length || childRanks.length ? Math.max(...nodeRanks, ...childRanks) : document.nodes.length + Math.max(0, groupIndex);
+    rankCache.set(groupId, rank);
+    return rank;
+  };
+  groups = groups.map((group, index) => ({ ...group, layerOrder: document.groups[index].layerOrder ?? groupRank(group.id) }));
+
+  type MutableLayer = { kind: "node" | "group"; index: number; parentId: string | null; order: number; stableOrder: number };
+  const siblings = new Map<string, MutableLayer[]>();
+  const addSibling = (layer: MutableLayer) => {
+    const key = layer.parentId ?? "__root__";
+    siblings.set(key, [...(siblings.get(key) ?? []), layer]);
+  };
+  nodes.forEach((node, index) => addSibling({ kind: "node", index, parentId: node.groupId, order: node.layerOrder, stableOrder: index }));
+  groups.forEach((group, index) => addSibling({ kind: "group", index, parentId: group.parentGroupId, order: group.layerOrder, stableOrder: document.nodes.length + index }));
+  siblings.forEach((layers) => layers.sort((first, second) => first.order - second.order || first.stableOrder - second.stableOrder).forEach((layer, order) => {
+    if (layer.kind === "node") nodes[layer.index].layerOrder = order;
+    else groups[layer.index].layerOrder = order;
+  }));
+
+  const directNodeIds = new Map<string, string[]>();
+  nodes.forEach((node) => {
+    if (!node.groupId || !groupIds.has(node.groupId)) return;
+    directNodeIds.set(node.groupId, [...(directNodeIds.get(node.groupId) ?? []), node.id]);
+  });
+  groups.forEach((group) => { group.nodeIds = directNodeIds.get(group.id) ?? []; });
+
+  return { ...document, nodes, groups };
+}
 
 function normalizeShapeNode(node: z.output<typeof shapeNode>) {
   const { cornerRadius, cornerRadii, ...canonicalNode } = node;
   const legacyRadius = cornerRadius ?? 0;
   return {
     ...canonicalNode,
+    layerOrder: canonicalNode.layerOrder ?? 0,
     cornerRadii: cornerRadii ?? {
       topLeft: legacyRadius,
       topRight: legacyRadius,
@@ -145,14 +256,18 @@ function normalizeShapeNode(node: z.output<typeof shapeNode>) {
   };
 }
 
-export const canvasDocumentSchema = canvasDocumentInputSchema.transform((document) => ({
-  ...document,
-  canvasBounds: document.canvasBounds ?? { ...document.initialViewport },
-  nodes: document.nodes.map((node) => node.type === "shape" ? normalizeShapeNode(node) : node),
-}));
+export const canvasDocumentSchema = canvasDocumentInputSchema.transform((document) => {
+  const normalized = normalizeCanvasLayers(document);
+  return {
+    ...normalized,
+    canvasBounds: document.canvasBounds ?? { ...document.initialViewport },
+    nodes: normalized.nodes.map((node) => node.type === "shape" ? normalizeShapeNode(node) : node),
+  };
+});
 
 export type CanvasDocumentV1 = z.output<typeof canvasDocumentSchema>;
 export type CanvasNode = CanvasDocumentV1["nodes"][number];
+export type CanvasGroup = CanvasDocumentV1["groups"][number];
 export type CanvasTextNode = Extract<CanvasNode, { type: "text" }>;
 export type CanvasImageNode = Extract<CanvasNode, { type: "image" }>;
 export type CanvasShapeNode = Extract<CanvasNode, { type: "shape" }>;

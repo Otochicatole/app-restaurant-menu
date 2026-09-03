@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ArrowRight, ChevronDown, Circle, Film, ImagePlus, Minus, Search, Square, Star, Triangle, Type, Upload, X } from "lucide-react";
 import { DynamicIcon } from "lucide-react/dynamic";
 import { LUCIDE_ICON_NAMES, humanizeLucideIconName, searchLucideIconNames, type LucideIconName } from "../domain/lucide-icon-catalog";
+import { nodeLayerState } from "../domain/layer-tree";
 import type { CanvasNode, MenuAssetView, MenuTemplateView } from "../contracts";
 import { HexColorInput } from "./HexColorInput";
 
@@ -39,7 +40,7 @@ function statusLabel(status: MenuTemplateView["status"]): string { return ({ DRA
 export function TemplateMiniature({ document, assets = {}, large = false, preview = false }: { document: MenuTemplateView["document"]; assets?: Record<string, { url: string }>; large?: boolean; preview?: boolean }) {
   const scale = preview ? Math.min(0.42, 680 / Math.max(document.canvasBounds.width, document.canvasBounds.height)) : large ? 0.18 : 0.12;
   const height = preview ? "min(62vh, 620px)" : large ? "11rem" : "6rem";
-  return <div className="relative overflow-hidden border-b border-zinc-100 bg-zinc-100" style={{ height }}><div className="absolute left-1/2 top-1/2 origin-center" style={{ width: document.canvasBounds.width * scale, height: document.canvasBounds.height * scale, transform: "translate(-50%,-50%)", background: document.background }}><div className="relative h-full w-full">{document.nodes.slice(0, 30).map((node) => <MiniatureNode key={node.id} node={node} origin={document.canvasBounds} scale={scale} assets={assets} />)}</div></div></div>;
+  return <div className="relative overflow-hidden border-b border-zinc-100 bg-zinc-100" style={{ height }}><div className="absolute left-1/2 top-1/2 origin-center" style={{ width: document.canvasBounds.width * scale, height: document.canvasBounds.height * scale, transform: "translate(-50%,-50%)", background: document.background }}><div className="relative h-full w-full">{document.nodes.filter((node) => nodeLayerState(document, node).effectiveVisible).slice(0, 30).map((node) => <MiniatureNode key={node.id} node={node} origin={document.canvasBounds} scale={scale} assets={assets} />)}</div></div></div>;
 }
 
 function MiniatureNode({ node, origin, scale, assets }: { node: CanvasNode; origin: { x: number; y: number }; scale: number; assets: Record<string, { url: string }> }) {

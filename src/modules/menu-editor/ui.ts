@@ -5,6 +5,7 @@ export { TemplateModerationPanel } from "./presentation/TemplateModerationPanel"
 export { LucideKonvaIcon } from "./ui/LucideKonvaIcon";
 export { CanvasStage } from "./ui/CanvasStage";
 export { cameraForViewport, zoomViewportAt } from "./ui/canvas-geometry";
-export type { CanvasDocumentV1, CanvasNode } from "./contracts";
+export type { CanvasDocumentV1, CanvasGroup, CanvasNode } from "./contracts";
 export { allCornerRadii, drawRectanglePath, hasAllStrokeSides, normalizeRectangleRadii, rectangleBorderGeometry, rectangleBorderGeometryForNode, toggleStrokeSide } from "./domain/rectangle-border";
 export { backgroundImagePlacement, gradientColorStops, gradientEndpoints, normalizeAngle } from "./domain/rectangle-fill";
+export { nodeLayerState } from "./domain/layer-tree";

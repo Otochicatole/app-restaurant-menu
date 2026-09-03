@@ -5,6 +5,7 @@ import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon,
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, zoomViewportAt } from "../domain/canvas-geometry";
+import { nodeLayerState } from "../domain/layer-tree";
 import { RectangleVisual } from "./RectangleVisual";
 import { LucideKonvaIcon } from "./LucideKonvaIcon";
 import type { MediaModalAsset } from "@/ui/MediaModal";
@@ -111,7 +112,7 @@ export function CanvasStage({ document, assets, onTextModalOpen }: { document: C
   const displayBackground = document.background.endsWith("00") ? "#f5f7f3" : document.background;
   return <div ref={containerRef} className="h-full w-full touch-none" style={{ backgroundColor: displayBackground }} onContextMenu={(event) => event.preventDefault()}>
     <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={() => { panMotion.current = null; setPanStart(null); }} onMouseLeave={() => { panMotion.current = null; setPanStart(null); }} onTouchStart={(event) => { const points = touchPoints(event); if (points.length >= 2) beginPinch(event, points); else if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={(event) => movePinch(event, touchPoints(event))} onTouchEnd={finishTouch} onTouchCancel={(event: Konva.KonvaEventObject<TouchEvent>) => finishTouch(event, false)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
-      <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{document.nodes.filter((node) => node.visible).map((node) => <CanvasStageNode key={node.id} node={node} assets={assets} onTextModalOpen={onTextModalOpen} />)}</Layer>
+      <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{document.nodes.filter((node) => nodeLayerState(document, node).effectiveVisible).map((node) => <CanvasStageNode key={node.id} node={node} assets={assets} onTextModalOpen={onTextModalOpen} />)}</Layer>
     </Stage>
     <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm disabled:opacity-30" onClick={() => zoomAt(0.9)} disabled={scale <= fitScale * (1 + 1e-10)} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoomAt(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => { cancelInertia(); updateViewport(bounds); }}>Restablecer</button></div>
   </div>;

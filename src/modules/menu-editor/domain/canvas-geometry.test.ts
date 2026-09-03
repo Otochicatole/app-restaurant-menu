@@ -4,7 +4,7 @@ import type { CanvasNode } from "../contracts";
 
 const bounds = { x: 0, y: 0, width: 1000, height: 800 };
 const size = { width: 1000, height: 800 };
-const text = (id: string, x: number, y: number): CanvasNode => ({ id, type: "text", x, y, width: 100, height: 40, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text: id, modalAssetId: null, fontAssetId: null, fontSize: 20, fontWeight: "400", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "top", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
+const text = (id: string, x: number, y: number): CanvasNode => ({ id, type: "text", x, y, width: 100, height: 40, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder: 0, link: null, text: id, modalAssetId: null, fontAssetId: null, fontSize: 20, fontWeight: "400", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "top", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: "paragraph" });
 
 describe("canvas geometry", () => {
   it("centers the sheet at the fitted camera", () => {

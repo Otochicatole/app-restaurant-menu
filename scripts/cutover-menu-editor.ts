@@ -20,7 +20,7 @@ type ExistingProject = { id: string; draftJson: string; publishedJson: string | 
 type DbSource = Client | Awaited<ReturnType<Client["transaction"]>>;
 
 function textNode(id: string, text: string, x: number, y: number, width: number, height: number, role: "heading" | "paragraph" | "label" | "price" = "paragraph", fontAssetId: string | null = null): CanvasNode {
-  return { id, name: text.slice(0, 120), type: "text", x, y, width, height, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, text, modalAssetId: null, fontAssetId, fontSize: role === "heading" ? 42 : 22, fontWeight: role === "heading" ? "700" : "400", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: role };
+  return { id, name: text.slice(0, 120), type: "text", x, y, width, height, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder: 0, link: null, text, modalAssetId: null, fontAssetId, fontSize: role === "heading" ? 42 : 22, fontWeight: role === "heading" ? "700" : "400", fontStyle: "normal", textDecoration: "none", align: "left", verticalAlign: "middle", lineHeight: 1.2, letterSpacing: 0, fill: "#171717", semanticRole: role };
 }
 
 function documentFor(tenant: TenantRow, groups: LegacyGroup[], products: LegacyProduct[], assets: Map<string, string>, fontAssetId: string | null): CanvasDocumentV1 {
@@ -50,7 +50,7 @@ function documentFor(tenant: TenantRow, groups: LegacyGroup[], products: LegacyP
       }
       const assetId = product.mediaPath ? assets.get(product.mediaPath) : undefined;
       if (assetId) {
-        nodes.push({ id: `legacy-image-${product.id}`, name: product.name, type: "image", assetId, x: 120, y, width: 260, height: 170, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: product.name });
+        nodes.push({ id: `legacy-image-${product.id}`, name: product.name, type: "image", assetId, x: 120, y, width: 260, height: 170, rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder: nodes.length, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: product.name });
         y += 190;
       }
       y += 28;

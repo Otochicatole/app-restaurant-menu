@@ -223,6 +223,135 @@ test("tenant admin can copy and paste selected objects with keyboard shortcuts",
   await expect(page.locator("#editor-layers [aria-pressed]")).toHaveCount(layerCount);
 });
 
+test("tenant admin can organize layers in nested groups with reversible visibility and locks", async ({ page, context }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  const suffix = Date.now();
+  const textLayer = `Texto grupo ${suffix}`;
+  const shapeLayer = `Forma grupo ${suffix}`;
+  const groupName = `Promoción ${suffix}`;
+  const childGroupName = `Detalles ${suffix}`;
+  const publicText = `Contenido agrupado ${suffix}`;
+  const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
+  const layers = page.locator("#editor-layers");
+
+  await page.getByRole("button", { name: "Texto", exact: true }).click();
+  await inspector.getByRole("textbox", { name: "Nombre de la capa" }).fill(textLayer);
+  await inspector.getByRole("textbox", { name: "Contenido" }).fill(publicText);
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  const textX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+  const textY = Number(await inspector.getByRole("spinbutton", { name: "Y", exact: true }).inputValue());
+  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await inspector.getByRole("textbox", { name: "Nombre de la capa" }).fill(shapeLayer);
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  const shapeX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+  const shapeY = Number(await inspector.getByRole("spinbutton", { name: "Y", exact: true }).inputValue());
+
+  await layers.getByText(textLayer, { exact: true }).click();
+  await layers.getByText(shapeLayer, { exact: true }).click({ modifiers: ["Shift"] });
+  await page.keyboard.press("Control+G");
+  const groupNameInput = layers.getByRole("textbox", { name: /^Nombre del grupo Grupo/ });
+  await groupNameInput.fill(groupName);
+  await groupNameInput.press("Enter");
+  await expect(inspector.getByRole("heading", { name: "Grupo", exact: true })).toBeVisible();
+  await expect(inspector.getByText("2 capas en este árbol.")).toBeVisible();
+
+  await layers.getByRole("button", { name: "Nuevo grupo" }).click();
+  const childNameInput = layers.getByRole("textbox", { name: /^Nombre del grupo Grupo/ });
+  await childNameInput.fill(childGroupName);
+  await childNameInput.press("Enter");
+  const childRow = layers.getByRole("treeitem").filter({ hasText: childGroupName });
+  await expect(childRow).toHaveAttribute("aria-level", "2");
+
+  const draggedGroupName = `Extras ${suffix}`;
+  await page.locator(".konvajs-content").first().click({ position: { x: 8, y: 8 } });
+  await layers.getByRole("button", { name: "Nuevo grupo" }).click();
+  const draggedNameInput = layers.getByRole("textbox", { name: /^Nombre del grupo Grupo/ });
+  await draggedNameInput.fill(draggedGroupName);
+  await draggedNameInput.press("Enter");
+  const dragHandle = layers.getByRole("button", { name: `Reordenar grupo ${draggedGroupName}` });
+  const outerTarget = layers.getByRole("button", { name: groupName, exact: true });
+  await dragHandle.scrollIntoViewIfNeeded();
+  const dragBox = await dragHandle.boundingBox();
+  const targetBox = await outerTarget.boundingBox();
+  if (!dragBox || !targetBox) throw new Error("Layer drag controls are not visible");
+  await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(layers.getByRole("treeitem").filter({ hasText: draggedGroupName })).toHaveAttribute("aria-level", "2");
+
+  await layers.getByText(groupName, { exact: true }).click();
+  await layers.getByRole("button", { name: `Bloquear grupo ${groupName}` }).click();
+  await expect(inspector.getByRole("button", { name: "Desbloquear grupo" })).toBeVisible();
+  await layers.getByRole("button", { name: `Desbloquear grupo ${groupName}` }).click();
+  await layers.getByRole("button", { name: `Ocultar grupo ${groupName}` }).click();
+  await expect(layers.getByText(textLayer, { exact: true })).toBeVisible();
+  await expect(layers.getByText(shapeLayer, { exact: true })).toBeVisible();
+  await expect(page.getByText("Cambios pendientes")).toBeVisible();
+  await expect(page.getByText("Guardado", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Publicar" }).click();
+  await expect(page.getByText("Publicado", { exact: true })).toBeVisible();
+  const publicPage = await context.newPage();
+  await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
+  await publicPage.getByRole("button", { name: "Ver contenido en texto" }).click();
+  await expect(publicPage.getByText(publicText, { exact: true })).toHaveCount(0);
+  await publicPage.close();
+
+  await layers.getByRole("button", { name: `Mostrar grupo ${groupName}` }).click();
+  await layers.getByText(groupName, { exact: true }).click();
+  await page.keyboard.press("Control+Shift+G");
+  await expect(layers.getByText(groupName, { exact: true })).toHaveCount(0);
+  await expect(layers.getByText(textLayer, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Deshacer" }).click();
+  await expect(layers.getByText(groupName, { exact: true })).toBeVisible();
+
+  const stage = page.locator(".konvajs-content").first();
+  await stage.click({ position: { x: 8, y: 8 } });
+  const shapePoint = await editorCanvasPoint(page, shapeX + 130, shapeY + 80);
+  await page.mouse.click(shapePoint.x, shapePoint.y);
+  await expect(inspector.getByRole("heading", { name: "Grupo", exact: true })).toBeVisible();
+  await page.mouse.dblclick(shapePoint.x, shapePoint.y);
+  await expect(inspector.getByRole("textbox", { name: "Nombre de la capa" })).toHaveValue(shapeLayer);
+
+  await layers.getByRole("button", { name: `Bloquear capa ${shapeLayer}` }).click();
+  await stage.click({ position: { x: 8, y: 8 } });
+  const textPoint = await editorCanvasPoint(page, textX + 20, textY + 25);
+  await page.mouse.move(textPoint.x, textPoint.y);
+  await page.mouse.down();
+  await page.mouse.move(textPoint.x + 40, textPoint.y + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect(inspector.getByRole("heading", { name: "Grupo", exact: true })).toBeVisible();
+
+  await layers.getByRole("button", { name: `Desbloquear capa ${shapeLayer}` }).click();
+  await layers.getByText(shapeLayer, { exact: true }).click();
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  const movedShapeX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+  const movedShapeY = Number(await inspector.getByRole("spinbutton", { name: "Y", exact: true }).inputValue());
+  await layers.getByText(textLayer, { exact: true }).click();
+  await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
+  const movedTextX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+  const movedTextY = Number(await inspector.getByRole("spinbutton", { name: "Y", exact: true }).inputValue());
+  expect(movedTextX - textX).toBeGreaterThan(0);
+  expect(movedTextY - textY).toBeGreaterThan(0);
+  expect(Math.abs((movedTextX - textX) - (movedShapeX - shapeX))).toBeLessThan(0.01);
+  expect(Math.abs((movedTextY - textY) - (movedShapeY - shapeY))).toBeLessThan(0.01);
+});
+
+async function editorCanvasPoint(page: import("@playwright/test").Page, worldX: number, worldY: number): Promise<{ x: number; y: number }> {
+  const stage = page.locator(".konvajs-content").first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error("Editor canvas is not visible");
+  const bounds = { x: 0, y: 0, width: 1240, height: 900 };
+  const scene = { width: Math.max(1, box.width - 80), height: Math.max(1, box.height - 80) };
+  const scale = Math.max(0.1, Math.min(8, Math.min(scene.width / bounds.width, scene.height / bounds.height)));
+  const cameraWidth = scene.width / scale;
+  const cameraHeight = scene.height / scale;
+  const cameraX = cameraWidth >= bounds.width ? bounds.x - (cameraWidth - bounds.width) / 2 : bounds.x;
+  const cameraY = cameraHeight >= bounds.height ? bounds.y - (cameraHeight - bounds.height) / 2 : bounds.y;
+  return { x: box.x + 40 + (worldX - cameraX) * scale, y: box.y + 40 + (worldY - cameraY) * scale };
+}
+
 async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name });
   const image = dialog.getByRole("img", { name });
