@@ -32,6 +32,7 @@ test("tenant admin can associate media, publish it immediately, and open it publ
   await loginAs(page, E2E.tenantAdmin);
   await page.getByRole("button", { name: "Texto", exact: true }).click();
   await expect(page.getByText("Al hacer clic")).toBeVisible();
+  await page.getByRole("button", { name: /^Al hacer clic/ }).click();
   await page.getByRole("button", { name: "Elegir multimedia" }).click();
   await page.locator("#editor-images").getByRole("button", { name: /Café E2E/ }).click();
   await expect(page.getByRole("button", { name: "Quitar" })).toBeEnabled();
@@ -73,6 +74,7 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
   await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
 
+  await page.getByRole("button", { name: /^Borde Sin borde visible/ }).click();
   const top = page.getByRole("button", { name: "Borde arriba" });
   const right = page.getByRole("button", { name: "Borde derecha" });
   const bottom = page.getByRole("button", { name: "Borde abajo" });
@@ -93,6 +95,7 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await expect(right).toHaveAttribute("aria-pressed", "true");
   await expect(bottom).toHaveAttribute("aria-pressed", "true");
 
+  await page.getByRole("button", { name: /^Esquinas/ }).click();
   const topLeft = page.getByRole("spinbutton", { name: "Arriba izquierda" });
   const topRight = page.getByRole("spinbutton", { name: "Arriba derecha" });
   const bottomRight = page.getByRole("spinbutton", { name: "Abajo derecha" });
@@ -138,6 +141,35 @@ test("tenant admin can configure a rectangle gradient and background image", asy
   await page.getByRole("button", { name: "Rehacer" }).click();
   await expect(imageOpacity).toHaveValue("60");
   await expect(page.getByRole("button", { name: "Quitar imagen de fondo" })).toBeVisible();
+});
+
+test("properties stay readable and keep object actions visible while scrolling", async ({ page }, testInfo) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
+  const name = inspector.getByRole("textbox", { name: "Nombre de la capa" });
+  const duplicate = inspector.getByRole("button", { name: "Duplicar", exact: true });
+  const nameBox = await name.boundingBox();
+  const actionBox = await duplicate.boundingBox();
+  await inspector.getByRole("button", { name: "Agregar degradado" }).click();
+  await inspector.getByRole("slider", { name: "Posición final del degradado" }).scrollIntoViewIfNeeded();
+
+  expect(await name.boundingBox()).toEqual(nameBox);
+  expect(await duplicate.boundingBox()).toEqual(actionBox);
+  await expect(name).toBeInViewport();
+  await expect(duplicate).toBeInViewport();
+  await expect(inspector.getByRole("button", { name: "Eliminar", exact: true })).toBeInViewport();
+  expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const controlsFit = await inspector.locator("input, select, textarea").evaluateAll((elements) => elements.filter((element) => element.getBoundingClientRect().width > 0).every((element) => {
+    const bounds = element.closest("aside")!.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
+    return rect.left >= bounds.left && rect.right <= bounds.right;
+  }));
+  expect(controlsFit).toBe(true);
+  await inspector.screenshot({ path: testInfo.outputPath("properties-gradient.png") });
+  await inspector.getByRole("button", { name: /^Relleno y fondo/ }).click();
+  await expect(inspector.getByRole("button", { name: /^Esquinas/ })).toBeVisible();
+  await inspector.screenshot({ path: testInfo.outputPath("properties-sections.png") });
 });
 
 async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {

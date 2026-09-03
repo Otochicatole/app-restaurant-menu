@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
-import { Grid2X2, Redo2, Trash2, Undo2 } from "lucide-react";
-import { CORNER_RADII, STROKE_SIDES, SYSTEM_FONT_FAMILIES, type CanvasDocumentV1, type CanvasNode, type CornerRadiusKey, type FillGradient, type MenuAssetView, type MenuProjectView, type MenuTemplateView, type RectangleBackgroundImage, type StrokeSide } from "../contracts";
+import { Grid2X2, Redo2, Undo2 } from "lucide-react";
+import { STROKE_SIDES, type CanvasDocumentV1, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
 import { placeNodeInCanvas } from "../domain/node-placement";
-import { allCornerRadii, hasAllStrokeSides, toggleStrokeSide } from "../domain/rectangle-border";
+import { allCornerRadii } from "../domain/rectangle-border";
+import { CanvasInspector } from "./CanvasInspector";
 import { LayersPanel } from "./LayersPanel";
 import { EditorToolsPanel, IconPickerDrawer, MediaPickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
 import { CanvasStage } from "../ui/CanvasStage";
@@ -212,7 +213,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
       {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <MediaPickerDrawer images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")} onClose={() => setImagesOpen(false)} onSelect={selectMedia} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} assets={assets} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel nodes={document.nodes} selectedIds={selectedIds} onReorder={reorderLayer} onSelect={(id, additive) => setSelectedIds((ids) => additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} />)}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedIds} showGrid={gridEnabled} onSelect={(id, additive) => setSelectedIds((ids) => !id ? [] : additive ? ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id] : [id])} onSelectMany={(ids) => setSelectedIds(ids.filter((id) => !document.nodes.find((node) => node.id === id)?.locked))} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside className="w-80 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4"><Inspector node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
+      <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} selectedCount={selectedIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!selected.locked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && (!selected.locked) && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && (!selected.locked) && patchNode(selected.id, { opacity })} /></aside>
     </div>
     </div>
     {previewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><div className="relative h-[min(90vh,720px)] w-[min(92vw,1100px)] overflow-hidden rounded-xl bg-zinc-100 shadow-2xl" role="dialog" aria-modal="true" aria-label="Vista previa del menú"><button type="button" className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-800 shadow" onClick={() => setPreviewOpen(false)}>Cerrar vista previa</button><CanvasStage document={document} assets={assetMap} onTextModalOpen={setPreviewAsset} /></div></div>}
@@ -230,259 +231,6 @@ function EditorModal({ state, name, description, onNameChange, onDescriptionChan
   const isSave = state.kind === "save";
   const title = isApply ? "Aplicar plantilla" : isDelete ? "Eliminar plantilla" : isSave ? (state.submitPublic ? "Enviar a la comunidad" : "Guardar plantilla") : "Sobrescribir borrador";
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title"><h2 id="editor-modal-title" className="text-base font-semibold text-zinc-900">{title}</h2>{isApply && <p className="mt-2 text-sm leading-6 text-zinc-600">“{state.template.name}” reemplazará el borrador actual. La publicación vigente no se modificará.</p>}{isDelete && <p className="mt-2 text-sm leading-6 text-zinc-600">Se eliminará “{state.template.name}”. Esta acción no se puede deshacer.</p>}{state.kind === "overwrite" && <p className="mt-2 text-sm leading-6 text-zinc-600">Esto reemplazará el borrador guardado con tu trabajo local.</p>}{isSave && <div className="mt-4 space-y-3"><label className="block text-xs font-medium">Nombre<input autoFocus className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm" value={name} onChange={(event) => onNameChange(event.target.value)} /></label><label className="block text-xs font-medium">Descripción<textarea className="mt-1 min-h-20 w-full resize-y rounded-md border border-zinc-200 px-3 py-2 text-sm" value={description} onChange={(event) => onDescriptionChange(event.target.value)} /></label></div>}<div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg border border-zinc-200 px-3 py-2 text-xs" onClick={onClose}>Cancelar</button>{isApply && <button type="button" className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onApply(state.template)}>Aplicar</button>}{isDelete && <button type="button" className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onDelete(state.template)}>Eliminar</button>}{isSave && <button type="button" disabled={!name.trim()} className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" onClick={() => void onSave(state.submitPublic, name, description)}>{state.submitPublic ? "Enviar" : "Guardar"}</button>}{state.kind === "overwrite" && <button type="button" className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white" onClick={() => void onOverwrite(state.serverRevision)}>Sobrescribir</button>}</div></div></div>;
-}
-
-function Inspector({ node, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange }: { node: CanvasNode | null; selectedCount: number; document: CanvasDocumentV1; assets: MenuAssetView[]; onCanvasSizeChange: (dimension: "width" | "height", value: number) => void; onOpenModalMedia: () => void; onOpenBackgroundImage: () => void; onChange: (patch: Partial<CanvasNode>) => void; onChangeSelected: (patch: Partial<CanvasNode>) => void; onDuplicate: () => void; onMoveLayer: (delta: number) => void; onDelete: () => void; onRename: (name: string) => void; onOpacityChange: (opacity: number) => void }) {
-  if (!node) {
-    return <div className="space-y-5">
-      <InspectorSection title="Lienzo">
-        <div>
-          <p className="text-sm font-semibold text-zinc-900">Tamaño de la carta pública</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">Define el área real de la hoja. La vista inicial se guarda por separado.</p>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <NumberField label="Ancho" value={document.canvasBounds.width} onChange={(value) => onCanvasSizeChange("width", value)} />
-          <NumberField label="Alto" value={document.canvasBounds.height} onChange={(value) => onCanvasSizeChange("height", value)} />
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
-          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1920); }}>Vertical</button>
-          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1920); onCanvasSizeChange("height", 1080); }}>Horizontal</button>
-          <button type="button" className="rounded-md border border-zinc-200 px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50" onClick={() => { onCanvasSizeChange("width", 1080); onCanvasSizeChange("height", 1080); }}>Cuadrado</button>
-        </div>
-      </InspectorSection>
-    </div>;
-  }
-
-  if (selectedCount > 1) {
-    return <div className="space-y-5">
-      <div className="border-b border-zinc-200 pb-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Selección múltiple</p>
-        <p className="mt-1 text-base font-semibold text-zinc-900">{selectedCount} objetos seleccionados</p>
-        <p className="mt-1 text-xs leading-5 text-zinc-500">Los cambios compatibles se aplican a todos los objetos seleccionados.</p>
-      </div>
-      <InspectorSection title="Transformación">
-        <div className="grid grid-cols-2 gap-2">
-          <NumberField label="Ancho" value={node.width} onChange={(value) => onChangeSelected({ width: value })} />
-          <NumberField label="Alto" value={node.height} onChange={(value) => onChangeSelected({ height: value })} />
-        </div>
-        <label className="mt-3 block text-xs font-medium">Opacidad <span className="float-right text-zinc-500">{Math.round((Number.isFinite(node.opacity) ? node.opacity : 1) * 100)}%</span><input aria-label="Opacidad de la selección" className="mt-1 w-full accent-emerald-700" type="range" min="0" max="1" step="0.01" value={Number.isFinite(node.opacity) ? node.opacity : 1} onChange={(event) => onChangeSelected({ opacity: Number(event.target.value) })} /></label>
-      </InspectorSection>
-      <InspectorSection title="Estado">
-        <label className="flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.locked} onChange={(event) => onChangeSelected({ locked: event.target.checked })} /> Bloquear selección</label>
-        <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.visible} onChange={(event) => onChangeSelected({ visible: event.target.checked })} /> Mostrar objetos</label>
-      </InspectorSection>
-      <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50" onClick={onDelete}><Trash2 size={14} /> Eliminar selección</button>
-    </div>;
-  }
-
-  const typeLabel = node.type === "text" ? "Texto" : node.type === "image" ? "Imagen" : node.type === "shape" ? ({ rect: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", triangle: "Triángulo", star: "Estrella" }[node.shape]) : "Icono";
-  const fieldDisabled = node.locked;
-  const modalAsset = node.type === "text" && node.modalAssetId ? assets.find((asset) => asset.id === node.modalAssetId) : undefined;
-  return <div className="space-y-5">
-    <div className="border-b border-zinc-200 pb-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Propiedades</p>
-      <div className="mt-1 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-zinc-900">{typeLabel}</h2>
-        <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-500">{node.id.slice(0, 8)}</span>
-      </div>
-    </div>
-
-    <InspectorSection title="Identificación">
-      <label className="block text-xs font-medium text-zinc-700">Nombre de la capa<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400" value={node.name ?? ""} placeholder="Ej. Título principal" onChange={(event) => onRename(event.target.value)} /></label>
-    </InspectorSection>
-
-    <InspectorSection title="Transformación">
-      <div className="grid grid-cols-2 gap-2">
-        <NumberField label="X" value={node.x} disabled={fieldDisabled} onChange={(value) => onChange({ x: value })} />
-        <NumberField label="Y" value={node.y} disabled={fieldDisabled} onChange={(value) => onChange({ y: value })} />
-        <NumberField label="Ancho" value={node.width} disabled={fieldDisabled} onChange={(value) => onChange({ width: value })} />
-        <NumberField label="Alto" value={node.height} disabled={fieldDisabled} onChange={(value) => onChange({ height: value })} />
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <NumberField label="Rotación" value={node.rotation} disabled={fieldDisabled} onChange={(value) => onChange({ rotation: value })} />
-        <label className="text-xs font-medium">Escala<input className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-xs text-zinc-500" value="Normalizada" readOnly /></label>
-      </div>
-    </InspectorSection>
-
-    <InspectorSection title="Capa y visibilidad">
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={fieldDisabled} onClick={() => onMoveLayer(1)}>Subir capa</button>
-        <button type="button" className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={fieldDisabled} onClick={() => onMoveLayer(-1)}>Bajar capa</button>
-      </div>
-      <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={node.locked} onChange={(event) => onChange({ locked: event.target.checked })} /> Bloquear objeto</label>
-      <label className="mt-3 flex items-center gap-2 text-xs font-medium"><input disabled={fieldDisabled} type="checkbox" checked={node.visible} onChange={(event) => onChange({ visible: event.target.checked })} /> Mostrar objeto</label>
-      <label className="mt-3 block text-xs font-medium">Opacidad <span className="float-right text-zinc-500">{Math.round((Number.isFinite(node.opacity) ? node.opacity : 1) * 100)}%</span><input aria-label="Opacidad del objeto" disabled={fieldDisabled} className="mt-1 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={Number.isFinite(node.opacity) ? node.opacity : 1} onChange={(event) => onOpacityChange(Number(event.target.value))} /></label>
-    </InspectorSection>
-
-    {node.type === "text" && <InspectorSection title="Contenido y tipografía">
-      <label className="block text-xs font-medium">Contenido<textarea disabled={fieldDisabled} className="mt-1 min-h-24 w-full resize-y rounded-md border border-zinc-200 p-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" value={node.text} onChange={(event) => onChange({ text: event.target.value })} /></label>
-      <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Tamaño" value={node.fontSize} disabled={fieldDisabled} onChange={(value) => onChange({ fontSize: value })} /><label className="text-xs font-medium">Peso<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontWeight} onChange={(event) => onChange({ fontWeight: event.target.value as typeof node.fontWeight })}><option value="400">Regular</option><option value="500">Medio</option><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option><option value="900">Black</option></select></label></div>
-      <label className="mt-3 block text-xs font-medium">Fuente<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontAssetId ? `asset:${node.fontAssetId}` : `system:${node.fontFamily ?? "Arial"}`} onChange={(event) => { const value = event.target.value; onChange(value.startsWith("asset:") ? { fontAssetId: value.slice(6), fontFamily: undefined } : { fontAssetId: null, fontFamily: value.slice(7) as typeof SYSTEM_FONT_FAMILIES[number] }); }}><optgroup label="Fuentes del sistema">{SYSTEM_FONT_FAMILIES.map((family) => <option key={family} value={`system:${family}`} style={{ fontFamily: family }}>{family}</option>)}</optgroup><optgroup label="Fuentes subidas">{assets.filter((asset) => asset.kind === "FONT").map((asset) => <option key={asset.id} value={`asset:${asset.id}`}>{asset.name}</option>)}</optgroup></select></label>
-      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Alineación<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.align} onChange={(event) => onChange({ align: event.target.value as typeof node.align })}><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label className="text-xs font-medium">Estilo<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fontStyle} onChange={(event) => onChange({ fontStyle: event.target.value as typeof node.fontStyle })}><option value="normal">Normal</option><option value="italic">Cursiva</option></select></label></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Rol semántico<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.semanticRole} onChange={(event) => onChange({ semanticRole: event.target.value as typeof node.semanticRole })}><option value="none">Ninguno</option><option value="heading">Encabezado</option><option value="paragraph">Párrafo</option><option value="label">Etiqueta</option><option value="price">Precio</option></select></label><label className="text-xs font-medium">Color<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label></div>
-    </InspectorSection>}
-
-    {node.type === "text" && <InspectorSection title="Al hacer clic">
-      <p className="text-xs leading-5 text-zinc-500">Abrí una imagen o video en un modal desde el menú público.</p>
-      <div className={`mt-2 rounded-md px-2.5 py-2 ${modalAsset ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`} aria-live="polite"><p className="truncate text-xs font-semibold">{modalAsset?.name ?? "Sin multimedia asociada"}</p><p className="mt-0.5 text-[10px] opacity-75">{modalAsset ? modalAsset.kind === "VIDEO" ? "Video" : "Imagen" : "Elegí un archivo para habilitar el clic."}</p></div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={fieldDisabled} className="rounded-md border border-emerald-200 px-2 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-40" onClick={onOpenModalMedia}>{node.modalAssetId ? "Cambiar multimedia" : "Elegir multimedia"}</button><button type="button" disabled={fieldDisabled || !node.modalAssetId} className="rounded-md border border-zinc-200 px-2 py-2 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-40" onClick={() => onChange({ modalAssetId: null })}>Quitar</button></div>
-    </InspectorSection>}
-
-    {node.type === "shape" && <InspectorSection title="Estilo de la figura">
-      <AlphaColorField label="Color de relleno" value={node.fill ?? "#3A4824"} disabled={fieldDisabled} onChange={(value) => onChange({ fill: value })} />
-      <div className="mt-3 grid grid-cols-2 gap-2"><NumberField label="Grosor del borde" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /><label className="text-xs font-medium">Color del borde<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.stroke?.slice(0, 7) ?? "#3A4824"} onChange={(event) => onChange({ stroke: event.target.value })} /></label></div>
-      {node.shape === "rect" && <><RectFillField node={node} assets={assets} disabled={fieldDisabled} onChange={onChange} onOpenBackgroundImage={onOpenBackgroundImage} /><RectBorderSidesField value={node.strokeSides} disabled={fieldDisabled} onChange={(strokeSides) => onChange({ strokeSides })} /><RectCornerRadiiField key={node.id} width={node.width} height={node.height} value={node.cornerRadii} disabled={fieldDisabled} onChange={(cornerRadii) => onChange({ cornerRadii })} /></>}
-    </InspectorSection>}
-
-    {node.type === "image" && <InspectorSection title="Imagen">
-      <label className="block text-xs font-medium">Ajuste<select disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2 py-2 text-xs disabled:bg-zinc-100" value={node.fit} onChange={(event) => onChange({ fit: event.target.value as typeof node.fit })}><option value="contain">Contener</option><option value="cover">Cubrir</option><option value="stretch">Estirar</option></select></label>
-      <label className="mt-3 block text-xs font-medium">Texto alternativo<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" value={node.alt} placeholder="Describe la imagen" onChange={(event) => onChange({ alt: event.target.value })} /></label>
-      <NumberField label="Redondeado" value={node.cornerRadius} disabled={fieldDisabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, value) })} />
-    </InspectorSection>}
-
-    {node.type === "icon" && <InspectorSection title="Icono">
-      <label className="block text-xs font-medium">Nombre accesible<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" value={node.accessibleLabel} onChange={(event) => onChange({ accessibleLabel: event.target.value })} /></label>
-      <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-medium">Color<input disabled={fieldDisabled} className="mt-1 h-9 w-full rounded-md border border-zinc-200 disabled:opacity-50" type="color" value={node.fill.slice(0, 7)} onChange={(event) => onChange({ fill: event.target.value })} /></label><NumberField label="Grosor" value={node.strokeWidth} disabled={fieldDisabled} onChange={(value) => onChange({ strokeWidth: value })} /></div>
-    </InspectorSection>}
-
-    <InspectorSection title="Interacción">
-      <label className="block text-xs font-medium">Enlace<input disabled={fieldDisabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs disabled:bg-zinc-100" type="url" placeholder="https://..." value={node.link ?? ""} onChange={(event) => onChange({ link: event.target.value || null })} /></label>
-    </InspectorSection>
-
-    <div className="grid grid-cols-2 gap-2 pt-1">
-      <button type="button" className="rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-40" disabled={fieldDisabled} onClick={onDuplicate}>Duplicar</button>
-      <button type="button" className="flex items-center justify-center gap-1 rounded-md border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50" onClick={onDelete}><Trash2 size={14} /> Eliminar</button>
-    </div>
-  </div>;
-}
-
-function InspectorSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="border-b border-zinc-100 pb-5 last:border-b-0">
-    <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-400">{title}</h3>
-    {children}
-  </section>;
-}
-
-function NumberField({ label, value, onChange, disabled = false }: { label: string; value: number; onChange: (value: number) => void; disabled?: boolean }) { const safeValue = Number.isFinite(value) ? value : 0; return <label className="text-xs font-medium">{label}<input disabled={disabled} className="mt-1 w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400" type="number" value={Math.round(safeValue * 100) / 100} onChange={(event) => onChange(Number(event.target.value) || 0)} /></label>; }
-
-function AlphaColorField({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
-  const normalized = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) ? value : "#3A4824";
-  const alpha = normalized.length === 9 ? parseInt(normalized.slice(7, 9), 16) / 255 : 1;
-  const base = normalized.slice(0, 7);
-  return <div>
-    <div className="flex items-center justify-between gap-2"><span className="truncate text-[11px] font-semibold text-zinc-800">{label}</span><span className="shrink-0 text-[10px] text-zinc-400">{Math.round(alpha * 100)}% visible</span></div>
-    <div className="mt-2 flex items-center gap-2">
-      <input aria-label={label} disabled={disabled} className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-white p-0.5 disabled:cursor-not-allowed disabled:opacity-50" type="color" value={base} onChange={(event) => onChange(withColorAlpha(event.target.value, alpha))} />
-      <label className="min-w-0 flex-1 text-[10px] font-medium text-zinc-500">Opacidad<div className="mt-1 flex items-center gap-1"><input aria-label={`Porcentaje de transparencia de ${label.toLowerCase()}`} disabled={disabled} className="min-w-0 flex-1 rounded border border-zinc-200 px-1.5 py-1 text-right text-[11px] text-zinc-700 disabled:bg-zinc-100 disabled:text-zinc-400" type="number" min="0" max="100" step="1" value={Math.round(alpha * 100)} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value) / 100))} /><span className="text-[11px] text-zinc-400">%</span></div></label>
-    </div>
-    <input aria-label={`Transparencia de ${label.toLowerCase()}`} disabled={disabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={alpha} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value)))} />
-  </div>;
-}
-
-function withColorAlpha(color: string, alpha: number): string {
-  const clamped = Math.max(0, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
-  const base = color.slice(0, 7);
-  if (clamped >= 0.999) return base;
-  return `${base}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
-}
-
-function RectFillField({ node, assets, disabled, onChange, onOpenBackgroundImage }: { node: Extract<CanvasNode, { type: "shape" }>; assets: MenuAssetView[]; disabled: boolean; onChange: (patch: Partial<CanvasNode>) => void; onOpenBackgroundImage: () => void }) {
-  const gradient = node.fillGradient;
-  const backgroundImage = node.backgroundImage;
-  const imageAsset = backgroundImage ? assets.find((asset) => asset.id === backgroundImage.assetId) : undefined;
-  const changeGradient = (next: FillGradient | null) => onChange({ fillGradient: next });
-  const changeBackgroundImage = (patch: Partial<RectangleBackgroundImage>) => onChange({ backgroundImage: backgroundImage ? { ...backgroundImage, ...patch } : null });
-  const updateStop = (index: 0 | 1, patch: Partial<FillGradient["stops"][number]>) => {
-    if (!gradient) return;
-    const stops = [...gradient.stops] as FillGradient["stops"];
-    stops[index] = { ...stops[index], ...patch };
-    changeGradient({ ...gradient, stops });
-  };
-  const updateOffset = (index: 0 | 1, value: number) => {
-    if (!gradient) return;
-    const next = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-    const other = gradient.stops[index === 0 ? 1 : 0].offset;
-    updateStop(index, { offset: index === 0 ? Math.min(next, other) : Math.max(next, other) });
-  };
-  return <section className="mt-5 border-t border-zinc-200 pt-4" aria-labelledby="rectangle-fill-title">
-    <div className="flex items-start justify-between gap-3"><div><h3 id="rectangle-fill-title" className="text-sm font-semibold text-zinc-900">Fondos del rectángulo</h3><p className="mt-0.5 text-[11px] leading-4 text-zinc-500">Combina el color base, una imagen y un degradado.</p></div><span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-500">CSS</span></div>
-    <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-zinc-900">Degradado lineal</p><p className="mt-0.5 text-[10px] text-zinc-500">Se dibuja sobre el color base.</p></div><button type="button" disabled={disabled} aria-label={gradient ? "Quitar degradado" : "Agregar degradado"} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 px-2.5 py-1 text-[10px] font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:opacity-40" onClick={() => changeGradient(gradient ? null : defaultGradient())}><span className={`h-1.5 w-1.5 rounded-full ${gradient ? "bg-emerald-500" : "bg-zinc-300"}`} />{gradient ? "Activo · Quitar" : "Agregar"}</button></div>
-      {gradient && (
-        <div className="mt-3 space-y-4 border-t border-zinc-100 pt-3">
-          <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <div><p className="text-[11px] font-semibold text-zinc-800">Dirección</p><p className="text-[10px] text-zinc-500">Elegí una dirección rápida</p></div>
-              <output className="rounded-md bg-white px-2 py-1 text-[11px] font-semibold tabular-nums text-zinc-700 shadow-sm">{Math.round(gradient.angle)}°</output>
-            </div>
-            <div className="mt-2 grid grid-cols-4 gap-1.5" role="group" aria-label="Dirección del degradado">
-              {GRADIENT_PRESETS.map((preset) => {
-                const selected = Math.abs(((gradient.angle - preset.angle + 540) % 360) - 180) < 0.1;
-                return <button key={preset.label} type="button" disabled={disabled} aria-pressed={selected} aria-label={`Degradado hacia ${preset.label}`} title={`Hacia ${preset.label}`} className={`flex h-9 items-center justify-center rounded-md border text-base transition disabled:opacity-40 ${selected ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm" : "border-zinc-200 bg-white text-zinc-500 hover:border-emerald-300 hover:bg-emerald-50"}`} onClick={() => changeGradient({ ...gradient, angle: preset.angle })}>{preset.symbol}</button>;
-              })}
-            </div>
-            <label className="mt-3 block text-[11px] font-semibold text-zinc-800">Ángulo personalizado
-              <div className="mt-1.5 flex items-center gap-2"><input aria-label="Ángulo del degradado" disabled={disabled} className="w-20 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" type="number" min="0" max="360" step="1" value={gradient.angle} onChange={(event) => changeGradient({ ...gradient, angle: Math.max(0, Math.min(360, Number(event.target.value) || 0)) })} /><span className="text-xs text-zinc-500">grados</span></div>
-              <input aria-label="Barra de ángulo del degradado" disabled={disabled} className="mt-2 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="360" step="1" value={gradient.angle} onChange={(event) => changeGradient({ ...gradient, angle: Number(event.target.value) })} />
-            </label>
-          </div>
-          <div>
-            <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold text-zinc-800">Colores del degradado</p><span className="h-3 w-20 rounded-full border border-zinc-200" style={{ background: `linear-gradient(${gradient.angle}deg, ${gradient.stops[0].color} ${gradient.stops[0].offset * 100}%, ${gradient.stops[1].color} ${gradient.stops[1].offset * 100}%)` }} aria-label="Vista previa del degradado" role="img" /><p className="text-[10px] text-zinc-500">Inicio y final</p></div>
-            <div className="mt-2 grid grid-cols-1 gap-2">
-              {gradient.stops.map((stop, index) => <div key={index} className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5"><AlphaColorField label={index === 0 ? "Color inicial" : "Color final"} value={stop.color} disabled={disabled} onChange={(color) => updateStop(index as 0 | 1, { color })} /><label className="mt-3 block text-[10px] font-semibold text-zinc-700"><span className="flex items-center justify-between gap-1"><span>Posición</span><output className="font-normal tabular-nums text-zinc-500">{Math.round(stop.offset * 100)}%</output></span><input aria-label={`Posición ${index === 0 ? "inicial" : "final"} del degradado`} disabled={disabled} className="mt-1.5 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={stop.offset} onChange={(event) => updateOffset(index as 0 | 1, Number(event.target.value))} /></label></div>)}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-    <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-zinc-900">Imagen de fondo</p><p className="mt-0.5 text-[10px] text-zinc-500">Se coloca debajo del degradado.</p></div><div className="flex shrink-0 items-center gap-1.5">{backgroundImage && <button type="button" disabled={disabled} className="rounded-md border border-zinc-200 px-2 py-1 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-40" onClick={onOpenBackgroundImage}>Cambiar</button>}<button type="button" disabled={disabled} aria-label={backgroundImage ? "Quitar imagen de fondo" : "Elegir imagen de fondo"} className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition disabled:opacity-40 ${backgroundImage ? "border-red-200 text-red-700 hover:bg-red-50" : "border-emerald-200 text-emerald-800 hover:bg-emerald-50"}`} onClick={backgroundImage ? () => onChange({ backgroundImage: null }) : onOpenBackgroundImage}>{backgroundImage ? "Quitar" : "Elegir imagen"}</button></div></div>
-      {backgroundImage ? <div className="mt-3 space-y-4 border-t border-zinc-100 pt-3">
-        <div className="flex min-w-0 items-center gap-2.5 rounded-lg bg-zinc-50 p-2"><span className="h-10 w-10 shrink-0 rounded-md border border-zinc-200 bg-zinc-200 bg-cover bg-center" style={imageAsset ? { backgroundImage: `url(${imageAsset.url})` } : undefined} aria-hidden="true" /><div className="min-w-0"><p className="truncate text-[11px] font-semibold text-zinc-800">{imageAsset?.name ?? "Imagen no disponible"}</p><p className="mt-0.5 text-[10px] text-zinc-500">Imagen de la biblioteca</p></div></div>
-        <label className="block text-[11px] font-semibold text-zinc-800">Ajuste de imagen<select aria-label="Ajuste de imagen de fondo" disabled={disabled} className="mt-1.5 w-full rounded-md border border-zinc-200 bg-white px-2 py-2 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" value={backgroundImage.fit} onChange={(event) => changeBackgroundImage({ fit: event.target.value as RectangleBackgroundImage["fit"] })}><option value="cover">Cubrir — llena todo el rectángulo</option><option value="contain">Contener — muestra la imagen completa</option><option value="stretch">Estirar — adapta al rectángulo</option></select></label>
-        <div className="space-y-4"><PercentRangeField label="Posición horizontal" value={backgroundImage.positionX} disabled={disabled} onChange={(value) => changeBackgroundImage({ positionX: value })} /><PercentRangeField label="Posición vertical" value={backgroundImage.positionY} disabled={disabled} onChange={(value) => changeBackgroundImage({ positionY: value })} /><PercentRangeField label="Opacidad de imagen" value={backgroundImage.opacity} disabled={disabled} onChange={(value) => changeBackgroundImage({ opacity: value })} /></div>
-      </div> : <button type="button" disabled={disabled} className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 px-3 py-3 text-[11px] font-medium text-zinc-500 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" onClick={onOpenBackgroundImage}>Elegir una imagen de la biblioteca</button>}
-    </div>
-  </section>;
-}
-
-const GRADIENT_PRESETS = [
-  { label: "arriba", angle: 0, symbol: "↑" }, { label: "arriba derecha", angle: 45, symbol: "↗" }, { label: "derecha", angle: 90, symbol: "→" }, { label: "abajo derecha", angle: 135, symbol: "↘" },
-  { label: "abajo", angle: 180, symbol: "↓" }, { label: "abajo izquierda", angle: 225, symbol: "↙" }, { label: "izquierda", angle: 270, symbol: "←" }, { label: "arriba izquierda", angle: 315, symbol: "↖" },
-] as const;
-
-function defaultGradient(): FillGradient {
-  return { angle: 180, stops: [{ color: "#00000099", offset: 0 }, { color: "#00000000", offset: 1 }] };
-}
-
-function PercentRangeField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (value: number) => void }) {
-  const percentage = Math.round(Math.max(0, Math.min(1, value)) * 100);
-  return <label className="block min-w-0 text-[10px] font-semibold text-zinc-700"><span className="flex items-center justify-between gap-1"><span className="truncate">{label}</span><output className="shrink-0 font-normal tabular-nums text-zinc-500">{percentage}%</output></span><div className="mt-1.5 flex items-center gap-2"><input aria-label={`${label} porcentaje`} disabled={disabled} className="w-14 rounded-md border border-zinc-200 px-1.5 py-1.5 text-right text-[11px] tabular-nums outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" type="number" min="0" max="100" step="1" value={percentage} onChange={(event) => onChange(Math.max(0, Math.min(1, (Number(event.target.value) || 0) / 100)))} /><input aria-label={`Barra de ${label.toLowerCase()}`} disabled={disabled} className="min-w-0 flex-1 accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={value} onChange={(event) => onChange(Number(event.target.value))} /></div></label>;
-}
-
-function RectBorderSidesField({ value, disabled, onChange }: { value: StrokeSide[]; disabled: boolean; onChange: (value: StrokeSide[]) => void }) {
-  const allSelected = hasAllStrokeSides(value);
-  const labels: Record<StrokeSide, string> = { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" };
-  return <div className="mt-3">
-    <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">Lados del borde</span><button type="button" disabled={disabled} className="text-[11px] font-medium text-emerald-800 hover:underline disabled:opacity-40" onClick={() => onChange(allSelected ? [] : [...STROKE_SIDES])}>{allSelected ? "Ninguno" : "Todos"}</button></div>
-    <div className="mt-2 grid grid-cols-2 gap-1.5" role="group" aria-label="Lados del borde del rectángulo">{STROKE_SIDES.map((side) => <button key={side} type="button" disabled={disabled} aria-pressed={value.includes(side)} aria-label={`Borde ${labels[side].toLowerCase()}`} className={`rounded-md border px-2 py-2 text-[11px] font-medium transition disabled:opacity-40 ${value.includes(side) ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"}`} onClick={() => onChange(toggleStrokeSide(value, side))}>{labels[side]}</button>)}</div>
-  </div>;
-}
-
-function RectCornerRadiiField({ width, height, value, disabled, onChange }: { width: number; height: number; value: Record<CornerRadiusKey, number>; disabled: boolean; onChange: (value: Record<CornerRadiusKey, number>) => void }) {
-  const [commonRadius, setCommonRadius] = useState(() => value.topLeft);
-  const labels: Record<CornerRadiusKey, string> = { topLeft: "Arriba izquierda", topRight: "Arriba derecha", bottomRight: "Abajo derecha", bottomLeft: "Abajo izquierda" };
-  const maxCommonRadius = Math.max(0, Math.min(width, height) / 2);
-  const commonPercentage = maxCommonRadius > 0 ? Math.min(100, (commonRadius / maxCommonRadius) * 100) : 0;
-  const update = (corner: CornerRadiusKey, radius: number) => onChange({ ...value, [corner]: Math.max(0, Math.min(10_000, radius)) });
-  return <div className="mt-3">
-    <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">Radio por esquina</span><button type="button" disabled={disabled} className="text-[11px] font-medium text-emerald-800 hover:underline disabled:opacity-40" onClick={() => onChange(allCornerRadii(commonRadius))}>Igualar esquinas</button></div>
-    <div className="mt-2 grid grid-cols-2 gap-2">{CORNER_RADII.map((corner) => <NumberField key={corner} label={labels[corner]} value={value[corner]} disabled={disabled} onChange={(radius) => update(corner, radius)} />)}</div>
-    <div className="mt-2">
-      <NumberField label="Valor común (px)" value={commonRadius} disabled={disabled} onChange={(radius) => { const nextRadius = Math.max(0, Math.min(10_000, radius)); setCommonRadius(nextRadius); onChange(allCornerRadii(nextRadius)); }} />
-      <label className="mt-2 block text-xs font-medium">Porcentaje de radio <span className="float-right text-zinc-500">{Math.round(commonPercentage)}%</span><input aria-label="Barra de valor común" disabled={disabled} className="mt-1 w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="100" step="1" value={commonPercentage} onChange={(event) => { const nextPercentage = Number(event.target.value); const nextRadius = (maxCommonRadius * nextPercentage) / 100; setCommonRadius(nextRadius); onChange(allCornerRadii(nextRadius)); }} /></label>
-    </div>
-  </div>;
 }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
