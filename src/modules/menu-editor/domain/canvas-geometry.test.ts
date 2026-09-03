@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraForViewport, clampGroupDelta, screenRectToWorld, zoomViewportAt } from "./canvas-geometry";
+import { CANVAS_GRID_SPACING, cameraForViewport, clampGroupDelta, screenRectToWorld, snapFrameToCanvasGrid, visibleCanvasGridLines, zoomViewportAt } from "./canvas-geometry";
 import type { CanvasNode } from "../contracts";
 
 const bounds = { x: 0, y: 0, width: 1000, height: 800 };
@@ -63,6 +63,19 @@ describe("canvas geometry", () => {
 
   it("converts the selection rectangle without rounding", () => {
     expect(screenRectToWorld({ x: 13, y: 17, width: 101, height: 79 }, { x: 100, y: 200, width: 500, height: 400 }, 2)).toEqual({ x: 106.5, y: 208.5, width: 50.5, height: 39.5 });
+  });
+
+  it("keeps the grid at 20 canvas pixels for every canvas resolution", () => {
+    expect(CANVAS_GRID_SPACING).toBe(20);
+    const viewport = { x: 0, y: 0, width: 100, height: 80 };
+    const regular = visibleCanvasGridLines({ x: 0, y: 0, width: 1080, height: 1920 }, viewport);
+    const veryLarge = visibleCanvasGridLines({ x: 0, y: 0, width: 100_000, height: 100_000 }, viewport);
+    expect(regular).toEqual({ vertical: [0, 20, 40, 60, 80, 100], horizontal: [0, 20, 40, 60, 80] });
+    expect(veryLarge).toEqual(regular);
+  });
+
+  it("uses the same fixed grid for moving and resizing objects", () => {
+    expect(snapFrameToCanvasGrid({ x: 27, y: 34, width: 86, height: 49 }, bounds)).toEqual({ x: 20, y: 40, width: 100, height: 40 });
   });
 
   it("keeps a group inside the sheet", () => {

@@ -4,6 +4,27 @@ export type CanvasRect = { x: number; y: number; width: number; height: number }
 export type CanvasSize = { width: number; height: number };
 export type CanvasPoint = { x: number; y: number };
 
+export const CANVAS_GRID_SPACING = 20;
+
+export function visibleCanvasGridLines(bounds: CanvasRect, viewport: CanvasRect): { vertical: number[]; horizontal: number[] } {
+  return {
+    vertical: gridAxisLines(bounds.x, bounds.width, viewport.x, viewport.width),
+    horizontal: gridAxisLines(bounds.y, bounds.height, viewport.y, viewport.height),
+  };
+}
+
+export function snapValueToCanvasGrid(value: number, origin: number): number {
+  return origin + Math.round((value - origin) / CANVAS_GRID_SPACING) * CANVAS_GRID_SPACING;
+}
+
+export function snapFrameToCanvasGrid(frame: CanvasRect, bounds: CanvasRect): CanvasRect {
+  const x = snapValueToCanvasGrid(frame.x, bounds.x);
+  const y = snapValueToCanvasGrid(frame.y, bounds.y);
+  const right = snapValueToCanvasGrid(frame.x + frame.width, bounds.x);
+  const bottom = snapValueToCanvasGrid(frame.y + frame.height, bounds.y);
+  return { x, y, width: Math.max(4, right - x), height: Math.max(4, bottom - y) };
+}
+
 export function cameraForViewport(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, minScale = 0.1, maxScale = 8, fitMode: "contain" | "cover" | "width" = "contain") {
   const fitRatio = fitMode === "cover" ? Math.max(size.width / bounds.width, size.height / bounds.height) : fitMode === "width" ? size.width / bounds.width : Math.min(size.width / bounds.width, size.height / bounds.height);
   // Public menus fit their entire width, even below the editor's minimum zoom.
@@ -72,6 +93,15 @@ function rotatedNodeBounds(node: CanvasNode): CanvasRect {
   const maxX = Math.max(...points.map((point) => point.x));
   const maxY = Math.max(...points.map((point) => point.y));
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function gridAxisLines(boundsStart: number, boundsLength: number, viewportStart: number, viewportLength: number): number[] {
+  const visibleStart = Math.max(boundsStart, viewportStart);
+  const visibleEnd = Math.min(boundsStart + boundsLength, viewportStart + viewportLength);
+  if (visibleEnd < visibleStart) return [];
+  const firstIndex = Math.ceil((visibleStart - boundsStart) / CANVAS_GRID_SPACING);
+  const lastIndex = Math.floor((visibleEnd - boundsStart) / CANVAS_GRID_SPACING);
+  return Array.from({ length: Math.max(0, lastIndex - firstIndex + 1) }, (_, index) => boundsStart + (firstIndex + index) * CANVAS_GRID_SPACING);
 }
 
 function clamp(value: number, min: number, max: number): number {

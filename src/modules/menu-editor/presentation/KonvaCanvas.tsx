@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Star, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
-import { cameraForViewport, screenRectToWorld, zoomViewportAt } from "../domain/canvas-geometry";
+import { cameraForViewport, screenRectToWorld, snapFrameToCanvasGrid, snapValueToCanvasGrid, visibleCanvasGridLines, zoomViewportAt } from "../domain/canvas-geometry";
 import { canvasGroupBounds, descendantNodeIds, groupLayerState, nodeLayerState, outermostGroupId } from "../domain/layer-tree";
 import { RectangleVisual } from "../ui/RectangleVisual";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
@@ -169,8 +169,8 @@ export function KonvaCanvas({ document, assets, selectedIds, selectedGroupId, de
     if (!start) return;
     const rawDelta = { x: event.target.x() - start.x, y: event.target.y() - start.y };
     const delta = showGrid ? {
-      x: snapToGrid(start.x + rawDelta.x, bounds.x, gridSpacing(bounds)) - start.x,
-      y: snapToGrid(start.y + rawDelta.y, bounds.y, gridSpacing(bounds)) - start.y,
+      x: snapValueToCanvasGrid(start.x + rawDelta.x, bounds.x) - start.x,
+      y: snapValueToCanvasGrid(start.y + rawDelta.y, bounds.y) - start.y,
     } : rawDelta;
     session.delta = delta;
     session.ids.forEach((selectedId) => {
@@ -230,7 +230,7 @@ export function KonvaCanvas({ document, assets, selectedIds, selectedGroupId, de
       <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}>
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
-        {showGrid && <GridOverlay bounds={bounds} scale={scale} />}
+        {showGrid && <GridOverlay bounds={bounds} viewport={camera} scale={scale} />}
         {document.nodes.filter((node) => nodeLayerState(document, node).effectiveVisible).map((node) => {
           const state = nodeLayerState(document, node);
           const outerGroupId = outermostGroupId(document, node.id);
@@ -251,7 +251,7 @@ export function KonvaCanvas({ document, assets, selectedIds, selectedGroupId, de
 
 function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed, interactive, draggable, selectOuterGroup, imageAsset, backgroundAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; showGrid: boolean; gridBounds: CanvasDocumentV1["canvasBounds"]; spacePressed: boolean; interactive: boolean; draggable: boolean; selectOuterGroup: boolean; imageAsset?: { url: string }; backgroundAsset?: { url: string; width?: number | null; height?: number | null }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string, additive: boolean, deep?: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
   const nodeX = finiteOr(node.x, 0); const nodeY = finiteOr(node.y, 0); const nodeWidth = Math.max(4, finiteOr(node.width, 4)); const nodeHeight = Math.max(4, finiteOr(node.height, 4)); const nodeRotation = finiteOr(node.rotation, 0); const nodeOpacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
-  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: interactive, draggable, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (selectOuterGroup || event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey, false); }, onDblClick: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; onSelect(node.id, false, true); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (selectOuterGroup || !selectedIds.includes(node.id)) onSelect(node.id, false, false); }, onDblTap: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; onSelect(node.id, false, true); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) }; const snappedFrame = showGrid ? snapFrameToGrid(frame, gridBounds, gridSpacing(gridBounds)) : frame; const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
+  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: interactive, draggable, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (selectOuterGroup || event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey, false); }, onDblClick: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; onSelect(node.id, false, true); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (selectOuterGroup || !selectedIds.includes(node.id)) onSelect(node.id, false, false); }, onDblTap: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; onSelect(node.id, false, true); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) }; const snappedFrame = showGrid ? snapFrameToCanvasGrid(frame, gridBounds) : frame; const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
   if (node.type === "text") return <Text {...common} text={node.text} wrap="word" fontSize={node.fontSize} fontStyle={node.fontStyle} fontVariant={`normal ${node.fontWeight}`} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <LoadedImage {...common} url={imageAsset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "shape") {
@@ -265,33 +265,12 @@ function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed,
   return <LucideKonvaIcon iconKey={node.iconKey} color={node.fill} strokeWidth={node.strokeWidth} nodeProps={common} />;
 }
 
-function GridOverlay({ bounds, scale }: { bounds: CanvasDocumentV1["canvasBounds"]; scale: number }) {
-  // Keep the grid readable on very large sheets without creating thousands of
-  // Konva nodes. The spacing is 20px for normal menus and grows only for
-  // unusually large canvases.
-  const spacing = gridSpacing(bounds);
-  const verticalCount = Math.floor(bounds.width / spacing) + 1;
-  const horizontalCount = Math.floor(bounds.height / spacing) + 1;
+function GridOverlay({ bounds, viewport, scale }: { bounds: CanvasDocumentV1["canvasBounds"]; viewport: Viewport; scale: number }) {
+  const lines = visibleCanvasGridLines(bounds, viewport);
   return <>
-    {Array.from({ length: verticalCount }, (_, index) => <Line key={`grid-v-${index}`} points={[bounds.x + index * spacing, bounds.y, bounds.x + index * spacing, bounds.y + bounds.height]} stroke="#94a3b8" opacity={0.28} strokeWidth={1 / scale} listening={false} />)}
-    {Array.from({ length: horizontalCount }, (_, index) => <Line key={`grid-h-${index}`} points={[bounds.x, bounds.y + index * spacing, bounds.x + bounds.width, bounds.y + index * spacing]} stroke="#94a3b8" opacity={0.28} strokeWidth={1 / scale} listening={false} />)}
+    {lines.vertical.map((x) => <Line key={`grid-v-${x}`} points={[x, bounds.y, x, bounds.y + bounds.height]} stroke="#94a3b8" opacity={0.28} strokeWidth={1 / scale} listening={false} />)}
+    {lines.horizontal.map((y) => <Line key={`grid-h-${y}`} points={[bounds.x, y, bounds.x + bounds.width, y]} stroke="#94a3b8" opacity={0.28} strokeWidth={1 / scale} listening={false} />)}
   </>;
-}
-
-function gridSpacing(bounds: CanvasDocumentV1["canvasBounds"]): number {
-  return Math.max(20, Math.ceil(Math.max(bounds.width, bounds.height) / 240 / 20) * 20);
-}
-
-function snapToGrid(value: number, origin: number, spacing: number): number {
-  return origin + Math.round((value - origin) / spacing) * spacing;
-}
-
-function snapFrameToGrid(frame: { x: number; y: number; width: number; height: number }, bounds: CanvasDocumentV1["canvasBounds"], spacing: number) {
-  const x = snapToGrid(frame.x, bounds.x, spacing);
-  const y = snapToGrid(frame.y, bounds.y, spacing);
-  const right = snapToGrid(frame.x + frame.width, bounds.x, spacing);
-  const bottom = snapToGrid(frame.y + frame.height, bounds.y, spacing);
-  return { x, y, width: Math.max(4, right - x), height: Math.max(4, bottom - y) };
 }
 
 function LoadedImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) {
