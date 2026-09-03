@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 export const E2E = {
+  zoomMenu: { slug: "e2e-zoom", width: 10_000, height: 40_000 },
   superAdmin: {
     email: "e2e-super@example.test",
     password: "E2e-super-password-123",

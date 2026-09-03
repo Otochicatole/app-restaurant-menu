@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { createTemplateDocument } from "../../src/modules/menu-editor/domain/template";
-import type { CanvasNode } from "../../src/modules/menu-editor/contracts";
+import { canvasNodeSchema, type CanvasNode } from "../../src/modules/menu-editor/contracts";
 import { createSqlitePrismaClient, type SqlitePrismaClient } from "../../src/platform/database/sqlite-client";
 import { requireDisposableTestDatabase } from "../../scripts/require-test-database";
 import { E2E } from "./fixtures";
@@ -41,7 +41,23 @@ export default async function globalSetup() {
     const other = await createTenantFixture(prisma, { id: FIXTURE_IDS.otherTenant, adminId: FIXTURE_IDS.otherAdmin, name: "E2E Otro", ...E2E.otherTenant, mustChangePassword: false });
     const otherDocument = createCanvasFixture(other.name);
     await prisma.menuProject.create({ data: { id: "e2e-project-other", tenantId: other.id, draftJson: JSON.stringify(otherDocument), schemaVersion: 1 } });
+
+    const zoomDocument = createZoomFixture();
+    await prisma.tenant.create({ data: { id: "e2e-tenant-zoom", name: "E2E Zoom", slug: E2E.zoomMenu.slug, menuProject: { create: { id: "e2e-project-zoom", draftJson: JSON.stringify(zoomDocument), publishedJson: JSON.stringify(zoomDocument), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } } } });
   } finally { await prisma.$disconnect(); }
+}
+
+function createZoomFixture() {
+  const bounds = { x: -120, y: -80, width: E2E.zoomMenu.width, height: E2E.zoomMenu.height };
+  const stripe = (id: string, offset: number, fill: string) => canvasNodeSchema.parse({ id, type: "shape", shape: "rect", link: null, x: bounds.x + bounds.width * offset, y: bounds.y, width: bounds.width / 10, height: bounds.height, fill });
+  return {
+    ...createTemplateDocument("E2E Zoom"),
+    background: "#FFFFFF",
+    canvasBounds: bounds,
+    // Simulate a document published while the editor was zoomed in and panned.
+    initialViewport: { x: 2380, y: 5000, width: 1000, height: 2000 },
+    nodes: [stripe("zoom-left", 0, "#FF0000"), stripe("zoom-center", 0.45, "#00FF00"), stripe("zoom-right", 0.9, "#0000FF")],
+  };
 }
 
 function createCanvasFixture(name: string, imageId?: string) {

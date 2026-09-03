@@ -6,9 +6,11 @@ export type CanvasPoint = { x: number; y: number };
 
 export function cameraForViewport(viewport: CanvasRect, bounds: CanvasRect, size: CanvasSize, minScale = 0.1, maxScale = 8, fitMode: "contain" | "cover" | "width" = "contain") {
   const fitRatio = fitMode === "cover" ? Math.max(size.width / bounds.width, size.height / bounds.height) : fitMode === "width" ? size.width / bounds.width : Math.min(size.width / bounds.width, size.height / bounds.height);
-  const fitScale = Math.max(minScale, Math.min(maxScale, fitRatio));
-  const requestedScale = Math.max(minScale, Math.min(maxScale, Math.min(size.width / viewport.width, size.height / viewport.height)));
-  const scale = Math.min(maxScale, Math.max(fitScale, requestedScale));
+  // Public menus fit their entire width, even below the editor's minimum zoom.
+  const fitScale = fitMode === "width" ? fitRatio : Math.max(minScale, Math.min(maxScale, fitRatio));
+  // Keep the horizontal framing when the screen resizes or mobile browser bars move.
+  const requestedScale = fitMode === "width" ? size.width / viewport.width : Math.min(size.width / viewport.width, size.height / viewport.height);
+  const scale = Math.max(fitScale, Math.min(maxScale, requestedScale));
   const width = size.width / scale;
   const height = size.height / scale;
   const maxX = bounds.x + bounds.width - width;

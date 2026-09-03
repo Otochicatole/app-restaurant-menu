@@ -23,7 +23,7 @@ type PanMotion = { last: TouchPoint; velocity: TouchPoint; time: number };
 export function CanvasStage({ document, assets, onTextModalOpen }: { document: CanvasDocumentV1; assets: Record<string, CanvasStageAsset>; onTextModalOpen?: (asset: MediaModalAsset) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 900, height: 640 });
-  const [viewport, setViewport] = useState(document.initialViewport);
+  const [viewport, setViewport] = useState(document.canvasBounds);
   const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: CanvasDocumentV1["initialViewport"] } | null>(null);
   const pinchSession = useRef<PinchSession | null>(null);
   const panMotion = useRef<PanMotion | null>(null);
@@ -113,7 +113,7 @@ export function CanvasStage({ document, assets, onTextModalOpen }: { document: C
     <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={() => { panMotion.current = null; setPanStart(null); }} onMouseLeave={() => { panMotion.current = null; setPanStart(null); }} onTouchStart={(event) => { const points = touchPoints(event); if (points.length >= 2) beginPinch(event, points); else if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={(event) => movePinch(event, touchPoints(event))} onTouchEnd={finishTouch} onTouchCancel={(event: Konva.KonvaEventObject<TouchEvent>) => finishTouch(event, false)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
       <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{document.nodes.filter((node) => node.visible).map((node) => <CanvasStageNode key={node.id} node={node} assets={assets} onTextModalOpen={onTextModalOpen} />)}</Layer>
     </Stage>
-    <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm disabled:opacity-30" onClick={() => zoomAt(0.9)} disabled={scale <= fitScale} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoomAt(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => updateViewport(bounds)}>Restablecer</button></div>
+    <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm disabled:opacity-30" onClick={() => zoomAt(0.9)} disabled={scale <= fitScale * (1 + 1e-10)} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoomAt(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => { cancelInertia(); updateViewport(bounds); }}>Restablecer</button></div>
   </div>;
 }
 
