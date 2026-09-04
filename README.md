@@ -27,7 +27,15 @@ bun run db:seed
 bun run dev
 ```
 
-En Windows o en un host sin systemd podés preparar el despliegue local con `bun run deploy:local` (SQLite en `storage/app.db`, migraciones, Prisma Client y build) y levantarlo con `bun run deploy:local:start` en el puerto 8201. Los alias `deploy:manual` y `deploy:manual:start` expresan el mismo flujo para un VPS sin releases. Para actualizar un checkout manual con backup, migraciones, build, health-check y reinicio usá `DEPLOY_MODE=manual bash scripts/deploy/redeploy.sh`. En VPS, `scripts/deploy/start.sh` y `stop.sh` detectan un checkout manual sin enlace `current` y administran directamente el proceso, su PID, logs y health-check; cuando existe un release systemd usan el servicio configurado.
+En Windows o en un host sin systemd podés preparar el despliegue local con `bun run deploy:local` (SQLite en `storage/app.db`, migraciones, Prisma Client y build) y levantarlo con `bun run deploy:local:start` en el puerto 8201. Los alias `deploy:manual` y `deploy:manual:start` expresan el mismo flujo para un VPS sin releases. Para actualizar un checkout manual con backup, migraciones, build, health-check y reinicio usá `./scripts/deploy/redeploy.sh`. En VPS, `./scripts/deploy/start.sh` y `./scripts/deploy/stop.sh` detectan un checkout manual sin enlace `current` y administran directamente el proceso, su PID, logs y health-check; cuando existe un release systemd usan el servicio configurado.
+
+Operación habitual desde la raíz del proyecto en el VPS, sin variables adicionales:
+
+```bash
+./scripts/deploy/start.sh
+./scripts/deploy/stop.sh
+./scripts/deploy/redeploy.sh
+```
 
 `bun run db:seed` es idempotente: crea/actualiza el superadmin definido por `SUPER_ADMIN_EMAIL` y prepara un restaurante Canvas de desarrollo (`Fuzion`, slug `fuzion`) con `admin@fuzion.local` y contraseña `FuzionAdmin2026!`. Podés personalizarlo con `SEED_RESTAURANT_NAME`, `SEED_RESTAURANT_SLUG`, `SEED_RESTAURANT_ADMIN_EMAIL` y `SEED_RESTAURANT_ADMIN_PASSWORD`. También siembra los presets globales Minimalista vertical, Cafetería y Gourmet.
 
@@ -44,11 +52,11 @@ bun run check:ci
 
 El almacenamiento actual es local y debe estar en un volumen persistente. Cada tenant tiene una cuota configurable y se mantienen los límites por archivo de imagen y fuente. Para escalar a varias instancias será necesario migrar a object storage.
 
-Los reemplazos y borrados encolan la limpieza física después del commit de base. Ejecutá `bash scripts/deploy/run-locked.sh bun run storage:cleanup` periódicamente desde un timer/cron; el wrapper comparte el lock de operación con los despliegues. El comando es idempotente, aplica lease entre workers y devuelve error si algún archivo debe reintentarse.
+Los reemplazos y borrados encolan la limpieza física después del commit de base. Ejecutá `./scripts/deploy/run-locked.sh bun run storage:cleanup` periódicamente desde un timer/cron; el wrapper comparte el lock de operación con los despliegues. El comando es idempotente, aplica lease entre workers y devuelve error si algún archivo debe reintentarse.
 
 ## Despliegue
 
-Los scripts de `scripts/deploy` construyen releases inmutables por commit bajo `APP_RELEASE_ROOT` (por defecto, la ruta absoluta `.deploy` dentro del proyecto), serializan deploys, migraciones, backups y comandos operativos con `flock`, y activan el release mediante el symlink atómico `current`. Antes de validar, sincronizan `DATABASE_URL` y `STORAGE_ROOT` en `.deploy/shared/.env` con las rutas persistentes canónicas del release, conservando el resto de la configuración. En producción se recomienda `APP_RELEASE_ROOT=/opt/app-res`.
+Los scripts ejecutables de `scripts/deploy` construyen releases inmutables por commit, serializan deploys, migraciones, backups y comandos operativos con `flock`, y activan el release mediante el symlink atómico `current`. En Linux el directorio estándar `/opt/app-res` se selecciona automáticamente cuando ya existe o cuando los scripts se ejecutan como root; en los demás entornos se usa la ruta absoluta `.deploy` dentro del proyecto. `APP_RELEASE_ROOT` continúa disponible como sobrescritura opcional. Antes de validar, los scripts sincronizan `DATABASE_URL` y `STORAGE_ROOT` en `shared/.env` con las rutas persistentes canónicas del release, conservando el resto de la configuración.
 
 La configuración, `shared/database/app.db`, sus archivos WAL/SHM, los backups y `shared/storage` viven fuera de cada release. Todo debe estar en un disco local persistente: SQLite no se admite sobre NFS, CIFS, volúmenes de red ni despliegues con más de una instancia/host escritor. El directorio de la base debe ser escribible para que SQLite pueda crear `-wal` y `-shm`.
 
@@ -56,12 +64,11 @@ Preparación inicial:
 
 ```bash
 # Debian/Ubuntu: instalá sqlite3 además de Bun, Git y curl.
-export APP_RELEASE_ROOT=/opt/app-res
 
 # .env debe contener las rutas absolutas bajo /opt/app-res/shared.
 # El primer deploy lo copia con permisos 0600 a shared/.env.
-bash scripts/deploy/create_service.sh
-bash scripts/deploy/redeploy.sh
+./scripts/deploy/create_service.sh
+./scripts/deploy/redeploy.sh
 ```
 
 `redeploy.sh` obtiene `origin/main` sin modificar el checkout y compila el release mientras la versión actual sigue activa. Después entra en una ventana de mantenimiento: detiene el servicio, completa el checkpoint WAL, valida integridad y foreign keys, crea un backup consistente mediante la API de backup de SQLite y aplica las migraciones. El candidato se levanta primero en un puerto loopback privado y debe superar `/api/health` antes de activar `current`.
@@ -71,29 +78,29 @@ Si la migración o ese health privado fallan, el script restaura automáticament
 Para volver manualmente al release previo sin modificar datos:
 
 ```bash
-bash scripts/deploy/rollback.sh
+./scripts/deploy/rollback.sh
 ```
 
 El rollback normal siempre es code-only. Por eso las migraciones productivas deben ser compatibles con el release anterior. Restaurar datos es una operación distinta y destructiva que exige un snapshot administrado y confirmación explícita:
 
 ```bash
-bash scripts/deploy/rollback.sh \
+./scripts/deploy/rollback.sh \
   --restore-database /opt/app-res/shared/backups/AAAAMMDD-pre-release.db \
   --confirm-data-loss
 ```
 
 Antes de esa restauración el script crea otro backup de rescate, mantiene el servicio detenido y prueba ambos releases contra el snapshot. No restaura datos automáticamente después de reabrir tráfico.
 
-Las migraciones también pueden ejecutarse de forma independiente con `bash scripts/deploy/migrate.sh /ruta/al/release`; el script detiene temporalmente el servicio, respalda la base, ejecuta el preflight/backfill Canvas y verifica compatibilidad antes de reiniciarlo. Los seeds son operaciones manuales bloqueadas, no forman parte del deploy habitual:
+Las migraciones también pueden ejecutarse de forma independiente con `./scripts/deploy/migrate.sh /ruta/al/release`; el script detiene temporalmente el servicio, respalda la base, ejecuta el preflight/backfill Canvas y verifica compatibilidad antes de reiniciarlo. Los seeds son operaciones manuales bloqueadas, no forman parte del deploy habitual:
 
 ```bash
-bash scripts/deploy/run-locked.sh bun run db:seed
+./scripts/deploy/run-locked.sh bun run db:seed
 ```
 
 Para crear un snapshot consistente sin detener el servicio:
 
 ```bash
-bash scripts/deploy/backup.sh
+./scripts/deploy/backup.sh
 ```
 
 Los snapshots bajo `shared/backups` protegen un despliegue, pero no la pérdida del disco. Copialos periódicamente a un destino externo y probá la restauración. Nunca hagas backup copiando sólo `app.db` mientras la aplicación está activa: el WAL también forma parte del estado de la base.
