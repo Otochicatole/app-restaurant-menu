@@ -19,6 +19,18 @@ afterEach(() => {
 });
 
 describe("identity forms", () => {
+  it("lets the user reveal and hide the login password", async () => {
+    const user = userEvent.setup();
+    render(React.createElement(LoginForm));
+    const password = screen.getByLabelText("Contraseña");
+
+    expect((password as HTMLInputElement).type).toBe("password");
+    await user.click(screen.getByRole("button", { name: "Mostrar clave" }));
+    expect((password as HTMLInputElement).type).toBe("text");
+    await user.click(screen.getByRole("button", { name: "Ocultar clave" }));
+    expect((password as HTMLInputElement).type).toBe("password");
+  });
+
   it("sends valid login input and preserves the mandatory-password redirect", async () => {
     const request = vi.fn().mockResolvedValue({
       json: async () => ({

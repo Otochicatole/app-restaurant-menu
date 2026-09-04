@@ -1,0 +1,312 @@
+.page {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 10% 12%, rgba(207, 177, 252, 0.15), transparent 25rem),
+    radial-gradient(circle at 43% 88%, rgba(184, 121, 10, 0.14), transparent 28rem),
+    #071710;
+}
+
+.texture {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.17;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at 32% 52%, black, transparent 78%);
+}
+
+.auroraOne,
+.auroraTwo {
+  position: absolute;
+  z-index: -1;
+  width: 38rem;
+  height: 38rem;
+  border-radius: 999px;
+  filter: blur(80px);
+  opacity: 0.17;
+  will-change: transform;
+}
+
+.auroraOne {
+  left: -14rem;
+  top: 12%;
+  background: #8f62bd;
+  animation: aurora-drift 17s ease-in-out infinite alternate;
+}
+
+.auroraTwo {
+  bottom: -22rem;
+  left: 34%;
+  background: #d08b34;
+  animation: aurora-drift-reverse 21s ease-in-out infinite alternate;
+}
+
+.panel {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.7), transparent 36%),
+    #f4eddf;
+  box-shadow: -30px 0 90px rgba(0, 0, 0, 0.2);
+}
+
+.panel::after {
+  position: absolute;
+  right: -8rem;
+  bottom: -9rem;
+  width: 23rem;
+  height: 23rem;
+  border: 1px solid rgba(58, 72, 36, 0.09);
+  border-radius: 999px;
+  box-shadow: 0 0 0 52px rgba(58, 72, 36, 0.025), 0 0 0 104px rgba(58, 72, 36, 0.018);
+  content: "";
+}
+
+.panelGlow {
+  position: absolute;
+  right: -8rem;
+  top: -10rem;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(207, 177, 252, 0.38), rgba(207, 177, 252, 0) 68%);
+  animation: panel-breathe 7s ease-in-out infinite;
+}
+
+.brandMark {
+  position: relative;
+  background: linear-gradient(145deg, #fffaf0, #e9dcc5);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.2), inset 0 1px rgba(255, 255, 255, 0.85);
+}
+
+.brandMark::after {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(207, 177, 252, 0.28);
+  border-radius: 1.15rem;
+  content: "";
+}
+
+.sparkleBadge {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(207, 177, 252, 0.28);
+  border-radius: 999px;
+  background: rgba(207, 177, 252, 0.08);
+  box-shadow: 0 0 24px rgba(207, 177, 252, 0.15);
+}
+
+.heroAccent {
+  color: #ead8b8;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.055em;
+}
+
+.featureDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #cfb1fc;
+  box-shadow: 0 0 12px rgba(207, 177, 252, 0.75);
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #67844d;
+  box-shadow: 0 0 0 4px rgba(103, 132, 77, 0.12);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+
+.orbitScene {
+  position: absolute;
+  right: -3rem;
+  bottom: 5%;
+  z-index: 10;
+  width: min(34vw, 31rem);
+  aspect-ratio: 1;
+  opacity: 0.92;
+  perspective: 900px;
+  transform: translate(22%, 18%);
+}
+
+.orbitOuter,
+.orbitInner {
+  position: absolute;
+  inset: 9%;
+  border: 1px solid rgba(234, 216, 184, 0.2);
+  border-radius: 50%;
+  animation: orbit-spin 24s linear infinite;
+}
+
+.orbitInner {
+  inset: 25%;
+  border-color: rgba(207, 177, 252, 0.25);
+  border-style: dashed;
+  animation-duration: 17s;
+  animation-direction: reverse;
+}
+
+.orbitOuter span,
+.orbitInner span {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ead8b8;
+  box-shadow: 0 0 18px rgba(234, 216, 184, 0.85);
+}
+
+.orbitOuter span:first-child { left: 15%; top: 12%; }
+.orbitOuter span:last-child { right: -5px; top: 50%; background: #cfb1fc; }
+.orbitInner span:first-child { left: -5px; top: 48%; background: #cfb1fc; }
+.orbitInner span:last-child { right: 18%; bottom: 8%; }
+
+.orbitCore {
+  position: absolute;
+  inset: 36%;
+  display: grid;
+  place-items: center;
+}
+
+.coreHalo {
+  position: absolute;
+  inset: -42%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(207, 177, 252, 0.25), transparent 68%);
+  animation: core-breathe 4.8s ease-in-out infinite;
+}
+
+.coreMark {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 88px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 250, 240, 0.98), rgba(234, 216, 184, 0.9));
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.9);
+  animation: core-float 5.5s ease-in-out infinite;
+}
+
+.floatingCard {
+  position: absolute;
+  display: flex;
+  width: 230px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  padding: 13px 14px;
+  color: white;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.045));
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.23);
+  backdrop-filter: blur(16px);
+  animation: card-float 7s ease-in-out infinite;
+}
+
+.floatingCard > span:nth-child(2) { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.floatingCard b { font-size: 12px; font-weight: 650; letter-spacing: 0.01em; }
+.floatingCard small { margin-top: 3px; overflow: hidden; color: rgba(255, 255, 255, 0.46); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.floatingCard i { width: 7px; height: 7px; border-radius: 50%; background: #cfb1fc; box-shadow: 0 0 14px rgba(207, 177, 252, 0.8); }
+
+.cardIndex {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(234, 216, 184, 0.12);
+  color: #ead8b8;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.cardOne { left: -7%; top: 19%; transform: rotate(-5deg); }
+.cardTwo { right: -3%; bottom: 16%; transform: rotate(4deg); animation-delay: -3.2s; }
+.sparkleA, .sparkleB { position: absolute; color: #cfb1fc; text-shadow: 0 0 18px rgba(207, 177, 252, 0.8); animation: sparkle 3s ease-in-out infinite; }
+.sparkleA { left: 17%; bottom: 17%; font-size: 17px; }
+.sparkleB { right: 16%; top: 8%; color: #ead8b8; font-size: 11px; animation-delay: -1.4s; }
+
+@keyframes aurora-drift {
+  to { transform: translate3d(8rem, -3rem, 0) scale(1.16); }
+}
+
+@keyframes aurora-drift-reverse {
+  to { transform: translate3d(-6rem, -5rem, 0) scale(0.88); }
+}
+
+@keyframes panel-breathe {
+  0%, 100% { opacity: 0.62; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(103, 132, 77, 0.1); }
+  50% { box-shadow: 0 0 0 7px rgba(103, 132, 77, 0.03); }
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes core-breathe {
+  0%, 100% { opacity: 0.58; transform: scale(0.82); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+
+@keyframes core-float {
+  0%, 100% { transform: translateY(-5px) rotate(-2deg); }
+  50% { transform: translateY(7px) rotate(2deg); }
+}
+
+@keyframes card-float {
+  0%, 100% { translate: 0 -5px; }
+  50% { translate: 0 8px; }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.75) rotate(0); }
+  50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
+}
+
+@media (max-width: 1535px) {
+  .floatingCard { display: none; }
+}
+
+@media (max-width: 1279px) {
+  .orbitScene { right: -5rem; opacity: 0.68; }
+}
+
+@media (max-width: 1023px) {
+  .page { overflow-y: auto; }
+  .panel { box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auroraOne,
+  .auroraTwo,
+  .panelGlow,
+  .liveDot,
+  .orbitOuter,
+  .orbitInner,
+  .coreHalo,
+  .coreMark,
+  .floatingCard,
+  .sparkleA,
+  .sparkleB {
+    animation: none;
+  }
+}
