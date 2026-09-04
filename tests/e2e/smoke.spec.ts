@@ -32,6 +32,31 @@ test("public menus expose only their own publication state", async ({ page }) =>
   await expect(page.getByText("Café E2E")).toHaveCount(0);
 });
 
+test("desktop canvas keeps moving after releasing a mouse drag", async ({ page }) => {
+  await page.setViewportSize({ width: 1_000, height: 700 });
+  await page.goto(`/m/${E2E.zoomMenu.slug}`);
+  await expect(page.locator(".konvajs-content")).toBeVisible();
+
+  await page.mouse.move(500, 350);
+  for (let index = 0; index < 4; index += 1) {
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(20);
+  }
+
+  await page.mouse.move(560, 350);
+  await page.mouse.down();
+  for (let x = 550; x >= 500; x -= 10) {
+    await page.mouse.move(x, 350);
+    await page.waitForTimeout(16);
+  }
+  await page.mouse.up();
+
+  const positionAtRelease = await canvasRowHash(page);
+  await page.waitForTimeout(120);
+  const positionWhileCoasting = await canvasRowHash(page);
+  expect(positionWhileCoasting).not.toBe(positionAtRelease);
+});
+
 test("anonymous users are redirected away from the CMS", async ({ page }) => {
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin\/login/);
@@ -51,4 +76,22 @@ async function expectLoadedCenteredImage(page: import("@playwright/test").Page, 
   if (!viewport || !box) return;
   expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
   expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+}
+
+async function canvasRowHash(page: import("@playwright/test").Page): Promise<number> {
+  return page.locator(".konvajs-content canvas").first().evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas 2D context is unavailable");
+    const pixels = context.getImageData(0, Math.floor(canvas.height / 2), canvas.width, 1).data;
+    let hash = 2166136261;
+    for (let index = 0; index < pixels.length; index += 4) {
+      hash ^= pixels[index] ?? 0;
+      hash = Math.imul(hash, 16777619);
+      hash ^= pixels[index + 1] ?? 0;
+      hash = Math.imul(hash, 16777619);
+      hash ^= pixels[index + 2] ?? 0;
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  });
 }

@@ -75,6 +75,22 @@ export function CanvasStage({ document, assets, onTextModalOpen, showZoomControl
     };
     inertiaFrame.current = window.requestAnimationFrame(tick);
   };
+  const finishMousePan = () => {
+    const motion = panMotion.current;
+    panMotion.current = null;
+    setPanStart(null);
+    if (!motion) return;
+
+    // Avoid flinging the canvas with an old velocity when the pointer was held
+    // still before release. A recent drag keeps the same momentum as touch.
+    const idleTime = performance.now() - motion.time;
+    if (idleTime >= 120) return;
+    const releaseFactor = Math.max(0, 1 - idleTime / 120);
+    startInertia({
+      x: motion.velocity.x * releaseFactor,
+      y: motion.velocity.y * releaseFactor,
+    });
+  };
   const touchPoints = (event: Konva.KonvaEventObject<TouchEvent>): TouchPoint[] => {
     const stage = event.target.getStage();
     if (!stage) return [];
@@ -121,7 +137,7 @@ export function CanvasStage({ document, assets, onTextModalOpen, showZoomControl
   useEffect(() => () => cancelInertia(), []);
   const displayBackground = document.background.endsWith("00") ? "#f5f7f3" : document.background;
   return <div ref={containerRef} className="h-full w-full touch-none" style={{ backgroundColor: displayBackground }} onContextMenu={(event) => event.preventDefault()}>
-    <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={() => { panMotion.current = null; setPanStart(null); }} onMouseLeave={() => { panMotion.current = null; setPanStart(null); }} onTouchStart={(event) => { const points = touchPoints(event); if (points.length >= 2) beginPinch(event, points); else if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={(event) => movePinch(event, touchPoints(event))} onTouchEnd={finishTouch} onTouchCancel={(event: Konva.KonvaEventObject<TouchEvent>) => finishTouch(event, false)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
+    <Stage width={size.width} height={size.height} draggable={false} onMouseDown={(event) => { if (event.target === event.target.getStage()) beginPan(event); }} onMouseMove={movePan} onMouseUp={finishMousePan} onMouseLeave={finishMousePan} onTouchStart={(event) => { const points = touchPoints(event); if (points.length >= 2) beginPinch(event, points); else if (event.target === event.target.getStage()) beginPan(event); }} onTouchMove={(event) => movePinch(event, touchPoints(event))} onTouchEnd={finishTouch} onTouchCancel={(event: Konva.KonvaEventObject<TouchEvent>) => finishTouch(event, false)} onWheel={(event) => { event.evt.preventDefault(); zoomAt(event.evt.deltaY > 0 ? 0.92 : 1.08, { x: event.evt.offsetX, y: event.evt.offsetY }); }}>
       <Layer x={scenePadding - camera.x * scale} y={scenePadding - camera.y * scale} scaleX={scale} scaleY={scale} clipX={bounds.x} clipY={bounds.y} clipWidth={bounds.width} clipHeight={bounds.height}><Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />{visibleNodes.map((node) => <CanvasStageNode key={node.id} node={node} assets={assets} onTextModalOpen={onTextModalOpen} />)}</Layer>
     </Stage>
     {showZoomControls && <div className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow"><button type="button" className="rounded px-2 py-1 text-sm disabled:opacity-30" onClick={() => zoomAt(0.9)} disabled={scale <= fitScale * (1 + 1e-10)} aria-label="Alejar">−</button><span className="px-1 text-[11px] text-zinc-600">{Math.round(scale * 100)}%</span><button type="button" className="rounded px-2 py-1 text-sm" onClick={() => zoomAt(1.1)} aria-label="Acercar">+</button><button type="button" className="rounded px-2 py-1 text-[11px] text-zinc-700" onClick={() => { cancelInertia(); updateViewport(bounds); }}>Restablecer</button></div>}
