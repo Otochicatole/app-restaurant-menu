@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, Layers3, MonitorSmartphone, Sparkles, Zap } from "lucide-react";
+import { ArrowUpRight, Layers3, Sparkles } from "lucide-react";
 import styles from "./home.module.css";
 
 export default function PlatformHomePage() {
@@ -51,39 +51,13 @@ export default function PlatformHomePage() {
               </Link>
             </div>
 
-            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-[11px] font-medium text-white/48">
-              <span className="flex items-center gap-2"><i className={styles.statusDot} />Sin instalaciones</span>
-              <span className="flex items-center gap-2"><i className={styles.statusDot} />Responsive</span>
-              <span className="flex items-center gap-2"><i className={styles.statusDot} />Siempre actualizado</span>
-            </div>
           </div>
 
           <MenuShowcase />
         </section>
 
-        <section id="experiencia" className={`${styles.featureRail} grid gap-px overflow-hidden rounded-[1.6rem] sm:grid-cols-3`}>
-          <Feature icon={<Layers3 size={18} />} index="01" title="Diseñá sin límites" copy="Capas, tipografías, multimedia y estilos en un lienzo completamente libre." />
-          <Feature icon={<Zap size={18} />} index="02" title="Publicá al instante" copy="Cada cambio puede llegar a tu carta pública en cuestión de segundos." />
-          <Feature icon={<MonitorSmartphone size={18} />} index="03" title="Perfecto en cada pantalla" copy="Tu diseño conserva su intención en teléfonos, tablets y escritorio." />
-        </section>
       </div>
     </main>
-  );
-}
-
-function Feature({ icon, index, title, copy }: { icon: React.ReactNode; index: string; title: string; copy: string }) {
-  return (
-    <article className={`${styles.feature} group relative flex gap-4 p-5 sm:p-6`}>
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[#cfb1fc] transition duration-300 group-hover:border-[#cfb1fc]/30 group-hover:bg-[#cfb1fc]/10">{icon}</span>
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-bold tracking-[0.18em] text-[#ead8b8]/55">{index}</span>
-          <span className="h-px w-5 bg-white/10" />
-        </div>
-        <h2 className="mt-1.5 text-sm font-semibold text-white">{title}</h2>
-        <p className="mt-1.5 max-w-sm text-xs leading-5 text-white/45">{copy}</p>
-      </div>
-    </article>
   );
 }
 

@@ -114,14 +114,6 @@ a:hover .brandMark {
 .primaryAction:hover::before { transform: translateX(130%); }
 .primaryAction > * { position: relative; }
 
-.statusDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #cfb1fc;
-  box-shadow: 0 0 12px rgba(207, 177, 252, 0.76);
-}
-
 .showcase {
   position: relative;
   min-height: min(62vh, 650px);
@@ -157,9 +149,9 @@ a:hover .brandMark {
   box-shadow: 0 0 18px rgba(207, 177, 252, 0.8);
 }
 
-.showcaseOrbit span:first-child { left: 14%; top: 14%; }
-.showcaseOrbit span:nth-child(2) { right: -4px; top: 50%; background: #ead8b8; }
-.showcaseOrbit span:last-child { left: 28%; bottom: 3%; background: #b8790a; }
+.showcaseOrbit span:first-child { left: 50%; top: 0; transform: translate(-50%, -50%); }
+.showcaseOrbit span:nth-child(2) { left: 100%; top: 50%; transform: translate(-50%, -50%); background: #ead8b8; }
+.showcaseOrbit span:last-child { left: 50%; top: 100%; transform: translate(-50%, -50%); background: #b8790a; }
 
 .menuCanvas {
   position: absolute;
@@ -306,20 +298,6 @@ a:hover .brandMark {
 }
 
 .cursorMark span { font-size: 10px; }
-
-.featureRail {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 24px 55px rgba(0, 0, 0, 0.18);
-}
-
-.feature {
-  background: rgba(8, 25, 17, 0.82);
-  backdrop-filter: blur(20px);
-  transition: background 300ms ease;
-}
-
-.feature:hover { background: rgba(18, 39, 26, 0.93); }
 
 @keyframes aurora-purple {
   to { transform: translate3d(8rem, -3rem, 0) scale(1.18); }

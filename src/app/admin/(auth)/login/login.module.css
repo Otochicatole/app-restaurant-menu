@@ -166,10 +166,10 @@
   box-shadow: 0 0 18px rgba(234, 216, 184, 0.85);
 }
 
-.orbitOuter span:first-child { left: 15%; top: 12%; }
-.orbitOuter span:last-child { right: -5px; top: 50%; background: #cfb1fc; }
-.orbitInner span:first-child { left: -5px; top: 48%; background: #cfb1fc; }
-.orbitInner span:last-child { right: 18%; bottom: 8%; }
+.orbitOuter span:first-child { left: 50%; top: 0; transform: translate(-50%, -50%); }
+.orbitOuter span:last-child { left: 100%; top: 50%; transform: translate(-50%, -50%); background: #cfb1fc; }
+.orbitInner span:first-child { left: 0; top: 50%; transform: translate(-50%, -50%); background: #cfb1fc; }
+.orbitInner span:last-child { left: 50%; top: 100%; transform: translate(-50%, -50%); }
 
 .orbitCore {
   position: absolute;
