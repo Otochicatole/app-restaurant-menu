@@ -14,7 +14,7 @@ CANDIDATE_PORT="${CANDIDATE_PORT:-8202}"
 # Dispatch before acquiring the release lock so the manual flow can stop and
 # start its process using the same lock safely.
 if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
-  exec bash "$SCRIPT_DIR/manual-redeploy.sh"
+  exec "$SCRIPT_DIR/manual-redeploy.sh"
 fi
 
 release_dir=""
@@ -73,7 +73,7 @@ rollback_after_error() {
 
   if (( recovery_ok == 1 && service_was_active == 1 )) && [[ -n "$previous_release" || -L "$CURRENT_LINK" ]]; then
     sudo systemctl start "$SERVICE"
-    bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
   elif (( recovery_ok == 0 )); then
     echo "ERROR: la recuperacion no pudo verificarse; $SERVICE queda detenido para evitar dano adicional." >&2
   fi
@@ -157,7 +157,7 @@ echo "Activando release y arrancando $SERVICE..."
 replace_link "$release_dir" "$CURRENT_LINK"
 activated=1
 sudo systemctl start "$SERVICE"
-bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
+"$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
 
 if [[ -n "$previous_release" ]]; then
   replace_link "$previous_release" "$PREVIOUS_LINK"

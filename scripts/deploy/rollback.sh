@@ -92,12 +92,12 @@ if [[ -z "$requested_backup" ]]; then
   fi
 
   if (( service_was_active == 1 )); then
-    if ! sudo systemctl restart "$SERVICE" || ! bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"; then
+    if ! sudo systemctl restart "$SERVICE" || ! "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"; then
       echo "ERROR: el release anterior no quedo sano; restaurando el codigo actual." >&2
       replace_link "$current_release" "$CURRENT_LINK"
       replace_link "$previous_release" "$PREVIOUS_LINK"
       sudo systemctl restart "$SERVICE"
-      bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
+      "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
       exit 1
     fi
   fi
@@ -149,7 +149,7 @@ recover_explicit_rollback() {
   fi
   if (( recovery_ok == 1 && service_was_active == 1 )); then
     sudo systemctl start "$SERVICE"
-    bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
   elif (( recovery_ok == 0 )); then
     echo "ERROR: la recuperacion no pudo verificarse; $SERVICE queda detenido." >&2
   fi
@@ -186,7 +186,7 @@ database_restore_allowed=0
 
 if (( service_was_active == 1 )); then
   sudo systemctl start "$SERVICE"
-  bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
+  "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
 fi
 
 trap - ERR INT TERM

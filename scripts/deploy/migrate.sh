@@ -53,7 +53,7 @@ rollback_migration() {
 
   if (( recovery_ok == 1 && service_was_active == 1 )); then
     sudo systemctl start "$SERVICE"
-    bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
   elif (( recovery_ok == 0 )); then
     echo "ERROR: la recuperacion no pudo verificarse; $SERVICE queda detenido." >&2
   fi
@@ -106,7 +106,7 @@ database_restore_allowed=0
 if (( service_was_active == 1 )); then
   echo "Reiniciando $SERVICE con la migracion validada..."
   sudo systemctl start "$SERVICE"
-  bash "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
+  "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL"
 fi
 
 trap - ERR INT TERM

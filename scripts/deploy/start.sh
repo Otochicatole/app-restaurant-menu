@@ -50,6 +50,9 @@ if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
 
   echo "Iniciando la aplicacion manual en 0.0.0.0:8201..."
   (
+    # The long-lived server must not inherit the deployment lock. Otherwise
+    # stop/redeploy commands remain blocked for the entire server lifetime.
+    exec 9>&-
     cd -- "$DEPLOY_PROJECT_ROOT"
     exec env NODE_ENV=production DATABASE_URL="$manual_database_url" \
       STORAGE_ROOT="$manual_storage_root" bun run start
@@ -67,7 +70,7 @@ if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
     exit 1
   fi
 
-  if ! bash "$SCRIPT_DIR/health-check.sh" "${HEALTH_URL:-http://127.0.0.1:8201/api/health}"; then
+  if ! "$SCRIPT_DIR/health-check.sh" "${HEALTH_URL:-http://127.0.0.1:8201/api/health}"; then
     echo "ERROR: la aplicacion inicio pero no supero health-check. Log: $MANUAL_LOG_FILE" >&2
     exit 1
   fi

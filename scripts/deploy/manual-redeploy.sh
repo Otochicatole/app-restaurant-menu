@@ -38,7 +38,7 @@ mkdir -p -- "$manual_storage_root" "$(dirname -- "$manual_database_path")" "$MAN
 # Stop only the manual process before touching SQLite. The stop script has its
 # own lock and is intentionally called before this script acquires one.
 exec 9>&-
-DEPLOY_MODE=manual bash "$SCRIPT_DIR/stop.sh"
+DEPLOY_MODE=manual "$SCRIPT_DIR/stop.sh"
 exec 9>>"$DEPLOY_LOCK"
 if ! flock -n 9; then
   echo "ERROR: no se pudo recuperar el lock de deploy manual." >&2
@@ -67,4 +67,4 @@ echo "Aplicando migraciones y compilando la instalacion manual..."
 )
 
 exec 9>&-
-DEPLOY_MODE=manual bash "$SCRIPT_DIR/start.sh"
+DEPLOY_MODE=manual "$SCRIPT_DIR/start.sh"

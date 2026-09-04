@@ -4,7 +4,12 @@
 
 DEPLOY_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_PROJECT_ROOT="$(cd -- "$DEPLOY_SCRIPT_DIR/../.." && pwd)"
-DEPLOY_ROOT="${APP_RELEASE_ROOT:-$DEPLOY_PROJECT_ROOT/.deploy}"
+STANDARD_DEPLOY_ROOT="/opt/app-res"
+DEFAULT_DEPLOY_ROOT="$DEPLOY_PROJECT_ROOT/.deploy"
+if [[ -d "$STANDARD_DEPLOY_ROOT" ]] || { [[ "${OSTYPE:-}" == linux* ]] && (( EUID == 0 )); }; then
+  DEFAULT_DEPLOY_ROOT="$STANDARD_DEPLOY_ROOT"
+fi
+DEPLOY_ROOT="${APP_RELEASE_ROOT:-$DEFAULT_DEPLOY_ROOT}"
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 SHARED_DIR="$DEPLOY_ROOT/shared"
 DATABASE_DIR="$SHARED_DIR/database"
@@ -406,7 +411,7 @@ run_candidate_health() {
   DEPLOY_CANDIDATE_PID=$!
 
   set +e
-  bash "$DEPLOY_SCRIPT_DIR/health-check.sh" "$health_url"
+  "$DEPLOY_SCRIPT_DIR/health-check.sh" "$health_url"
   status=$?
   stop_candidate
   set -e
