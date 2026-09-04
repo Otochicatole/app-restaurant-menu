@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowRight, ChevronDown, Circle, Film, ImagePlus, Minus, Search, Square, Star, Triangle, Type, Upload, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, Circle, Download, Film, FileUp, ImagePlus, LoaderCircle, Minus, Search, Square, Star, Triangle, Type, Upload, X } from "lucide-react";
 import { DynamicIcon } from "lucide-react/dynamic";
 import { LUCIDE_ICON_NAMES, humanizeLucideIconName, searchLucideIconNames, type LucideIconName } from "../domain/lucide-icon-catalog";
 import { createCanvasLayerIndex } from "../domain/layer-tree";
@@ -25,15 +25,72 @@ export function EditorToolsPanel({ background, layersOpen, onToggleLayers, onOpe
   </>;
 }
 
-export function TemplatePickerDrawer({ templates, assets, onClose, onApply, onSaveTemplate, onDelete }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onClose: () => void; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void }) {
-  return <aside id="editor-templates" className="flex h-full w-80 min-w-72 shrink-0 flex-col border-r border-zinc-200 bg-white p-3"><div className="mb-2 flex shrink-0 items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Plantillas</p><p className="mt-1 text-[10px] text-zinc-400">Diseños listos para tu carta</p></div><button className="rounded p-1 text-zinc-500 hover:bg-zinc-100" onClick={onClose} aria-label="Volver a capas"><X size={17} /></button></div><TemplateLibrary templates={templates} assets={assets} onApply={onApply} onSaveTemplate={onSaveTemplate} onDelete={onDelete} /></aside>;
+export function TemplatePickerDrawer({ templates, assets, onClose, onApply, onSaveTemplate, onDelete, onImport }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onClose: () => void; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
+  return <aside id="editor-templates" className="flex h-full w-80 min-w-72 shrink-0 flex-col border-r border-zinc-200 bg-white p-3"><div className="mb-2 flex shrink-0 items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Plantillas</p><p className="mt-1 text-[10px] text-zinc-400">Diseños listos para tu carta</p></div><button className="rounded p-1 text-zinc-500 hover:bg-zinc-100" onClick={onClose} aria-label="Volver a capas"><X size={17} /></button></div><TemplateLibrary templates={templates} assets={assets} onApply={onApply} onSaveTemplate={onSaveTemplate} onDelete={onDelete} onImport={onImport} /></aside>;
 }
 
-function TemplateLibrary({ templates, assets, onApply, onSaveTemplate, onDelete }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void }) {
+function TemplateLibrary({ templates, assets, onApply, onSaveTemplate, onDelete, onImport }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
   const [filter, setFilter] = useState<"ALL" | "PUBLIC" | "PRIVATE">("ALL");
+  const [importing, setImporting] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
   const visible = useMemo(() => templates.filter((template) => filter === "ALL" || template.visibility === filter || (filter === "PUBLIC" && template.isSystem)), [filter, templates]);
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
-  return <div className="flex min-h-0 flex-1 flex-col gap-2"><div className="grid shrink-0 grid-cols-3 gap-1"><button className={`rounded px-1 py-1 text-[10px] ${filter === "ALL" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("ALL")}>Todas</button><button className={`rounded px-1 py-1 text-[10px] ${filter === "PUBLIC" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("PUBLIC")}>Públicas</button><button className={`rounded px-1 py-1 text-[10px] ${filter === "PRIVATE" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("PRIVATE")}>Privadas</button></div><div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">{visible.map((template) => <article key={template.id} className="overflow-hidden rounded-lg border border-zinc-200 bg-white"><TemplateMiniature document={template.document} assets={assetMap} /><div className="p-2"><div className="flex items-center justify-between gap-1"><p className="truncate text-xs font-semibold text-zinc-800">{template.name}</p><span className="shrink-0 rounded bg-zinc-100 px-1 py-0.5 text-[9px] text-zinc-500">{template.isSystem ? "Preset" : statusLabel(template.status)}</span></div><p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-zinc-500">{template.description}</p><div className="mt-2 flex items-center justify-between gap-1"><span className="text-[9px] uppercase tracking-wide text-zinc-400">{template.visibility === "PUBLIC" ? "Pública" : "Privada"}</span><div className="flex gap-1"><button className="rounded bg-emerald-950 px-2 py-1 text-[10px] font-semibold text-white" onClick={() => onApply(template)}>Usar</button>{!template.isSystem && template.visibility === "PRIVATE" && <button className="rounded border border-red-200 px-2 py-1 text-[10px] text-red-700" onClick={() => onDelete(template)}>×</button>}</div></div></div></article>)}</div><div className="grid shrink-0 grid-cols-2 gap-1.5 border-t border-zinc-100 pt-2"><button className="rounded border border-zinc-200 px-2 py-1.5 text-[10px] font-medium" onClick={() => onSaveTemplate(false)}>Guardar borrador</button><button className="rounded border border-emerald-200 px-2 py-1.5 text-[10px] font-medium text-emerald-800" onClick={() => onSaveTemplate(true)}>Enviar comunidad</button></div></div>;
+  const importFile = async (file: File) => {
+    setImporting(true);
+    setTransferError(null);
+    setTransferSuccess(null);
+    try { await onImport(file); setFilter("PRIVATE"); setTransferSuccess("Plantilla importada correctamente."); }
+    catch (error) { setTransferError(error instanceof Error ? error.message : "No se pudo importar la plantilla."); }
+    finally { setImporting(false); }
+  };
+  const exportFile = async (template: MenuTemplateView) => {
+    setExportingId(template.id);
+    setTransferError(null);
+    setTransferSuccess(null);
+    try {
+      const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}/export`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error?.message ?? "No se pudo exportar la plantilla.");
+      }
+      const blob = await response.blob();
+      const filename = responseFilename(response.headers.get("Content-Disposition"), `${template.name}.menutemplate`);
+      const url = URL.createObjectURL(blob);
+      const download = document.createElement("a");
+      download.href = url;
+      download.download = filename;
+      download.hidden = true;
+      document.body.appendChild(download);
+      download.click();
+      download.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      setTransferSuccess(`Archivo listo: ${filename}`);
+    } catch (error) {
+      setTransferError(error instanceof Error ? error.message : "No se pudo exportar la plantilla.");
+    } finally {
+      setExportingId(null);
+    }
+  };
+  const transferBusy = importing || exportingId !== null;
+  return <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="grid shrink-0 grid-cols-3 gap-1"><button className={`rounded px-1 py-1 text-[10px] ${filter === "ALL" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("ALL")}>Todas</button><button className={`rounded px-1 py-1 text-[10px] ${filter === "PUBLIC" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("PUBLIC")}>Públicas</button><button className={`rounded px-1 py-1 text-[10px] ${filter === "PRIVATE" ? "bg-emerald-100 text-emerald-900" : "bg-zinc-50 text-zinc-500"}`} onClick={() => setFilter("PRIVATE")}>Privadas</button></div>
+    <label className={`relative flex shrink-0 items-center justify-center gap-2 overflow-hidden rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-900 ${transferBusy ? "cursor-wait opacity-70" : "cursor-pointer hover:border-emerald-500"}`} aria-busy={importing}>{importing ? <LoaderCircle className="animate-spin motion-reduce:animate-none" size={14} aria-hidden="true" /> : <FileUp size={14} aria-hidden="true" />}{importing ? "Importando plantilla…" : "Importar archivo .menutemplate"}{importing && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 animate-pulse bg-emerald-600 motion-reduce:animate-none" />}<input className="sr-only" type="file" accept=".menutemplate,application/vnd.restaurant-menu.template" disabled={transferBusy} aria-label="Importar plantilla completa" onChange={(event) => { const input = event.currentTarget; const file = input.files?.[0]; if (file) void importFile(file).finally(() => { input.value = ""; }); }} /></label>
+    {transferError && <p role="alert" className="shrink-0 rounded-lg bg-red-50 px-2.5 py-2 text-[10px] leading-4 text-red-800">{transferError}</p>}
+    {transferSuccess && <p role="status" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-2 text-[10px] leading-4 text-emerald-800"><CheckCircle2 size={13} aria-hidden="true" /> <span className="min-w-0 truncate">{transferSuccess}</span></p>}
+    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">{visible.map((template) => { const exporting = exportingId === template.id; return <article key={template.id} className="overflow-hidden rounded-lg border border-zinc-200 bg-white"><TemplateMiniature document={template.document} assets={assetMap} /><div className="p-2"><div className="flex items-center justify-between gap-1"><p className="truncate text-xs font-semibold text-zinc-800">{template.name}</p><span className="shrink-0 rounded bg-zinc-100 px-1 py-0.5 text-[9px] text-zinc-500">{template.isSystem ? "Preset" : statusLabel(template.status)}</span></div><p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-zinc-500">{template.description}</p><div className="mt-2 flex items-center justify-between gap-1"><span className="text-[9px] uppercase tracking-wide text-zinc-400">{template.visibility === "PUBLIC" ? "Pública" : "Privada"}</span><div className="flex gap-1"><button type="button" disabled={transferBusy} aria-busy={exporting} className="inline-flex min-w-[72px] items-center justify-center gap-1 rounded border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-wait disabled:opacity-60" onClick={() => void exportFile(template)} aria-label={exporting ? `Exportando ${template.name}` : `Exportar ${template.name}`}>{exporting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" size={11} aria-hidden="true" /> : <Download size={11} aria-hidden="true" />}{exporting ? "Exportando…" : "Exportar"}</button><button className="rounded bg-emerald-950 px-2 py-1 text-[10px] font-semibold text-white" onClick={() => onApply(template)}>Usar</button>{!template.isSystem && template.visibility === "PRIVATE" && <button className="rounded border border-red-200 px-2 py-1 text-[10px] text-red-700" onClick={() => onDelete(template)} aria-label={`Eliminar ${template.name}`}>×</button>}</div></div></div></article>; })}</div>
+    <div className="grid shrink-0 grid-cols-2 gap-1.5 border-t border-zinc-100 pt-2"><button className="rounded border border-zinc-200 px-2 py-1.5 text-[10px] font-medium" onClick={() => onSaveTemplate(false)}>Guardar borrador</button><button className="rounded border border-emerald-200 px-2 py-1.5 text-[10px] font-medium text-emerald-800" onClick={() => onSaveTemplate(true)}>Enviar comunidad</button></div>
+  </div>;
+}
+
+function responseFilename(contentDisposition: string | null, fallback: string): string {
+  const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = contentDisposition?.match(/filename="([^"]+)"/i)?.[1];
+  let candidate = quoted ?? fallback;
+  if (encoded) { try { candidate = decodeURIComponent(encoded); } catch { candidate = fallback; } }
+  const safe = candidate.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").trim();
+  return safe || "plantilla.menutemplate";
 }
 
 function statusLabel(status: MenuTemplateView["status"]): string { return ({ DRAFT: "Borrador", PENDING: "Pendiente", PUBLISHED: "Publicada", REJECTED: "Rechazada", ARCHIVED: "Archivada" })[status]; }

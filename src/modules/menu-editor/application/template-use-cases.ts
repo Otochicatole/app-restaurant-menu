@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BadRequestError } from "@/platform/application/errors";
 import { createTemplateSchema, superadminTemplateQuerySchema, templateIdSchema, type CreateTemplateCommand } from "../contracts";
 import { validateCanvasDocument } from "../domain/document-policy";
+import { decodeTemplateBundle, encodeTemplateBundle, templateBundleFilename } from "../domain/template-bundle";
 import type { TemplateRepository } from "./template-ports";
 
 export function createTemplateUseCases(repository: TemplateRepository) {
@@ -13,6 +14,13 @@ export function createTemplateUseCases(repository: TemplateRepository) {
       const validDocument = validateCanvasDocument(document);
       if (command.submitPublic) return repository.submitPublic({ ...command, tenantId: id, document: validDocument });
       return repository.createPrivate({ ...command, tenantId: id, document: validDocument });
+    },
+    async export(tenantId: string, templateId: string) {
+      const template = await repository.exportPortable(z.string().min(1).parse(tenantId), templateIdSchema.parse(templateId));
+      return { bytes: encodeTemplateBundle(template), filename: templateBundleFilename(template.name) };
+    },
+    import(tenantId: string, bytes: Uint8Array) {
+      return repository.importPortable(z.string().min(1).parse(tenantId), decodeTemplateBundle(bytes));
     },
     apply(tenantId: string, templateId: string) {
       return repository.apply(z.string().min(1).parse(tenantId), templateIdSchema.parse(templateId));

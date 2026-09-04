@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
+import { decodeTemplateBundle } from "../../src/modules/menu-editor/domain/template-bundle";
 import { E2E, loginAs } from "./fixtures";
 
 test("tenant admin opens the Canvas editor and publishes a document", async ({ page }) => {
@@ -26,6 +28,54 @@ test("tenant admin can open the icon library and image library", async ({ page }
 
   await page.getByRole("button", { name: "Imágenes" }).click();
   await expect(page.getByText("Café E2E").last()).toBeVisible();
+});
+
+test("tenant admin can export a complete template and import it in another restaurant", async ({ page }) => {
+  await loginAs(page, E2E.tenantAdmin);
+  await page.getByRole("button", { name: "Plantillas", exact: true }).click();
+  const library = page.locator("#editor-templates");
+  const name = `Plantilla portable ${Date.now()}`;
+  await library.getByRole("button", { name: "Guardar borrador" }).click();
+  const saveDialog = page.getByRole("dialog", { name: "Guardar plantilla" });
+  await saveDialog.getByLabel("Nombre").fill(name);
+  await saveDialog.getByLabel("Descripción").fill("Documento y recursos incluidos");
+  await saveDialog.getByRole("button", { name: "Guardar", exact: true }).click();
+  const sourceCard = library.locator("article").filter({ hasText: name });
+  await expect(sourceCard).toBeVisible();
+
+  await page.route(/\/api\/editor\/templates\/[^/]+\/export$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await route.continue();
+  });
+  const downloadEvent = page.waitForEvent("download");
+  await sourceCard.getByRole("button", { name: `Exportar ${name}` }).click();
+  await expect(sourceCard.getByRole("button", { name: `Exportando ${name}` })).toBeVisible();
+  const download = await downloadEvent;
+  await expect(library.getByRole("status")).toContainText("Archivo listo:");
+  expect(download.suggestedFilename()).toBe(`${name.replaceAll(" ", "-")}.menutemplate`);
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error("La plantilla exportada no generó un archivo local");
+  const decoded = decodeTemplateBundle(new Uint8Array(await readFile(downloadPath)));
+  expect(decoded.name).toBe(name);
+  expect(decoded.assets.some((asset) => asset.kind === "IMAGE" && asset.name === "Café E2E")).toBe(true);
+
+  await page.context().clearCookies();
+  await loginAs(page, E2E.otherTenant);
+  await page.getByRole("button", { name: "Plantillas", exact: true }).click();
+  const targetLibrary = page.locator("#editor-templates");
+  await page.route("**/api/editor/templates/import", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await route.continue();
+  });
+  await targetLibrary.getByLabel("Importar plantilla completa").setInputFiles(downloadPath);
+  await expect(targetLibrary.getByText("Importando plantilla…", { exact: true })).toBeVisible();
+  await expect(page.getByText("Plantilla importada", { exact: true })).toBeVisible();
+  const importedCard = targetLibrary.locator("article").filter({ hasText: name });
+  await expect(importedCard).toBeVisible();
+  await importedCard.getByRole("button", { name: "Usar" }).click();
+  await expect(page.getByText("Plantilla aplicada", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Imágenes", exact: true }).click();
+  await expect(page.locator("#editor-images").getByRole("button", { name: /Café E2E/ })).toBeVisible();
 });
 
 test("tenant admin can associate media, publish it immediately, and open it publicly", async ({ page, context }) => {

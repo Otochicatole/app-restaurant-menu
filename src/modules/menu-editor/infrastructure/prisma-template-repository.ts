@@ -1,11 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { prisma } from "@/platform/database/prisma";
 import { blobStore } from "@/platform/storage";
 import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
 import { documentAssetIds, validateCanvasDocument } from "../domain/document-policy";
+import type { PortableTemplate, PortableTemplateAsset } from "../domain/template-bundle";
 import { presetAsView, TEMPLATE_PRESETS } from "../domain/template-presets";
-import type { CanvasDocumentV1, MenuTemplateView, SuperadminTemplateList, SuperadminTemplateQuery, SuperadminTemplateView } from "../contracts";
+import type { CanvasDocumentV1, MenuAssetKind, MenuTemplateView, SuperadminTemplateList, SuperadminTemplateQuery, SuperadminTemplateView } from "../contracts";
 import type { TemplateCreateInput, TemplateRepository } from "../application/template-ports";
 
 export class PrismaTemplateRepository implements TemplateRepository {
@@ -52,6 +53,119 @@ export class PrismaTemplateRepository implements TemplateRepository {
       return template;
     });
     return toView(row);
+  }
+
+  async exportPortable(tenantId: string, templateId: string): Promise<PortableTemplate> {
+    const preset = TEMPLATE_PRESETS.find((item) => item.id === templateId);
+    if (preset) {
+      const document = validateCanvasDocument(preset.document);
+      if (documentAssetIds(document).size) throw new ConflictError("La plantilla integrada contiene assets que no se pueden exportar.");
+      return { name: preset.name, description: preset.description, document, assets: [] };
+    }
+
+    const template = await prisma.menuTemplate.findFirst({
+      where: { id: templateId, OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { tenantId }] },
+      include: { assets: true, references: { include: { asset: true } } },
+    });
+    if (!template) throw new NotFoundError("Plantilla");
+    const document = validateCanvasDocument(JSON.parse(template.documentJson));
+    const sourceAssets: StoredTemplateAsset[] = template.visibility === "PUBLIC" ? template.assets : template.references.map((reference) => reference.asset);
+    const assetsById = new Map(sourceAssets.map((asset) => [asset.id, asset]));
+    const assets: PortableTemplateAsset[] = [];
+    for (const assetId of documentAssetIds(document)) {
+      const asset = assetsById.get(assetId);
+      if (!asset) throw new ConflictError("La plantilla tiene referencias a assets inexistentes.");
+      const content = new Uint8Array(await blobStore.read(asset.storageKey));
+      assets.push({
+        id: asset.id,
+        kind: asset.kind,
+        name: asset.name,
+        mimeType: portableMimeType(asset.kind, asset.mimeType, asset.name),
+        byteSize: content.byteLength,
+        checksum: hashAsset(content),
+        width: asset.kind === "IMAGE" ? null : asset.width,
+        height: asset.kind === "IMAGE" ? null : asset.height,
+        fontFamily: asset.fontFamily,
+        content,
+      });
+    }
+    return { name: template.name, description: template.description, document, assets };
+  }
+
+  async importPortable(tenantId: string, template: PortableTemplate): Promise<MenuTemplateView> {
+    const [tenant, usage, existingAssets] = await Promise.all([
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { assetQuotaBytes: true } }),
+      prisma.menuAsset.aggregate({ where: { tenantId }, _sum: { byteSize: true } }),
+      prisma.menuAsset.findMany({ where: { tenantId, checksum: { in: [...new Set(template.assets.map((asset) => asset.checksum))] } } }),
+    ]);
+    if (!tenant) throw new NotFoundError("Restaurante");
+
+    const existingByContent = new Map(existingAssets.map((asset) => [assetContentKey(asset), asset]));
+    const importedByContent = new Map<string, ImportedAsset>();
+    const remap = new Map<string, string>();
+    for (const asset of template.assets) {
+      const contentKey = assetContentKey(asset);
+      const existing = existingByContent.get(contentKey);
+      if (existing) { remap.set(asset.id, existing.id); continue; }
+      let imported = importedByContent.get(contentKey);
+      if (!imported) {
+        const id = randomUUID();
+        imported = {
+          ...asset,
+          id,
+          storageKey: `tenants/${tenantId}/template-imports/${randomUUID()}.${extensionForAsset(asset.mimeType, asset.name)}`,
+        };
+        importedByContent.set(contentKey, imported);
+      }
+      remap.set(asset.id, imported.id);
+    }
+
+    const assetsToCreate = [...importedByContent.values()];
+    const newBytes = assetsToCreate.reduce((total, asset) => total + asset.byteSize, 0);
+    if ((usage._sum.byteSize ?? 0) + newBytes > tenant.assetQuotaBytes) throw new BadRequestError("La plantilla supera la cuota de archivos del restaurante.");
+
+    const writtenKeys: string[] = [];
+    try {
+      for (const asset of assetsToCreate) {
+        await blobStore.put(asset.storageKey, Buffer.from(asset.content));
+        writtenKeys.push(asset.storageKey);
+      }
+      const document = validateCanvasDocument(remapDocumentAssets(template.document, remap));
+      const row = await prisma.$transaction(async (transaction) => {
+        for (const asset of assetsToCreate) {
+          await transaction.menuAsset.create({ data: {
+            id: asset.id,
+            tenantId,
+            kind: asset.kind,
+            name: asset.name.slice(0, 100),
+            storageKey: asset.storageKey,
+            mimeType: asset.mimeType,
+            byteSize: asset.byteSize,
+            checksum: asset.checksum,
+            width: asset.width,
+            height: asset.height,
+            fontFamily: asset.fontFamily,
+          } });
+        }
+        const created = await transaction.menuTemplate.create({ data: {
+          id: randomUUID(),
+          tenantId,
+          name: template.name,
+          description: template.description,
+          documentJson: JSON.stringify(document),
+          schemaVersion: document.schemaVersion,
+          visibility: "PRIVATE",
+          status: "DRAFT",
+        } });
+        const assetIds = [...new Set(documentAssetIds(document))];
+        if (assetIds.length) await transaction.menuTemplateAssetReference.createMany({ data: assetIds.map((assetId) => ({ tenantId, templateId: created.id, assetId })) });
+        return created;
+      });
+      return toView(row);
+    } catch (error) {
+      await Promise.all(writtenKeys.map((key) => blobStore.delete(key).catch(() => undefined)));
+      throw error;
+    }
   }
 
   async apply(tenantId: string, templateId: string): Promise<CanvasDocumentV1> {
@@ -137,6 +251,41 @@ export class PrismaTemplateRepository implements TemplateRepository {
     const row = await prisma.menuTemplate.update({ where: { id: templateId }, data: { status, rejectionReason: action === "reject" ? reason ?? null : null, publishedAt: action === "publish" ? new Date() : null } });
     return toView(row);
   }
+}
+
+type StoredTemplateAsset = {
+  id: string;
+  kind: MenuAssetKind;
+  name: string;
+  storageKey: string;
+  mimeType: string;
+  byteSize: number;
+  checksum: string;
+  width: number | null;
+  height: number | null;
+  fontFamily: string | null;
+};
+
+type ImportedAsset = PortableTemplateAsset & { storageKey: string };
+
+function assetContentKey(asset: Pick<PortableTemplateAsset, "checksum" | "kind" | "mimeType">): string {
+  return `${asset.kind}:${asset.mimeType}:${asset.checksum}`;
+}
+
+function hashAsset(content: Uint8Array): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function portableMimeType(kind: MenuAssetKind, mimeType: string, name: string): string {
+  if (mimeType.trim()) return mimeType.trim().toLowerCase();
+  if (kind !== "FONT") return mimeType;
+  const extension = name.split(".").pop()?.toLowerCase();
+  return ({ woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf" } as Record<string, string>)[extension ?? ""] ?? "application/octet-stream";
+}
+
+function extensionForAsset(mimeType: string, name: string): string {
+  const known: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm", "font/woff": "woff", "font/woff2": "woff2", "font/ttf": "ttf", "font/otf": "otf", "application/font-woff": "woff", "application/font-woff2": "woff2", "application/x-font-ttf": "ttf", "application/vnd.ms-opentype": "otf" };
+  return known[mimeType] ?? (name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin");
 }
 
 function toView(row: { id: string; name: string; description: string; visibility: string; status: string; isSystem: boolean; tenantId: string | null; documentJson: string; rejectionReason: string | null; createdAt: Date; updatedAt: Date }): MenuTemplateView {
