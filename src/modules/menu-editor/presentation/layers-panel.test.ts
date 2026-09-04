@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
+import { createCanvasLayerIndex } from "../domain/layer-tree";
 import { createTemplateDocument } from "../domain/template";
 import { LayersPanel } from "./LayersPanel";
 
@@ -27,6 +28,7 @@ const document: CanvasDocumentV1 = {
 function panelProps(overrides: Partial<React.ComponentProps<typeof LayersPanel>> = {}): React.ComponentProps<typeof LayersPanel> {
   return {
     document,
+    layerIndex: createCanvasLayerIndex(document),
     selectedIds: [],
     selectedGroupId: null,
     renameGroupId: null,

@@ -25,10 +25,11 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, FolderPlus, GripVertical, Layers2, LockKeyhole, Unlock } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CanvasDocumentV1, CanvasGroup, CanvasNode } from "../contracts";
-import { groupLayerState, layerTreeRows, type CanvasLayerMoveDestination, type CanvasLayerRef, type CanvasLayerRow } from "../domain/layer-tree";
+import { layerTreeRows, type CanvasLayerIndex, type CanvasLayerMoveDestination, type CanvasLayerRef, type CanvasLayerRow } from "../domain/layer-tree";
 
 interface LayersPanelProps {
   document: CanvasDocumentV1;
+  layerIndex: CanvasLayerIndex;
   selectedIds: string[];
   selectedGroupId: string | null;
   renameGroupId: string | null;
@@ -45,26 +46,27 @@ interface LayersPanelProps {
   onRenameFinished(): void;
 }
 
-export function LayersPanel({ document, selectedIds, selectedGroupId, renameGroupId, storageKey, onCreateGroup, onGroupSelection, onSelectNode, onSelectGroup, onChangeNode, onChangeGroup, onRenameGroup, onUngroup, onMove, onRenameFinished }: LayersPanelProps) {
+export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId, renameGroupId, storageKey, onCreateGroup, onGroupSelection, onSelectNode, onSelectGroup, onChangeNode, onChangeGroup, onRenameGroup, onUngroup, onMove, onRenameFinished }: LayersPanelProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [storageReady, setStorageReady] = useState(false);
   const [activeRef, setActiveRef] = useState<CanvasLayerRef | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
-  const selectedGroup = selectedGroupId ? document.groups.find((group) => group.id === selectedGroupId) ?? null : null;
-  const selectedGroupLocked = selectedGroup ? groupLayerState(document, selectedGroup).effectiveLocked : false;
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedGroup = selectedGroupId ? layerIndex.groupsById.get(selectedGroupId) ?? null : null;
+  const selectedGroupLocked = selectedGroup ? layerIndex.groupStates.get(selectedGroup.id)?.effectiveLocked ?? true : false;
   const displayedCollapsed = useMemo(() => {
     const next = new Set(collapsed);
     const visited = new Set<string>();
-    let current = selectedGroupId ? document.groups.find((group) => group.id === selectedGroupId)?.parentGroupId ?? null : null;
+    let current = selectedGroupId ? layerIndex.groupsById.get(selectedGroupId)?.parentGroupId ?? null : null;
     while (current && !visited.has(current)) {
       visited.add(current);
       next.delete(current);
-      current = document.groups.find((group) => group.id === current)?.parentGroupId ?? null;
+      current = layerIndex.groupsById.get(current)?.parentGroupId ?? null;
     }
     return next;
-  }, [collapsed, document.groups, selectedGroupId]);
-  const rows = useMemo(() => layerTreeRows(document, displayedCollapsed), [document, displayedCollapsed]);
+  }, [collapsed, layerIndex, selectedGroupId]);
+  const rows = useMemo(() => layerTreeRows(document, displayedCollapsed, layerIndex), [document, displayedCollapsed, layerIndex]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
@@ -98,7 +100,7 @@ export function LayersPanel({ document, selectedIds, selectedGroupId, renameGrou
   };
   const finishRename = (save: boolean) => {
     const groupId = editingGroupId ?? renameGroupId;
-    const draft = editingGroupId ? nameDraft : document.groups.find((group) => group.id === renameGroupId)?.name ?? "";
+    const draft = editingGroupId ? nameDraft : renameGroupId ? layerIndex.groupsById.get(renameGroupId)?.name ?? "" : "";
     if (save && groupId && draft.trim()) onRenameGroup(groupId, draft.trim());
     setEditingGroupId(null);
     onRenameFinished();
@@ -117,7 +119,7 @@ export function LayersPanel({ document, selectedIds, selectedGroupId, renameGrou
     if (!ref) return;
     setActiveRef(ref);
     if (ref.kind === "group") onSelectGroup(ref.id);
-    else if (!selectedIds.includes(ref.id)) onSelectNode(ref.id, false);
+    else if (!selectedIdSet.has(ref.id)) onSelectNode(ref.id, false);
   };
   const handleDragEnd = (event: DragEndEvent) => {
     const active = parseLayerDndId(String(event.active.id));
@@ -134,7 +136,7 @@ export function LayersPanel({ document, selectedIds, selectedGroupId, renameGrou
     const targetCenter = event.over.rect.top + event.over.rect.height / 2;
     onMove(active, { type: activeCenter < targetCenter ? "before" : "after", target });
   };
-  const activeLabel = activeRef ? layerLabel(document, activeRef) : "";
+  const activeLabel = activeRef ? layerLabel(layerIndex, activeRef) : "";
 
   return (
     <aside id="editor-layers" className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white shadow-sm" aria-label="Capas del lienzo">
@@ -160,15 +162,15 @@ export function LayersPanel({ document, selectedIds, selectedGroupId, renameGrou
             <SortableContext items={rows.map((row) => layerDndId(row.ref))} strategy={verticalListSortingStrategy}>
               <div role="tree" aria-label="Árbol de capas" className="space-y-0.5">
                 {rows.map((row) => {
-                  const node = row.ref.kind === "node" ? document.nodes.find((candidate) => candidate.id === row.ref.id) : undefined;
-                  const group = row.ref.kind === "group" ? document.groups.find((candidate) => candidate.id === row.ref.id) : undefined;
+                  const node = row.ref.kind === "node" ? layerIndex.nodesById.get(row.ref.id) : undefined;
+                  const group = row.ref.kind === "group" ? layerIndex.groupsById.get(row.ref.id) : undefined;
                   if (!node && !group) return null;
                   return <SortableLayerRow
                     key={layerDndId(row.ref)}
                     row={row}
                     node={node}
                     group={group}
-                    selected={row.ref.kind === "group" ? selectedGroupId === row.ref.id : !selectedGroupId && selectedIds.includes(row.ref.id)}
+                    selected={row.ref.kind === "group" ? selectedGroupId === row.ref.id : !selectedGroupId && selectedIdSet.has(row.ref.id)}
                     collapsed={group ? displayedCollapsed.has(group.id) : false}
                     editing={group?.id === (editingGroupId ?? renameGroupId)}
                     nameDraft={editingGroupId ? nameDraft : group?.name ?? ""}
@@ -223,7 +225,7 @@ function SortableLayerRow({ row, node, group, selected, collapsed, editing, name
     aria-level={row.depth + 1}
     aria-selected={selected}
     aria-expanded={group ? !collapsed : undefined}
-    style={{ transform: CSS.Transform.toString(transform), transition, willChange: "transform", paddingLeft: indent }}
+    style={{ transform: CSS.Transform.toString(transform), transition, willChange: isDragging ? "transform" : "auto", paddingLeft: indent, contentVisibility: "auto", containIntrinsicSize: "32px" }}
     className={`relative ${isDragging ? "z-10 opacity-30" : ""}`}
   >
     {row.depth > 0 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 opacity-70" style={{ width: indent, backgroundImage: "repeating-linear-gradient(to right, transparent 0, transparent 12px, #e4e4e7 13px, transparent 14px)" }} />}
@@ -250,9 +252,9 @@ function parseLayerDndId(value: string): CanvasLayerRef | null {
   const match = /^layer:(node|group):(.+)$/.exec(value);
   return match ? { kind: match[1] as CanvasLayerRef["kind"], id: match[2] } : null;
 }
-function layerLabel(document: CanvasDocumentV1, ref: CanvasLayerRef): string {
-  if (ref.kind === "group") return document.groups.find((group) => group.id === ref.id)?.name ?? "Grupo";
-  const node = document.nodes.find((candidate) => candidate.id === ref.id);
+function layerLabel(index: CanvasLayerIndex, ref: CanvasLayerRef): string {
+  if (ref.kind === "group") return index.groupsById.get(ref.id)?.name ?? "Grupo";
+  const node = index.nodesById.get(ref.id);
   return node ? getNodeLabel(node) : "Capa";
 }
 function getNodeLabel(node: CanvasNode): string {

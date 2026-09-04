@@ -19,6 +19,78 @@ export type CanvasLayerMoveDestination =
   | { type: "root-front" }
   | { type: "outdent" };
 
+export type CanvasLayerIndex = {
+  nodesById: ReadonlyMap<string, CanvasNode>;
+  groupsById: ReadonlyMap<string, CanvasGroup>;
+  nodeStates: ReadonlyMap<string, CanvasLayerState>;
+  groupStates: ReadonlyMap<string, CanvasLayerState>;
+  outermostGroupIds: ReadonlyMap<string, string>;
+  descendantNodeIds(groupId: string): readonly string[];
+  directItemsByParentId: ReadonlyMap<string | null, readonly CanvasLayerRef[]>;
+};
+
+/** Builds the read model used while rendering. Call once per document revision. */
+export function createCanvasLayerIndex(document: CanvasDocumentV1): CanvasLayerIndex {
+  const nodesById = new Map(document.nodes.map((node) => [node.id, node]));
+  const groupsById = new Map(document.groups.map((group) => [group.id, group]));
+  const groupStates = new Map<string, CanvasLayerState>();
+  const outermostGroupByGroupId = new Map<string, string>();
+  const branchGroupIdsByGroupId = new Map<string, ReadonlySet<string>>();
+
+  document.groups.forEach((group) => {
+    const ancestors = indexedAncestorGroups(group.parentGroupId, groupsById);
+    const inheritedHidden = ancestors.some((ancestor) => !ancestor.visible);
+    const inheritedLocked = ancestors.some((ancestor) => ancestor.locked);
+    groupStates.set(group.id, {
+      effectiveVisible: group.visible && !inheritedHidden,
+      effectiveLocked: group.locked || inheritedLocked,
+      inheritedHidden,
+      inheritedLocked,
+    });
+    outermostGroupByGroupId.set(group.id, ancestors.at(-1)?.id ?? group.id);
+    branchGroupIdsByGroupId.set(group.id, new Set([group.id, ...ancestors.map((ancestor) => ancestor.id)]));
+  });
+
+  const nodeStates = new Map<string, CanvasLayerState>();
+  const outermostGroupIds = new Map<string, string>();
+  document.nodes.forEach((node) => {
+    const parentState = node.groupId ? groupStates.get(node.groupId) : undefined;
+    const inheritedHidden = parentState ? !parentState.effectiveVisible : false;
+    const inheritedLocked = parentState?.effectiveLocked ?? false;
+    nodeStates.set(node.id, {
+      effectiveVisible: node.visible && !inheritedHidden,
+      effectiveLocked: node.locked || inheritedLocked,
+      inheritedHidden,
+      inheritedLocked,
+    });
+    if (node.groupId) {
+      outermostGroupIds.set(node.id, outermostGroupByGroupId.get(node.groupId) ?? node.groupId);
+    }
+  });
+
+  const descendantCache = new Map<string, readonly string[]>();
+  const indexedDescendantNodeIds = (groupId: string): readonly string[] => {
+    const cached = descendantCache.get(groupId);
+    if (cached) return cached;
+    const result = document.nodes.filter((node) => node.groupId && branchGroupIdsByGroupId.get(node.groupId)?.has(groupId)).map((node) => node.id);
+    descendantCache.set(groupId, result);
+    return result;
+  };
+
+  const directItemsWithOrder = new Map<string | null, Array<CanvasLayerRef & { order: number; stable: number }>>();
+  const addDirectItem = (parentId: string | null, item: CanvasLayerRef & { order: number; stable: number }) => {
+    const siblings = directItemsWithOrder.get(parentId) ?? [];
+    siblings.push(item);
+    directItemsWithOrder.set(parentId, siblings);
+  };
+  document.nodes.forEach((node, stable) => addDirectItem(node.groupId, { kind: "node", id: node.id, order: node.layerOrder, stable }));
+  document.groups.forEach((group, stable) => addDirectItem(group.parentGroupId, { kind: "group", id: group.id, order: group.layerOrder, stable: document.nodes.length + stable }));
+  const directItemsByParentId = new Map<string | null, readonly CanvasLayerRef[]>();
+  directItemsWithOrder.forEach((items, parentId) => directItemsByParentId.set(parentId, items.sort((first, second) => first.order - second.order || first.stable - second.stable).map(({ kind, id }) => ({ kind, id }))));
+
+  return { nodesById, groupsById, nodeStates, groupStates, outermostGroupIds, descendantNodeIds: indexedDescendantNodeIds, directItemsByParentId };
+}
+
 export function directLayerItems(document: CanvasDocumentV1, parentGroupId: string | null): CanvasLayerRef[] {
   const items: Array<CanvasLayerRef & { order: number; stable: number }> = [];
   document.nodes.forEach((node, index) => {
@@ -30,21 +102,23 @@ export function directLayerItems(document: CanvasDocumentV1, parentGroupId: stri
   return items.sort((first, second) => first.order - second.order || first.stable - second.stable).map(({ kind, id }) => ({ kind, id }));
 }
 
-export function layerTreeRows(document: CanvasDocumentV1, collapsedGroupIds: ReadonlySet<string>): CanvasLayerRow[] {
+export function layerTreeRows(document: CanvasDocumentV1, collapsedGroupIds: ReadonlySet<string>, index = createCanvasLayerIndex(document)): CanvasLayerRow[] {
   const rows: CanvasLayerRow[] = [];
   const visited = new Set<string>();
   const visit = (parentGroupId: string | null, depth: number) => {
-    directLayerItems(document, parentGroupId).reverse().forEach((ref) => {
+    [...(index.directItemsByParentId.get(parentGroupId) ?? [])].reverse().forEach((ref) => {
       if (ref.kind === "node") {
-        const node = document.nodes.find((candidate) => candidate.id === ref.id);
-        if (node) rows.push({ ref, parentGroupId, depth, ...nodeLayerState(document, node) });
+        const node = index.nodesById.get(ref.id);
+        const state = index.nodeStates.get(ref.id);
+        if (node && state) rows.push({ ref, parentGroupId, depth, ...state });
         return;
       }
       if (visited.has(ref.id)) return;
       visited.add(ref.id);
-      const group = document.groups.find((candidate) => candidate.id === ref.id);
-      if (!group) return;
-      rows.push({ ref, parentGroupId, depth, ...groupLayerState(document, group) });
+      const group = index.groupsById.get(ref.id);
+      const state = index.groupStates.get(ref.id);
+      if (!group || !state) return;
+      rows.push({ ref, parentGroupId, depth, ...state });
       if (!collapsedGroupIds.has(group.id)) visit(group.id, depth + 1);
     });
   };
@@ -294,6 +368,20 @@ function ancestorGroups(document: CanvasDocumentV1, firstGroupId: string | null)
   while (currentId && !visited.has(currentId)) {
     visited.add(currentId);
     const group = document.groups.find((candidate) => candidate.id === currentId);
+    if (!group) break;
+    result.push(group);
+    currentId = group.parentGroupId;
+  }
+  return result;
+}
+
+function indexedAncestorGroups(firstGroupId: string | null, groupsById: ReadonlyMap<string, CanvasGroup>): CanvasGroup[] {
+  const result: CanvasGroup[] = [];
+  const visited = new Set<string>();
+  let currentId = firstGroupId;
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const group = groupsById.get(currentId);
     if (!group) break;
     result.push(group);
     currentId = group.parentGroupId;

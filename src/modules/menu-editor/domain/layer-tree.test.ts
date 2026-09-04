@@ -3,6 +3,7 @@ import type { CanvasDocumentV1, CanvasGroup, CanvasNode } from "../contracts";
 import { validateCanvasDocument } from "./document-policy";
 import {
   createCanvasGroup,
+  createCanvasLayerIndex,
   descendantGroupIds,
   descendantNodeIds,
   directLayerItems,
@@ -70,6 +71,21 @@ describe("layer tree", () => {
     const restored = { ...hidden, groups: hidden.groups.map((item) => item.id === "outer" ? { ...item, visible: true, locked: false } : item) };
     expect(nodeLayerState(restored, "node")).toMatchObject({ effectiveVisible: true, effectiveLocked: false });
     expect(restored.nodes[0]).toMatchObject({ visible: true, locked: false });
+  });
+
+  it("indexes hierarchy state, descendants, and rows once for renderers", () => {
+    const nested = documentWith(
+      [text("visible", 0, "inner"), { ...text("hidden", 1, "inner"), visible: false }, text("root", 1)],
+      [group("outer", null, 0, [], { locked: true }), group("inner", "outer", 0, ["visible", "hidden"])],
+    );
+    const index = createCanvasLayerIndex(nested);
+
+    expect(index.nodeStates.get("visible")).toEqual(nodeLayerState(nested, "visible"));
+    expect(index.groupStates.get("inner")).toEqual(groupLayerState(nested, "inner"));
+    expect(index.outermostGroupIds.get("visible")).toBe("outer");
+    expect(index.descendantNodeIds("outer")).toEqual(["visible", "hidden"]);
+    expect(index.directItemsByParentId.get("inner")).toEqual(directLayerItems(nested, "inner"));
+    expect(layerTreeRows(nested, new Set(), index).map((row) => row.ref.id)).toEqual(layerTreeRows(nested, new Set()).map((row) => row.ref.id));
   });
 
   it("creates empty nested groups and groups a selection without changing coordinates", () => {

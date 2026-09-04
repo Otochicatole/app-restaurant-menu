@@ -7,15 +7,14 @@ import { STROKE_SIDES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode,
 import { copyCanvasSelection, pasteCanvasSelection, type CanvasClipboardSnapshot } from "../domain/canvas-clipboard";
 import {
   createCanvasGroup,
+  createCanvasLayerIndex,
   descendantNodeIds,
   groupCanvasSelection,
-  groupLayerState,
   moveCanvasLayer,
   moveCanvasLayerByOffset,
   nextCanvasGroupName,
   nextRootLayerOrder,
   nodeLayerState,
-  outermostGroupId,
   removeCanvasNodes,
   ungroupCanvasGroup,
   type CanvasLayerMoveDestination,
@@ -68,9 +67,10 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
 
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
   const fontFaces = useMemo(() => assets.filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join(""), [assets]);
-  const selectedGroup = document.groups.find((group) => group.id === selectedGroupId) ?? null;
-  const selected = selectedGroup ? null : document.nodes.find((node) => node.id === selectedIds[0]) ?? null;
-  const selectedNodeIds = selectedGroup ? descendantNodeIds(document, selectedGroup.id) : selectedIds;
+  const layerIndex = useMemo(() => createCanvasLayerIndex(document), [document]);
+  const selectedGroup = selectedGroupId ? layerIndex.groupsById.get(selectedGroupId) ?? null : null;
+  const selected = selectedGroup ? null : layerIndex.nodesById.get(selectedIds[0]) ?? null;
+  const selectedNodeIds = useMemo(() => selectedGroup ? [...layerIndex.descendantNodeIds(selectedGroup.id)] : selectedIds, [layerIndex, selectedGroup, selectedIds]);
 
   const commitTransform = (transform: (current: CanvasDocumentV1) => CanvasDocumentV1) => {
     editVersionRef.current += 1;
@@ -94,8 +94,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     return next;
   }) }));
   const patchGroup = (id: string, patch: Partial<Pick<CanvasGroup, "name" | "visible" | "locked">>) => commitTransform((current) => ({ ...current, groups: current.groups.map((group) => group.id === id ? { ...group, ...patch } : group) }));
-  const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => selectedIds.includes(node.id) && !nodeLayerState(current, node).effectiveLocked ? ({ ...node, ...patch } as CanvasNode) : node) }));
-  const moveSelected = (ids: string[], delta: { x: number; y: number }, includeLocked = false) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => ids.includes(node.id) && (includeLocked || !nodeLayerState(current, node).effectiveLocked) ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }));
+  const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => { const ids = new Set(selectedIds); return { ...current, nodes: current.nodes.map((node) => ids.has(node.id) && !nodeLayerState(current, node).effectiveLocked ? ({ ...node, ...patch } as CanvasNode) : node) }; });
+  const moveSelected = (selected: string[], delta: { x: number; y: number }, includeLocked = false) => commitTransform((current) => { const ids = new Set(selected); return { ...current, nodes: current.nodes.map((node) => ids.has(node.id) && (includeLocked || !nodeLayerState(current, node).effectiveLocked) ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }; });
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
   const undo = () => { const previous = history.at(-1); if (!previous) return; editVersionRef.current += 1; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setSelectedGroupId(null); setDeepSelectedId(null); setDirty(true); setStatus("Cambios pendientes"); };
   const redo = () => { const next = future.at(-1); if (!next) return; editVersionRef.current += 1; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setSelectedGroupId(null); setDeepSelectedId(null); setDirty(true); setStatus("Cambios pendientes"); };
@@ -108,11 +108,11 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const selectGroup = (id: string) => {
     setSelectedGroupId(id);
     setDeepSelectedId(null);
-    setSelectedIds(descendantNodeIds(document, id));
+    setSelectedIds([...layerIndex.descendantNodeIds(id)]);
   };
   const selectCanvasNode = (id: string | null, additive: boolean, deep = false) => {
     if (!id) { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds([]); return; }
-    const groupId = deep ? null : outermostGroupId(document, id);
+    const groupId = deep ? null : layerIndex.outermostGroupIds.get(id) ?? null;
     if (groupId) { selectGroup(groupId); return; }
     selectLayerNode(id, additive);
   };
@@ -210,8 +210,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const newNodeFrame = (preferredWidth: number, preferredHeight: number, point?: { x: number; y: number }) => { const frame = point ? { x: point.x - preferredWidth / 2, y: point.y - preferredHeight / 2, width: preferredWidth, height: preferredHeight } : placeNodeInCanvas(document.canvasBounds, viewport, preferredWidth, preferredHeight); return { x: finiteOr(frame.x, document.canvasBounds.x + document.canvasBounds.width / 2 - preferredWidth / 2), y: finiteOr(frame.y, document.canvasBounds.y + document.canvasBounds.height / 2 - preferredHeight / 2), width: finiteOr(frame.width, preferredWidth), height: finiteOr(frame.height, preferredHeight) }; };
   const duplicate = () => {
     if (!selected && !selectedGroup) return;
-    if (selected && nodeLayerState(document, selected).effectiveLocked) return;
-    if (selectedGroup && groupLayerState(document, selectedGroup).effectiveLocked) return;
+    if (selected && layerIndex.nodeStates.get(selected.id)?.effectiveLocked) return;
+    if (selectedGroup && layerIndex.groupStates.get(selectedGroup.id)?.effectiveLocked) return;
     const snapshot = copyCanvasSelection(document, selected ? [selected.id] : selectedIds, selectedGroup?.id ?? null);
     if (snapshot) appendClipboardSnapshot(snapshot, 1);
   };
@@ -226,15 +226,15 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     if (next !== document) commit(next);
   };
   const deleteSelected = () => {
-    if (selectedGroup) { if (groupLayerState(document, selectedGroup).effectiveLocked) return; const descendants = descendantNodeIds(document, selectedGroup.id); commit(ungroupCanvasGroup(document, selectedGroup.id)); setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(descendants); return; }
-    const deletable = selectedIds.filter((id) => !nodeLayerState(document, id).effectiveLocked);
+    if (selectedGroup) { if (layerIndex.groupStates.get(selectedGroup.id)?.effectiveLocked) return; const descendants = [...layerIndex.descendantNodeIds(selectedGroup.id)]; commit(ungroupCanvasGroup(document, selectedGroup.id)); setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(descendants); return; }
+    const deletable = selectedIds.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked);
     if (!deletable.length) return;
     commit(removeCanvasNodes(document, deletable));
     if (deepSelectedId && deletable.includes(deepSelectedId)) setDeepSelectedId(null);
     setSelectedIds((ids) => ids.filter((id) => !deletable.includes(id)));
   };
   const createGroup = () => {
-    if (selectedGroup && groupLayerState(document, selectedGroup).effectiveLocked) return;
+    if (selectedGroup && layerIndex.groupStates.get(selectedGroup.id)?.effectiveLocked) return;
     const id = crypto.randomUUID();
     const next = createCanvasGroup(document, id, nextCanvasGroupName(document), selectedGroupId);
     commit(next);
@@ -244,8 +244,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     setRenameGroupId(id);
   };
   const groupSelection = () => {
-    if (selectedGroup && groupLayerState(document, selectedGroup).effectiveLocked) return;
-    const refs: CanvasLayerRef[] = selectedGroup ? [{ kind: "group", id: selectedGroup.id }] : selectedIds.filter((id) => !nodeLayerState(document, id).effectiveLocked).map((id) => ({ kind: "node" as const, id }));
+    if (selectedGroup && layerIndex.groupStates.get(selectedGroup.id)?.effectiveLocked) return;
+    const refs: CanvasLayerRef[] = selectedGroup ? [{ kind: "group", id: selectedGroup.id }] : selectedIds.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked).map((id) => ({ kind: "node" as const, id }));
     if (!refs.length) return;
     const id = crypto.randomUUID();
     const next = groupCanvasSelection(document, refs, id, nextCanvasGroupName(document));
@@ -257,8 +257,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     setRenameGroupId(id);
   };
   const ungroup = (id: string) => {
-    if (groupLayerState(document, id).effectiveLocked) return;
-    const descendants = descendantNodeIds(document, id);
+    if (layerIndex.groupStates.get(id)?.effectiveLocked) return;
+    const descendants = [...layerIndex.descendantNodeIds(id)];
     const next = ungroupCanvasGroup(document, id);
     if (next === document) return;
     commit(next);
@@ -358,9 +358,9 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     </header>
     <div className="flex min-h-0 flex-1">
       <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
-      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <MediaPickerDrawer images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")} onClose={() => setImagesOpen(false)} onSelect={selectMedia} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} assets={assets} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel key={restaurantSlug} document={document} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />)}
-      <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} assets={assetMap} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} deepSelectedId={deepSelectedId} showGrid={gridEnabled} onSelect={selectCanvasNode} onSelectMany={(ids) => { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(ids.filter((id) => !nodeLayerState(document, id).effectiveLocked)); }} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!nodeLayerState(document, selected).effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !nodeLayerState(document, selected).effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !nodeLayerState(document, selected).effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
+      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <MediaPickerDrawer images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")} onClose={() => setImagesOpen(false)} onSelect={selectMedia} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} assets={assets} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} /> : <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />)}
+      <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} layerIndex={layerIndex} assets={assetMap} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} deepSelectedId={deepSelectedId} showGrid={gridEnabled} onSelect={selectCanvasNode} onSelectMany={(ids) => { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(ids.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked)); }} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
+      <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!layerIndex.nodeStates.get(selected.id)?.effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
     </div>
     </div>
     {clipboardNotice && <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-2 text-xs font-semibold text-white shadow-xl">{clipboardNotice}</div>}
@@ -382,12 +382,19 @@ function EditorModal({ state, name, description, onNameChange, onDescriptionChan
 }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {
-  return { ...document, nodes: document.nodes.map((node) => {
+  let changed = false;
+  const nodes = document.nodes.map((node) => {
     const width = Math.max(4, finiteOr(node.width, 4));
     const height = Math.max(4, finiteOr(node.height, 4));
-    const normalized = { ...node, x: finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2), y: finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2), width, height, rotation: finiteOr(node.rotation, 0), opacity: Math.max(0, Math.min(1, finiteOr(node.opacity, 1))) } as CanvasNode;
-    return normalized;
-  }) };
+    const x = finiteOr(node.x, document.canvasBounds.x + (document.canvasBounds.width - width) / 2);
+    const y = finiteOr(node.y, document.canvasBounds.y + (document.canvasBounds.height - height) / 2);
+    const rotation = finiteOr(node.rotation, 0);
+    const opacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
+    if (node.x === x && node.y === y && node.width === width && node.height === height && node.rotation === rotation && node.opacity === opacity) return node;
+    changed = true;
+    return { ...node, x, y, width, height, rotation, opacity } as CanvasNode;
+  });
+  return changed ? { ...document, nodes } : document;
 }
 
 function finiteOr(value: number, fallback: number): number { return Number.isFinite(value) ? value : fallback; }
@@ -398,7 +405,7 @@ function estimateTextHeight(node: Extract<CanvasNode, { type: "text" }>): number
   const letterSpacing = finiteOr(node.letterSpacing, 0);
   let measure: (value: string) => number = (value) => value.length * Math.max(1, fontSize * 0.55 + letterSpacing);
   if (typeof window !== "undefined") {
-    const context = window.document.createElement("canvas").getContext("2d");
+    const context = textMeasurementContext ??= window.document.createElement("canvas").getContext("2d");
     if (context) {
       context.font = `${node.fontStyle} ${node.fontWeight} ${fontSize}px ${node.fontFamily ?? "Arial"}`;
       measure = (value) => context.measureText(value).width + Math.max(0, value.length - 1) * letterSpacing;
@@ -425,3 +432,5 @@ function estimateTextHeight(node: Extract<CanvasNode, { type: "text" }>): number
   }, 0);
   return Math.max(4, Math.ceil(lines * node.fontSize * node.lineHeight + 8));
 }
+
+let textMeasurementContext: CanvasRenderingContext2D | null = null;
