@@ -15,9 +15,11 @@ test("platform landing and the published Canvas menu are reachable", async ({ pa
 
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Ingresar al panel" })).toBeVisible();
+  await expect(page.locator('link[rel="icon"][href="/icon.svg"]')).toHaveCount(1);
 
   await page.goto(`/m/${E2E.tenantAdmin.slug}`);
-  await expect(page.getByRole("button", { name: "Ver contenido en texto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ver contenido en texto" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Restablecer" })).toHaveCount(0);
   await expect(page.getByText("Café E2E").first()).toBeAttached();
   await page.locator("canvas").first().click({ position: { x: 200, y: 600 } });
   await expectLoadedCenteredImage(page, "Café E2E");

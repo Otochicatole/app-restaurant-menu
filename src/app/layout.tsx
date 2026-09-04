@@ -13,6 +13,7 @@ export const viewport: Viewport = { interactiveWidget: "resizes-content" };
 export const metadata: Metadata = {
   title: { default: "Menús digitales", template: "%s | Menús digitales" },
   description: "Menús digitales para restaurantes y negocios gastronómicos",
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }] },
   robots: { index: true, follow: true },
 };
 

@@ -95,8 +95,13 @@ test("tenant admin can associate media, publish it immediately, and open it publ
 
   const publicPage = await context.newPage();
   await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
-  await publicPage.getByRole("button", { name: "Ver contenido en texto" }).click();
-  await publicPage.getByRole("button", { name: "Nuevo texto", exact: true }).last().click();
+  const publicCanvas = publicPage.locator("canvas").first();
+  const publicCanvasBox = await publicCanvas.boundingBox();
+  expect(publicCanvasBox).not.toBeNull();
+  if (publicCanvasBox) {
+    const scale = (publicCanvasBox.width - 20) / 1240;
+    await publicCanvas.click({ position: { x: 10 + 370 * scale, y: 10 + 585 * scale } });
+  }
   await expect(publicPage.getByRole("dialog", { name: "Café E2E" })).toBeVisible();
   await publicPage.getByRole("button", { name: "Cerrar multimedia" }).click();
   await publicPage.close();
@@ -344,7 +349,6 @@ test("tenant admin can organize layers in nested groups with reversible visibili
   await expect(page.getByText("Publicado", { exact: true })).toBeVisible();
   const publicPage = await context.newPage();
   await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
-  await publicPage.getByRole("button", { name: "Ver contenido en texto" }).click();
   await expect(publicPage.getByText(publicText, { exact: true })).toHaveCount(0);
   await publicPage.close();
 
