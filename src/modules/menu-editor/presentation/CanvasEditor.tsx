@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Grid2X2, Redo2, Undo2 } from "lucide-react";
+import { Grid2X2, QrCode, Redo2, Undo2 } from "lucide-react";
+import QRCode from "qrcode";
 import { STROKE_SIDES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
 import { copyCanvasSelection, pasteCanvasSelection, type CanvasClipboardSnapshot } from "../domain/canvas-clipboard";
 import {
@@ -30,7 +31,7 @@ import { MediaModal, type MediaModalAsset } from "@/ui/MediaModal";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
-export function CanvasEditor({ project, initialAssets, initialTemplates, restaurantName, restaurantSlug }: { project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string }) {
+export function CanvasEditor({ project, initialAssets, initialTemplates, restaurantName, restaurantSlug, publicMenuUrl }: { project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string; publicMenuUrl: string }) {
   const [document, setDocument] = useState(() => normalizeDocument(project.document));
   const [revision, setRevision] = useState(project.draftRevision);
   const [publishedRevision, setPublishedRevision] = useState(project.publishedRevision);
@@ -358,18 +359,30 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     const payload = await response.json();
     if (response.ok && payload.success) { setTemplates((items) => items.filter((item) => item.id !== template.id)); setStatus("Plantilla eliminada"); } else setStatus(payload.error?.message ?? "No se pudo eliminar la plantilla");
   };
+  const downloadQr = async () => {
+    try {
+      const dataUrl = await QRCode.toDataURL(publicMenuUrl, { width: 512, margin: 2 });
+      const link = window.document.createElement("a");
+      link.href = dataUrl;
+      link.download = `menu-${restaurantSlug}-qr.png`;
+      link.click();
+      setStatus("QR descargado");
+    } catch {
+      setStatus("No se pudo generar el QR");
+    }
+  };
 
   return <>
     <div className="flex min-h-[70dvh] flex-col justify-center gap-4 p-6 md:hidden">
       <h1 className="text-2xl font-semibold">Editor de carta</h1>
       <p className="text-sm leading-6 text-zinc-600">Para diseñar con precisión necesitás una pantalla más grande. Desde acá podés abrir la configuración o ver la carta pública.</p>
-      <div className="flex flex-wrap gap-2"><a className="rounded-lg bg-emerald-950 px-4 py-2 text-sm font-semibold text-white" href="/admin/settings">Configuración</a><a className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold" href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank">Ver carta pública</a></div>
+      <div className="flex flex-wrap gap-2"><a className="rounded-lg bg-emerald-950 px-4 py-2 text-sm font-semibold text-white" href="/admin/settings">Configuración</a><a className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold" href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank">Ver carta pública</a><button type="button" className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold" onClick={() => void downloadQr()}><QrCode size={16} aria-hidden="true" />Descargar QR</button></div>
     </div>
     <div className="fixed inset-y-0 right-0 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-4 shadow-sm backdrop-blur">
       <div className="flex min-w-0 items-center gap-3"><h1 className="sr-only">Resumen del menú</h1><p className="truncate text-sm font-semibold text-zinc-900">Editor de {restaurantName}</p><span className="hidden rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-500 sm:inline-flex">{status}</span></div>
-      <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-emerald-700" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button><button className="rounded-lg border border-emerald-200 px-3 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" onClick={() => setPreviewOpen(true)}>Vista previa</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40" onClick={publish} disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}>Publicar</button></div>
+      <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-emerald-700" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button><button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={14} aria-hidden="true" />Descargar QR</button><button className="rounded-lg border border-emerald-200 px-3 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" onClick={() => setPreviewOpen(true)}>Vista previa</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-emerald-950 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40" onClick={publish} disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}>Publicar</button></div>
     </header>
     <div className="flex min-h-0 flex-1">
       <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />

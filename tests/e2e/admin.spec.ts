@@ -26,7 +26,7 @@ test("tenant admin can open the icon library and image library", async ({ page }
   await page.getByPlaceholder("Buscar iconos...").fill("coffee");
   await expect(page.getByRole("button", { name: /Agregar icono/i }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Imágenes" }).click();
+  await page.getByRole("button", { name: "Media" }).click();
   await expect(page.getByText("Café E2E").last()).toBeVisible();
 });
 
@@ -74,7 +74,7 @@ test("tenant admin can export a complete template and import it in another resta
   await expect(importedCard).toBeVisible();
   await importedCard.getByRole("button", { name: "Usar" }).click();
   await expect(page.getByText("Plantilla aplicada", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Imágenes", exact: true }).click();
+  await page.getByRole("button", { name: "Media", exact: true }).click();
   await expect(page.locator("#editor-images").getByRole("button", { name: /Café E2E/ })).toBeVisible();
 });
 
