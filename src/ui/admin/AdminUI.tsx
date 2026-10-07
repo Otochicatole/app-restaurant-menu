@@ -128,6 +128,7 @@ export function AdminConfirmModal({
   loading = false,
   confirmLabel = "Eliminar",
   loadingLabel = "Eliminando...",
+  children,
 }: {
   open: boolean;
   title: string;
@@ -137,9 +138,11 @@ export function AdminConfirmModal({
   loading?: boolean;
   confirmLabel?: string;
   loadingLabel?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <AdminModal open={open} title={title} description={description} onClose={loading ? () => undefined : onClose}>
+      {children}
       <div className="flex flex-col-reverse gap-2 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
         <button type="button" className={adminSecondaryButtonClass} onClick={onClose} disabled={loading}>
           Cancelar

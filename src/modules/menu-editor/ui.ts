@@ -2,6 +2,7 @@ export { CanvasEditor } from "./presentation/CanvasEditor";
 export { RestaurantProfileForm } from "./presentation/RestaurantProfileForm";
 export { FontLibraryClient } from "./presentation/FontLibraryClient";
 export { TemplateModerationPanel } from "./presentation/TemplateModerationPanel";
+export { MenuPickerScreen } from "./presentation/MenuPickerScreen";
 export { LucideKonvaIcon } from "./ui/LucideKonvaIcon";
 export { CanvasStage } from "./ui/CanvasStage";
 export { cameraForViewport, zoomViewportAt } from "./ui/canvas-geometry";

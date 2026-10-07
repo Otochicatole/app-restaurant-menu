@@ -9,6 +9,8 @@ import {
   createTenantCommandSchema,
   deleteTenantCommandSchema,
   resetTenantPasswordCommandSchema,
+  setTenantMaxMenusCommandSchema,
+  setTenantMultiMenuCommandSchema,
   setTenantStatusCommandSchema,
   updateTenantCommandSchema,
 } from "../contracts";
@@ -56,6 +58,37 @@ export async function setTenantStatusAction(formData: FormData): Promise<TenantA
     revalidateTenantViews();
     return actionSuccess({});
   }, "No se pudo cambiar el estado");
+}
+
+export async function setTenantMultiMenuAction(formData: FormData): Promise<TenantActionResult> {
+  return run(async () => {
+    await requireSuperAdmin();
+    const enabled = formData.get("multiMenuEnabled") === "true";
+    const maxMenusRaw = formData.get("maxMenus");
+    const command = setTenantMultiMenuCommandSchema.parse({
+      id: String(formData.get("id") ?? ""),
+      multiMenuEnabled: enabled,
+      maxMenus: enabled && maxMenusRaw != null && String(maxMenusRaw).trim() !== ""
+        ? Number(maxMenusRaw)
+        : undefined,
+    });
+    await tenantManagementService.setTenantMultiMenu(command);
+    revalidateTenantViews();
+    return actionSuccess({});
+  }, "No se pudo actualizar el privilegio de varios menús");
+}
+
+export async function setTenantMaxMenusAction(formData: FormData): Promise<TenantActionResult> {
+  return run(async () => {
+    await requireSuperAdmin();
+    const command = setTenantMaxMenusCommandSchema.parse({
+      id: String(formData.get("id") ?? ""),
+      maxMenus: Number(formData.get("maxMenus")),
+    });
+    await tenantManagementService.setTenantMaxMenus(command);
+    revalidateTenantViews();
+    return actionSuccess({});
+  }, "No se pudo actualizar el cupo de menús");
 }
 
 export async function resetTenantPasswordAction(formData: FormData): Promise<TenantActionResult> {

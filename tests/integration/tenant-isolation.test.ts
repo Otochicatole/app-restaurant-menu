@@ -12,10 +12,12 @@ let tenantB = "";
 
 suite("tenant isolation in Canvas", () => {
   beforeAll(async () => {
-    tenantA = (await prisma!.tenant.create({ data: { name: "A", slug: `test-a-${Date.now()}` } })).id;
-    tenantB = (await prisma!.tenant.create({ data: { name: "B", slug: `test-b-${Date.now()}` } })).id;
-    const projectA = await prisma!.menuProject.create({ data: { tenantId: tenantA, draftJson: JSON.stringify(createTemplateDocument("A")), publishedJson: JSON.stringify(createTemplateDocument("A")), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
-    const projectB = await prisma!.menuProject.create({ data: { tenantId: tenantB, draftJson: JSON.stringify(createTemplateDocument("B")), schemaVersion: 1 } });
+    const slugA = `test-a-${Date.now()}`;
+    const slugB = `test-b-${Date.now()}`;
+    tenantA = (await prisma!.tenant.create({ data: { name: "A", slug: slugA } })).id;
+    tenantB = (await prisma!.tenant.create({ data: { name: "B", slug: slugB } })).id;
+    const projectA = await prisma!.menuProject.create({ data: { tenantId: tenantA, name: "A", slug: slugA, publicDescription: "Menú digital", isPrimary: true, draftJson: JSON.stringify(createTemplateDocument("A")), publishedJson: JSON.stringify(createTemplateDocument("A")), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
+    const projectB = await prisma!.menuProject.create({ data: { tenantId: tenantB, name: "B", slug: slugB, publicDescription: "Menú digital", isPrimary: true, draftJson: JSON.stringify(createTemplateDocument("B")), schemaVersion: 1 } });
     const assetA = await prisma!.menuAsset.create({ data: { tenantId: tenantA, kind: "IMAGE", name: "A", storageKey: `tenants/${tenantA}/a.png`, mimeType: "image/png", byteSize: 1, checksum: `a-${Date.now()}` } });
     await prisma!.menuAssetReference.create({ data: { tenantId: tenantA, projectId: projectA.id, assetId: assetA.id, scope: "PUBLISHED" } });
     expect(projectB.tenantId).toBe(tenantB);
@@ -33,7 +35,7 @@ suite("tenant isolation in Canvas", () => {
   });
 
   it("rejects cross-tenant asset references at the database boundary", async () => {
-    const projectA = await prisma!.menuProject.findUniqueOrThrow({ where: { tenantId: tenantA } });
+    const projectA = await prisma!.menuProject.findFirstOrThrow({ where: { tenantId: tenantA, isPrimary: true } });
     const assetB = await prisma!.menuAsset.create({ data: { tenantId: tenantB, kind: "IMAGE", name: "B", storageKey: `tenants/${tenantB}/b.png`, mimeType: "image/png", byteSize: 1, checksum: `b-${Date.now()}` } });
     await expect(prisma!.menuAssetReference.create({ data: { tenantId: tenantA, projectId: projectA.id, assetId: assetB.id, scope: "DRAFT" } })).rejects.toBeDefined();
   });

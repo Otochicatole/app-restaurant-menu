@@ -26,6 +26,25 @@ export const setTenantStatusCommandSchema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED"]),
 });
 
+export const tenantMaxMenusSchema = z.coerce.number().int().min(1).max(50);
+
+export const setTenantMultiMenuCommandSchema = z
+  .object({
+    id: tenantIdSchema,
+    multiMenuEnabled: z.boolean(),
+    maxMenus: tenantMaxMenusSchema.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.multiMenuEnabled && value.maxMenus == null) {
+      context.addIssue({ code: "custom", message: "Indicá cuántos menús puede tener la cuenta.", path: ["maxMenus"] });
+    }
+  });
+
+export const setTenantMaxMenusCommandSchema = z.object({
+  id: tenantIdSchema,
+  maxMenus: tenantMaxMenusSchema,
+});
+
 export const resetTenantPasswordCommandSchema = z.object({ id: tenantIdSchema });
 export const deleteTenantCommandSchema = z.object({ id: tenantIdSchema, confirmationSlug: tenantSlugSchema });
 
@@ -33,6 +52,8 @@ export type TenantStatus = "ACTIVE" | "SUSPENDED";
 export type CreateTenantCommand = z.infer<typeof createTenantCommandSchema>;
 export type UpdateTenantCommand = z.infer<typeof updateTenantCommandSchema>;
 export type SetTenantStatusCommand = z.infer<typeof setTenantStatusCommandSchema>;
+export type SetTenantMultiMenuCommand = z.infer<typeof setTenantMultiMenuCommandSchema>;
+export type SetTenantMaxMenusCommand = z.infer<typeof setTenantMaxMenusCommandSchema>;
 export type DeleteTenantCommand = z.infer<typeof deleteTenantCommandSchema>;
 
 export type ActiveTenant = {
@@ -47,6 +68,8 @@ export type TenantListItem = {
   name: string;
   slug: string;
   status: TenantStatus;
+  multiMenuEnabled: boolean;
+  maxMenus: number;
   email: string;
   lastLoginAt: string | null;
   createdAt: string;

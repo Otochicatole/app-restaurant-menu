@@ -2,12 +2,13 @@ import { AdminCard, AdminPageHeader } from "@/ui/admin/AdminPrimitives";
 import Link from "next/link";
 import { ArrowRight, KeyRound, Type } from "lucide-react";
 import { requireTenantAdmin } from "@/modules/identity-access/server";
-import { menuEditor } from "@/modules/menu-editor/server";
+import { menuEditor, requireActiveMenuProject } from "@/modules/menu-editor/server";
 import { RestaurantProfileForm } from "@/modules/menu-editor/ui";
 
 export default async function AdminSettingsPage() {
   const actor = await requireTenantAdmin();
-  const profile = await menuEditor.getProfile(actor.tenantId);
+  const project = await requireActiveMenuProject(actor.tenantId);
+  const profile = await menuEditor.getProfile(actor.tenantId, project.id);
   return (
     <div className="space-y-8">
         <AdminPageHeader
@@ -16,7 +17,7 @@ export default async function AdminSettingsPage() {
           description="Configurá la identidad pública y los recursos de tu carta."
         />
 
-        <AdminCard className="p-6 sm:p-8"><RestaurantProfileForm initialData={profile} slug={actor.tenantSlug} email={actor.email} /></AdminCard>
+        <AdminCard className="p-6 sm:p-8"><RestaurantProfileForm initialData={profile} slug={profile.slug} email={actor.email} /></AdminCard>
         <AdminCard className="overflow-hidden">
           <Link
             href="/admin/settings/fonts"

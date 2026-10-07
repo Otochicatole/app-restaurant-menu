@@ -8,5 +8,15 @@ export { documentAssetIds, documentBackgroundImageAssetIds, documentModalAssetId
 export { MAX_TEMPLATE_BUNDLE_BYTES, TEMPLATE_BUNDLE_EXTENSION, TEMPLATE_BUNDLE_MIME_TYPE } from "./domain/template-bundle";
 export { checksum } from "./infrastructure/prisma-menu-editor-repository";
 export { TEMPLATE_PRESETS } from "./domain/template-presets";
+export {
+  loadActiveMenuWorkspace,
+  requireActiveMenuProject,
+  requireActiveMenuProjectForApi,
+  writeActiveMenuCookie,
+  clearActiveMenuCookie,
+  type ActiveMenuWorkspace,
+} from "./infrastructure/active-menu";
+export { createMenuAction, deleteMenusAction, selectMenuAction } from "./presentation/menu-actions";
+export type { MenuActionResult } from "./presentation/menu-actions";
 export const menuEditor = menuEditorService;
 export const menuTemplates = menuTemplateService;

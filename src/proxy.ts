@@ -20,7 +20,9 @@ function buildCSP(): string {
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", buildCSP());
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");

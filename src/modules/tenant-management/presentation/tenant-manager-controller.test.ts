@@ -21,6 +21,8 @@ describe("useTenantManager", () => {
       createTenant,
       updateTenant: successAction,
       toggleTenant: successAction,
+      toggleMultiMenu: successAction,
+      setMaxMenus: successAction,
       resetPassword: successAction,
       deleteTenant: successAction,
     }));
@@ -39,6 +41,8 @@ describe("useTenantManager", () => {
       createTenant,
       updateTenant: successAction,
       toggleTenant: successAction,
+      toggleMultiMenu: successAction,
+      setMaxMenus: successAction,
       resetPassword: successAction,
       deleteTenant: successAction,
     }));

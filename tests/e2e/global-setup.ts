@@ -33,17 +33,17 @@ export default async function globalSetup() {
     await writeFixtureAsset(storageRoot, imageKey);
     const image = await prisma.menuAsset.create({ data: { id: "e2e-asset-cafe", tenantId: tenant.id, kind: "IMAGE", name: "Café E2E", storageKey: imageKey, mimeType: "image/png", byteSize: 68, checksum: "e2e-cafe-checksum", width: 1, height: 1 } });
     const document = createCanvasFixture(tenant.name, image.id);
-    const project = await prisma.menuProject.create({ data: { id: "e2e-project-cafe", tenantId: tenant.id, draftJson: JSON.stringify(document), publishedJson: JSON.stringify(document), draftRevision: 0, publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
+    const project = await prisma.menuProject.create({ data: { id: "e2e-project-cafe", tenantId: tenant.id, name: tenant.name, slug: tenant.slug, publicDescription: "Fixture Canvas", isPrimary: true, draftJson: JSON.stringify(document), publishedJson: JSON.stringify(document), draftRevision: 0, publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } });
     await prisma.menuAssetReference.create({ data: { tenantId: tenant.id, projectId: project.id, assetId: image.id, scope: "DRAFT" } });
     await prisma.menuAssetReference.create({ data: { tenantId: tenant.id, projectId: project.id, assetId: image.id, scope: "PUBLISHED" } });
 
     await createTenantFixture(prisma, { id: FIXTURE_IDS.forcedTenant, adminId: FIXTURE_IDS.forcedAdmin, name: "E2E Cambio", ...E2E.forcedPasswordAdmin, mustChangePassword: true });
     const other = await createTenantFixture(prisma, { id: FIXTURE_IDS.otherTenant, adminId: FIXTURE_IDS.otherAdmin, name: "E2E Otro", ...E2E.otherTenant, mustChangePassword: false });
     const otherDocument = createCanvasFixture(other.name);
-    await prisma.menuProject.create({ data: { id: "e2e-project-other", tenantId: other.id, draftJson: JSON.stringify(otherDocument), schemaVersion: 1 } });
+    await prisma.menuProject.create({ data: { id: "e2e-project-other", tenantId: other.id, name: other.name, slug: other.slug, publicDescription: "Fixture Canvas", isPrimary: true, draftJson: JSON.stringify(otherDocument), schemaVersion: 1 } });
 
     const zoomDocument = createZoomFixture();
-    await prisma.tenant.create({ data: { id: "e2e-tenant-zoom", name: "E2E Zoom", slug: E2E.zoomMenu.slug, menuProject: { create: { id: "e2e-project-zoom", draftJson: JSON.stringify(zoomDocument), publishedJson: JSON.stringify(zoomDocument), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } } } });
+    await prisma.tenant.create({ data: { id: "e2e-tenant-zoom", name: "E2E Zoom", slug: E2E.zoomMenu.slug, menuProjects: { create: { id: "e2e-project-zoom", name: "E2E Zoom", slug: E2E.zoomMenu.slug, publicDescription: "Fixture Canvas", isPrimary: true, draftJson: JSON.stringify(zoomDocument), publishedJson: JSON.stringify(zoomDocument), publishedRevision: 0, publishedAt: new Date(), schemaVersion: 1 } } } });
   } finally { await prisma.$disconnect(); }
 }
 

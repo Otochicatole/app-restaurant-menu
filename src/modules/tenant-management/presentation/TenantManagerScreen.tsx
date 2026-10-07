@@ -36,6 +36,29 @@ function confirmationCopy(pending: PendingTenantConfirmation | null) {
           loadingLabel: "Reactivando...",
         };
   }
+  if (pending.type === "multiMenu") {
+    return pending.tenant.multiMenuEnabled
+      ? {
+          title: `¿Quitar varios menús a ${pending.tenant.name}?`,
+          description: "La cuenta volverá a trabajar solo con el menú principal. Los menús extra se conservan y reaparecen si volvés a activar el privilegio.",
+          confirmLabel: "Quitar varios menús",
+          loadingLabel: "Actualizando...",
+        }
+      : {
+          title: `¿Habilitar varios menús para ${pending.tenant.name}?`,
+          description: "La cuenta podrá crear lienzos adicionales con su propio slug público. Indicá el cupo máximo de menús.",
+          confirmLabel: "Habilitar varios menús",
+          loadingLabel: "Actualizando...",
+        };
+  }
+  if (pending.type === "maxMenus") {
+    return {
+      title: `Cupo de menús de ${pending.tenant.name}`,
+      description: "Definí cuántos menús puede tener esta cuenta. No se borran menús existentes si el cupo queda por debajo del total actual.",
+      confirmLabel: "Guardar cupo",
+      loadingLabel: "Guardando...",
+    };
+  }
   if (pending.type === "reset") {
     return {
       title: `¿Restablecer la clave de ${pending.tenant.name}?`,
@@ -131,7 +154,29 @@ export function TenantManagerScreen({ controller }: Props) {
           loading={pendingKey ? controller.isBusy(pendingKey) : false}
           confirmLabel={copy.confirmLabel}
           loadingLabel={copy.loadingLabel}
-        />
+        >
+          {controller.pendingConfirmation &&
+            ((controller.pendingConfirmation.type === "multiMenu" && !controller.pendingConfirmation.tenant.multiMenuEnabled) ||
+              controller.pendingConfirmation.type === "maxMenus") && (
+              <label className="mb-4 grid gap-1.5 text-xs font-semibold text-zinc-600">
+                Cantidad máxima de menús
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={controller.maxMenusDraft}
+                  onChange={(event) => controller.setMaxMenusDraft(event.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-normal text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                />
+                <span className="font-normal text-zinc-400">Entre 1 y 50 menús por cuenta.</span>
+              </label>
+            )}
+          {controller.confirmationError && (
+            <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {controller.confirmationError}
+            </p>
+          )}
+        </AdminConfirmModal>
       )}
     </div>
   );
@@ -239,10 +284,17 @@ function TenantRowCard({ tenant, controller }: { tenant: TenantRow; controller: 
       <div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end">
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${isSuspended ? "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-300" : "bg-emerald-100 text-emerald-800"}`}><span className={`h-1.5 w-1.5 rounded-full ${isSuspended ? "bg-amber-600" : "bg-emerald-600"}`} />{isSuspended ? "Suspendido" : "Activo"}</span>
+          {tenant.multiMenuEnabled && <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-900">Hasta {tenant.maxMenus} menús</span>}
           {isSuspended && <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800"><AlertTriangle size={14} /> Acceso bloqueado</span>}
         </div>
         <div className="flex flex-wrap gap-2 lg:justify-end">
           <button type="button" disabled={isBusy} onClick={() => controller.requestConfirmation({ type: "toggle", tenant })} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-emerald-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50">{isSuspended ? "Reactivar" : "Suspender"}</button>
+          <button type="button" disabled={isBusy} onClick={() => controller.requestConfirmation({ type: "multiMenu", tenant })} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50">{tenant.multiMenuEnabled ? "Quitar varios menús" : "Varios menús"}</button>
+          {tenant.multiMenuEnabled && (
+            <button type="button" disabled={isBusy} onClick={() => controller.requestConfirmation({ type: "maxMenus", tenant })} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50">
+              Cupo
+            </button>
+          )}
           <button type="button" disabled={isBusy} onClick={() => controller.requestConfirmation({ type: "reset", tenant })} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50">Restablecer clave</button>
           <button type="button" disabled={isBusy} onClick={() => controller.requestConfirmation({ type: "delete", tenant })} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">Borrar</button>
         </div>

@@ -5,6 +5,8 @@ import type {
   ActiveTenant,
   CreateTenantCommand,
   DeleteTenantCommand,
+  SetTenantMaxMenusCommand,
+  SetTenantMultiMenuCommand,
   SetTenantStatusCommand,
   TenantListItem,
   UpdateTenantCommand,
@@ -16,6 +18,8 @@ type TenantWithAdmin = {
   name: string;
   slug: string;
   status: "ACTIVE" | "SUSPENDED";
+  multiMenuEnabled: boolean;
+  maxMenus: number;
   createdAt: Date;
   admin: { email: string; lastLoginAt: Date | null } | null;
 };
@@ -27,6 +31,8 @@ function toListItem(tenant: TenantWithAdmin): TenantListItem {
     name: tenant.name,
     slug: tenant.slug,
     status: tenant.status,
+    multiMenuEnabled: tenant.multiMenuEnabled,
+    maxMenus: tenant.maxMenus,
     email: tenant.admin.email,
     lastLoginAt: tenant.admin.lastLoginAt?.toISOString() ?? null,
     createdAt: tenant.createdAt.toISOString(),
@@ -68,6 +74,10 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
         await transaction.menuProject.create({
           data: {
             tenantId: tenant.id,
+            name: input.name,
+            slug: input.slug,
+            publicDescription: "Menú digital",
+            isPrimary: true,
             draftJson: JSON.stringify(createTenantTemplate(input.name)),
             schemaVersion: 1,
           },
@@ -95,6 +105,10 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
           where: { id: input.id },
           data: { name: input.name },
         });
+        await transaction.menuProject.updateMany({
+          where: { tenantId: input.id, isPrimary: true },
+          data: { name: input.name },
+        });
         const emailChanged = existing.admin.email !== input.email;
         const admin = await transaction.admin.update({
           where: { id: existing.admin.id },
@@ -112,6 +126,30 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
       if (isUniqueConstraintError(error)) throw new ConflictError("Ya existe una cuenta con ese correo.");
       throw error;
     }
+  }
+
+  async setMultiMenuEnabled(input: SetTenantMultiMenuCommand): Promise<void> {
+    const tenant = await prisma.tenant.findUnique({ where: { id: input.id }, select: { id: true } });
+    if (!tenant) throw new NotFoundError("Tenant");
+    await prisma.tenant.update({
+      where: { id: input.id },
+      data: input.multiMenuEnabled
+        ? { multiMenuEnabled: true, maxMenus: input.maxMenus ?? 1 }
+        : { multiMenuEnabled: false, maxMenus: 1 },
+    });
+  }
+
+  async setMaxMenus(input: SetTenantMaxMenusCommand): Promise<void> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: input.id },
+      select: { id: true, multiMenuEnabled: true },
+    });
+    if (!tenant) throw new NotFoundError("Tenant");
+    if (!tenant.multiMenuEnabled) throw new ConflictError("Habilitá varios menús antes de definir el cupo.");
+    await prisma.tenant.update({
+      where: { id: input.id },
+      data: { maxMenus: input.maxMenus },
+    });
   }
 
   async setStatus(input: SetTenantStatusCommand): Promise<void> {

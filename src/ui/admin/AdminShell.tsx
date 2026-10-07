@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { ExternalLink, Layers3, Menu, MonitorCog, Settings, X } from "lucide-react";
+import { ExternalLink, Layers3, LayoutGrid, Menu, MonitorCog, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
@@ -12,10 +12,23 @@ const navigation = [
   { label: "Configuración", href: "/admin/settings", icon: Settings },
 ];
 
-export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { children: React.ReactNode; brandTitle: string; brandSubtitle: string; menuHref: string }) {
+export function AdminShell({
+  children,
+  brandTitle,
+  brandSubtitle,
+  menuHref,
+  showMenuPickerLink,
+}: {
+  children: React.ReactNode;
+  brandTitle: string;
+  brandSubtitle: string;
+  menuHref: string;
+  showMenuPickerLink: boolean;
+}) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isEditor = pathname === "/admin";
+  const isMenusPage = pathname === "/admin/menus" || pathname.startsWith("/admin/menus/");
   const [desktopNavOpen, setDesktopNavOpen] = useState(!isEditor);
   const desktopNavCollapsed = !desktopNavOpen;
 
@@ -23,6 +36,10 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
   const labelVisibility = desktopNavCollapsed
     ? "opacity-100 lg:pointer-events-none lg:opacity-0"
     : "opacity-100 delay-100";
+
+  if (isMenusPage) {
+    return <>{children}</>;
+  }
 
   return (
     <div
@@ -55,7 +72,8 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
                   setDesktopNavOpen(false);
                 }}
               >
-                <span className="block max-w-[170px] truncate whitespace-nowrap text-sm font-semibold tracking-tight">{brandTitle}</span>
+                <span className="block max-w-[170px] truncate whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Menú activo</span>
+                <span className="mt-0.5 block max-w-[170px] truncate whitespace-nowrap text-sm font-semibold tracking-tight">{brandTitle}</span>
                 <span className="mt-0.5 block max-w-[170px] truncate whitespace-nowrap text-[11px] text-zinc-500">{brandSubtitle}</span>
               </Link>
               <button type="button" className="shrink-0 rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú">
@@ -65,6 +83,25 @@ export function AdminShell({ children, brandTitle, brandSubtitle, menuHref }: { 
           </div>
 
           <nav aria-label="Navegación principal" className="flex min-h-0 flex-1 flex-col justify-center py-4">
+            {showMenuPickerLink && (
+              <Link
+                href="/admin/menus"
+                onClick={() => setMobileOpen(false)}
+                title={desktopNavCollapsed ? "Cambiar menú" : undefined}
+                aria-current={isMenusPage ? "page" : undefined}
+                className="group grid h-12 w-72 shrink-0 grid-cols-[4rem_1fr] items-center whitespace-nowrap text-sm"
+              >
+                <span className="flex h-full items-center justify-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-500 transition-colors group-hover:bg-zinc-50 group-hover:text-emerald-700">
+                    <LayoutGrid size={16} />
+                  </span>
+                </span>
+                <span className={`min-w-[180px] whitespace-nowrap pr-4 font-medium text-zinc-600 transition-opacity duration-150 ease-out group-hover:text-emerald-950 ${labelVisibility}`}>
+                  Cambiar menú
+                </span>
+              </Link>
+            )}
+
             {navigation.map((item) => {
               const active = isActive(item);
               const Icon = item.icon as LucideIcon;

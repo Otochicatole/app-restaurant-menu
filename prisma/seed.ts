@@ -42,11 +42,30 @@ async function main() {
     if (existingTenantAdmin) await transaction.admin.update({ where: { id: existingTenantAdmin.id }, data: { email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", mustChangePassword: false } });
     else await transaction.admin.create({ data: { id: tenantAdminId, email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", tenantId: tenant.id, mustChangePassword: false } });
     const initialDocument = createTemplateDocument(tenantName);
-    await transaction.menuProject.upsert({
-      where: { tenantId: tenant.id },
-      update: { schemaVersion: initialDocument.schemaVersion },
-      create: { tenantId: tenant.id, draftJson: JSON.stringify(initialDocument), schemaVersion: initialDocument.schemaVersion },
-    });
+    const primary = await transaction.menuProject.findFirst({ where: { tenantId: tenant.id, isPrimary: true }, select: { id: true } });
+    if (primary) {
+      await transaction.menuProject.update({
+        where: { id: primary.id },
+        data: {
+          name: tenantName,
+          slug: tenantSlug,
+          publicDescription: `Menú digital de ${tenantName}`,
+          schemaVersion: initialDocument.schemaVersion,
+        },
+      });
+    } else {
+      await transaction.menuProject.create({
+        data: {
+          tenantId: tenant.id,
+          name: tenantName,
+          slug: tenantSlug,
+          publicDescription: `Menú digital de ${tenantName}`,
+          isPrimary: true,
+          draftJson: JSON.stringify(initialDocument),
+          schemaVersion: initialDocument.schemaVersion,
+        },
+      });
+    }
   });
 
   const systemPublishedAt = new Date("2026-01-01T00:00:00.000Z");

@@ -38,10 +38,12 @@ model Tenant {
   assetQuotaBytes Int @default(262144000)
   slug      String       @unique
   status    TenantStatus @default(ACTIVE)
+  multiMenuEnabled Boolean @default(false)
+  maxMenus  Int          @default(1)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   admin     Admin?
-  menuProject MenuProject?
+  menuProjects MenuProject[]
   menuAssets MenuAsset[]
   menuAssetReferences MenuAssetReference[]
   menuTemplates MenuTemplate[]
@@ -110,8 +112,12 @@ enum MenuTemplateStatus {
 
 model MenuProject {
   id                String   @id @default(cuid())
-  tenantId          String   @unique
+  tenantId          String
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String   @unique
+  publicDescription String   @default("Menú digital")
+  isPrimary         Boolean  @default(false)
   draftJson         String
   draftRevision     Int      @default(0)
   publishedJson     String?
@@ -123,7 +129,8 @@ model MenuProject {
   assetReferences   MenuAssetReference[]
 
   @@unique([id, tenantId])
-
+  @@index([tenantId])
+  @@index([tenantId, isPrimary])
 }
 
 model MenuAsset {
