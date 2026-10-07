@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { AccountPasswordNav } from "@/modules/identity-access/presentation/AccountPasswordNav";
-import { ChangePasswordForm } from "@/modules/identity-access/ui";
-import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
-import type { CurrentActor } from "@/modules/identity-access/domain/current-actor";
+import { AccountPasswordNav, ChangePasswordForm } from "@/modules/identity-access/ui";
+import { requireAuthenticatedAccount, type CurrentActor } from "@/modules/identity-access/server";
 
 export const metadata: Metadata = {
   title: "Cambiar contraseña",
