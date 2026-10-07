@@ -42,7 +42,16 @@ export function MenuPickerScreen({
   const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<ConfirmState>(null);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const closeConfirm = () => {
+    if (pending && pendingId === "delete") return;
+    setConfirm(null);
+    setConfirmPassword("");
+    setConfirmError(null);
+  };
 
   const run = (
     action: (formData: FormData) => Promise<MenuActionResult>,
@@ -51,11 +60,19 @@ export function MenuPickerScreen({
   ) => {
     startTransition(async () => {
       setNotice(null);
+      if (projectId === "delete") setConfirmError(null);
       setPendingId(projectId ?? "create");
       const result = await action(formData);
       setPendingId(null);
-      if (!result.success) setNotice({ tone: "error", message: result.error.message });
-      else if (result.data?.deletedCount != null) {
+      if (!result.success) {
+        if (projectId === "delete" || confirm) {
+          setConfirmError(result.error.message);
+        } else {
+          setNotice({ tone: "error", message: result.error.message });
+        }
+        return;
+      }
+      if (result.data?.deletedCount != null) {
         setNotice({
           tone: "success",
           message:
@@ -65,6 +82,8 @@ export function MenuPickerScreen({
         });
         setSelected(new Set());
         setConfirm(null);
+        setConfirmPassword("");
+        setConfirmError(null);
         setManaging(false);
       }
     });
@@ -109,7 +128,7 @@ export function MenuPickerScreen({
                 setManaging((open) => !open);
                 setSelected(new Set());
                 setShowCreate(false);
-                setConfirm(null);
+                closeConfirm();
               }}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 managing
@@ -169,7 +188,11 @@ export function MenuPickerScreen({
             <button
               type="button"
               disabled={pending || selectedCount === 0}
-              onClick={() => setConfirm({ kind: "selected", ids: [...selected] })}
+              onClick={() => {
+                setConfirmPassword("");
+                setConfirmError(null);
+                setConfirm({ kind: "selected", ids: [...selected] });
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-40"
             >
               <Trash2 size={13} />
@@ -178,7 +201,11 @@ export function MenuPickerScreen({
             <button
               type="button"
               disabled={pending || menus.length === 0}
-              onClick={() => setConfirm({ kind: "all" })}
+              onClick={() => {
+                setConfirmPassword("");
+                setConfirmError(null);
+                setConfirm({ kind: "all" });
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-40"
             >
               <Trash2 size={13} />
@@ -238,7 +265,11 @@ export function MenuPickerScreen({
                       <button
                         type="button"
                         disabled={pending}
-                        onClick={() => setConfirm({ kind: "selected", ids: [menu.id] })}
+                        onClick={() => {
+                          setConfirmPassword("");
+                          setConfirmError(null);
+                          setConfirm({ kind: "selected", ids: [menu.id] });
+                        }}
                         className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         aria-label={`Eliminar ${menu.name}`}
                       >
@@ -404,7 +435,7 @@ export function MenuPickerScreen({
           className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !pending) setConfirm(null);
+            if (event.target === event.currentTarget) closeConfirm();
           }}
         >
           <div
@@ -419,9 +450,9 @@ export function MenuPickerScreen({
               </h2>
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => setConfirm(null)}
-                className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+                disabled={pending && pendingId === "delete"}
+                onClick={closeConfirm}
+                className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                 aria-label="Cerrar"
               >
                 <X size={16} />
@@ -435,20 +466,42 @@ export function MenuPickerScreen({
                   : `Se eliminarán ${confirm.ids.length} menús de forma definitiva.`}{" "}
               Esta acción no se puede deshacer.
             </p>
+            <label className="mt-4 grid gap-1.5 text-xs font-semibold text-zinc-600">
+              Contraseña actual
+              <input
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  if (confirmError) setConfirmError(null);
+                }}
+                disabled={pending && pendingId === "delete"}
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-normal text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
+                placeholder="Confirmá tu contraseña"
+              />
+            </label>
+            {confirmError && (
+              <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {confirmError}
+              </p>
+            )}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => setConfirm(null)}
+                disabled={pending && pendingId === "delete"}
+                onClick={closeConfirm}
                 className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                disabled={pending}
+                disabled={(pending && pendingId === "delete") || !confirmPassword.trim()}
                 onClick={() => {
                   const formData = new FormData();
+                  formData.set("currentPassword", confirmPassword);
                   if (confirm.kind === "all") {
                     formData.set("scope", "all");
                   } else {

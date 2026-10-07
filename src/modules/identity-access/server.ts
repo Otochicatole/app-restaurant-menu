@@ -6,11 +6,13 @@ import {
   changePasswordCommandSchema,
   loginCommandSchema,
   updateAccountEmailCommandSchema,
+  verifyCurrentPasswordCommandSchema,
   type ChangePasswordCommand,
   type LoginCommand,
   type LoginView,
   type SessionView,
   type UpdateAccountEmailCommand,
+  type VerifyCurrentPasswordCommand,
 } from "./contracts";
 import type { CurrentActor, SuperAdminActor, TenantAdminActor } from "./domain/current-actor";
 import type { SessionClaims } from "./domain/session";
@@ -68,6 +70,11 @@ export async function changePassword(command: ChangePasswordCommand): Promise<vo
 export async function updateAccountEmail(command: UpdateAccountEmailCommand): Promise<string> {
   const actor = await requireTenantAdmin();
   return (await identityAccess()).updateAccountEmail(actor, updateAccountEmailCommandSchema.parse(command));
+}
+
+export async function verifyCurrentPassword(command: VerifyCurrentPasswordCommand): Promise<void> {
+  const actor = await requireTenantAdmin();
+  await (await identityAccess()).verifyCurrentPassword(actor, verifyCurrentPasswordCommandSchema.parse(command));
 }
 
 export function toLoginView(actor: CurrentActor): LoginView {

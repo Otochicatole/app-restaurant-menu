@@ -20,9 +20,14 @@ export const updateAccountEmailCommandSchema = z.object({
   email: z.string().trim().email("Correo inválido").transform((value) => value.toLowerCase()),
 });
 
+export const verifyCurrentPasswordCommandSchema = z.object({
+  currentPassword: z.string().min(1, "Indicá tu contraseña"),
+});
+
 export type LoginCommand = z.infer<typeof loginCommandSchema>;
 export type ChangePasswordCommand = z.infer<typeof changePasswordCommandSchema>;
 export type UpdateAccountEmailCommand = z.infer<typeof updateAccountEmailCommandSchema>;
+export type VerifyCurrentPasswordCommand = z.infer<typeof verifyCurrentPasswordCommandSchema>;
 
 export type AdminRole = "SUPER_ADMIN" | "TENANT_ADMIN";
 

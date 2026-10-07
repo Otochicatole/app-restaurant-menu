@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { actionErrorResult, type ActionResult } from "@/platform/application/action-result";
-import { requireTenantAdmin } from "@/modules/identity-access/server";
+import { BadRequestError } from "@/platform/application/errors";
 import { createMenuProjectSchema } from "../contracts";
 import { createTemplateDocument } from "../domain/template";
 import { clearActiveMenuCookie, readActiveMenuCookie, writeActiveMenuCookie } from "../infrastructure/active-menu";
@@ -11,8 +11,13 @@ import { menuEditorService } from "../infrastructure/composition";
 
 export type MenuActionResult = ActionResult<{ projectId?: string; deletedCount?: number }>;
 
+async function identityAccess() {
+  return import("@/modules/identity-access/server");
+}
+
 export async function selectMenuAction(formData: FormData): Promise<MenuActionResult> {
   return run(async () => {
+    const { requireTenantAdmin } = await identityAccess();
     const actor = await requireTenantAdmin();
     const projectId = String(formData.get("projectId") ?? "");
     const project = await menuEditorService.getProject(actor.tenantId, projectId);
@@ -28,6 +33,7 @@ export async function selectMenuAction(formData: FormData): Promise<MenuActionRe
 
 export async function createMenuAction(formData: FormData): Promise<MenuActionResult> {
   return run(async () => {
+    const { requireTenantAdmin } = await identityAccess();
     const actor = await requireTenantAdmin();
     const command = createMenuProjectSchema.parse({
       name: formData.get("name"),
@@ -47,7 +53,14 @@ export async function createMenuAction(formData: FormData): Promise<MenuActionRe
 
 export async function deleteMenusAction(formData: FormData): Promise<MenuActionResult> {
   return run(async () => {
+    const { requireTenantAdmin, verifyCurrentPassword } = await identityAccess();
     const actor = await requireTenantAdmin();
+    const currentPassword = String(formData.get("currentPassword") ?? "");
+    if (!currentPassword.trim()) {
+      throw new BadRequestError("Para eliminar menús tenés que confirmar tu contraseña.");
+    }
+    await verifyCurrentPassword({ currentPassword });
+
     const scope = String(formData.get("scope") ?? "selected");
     const activeCookie = await readActiveMenuCookie();
 

@@ -4,7 +4,12 @@ import {
   RateLimitedError,
   UnauthorizedError,
 } from "../../../platform/application/errors";
-import type { ChangePasswordCommand, LoginCommand, UpdateAccountEmailCommand } from "../contracts";
+import type {
+  ChangePasswordCommand,
+  LoginCommand,
+  UpdateAccountEmailCommand,
+  VerifyCurrentPasswordCommand,
+} from "../contracts";
 import type {
   CurrentActor,
   SuperAdminActor,
@@ -189,6 +194,15 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
     }
   }
 
+  async function verifyCurrentPassword(actor: CurrentActor, command: VerifyCurrentPasswordCommand): Promise<void> {
+    const account = await repository.findAccountById(actor.adminId);
+    if (!account) throw new UnauthorizedError();
+    const validPassword = await passwordHasher.compare(command.currentPassword, account.passwordHash);
+    if (!validPassword) {
+      throw new UnauthorizedError("La contraseña no es correcta");
+    }
+  }
+
   async function updateAccountEmail(actor: CurrentActor, command: UpdateAccountEmailCommand): Promise<string> {
     if (actor.kind !== "tenant-admin") {
       throw new ForbiddenError("No tenés permisos para esta operación");
@@ -219,6 +233,7 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
 
   return {
     changePassword,
+    verifyCurrentPassword,
     updateAccountEmail,
     getCurrentActor,
     getSessionClaims,
