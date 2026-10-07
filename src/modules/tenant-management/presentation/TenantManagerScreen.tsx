@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import {
   Building2,
+  Check,
   CheckCircle2,
   Clock3,
+  Copy,
   ExternalLink,
   KeyRound,
   Layers3,
@@ -123,10 +126,6 @@ export function TenantManagerScreen({ controller }: Props) {
             <X size={16} />
           </button>
         </div>
-      )}
-
-      {controller.temporaryPassword && (
-        <TemporaryPasswordNotice value={controller.temporaryPassword.value} onClose={controller.dismissTemporaryPassword} />
       )}
 
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -282,6 +281,11 @@ export function TenantManagerScreen({ controller }: Props) {
           )}
         </AdminConfirmModal>
       )}
+
+      <TemporaryPasswordModal
+        value={controller.temporaryPassword?.value ?? null}
+        onClose={controller.dismissTemporaryPassword}
+      />
     </div>
   );
 }
@@ -556,19 +560,61 @@ function ManageTenantModal({ tenant, controller }: { tenant: TenantRow; controll
   );
 }
 
-function TemporaryPasswordNotice({ value, onClose }: { value: string; onClose: () => void }) {
+function TemporaryPasswordModal({ value, onClose }: { value: string | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyPassword = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
-    <div role="status" aria-live="polite" className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <KeyRound size={16} className="text-amber-700" />
-          <p className="font-bold">Contraseña temporal (guardala ahora)</p>
+    <AdminModal
+      open={Boolean(value)}
+      title="Contraseña temporal"
+      description="Guardala ahora. No se vuelve a mostrar."
+      onClose={() => {
+        setCopied(false);
+        onClose();
+      }}
+    >
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-center gap-2 text-amber-900">
+          <KeyRound size={16} className="shrink-0 text-amber-700" />
+          <p className="text-sm font-semibold">Clave generada</p>
         </div>
-        <code className="mt-3 block overflow-x-auto rounded-lg bg-white px-3 py-2 text-base">{value}</code>
+        <div className="mt-3 flex items-stretch gap-2">
+          <code className="block min-w-0 flex-1 select-all overflow-x-auto rounded-xl bg-white px-3 py-3 font-mono text-base tracking-wide text-zinc-950">
+            {value}
+          </code>
+          <button
+            type="button"
+            onClick={() => void copyPassword()}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-100"
+          >
+            {copied ? <Check size={15} /> : <Copy size={15} />}
+            {copied ? "Copiado" : "Copiar"}
+          </button>
+        </div>
       </div>
-      <button type="button" onClick={onClose} className="self-start rounded-lg px-2 py-1 text-xs font-bold uppercase tracking-wide text-amber-800 transition hover:bg-amber-100 sm:self-center">
-        Cerrar
-      </button>
-    </div>
+      <div className="mt-5 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setCopied(false);
+            onClose();
+          }}
+          className={adminPrimaryButtonClass}
+        >
+          Entendido
+        </button>
+      </div>
+    </AdminModal>
   );
 }
