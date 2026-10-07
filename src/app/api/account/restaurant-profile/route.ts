@@ -1,14 +1,24 @@
 import { NextRequest } from "next/server";
-import { requireTenantAdmin } from "@/modules/identity-access/server";
-import { menuEditor, profileSchema, requireActiveMenuProjectForApi } from "@/modules/menu-editor/server";
+import { z } from "zod";
+import { requireTenantAdmin, updateAccountEmail } from "@/modules/identity-access/server";
+import { menuSlugSchema, profileSchema } from "@/modules/menu-editor/contracts";
+import { menuEditor, requireActiveMenuProjectForApi } from "@/modules/menu-editor/server";
 import { handleApiError, successResponse } from "@/platform/http/api-response";
 import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
+
+const updateSettingsSchema = z.object({
+  name: profileSchema.shape.name,
+  publicDescription: profileSchema.shape.publicDescription,
+  slug: menuSlugSchema,
+  email: z.string().trim().email("Correo inválido").transform((value) => value.toLowerCase()),
+});
 
 export async function GET() {
   try {
     const actor = await requireTenantAdmin();
     const project = await requireActiveMenuProjectForApi(actor.tenantId);
-    return successResponse(await menuEditor.getProfile(actor.tenantId, project.id));
+    const profile = await menuEditor.getProfile(actor.tenantId, project.id);
+    return successResponse({ ...profile, email: actor.email });
   } catch (error) {
     return handleApiError(error);
   }
@@ -19,7 +29,14 @@ export async function PATCH(request: NextRequest) {
     if (!validateOrigin(request)) return csrfErrorResponse();
     const actor = await requireTenantAdmin();
     const project = await requireActiveMenuProjectForApi(actor.tenantId);
-    return successResponse(await menuEditor.updateProfile(actor.tenantId, project.id, profileSchema.parse(await request.json())));
+    const input = updateSettingsSchema.parse(await request.json());
+    const profile = await menuEditor.updateProfile(actor.tenantId, project.id, {
+      name: input.name,
+      publicDescription: input.publicDescription,
+      slug: input.slug,
+    });
+    const email = await updateAccountEmail({ email: input.email });
+    return successResponse({ ...profile, email });
   } catch (error) {
     return handleApiError(error);
   }

@@ -108,12 +108,15 @@ export function createMenuEditorUseCases(repository: MenuEditorRepository) {
       return repository.getProfile(z.string().min(1).parse(tenantId), z.string().min(1).parse(projectId));
     },
 
-    updateProfile(tenantId: string, projectId: string, input: RestaurantProfile) {
-      return repository.updateProfile(
-        z.string().min(1).parse(tenantId),
-        z.string().min(1).parse(projectId),
-        profileSchema.parse(input),
-      );
+    async updateProfile(tenantId: string, projectId: string, input: RestaurantProfile) {
+      const tid = z.string().min(1).parse(tenantId);
+      const pid = z.string().min(1).parse(projectId);
+      const profile = profileSchema.parse(input);
+      if (RESERVED_MENU_SLUGS.has(profile.slug)) throw new ConflictError("Ese slug está reservado.");
+      if (await repository.isSlugTaken(profile.slug, pid, tid)) {
+        throw new ConflictError("Ya existe un menú con ese slug.");
+      }
+      return repository.updateProfile(tid, pid, profile);
     },
 
     getTenantMultiMenuEnabled(tenantId: string) {

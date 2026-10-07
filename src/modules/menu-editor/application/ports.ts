@@ -31,9 +31,9 @@ export interface MenuEditorRepository {
   }): Promise<MenuAssetView>;
   deleteAsset(tenantId: string, assetId: string): Promise<void>;
   getAsset(tenantId: string, assetId: string, scope: "private" | "published", projectId?: string): Promise<{ storageKey: string; mimeType: string; name: string } | null>;
-  getProfile(tenantId: string, projectId: string): Promise<RestaurantProfile & { slug: string }>;
-  updateProfile(tenantId: string, projectId: string, profile: RestaurantProfile): Promise<RestaurantProfile & { slug: string }>;
-  isSlugTaken(slug: string, excludeProjectId?: string): Promise<boolean>;
+  getProfile(tenantId: string, projectId: string): Promise<RestaurantProfile>;
+  updateProfile(tenantId: string, projectId: string, profile: RestaurantProfile): Promise<RestaurantProfile>;
+  isSlugTaken(slug: string, excludeProjectId?: string, excludeTenantId?: string): Promise<boolean>;
   getTenantMultiMenuEnabled(tenantId: string): Promise<boolean>;
   getTenantMenuQuota(tenantId: string): Promise<{ multiMenuEnabled: boolean; maxMenus: number; currentMenus: number }>;
 }

@@ -1,9 +1,10 @@
 import {
+  ConflictError,
   ForbiddenError,
   RateLimitedError,
   UnauthorizedError,
 } from "../../../platform/application/errors";
-import type { ChangePasswordCommand, LoginCommand } from "../contracts";
+import type { ChangePasswordCommand, LoginCommand, UpdateAccountEmailCommand } from "../contracts";
 import type {
   CurrentActor,
   SuperAdminActor,
@@ -188,6 +189,26 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
     }
   }
 
+  async function updateAccountEmail(actor: CurrentActor, command: UpdateAccountEmailCommand): Promise<string> {
+    if (actor.kind !== "tenant-admin") {
+      throw new ForbiddenError("No tenés permisos para esta operación");
+    }
+    const email = command.email.trim().toLowerCase();
+    if (email === actor.email) return email;
+    const existing = await repository.findAccountByEmail(email);
+    if (existing && existing.id !== actor.adminId) {
+      throw new ConflictError("Ya existe una cuenta con ese correo.");
+    }
+    try {
+      return await repository.updateEmail({ adminId: actor.adminId, email });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "P2002") {
+        throw new ConflictError("Ya existe una cuenta con ese correo.");
+      }
+      throw error;
+    }
+  }
+
   async function clearCookieWithoutMaskingAuthentication(): Promise<void> {
     try {
       await sessionCookie.clear();
@@ -198,6 +219,7 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
 
   return {
     changePassword,
+    updateAccountEmail,
     getCurrentActor,
     getSessionClaims,
     login,

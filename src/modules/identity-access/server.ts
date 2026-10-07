@@ -5,10 +5,12 @@ import { ForbiddenError, UnauthorizedError } from "@/platform/application/errors
 import {
   changePasswordCommandSchema,
   loginCommandSchema,
+  updateAccountEmailCommandSchema,
   type ChangePasswordCommand,
   type LoginCommand,
   type LoginView,
   type SessionView,
+  type UpdateAccountEmailCommand,
 } from "./contracts";
 import type { CurrentActor, SuperAdminActor, TenantAdminActor } from "./domain/current-actor";
 import type { SessionClaims } from "./domain/session";
@@ -61,6 +63,11 @@ export async function requireSuperAdmin(): Promise<SuperAdminActor> {
 export async function changePassword(command: ChangePasswordCommand): Promise<void> {
   const actor = await requireAuthenticatedAccount();
   await (await identityAccess()).changePassword(actor, changePasswordCommandSchema.parse(command));
+}
+
+export async function updateAccountEmail(command: UpdateAccountEmailCommand): Promise<string> {
+  const actor = await requireTenantAdmin();
+  return (await identityAccess()).updateAccountEmail(actor, updateAccountEmailCommandSchema.parse(command));
 }
 
 export function toLoginView(actor: CurrentActor): LoginView {

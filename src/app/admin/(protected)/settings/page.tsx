@@ -14,10 +14,17 @@ export default async function AdminSettingsPage() {
         <AdminPageHeader
           eyebrow="Configuración"
           title="Ajustes"
-          description="Configurá la identidad pública y los recursos de tu carta."
+          description="Configurá el menú activo: nombre, descripción, slug público y correo de acceso."
         />
 
-        <AdminCard className="p-6 sm:p-8"><RestaurantProfileForm initialData={profile} slug={profile.slug} email={actor.email} /></AdminCard>
+        <AdminCard className="p-6 sm:p-8">
+          <p className="mb-4 text-xs text-zinc-500">
+            Estás editando <span className="font-semibold text-zinc-700">{project.name}</span>
+            {" · "}
+            <span className="font-mono">/m/{profile.slug}</span>
+          </p>
+          <RestaurantProfileForm initialData={profile} slug={profile.slug} email={actor.email} />
+        </AdminCard>
         <AdminCard className="overflow-hidden">
           <Link
             href="/admin/settings/fonts"

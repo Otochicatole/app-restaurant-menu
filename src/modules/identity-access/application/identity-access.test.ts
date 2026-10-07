@@ -320,6 +320,9 @@ function createFixture(options: {
       state.passwordChange = input;
       return options.passwordChangeSucceeds ?? true;
     },
+    async updateEmail(input) {
+      return input.email;
+    },
   };
 
   const passwordHasher: PasswordHasher = {

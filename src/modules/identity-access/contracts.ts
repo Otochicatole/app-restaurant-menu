@@ -16,8 +16,13 @@ export const changePasswordCommandSchema = z
     path: ["confirmPassword"],
   });
 
+export const updateAccountEmailCommandSchema = z.object({
+  email: z.string().trim().email("Correo inválido").transform((value) => value.toLowerCase()),
+});
+
 export type LoginCommand = z.infer<typeof loginCommandSchema>;
 export type ChangePasswordCommand = z.infer<typeof changePasswordCommandSchema>;
+export type UpdateAccountEmailCommand = z.infer<typeof updateAccountEmailCommandSchema>;
 
 export type AdminRole = "SUPER_ADMIN" | "TENANT_ADMIN";
 

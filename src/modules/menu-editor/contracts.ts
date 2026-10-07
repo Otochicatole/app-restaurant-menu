@@ -283,9 +283,18 @@ export const publishDocumentSchema = z.object({
   baseRevision: z.number().int().nonnegative(),
   document: canvasDocumentSchema,
 });
+export const menuSlugSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "El slug solo puede contener letras minúsculas, números y guiones.")
+  .min(3)
+  .max(50);
+
 export const profileSchema = z.object({
   name: z.string().trim().min(1).max(100),
   publicDescription: z.string().trim().max(500),
+  slug: menuSlugSchema,
 });
 
 export type SaveDocumentCommand = z.infer<typeof saveDocumentSchema>;
@@ -294,13 +303,7 @@ export type RestaurantProfile = z.infer<typeof profileSchema>;
 
 export const createMenuProjectSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  slug: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "El slug solo puede contener letras minúsculas, números y guiones.")
-    .min(3)
-    .max(50),
+  slug: menuSlugSchema,
   publicDescription: z.string().trim().max(500).default("Menú digital"),
 });
 export type CreateMenuProjectCommand = z.infer<typeof createMenuProjectSchema>;

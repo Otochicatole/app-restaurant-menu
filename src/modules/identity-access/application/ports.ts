@@ -33,6 +33,7 @@ export interface IdentityRepository {
     newPasswordHash: string;
     currentJti: string;
   }): Promise<boolean>;
+  updateEmail(input: { adminId: string; email: string }): Promise<string>;
 }
 
 export interface PasswordHasher {

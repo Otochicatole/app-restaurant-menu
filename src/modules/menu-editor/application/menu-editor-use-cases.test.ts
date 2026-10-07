@@ -35,7 +35,7 @@ function repository(): MenuEditorRepository {
     deleteAsset: vi.fn(async () => undefined),
     getAsset: vi.fn(async () => null),
     getProfile: vi.fn(async () => ({ name: "Café", publicDescription: "Carta", slug: "cafe" })),
-    updateProfile: vi.fn(async (_tenant, _project, profile) => ({ ...profile, slug: "cafe" })),
+    updateProfile: vi.fn(async (_tenant, _project, profile) => profile),
     isSlugTaken: vi.fn(async () => false),
     getTenantMultiMenuEnabled: vi.fn(async () => false),
     getTenantMenuQuota: vi.fn(async () => ({ multiMenuEnabled: false, maxMenus: 1, currentMenus: 1 })),
@@ -63,8 +63,25 @@ describe("menu editor use cases", () => {
     await service.listAssets("tenant", "FONT");
     await service.createAsset("tenant", { tenantId: "tenant", kind: "FONT", name: "Nueva", mimeType: "font/woff", byteSize: 2, checksum: "x", storageKey: "key" });
     await service.getProfile("tenant", "project-1");
-    await service.updateProfile("tenant", "project-1", { name: "Nuevo", publicDescription: "Descripción" });
+    await service.updateProfile("tenant", "project-1", { name: "Nuevo", publicDescription: "Descripción", slug: "nuevo-cafe" });
     expect(repo.createAsset).toHaveBeenCalled();
+    expect(repo.updateProfile).toHaveBeenCalledWith("tenant", "project-1", {
+      name: "Nuevo",
+      publicDescription: "Descripción",
+      slug: "nuevo-cafe",
+    });
+  });
+
+  it("rejects reserved or taken slugs when updating a profile", async () => {
+    const repo = repository();
+    const service = createMenuEditorUseCases(repo);
+    await expect(
+      service.updateProfile("tenant", "project-1", { name: "Nuevo", publicDescription: "Desc", slug: "admin" }),
+    ).rejects.toThrow(/reservado/i);
+    vi.mocked(repo.isSlugTaken).mockResolvedValueOnce(true);
+    await expect(
+      service.updateProfile("tenant", "project-1", { name: "Nuevo", publicDescription: "Desc", slug: "otro" }),
+    ).rejects.toThrow(/slug/i);
   });
 
   it("deletes selected menus and all menus", async () => {

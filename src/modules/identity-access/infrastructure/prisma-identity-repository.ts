@@ -100,6 +100,14 @@ export class PrismaIdentityRepository implements IdentityRepository {
     });
   }
 
+  async updateEmail(input: { adminId: string; email: string }): Promise<string> {
+    const updated = await this.client.admin.update({
+      where: { id: input.adminId },
+      data: { email: input.email },
+      select: { email: true },
+    });
+    return updated.email;
+  }
 }
 
 type PrismaAccount = Awaited<
