@@ -8,6 +8,7 @@ import { requireSuperAdmin } from "@/modules/identity-access/server";
 import {
   createTenantCommandSchema,
   deleteTenantCommandSchema,
+  deleteTenantMenusCommandSchema,
   resetTenantPasswordCommandSchema,
   setTenantMaxMenusCommandSchema,
   setTenantMultiMenuCommandSchema,
@@ -81,14 +82,29 @@ export async function setTenantMultiMenuAction(formData: FormData): Promise<Tena
 export async function setTenantMaxMenusAction(formData: FormData): Promise<TenantActionResult> {
   return run(async () => {
     await requireSuperAdmin();
+    const keepMenuIds = formData.getAll("keepMenuId").map((value) => String(value)).filter(Boolean);
     const command = setTenantMaxMenusCommandSchema.parse({
       id: String(formData.get("id") ?? ""),
       maxMenus: Number(formData.get("maxMenus")),
+      keepMenuIds: keepMenuIds.length > 0 ? keepMenuIds : undefined,
     });
     await tenantManagementService.setTenantMaxMenus(command);
     revalidateTenantViews();
     return actionSuccess({});
   }, "No se pudo actualizar el cupo de menús");
+}
+
+export async function deleteTenantMenusAction(formData: FormData): Promise<TenantActionResult> {
+  return run(async () => {
+    await requireSuperAdmin();
+    const command = deleteTenantMenusCommandSchema.parse({
+      tenantId: String(formData.get("tenantId") ?? ""),
+      projectIds: formData.getAll("projectId").map((value) => String(value)).filter(Boolean),
+    });
+    await tenantManagementService.deleteTenantMenus(command);
+    revalidateTenantViews();
+    return actionSuccess({});
+  }, "No se pudo eliminar el menú");
 }
 
 export async function resetTenantPasswordAction(formData: FormData): Promise<TenantActionResult> {

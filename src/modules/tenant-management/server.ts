@@ -5,6 +5,7 @@ import { tenantManagementService } from "./infrastructure/composition";
 export {
   createTenantAction,
   deleteTenantAction,
+  deleteTenantMenusAction,
   resetTenantPasswordAction,
   setTenantMaxMenusAction,
   setTenantMultiMenuAction,
@@ -18,16 +19,19 @@ export type {
   CreateTenantCommand,
   CreatedTenant,
   DeleteTenantCommand,
+  DeleteTenantMenusCommand,
   SetTenantMaxMenusCommand,
   SetTenantMultiMenuCommand,
   SetTenantStatusCommand,
   TenantListItem,
+  TenantMenuSummary,
   TenantStatus,
   UpdateTenantCommand,
 } from "./contracts";
 export {
   createTenantCommandSchema,
   deleteTenantCommandSchema,
+  deleteTenantMenusCommandSchema,
   resetTenantPasswordCommandSchema,
   setTenantMaxMenusCommandSchema,
   setTenantMultiMenuCommandSchema,

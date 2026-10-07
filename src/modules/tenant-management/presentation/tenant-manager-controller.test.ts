@@ -23,6 +23,7 @@ describe("useTenantManager", () => {
       toggleTenant: successAction,
       toggleMultiMenu: successAction,
       setMaxMenus: successAction,
+      deleteMenus: successAction,
       resetPassword: successAction,
       deleteTenant: successAction,
     }));
@@ -43,6 +44,7 @@ describe("useTenantManager", () => {
       toggleTenant: successAction,
       toggleMultiMenu: successAction,
       setMaxMenus: successAction,
+      deleteMenus: successAction,
       resetPassword: successAction,
       deleteTenant: successAction,
     }));

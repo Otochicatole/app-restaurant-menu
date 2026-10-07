@@ -17,11 +17,13 @@ function createRepository(): TenantAccountRepository {
       email: input.email,
       lastLoginAt: null,
       createdAt: new Date(0).toISOString(),
+      menus: [{ id: "menu-1", name: input.name, slug: input.slug, isPrimary: true }],
     })),
     update: vi.fn(),
     setStatus: vi.fn(),
     setMultiMenuEnabled: vi.fn(),
     setMaxMenus: vi.fn(),
+    deleteMenus: vi.fn(),
     replacePassword: vi.fn(),
     delete: vi.fn(),
   };
@@ -85,6 +87,7 @@ describe("tenant management use cases", () => {
       email: "admin@cafe.test",
       lastLoginAt: null,
       createdAt: new Date(0).toISOString(),
+      menus: [{ id: "menu-1", name: "Café", slug: "cafe-central", isPrimary: true }],
     };
     vi.mocked(repository.findActiveBySlug).mockResolvedValue({ id: row.id, name: row.name, slug: row.slug, status: "ACTIVE" });
     vi.mocked(repository.list).mockResolvedValue([row]);

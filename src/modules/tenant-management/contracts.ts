@@ -43,6 +43,12 @@ export const setTenantMultiMenuCommandSchema = z
 export const setTenantMaxMenusCommandSchema = z.object({
   id: tenantIdSchema,
   maxMenus: tenantMaxMenusSchema,
+  keepMenuIds: z.array(tenantIdSchema).optional(),
+});
+
+export const deleteTenantMenusCommandSchema = z.object({
+  tenantId: tenantIdSchema,
+  projectIds: z.array(tenantIdSchema).min(1),
 });
 
 export const resetTenantPasswordCommandSchema = z.object({ id: tenantIdSchema });
@@ -54,6 +60,7 @@ export type UpdateTenantCommand = z.infer<typeof updateTenantCommandSchema>;
 export type SetTenantStatusCommand = z.infer<typeof setTenantStatusCommandSchema>;
 export type SetTenantMultiMenuCommand = z.infer<typeof setTenantMultiMenuCommandSchema>;
 export type SetTenantMaxMenusCommand = z.infer<typeof setTenantMaxMenusCommandSchema>;
+export type DeleteTenantMenusCommand = z.infer<typeof deleteTenantMenusCommandSchema>;
 export type DeleteTenantCommand = z.infer<typeof deleteTenantCommandSchema>;
 
 export type ActiveTenant = {
@@ -61,6 +68,13 @@ export type ActiveTenant = {
   name: string;
   slug: string;
   status: "ACTIVE";
+};
+
+export type TenantMenuSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  isPrimary: boolean;
 };
 
 export type TenantListItem = {
@@ -73,6 +87,7 @@ export type TenantListItem = {
   email: string;
   lastLoginAt: string | null;
   createdAt: string;
+  menus: TenantMenuSummary[];
 };
 
 export type CreatedTenant = {

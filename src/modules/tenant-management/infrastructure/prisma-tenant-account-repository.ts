@@ -1,14 +1,16 @@
-import { ConflictError, NotFoundError } from "@/platform/application/errors";
+import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { prisma } from "@/platform/database/prisma";
 import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
 import type {
   ActiveTenant,
   CreateTenantCommand,
   DeleteTenantCommand,
+  DeleteTenantMenusCommand,
   SetTenantMaxMenusCommand,
   SetTenantMultiMenuCommand,
   SetTenantStatusCommand,
   TenantListItem,
+  TenantMenuSummary,
   UpdateTenantCommand,
 } from "../contracts";
 import type { TenantAccountRepository } from "../application/ports";
@@ -22,6 +24,7 @@ type TenantWithAdmin = {
   maxMenus: number;
   createdAt: Date;
   admin: { email: string; lastLoginAt: Date | null } | null;
+  menuProjects?: TenantMenuSummary[];
 };
 
 function toListItem(tenant: TenantWithAdmin): TenantListItem {
@@ -36,7 +39,30 @@ function toListItem(tenant: TenantWithAdmin): TenantListItem {
     email: tenant.admin.email,
     lastLoginAt: tenant.admin.lastLoginAt?.toISOString() ?? null,
     createdAt: tenant.createdAt.toISOString(),
+    menus: tenant.menuProjects ?? [],
   };
+}
+
+async function ensurePrimaryAmongRemaining(
+  transaction: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  tenantId: string,
+) {
+  const remaining = await transaction.menuProject.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, publicDescription: true, isPrimary: true },
+  });
+  if (remaining.length === 0) return;
+  if (remaining.some((project) => project.isPrimary)) return;
+  const nextPrimary = remaining[0]!;
+  await transaction.menuProject.update({
+    where: { id: nextPrimary.id },
+    data: { isPrimary: true },
+  });
+  await transaction.tenant.update({
+    where: { id: tenantId },
+    data: { name: nextPrimary.name, publicDescription: nextPrimary.publicDescription },
+  });
 }
 
 export class PrismaTenantAccountRepository implements TenantAccountRepository {
@@ -50,7 +76,13 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
 
   async list(): Promise<TenantListItem[]> {
     const tenants = await prisma.tenant.findMany({
-      include: { admin: { select: { email: true, lastLoginAt: true } } },
+      include: {
+        admin: { select: { email: true, lastLoginAt: true } },
+        menuProjects: {
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: { id: true, name: true, slug: true, isPrimary: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     return tenants.map(toListItem);
@@ -71,7 +103,7 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
             mustChangePassword: true,
           },
         });
-        await transaction.menuProject.create({
+        const primaryMenu = await transaction.menuProject.create({
           data: {
             tenantId: tenant.id,
             name: input.name,
@@ -81,8 +113,9 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
             draftJson: JSON.stringify(createTenantTemplate(input.name)),
             schemaVersion: 1,
           },
+          select: { id: true, name: true, slug: true, isPrimary: true },
         });
-        return toListItem({ ...tenant, admin });
+        return toListItem({ ...tenant, admin, menuProjects: [primaryMenu] });
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -120,7 +153,12 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
             data: { revoked: true },
           });
         }
-        return toListItem({ ...tenant, admin });
+        const menus = await transaction.menuProject.findMany({
+          where: { tenantId: input.id },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          select: { id: true, name: true, slug: true, isPrimary: true },
+        });
+        return toListItem({ ...tenant, admin, menuProjects: menus });
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) throw new ConflictError("Ya existe una cuenta con ese correo.");
@@ -140,15 +178,61 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
   }
 
   async setMaxMenus(input: SetTenantMaxMenusCommand): Promise<void> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: input.id },
-      select: { id: true, multiMenuEnabled: true },
+    await prisma.$transaction(async (transaction) => {
+      const tenant = await transaction.tenant.findUnique({
+        where: { id: input.id },
+        select: { id: true, multiMenuEnabled: true },
+      });
+      if (!tenant) throw new NotFoundError("Tenant");
+      if (!tenant.multiMenuEnabled) throw new ConflictError("Habilitá varios menús antes de definir el cupo.");
+
+      const menus = await transaction.menuProject.findMany({
+        where: { tenantId: input.id },
+        select: { id: true },
+      });
+
+      if (menus.length > input.maxMenus) {
+        const keepIds = [...new Set(input.keepMenuIds ?? [])];
+        if (keepIds.length !== input.maxMenus) {
+          throw new BadRequestError(
+            `Para bajar el cupo a ${input.maxMenus}, elegí exactamente ${input.maxMenus} menús para conservar.`,
+          );
+        }
+        const owned = new Set(menus.map((menu) => menu.id));
+        if (keepIds.some((id) => !owned.has(id))) {
+          throw new BadRequestError("Uno de los menús seleccionados no pertenece a esta cuenta.");
+        }
+        const keepSet = new Set(keepIds);
+        const deleteIds = menus.map((menu) => menu.id).filter((id) => !keepSet.has(id));
+        if (deleteIds.length) {
+          await transaction.menuProject.deleteMany({ where: { tenantId: input.id, id: { in: deleteIds } } });
+          await ensurePrimaryAmongRemaining(transaction, input.id);
+        }
+      }
+
+      await transaction.tenant.update({
+        where: { id: input.id },
+        data: { maxMenus: input.maxMenus },
+      });
     });
-    if (!tenant) throw new NotFoundError("Tenant");
-    if (!tenant.multiMenuEnabled) throw new ConflictError("Habilitá varios menús antes de definir el cupo.");
-    await prisma.tenant.update({
-      where: { id: input.id },
-      data: { maxMenus: input.maxMenus },
+  }
+
+  async deleteMenus(input: DeleteTenantMenusCommand): Promise<{ deletedIds: string[] }> {
+    const uniqueIds = [...new Set(input.projectIds)];
+    return prisma.$transaction(async (transaction) => {
+      const tenant = await transaction.tenant.findUnique({ where: { id: input.tenantId }, select: { id: true } });
+      if (!tenant) throw new NotFoundError("Tenant");
+
+      const owned = await transaction.menuProject.findMany({
+        where: { tenantId: input.tenantId, id: { in: uniqueIds } },
+        select: { id: true },
+      });
+      if (owned.length !== uniqueIds.length) throw new NotFoundError("Menu project");
+
+      const deletedIds = owned.map((project) => project.id);
+      await transaction.menuProject.deleteMany({ where: { tenantId: input.tenantId, id: { in: deletedIds } } });
+      await ensurePrimaryAmongRemaining(transaction, input.tenantId);
+      return { deletedIds };
     });
   }
 

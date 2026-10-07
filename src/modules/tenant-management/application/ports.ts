@@ -2,6 +2,7 @@ import type {
   ActiveTenant,
   CreateTenantCommand,
   DeleteTenantCommand,
+  DeleteTenantMenusCommand,
   SetTenantMaxMenusCommand,
   SetTenantMultiMenuCommand,
   SetTenantStatusCommand,
@@ -17,6 +18,7 @@ export interface TenantAccountRepository {
   setStatus(input: SetTenantStatusCommand): Promise<void>;
   setMultiMenuEnabled(input: SetTenantMultiMenuCommand): Promise<void>;
   setMaxMenus(input: SetTenantMaxMenusCommand): Promise<void>;
+  deleteMenus(input: DeleteTenantMenusCommand): Promise<{ deletedIds: string[] }>;
   replacePassword(input: { id: string; passwordHash: string }): Promise<void>;
   delete(input: DeleteTenantCommand): Promise<void>;
 }

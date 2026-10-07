@@ -2,6 +2,7 @@ import { ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
   createTenantCommandSchema,
   deleteTenantCommandSchema,
+  deleteTenantMenusCommandSchema,
   resetTenantPasswordCommandSchema,
   setTenantMaxMenusCommandSchema,
   setTenantMultiMenuCommandSchema,
@@ -12,6 +13,7 @@ import {
   type CreateTenantCommand,
   type CreatedTenant,
   type DeleteTenantCommand,
+  type DeleteTenantMenusCommand,
   type SetTenantMaxMenusCommand,
   type SetTenantMultiMenuCommand,
   type SetTenantStatusCommand,
@@ -68,6 +70,10 @@ export function createTenantUseCases(dependencies: Dependencies) {
 
     setTenantMaxMenus(input: SetTenantMaxMenusCommand): Promise<void> {
       return dependencies.repository.setMaxMenus(setTenantMaxMenusCommandSchema.parse(input));
+    },
+
+    deleteTenantMenus(input: DeleteTenantMenusCommand): Promise<{ deletedIds: string[] }> {
+      return dependencies.repository.deleteMenus(deleteTenantMenusCommandSchema.parse(input));
     },
 
     async resetTenantPassword(input: { id: string }): Promise<string> {

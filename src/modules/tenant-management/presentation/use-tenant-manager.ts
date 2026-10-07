@@ -7,6 +7,7 @@ import type {
   PendingTenantConfirmation,
   TenantFormAction,
   TenantManagerProps,
+  TenantRow,
 } from "./tenant-manager.types";
 
 type TemporaryPassword = { value: string; tenantId?: string };
@@ -18,6 +19,7 @@ export function useTenantManager({
   toggleTenant,
   toggleMultiMenu,
   setMaxMenus,
+  deleteMenus,
   resetPassword,
   deleteTenant,
 }: TenantManagerProps) {
@@ -29,11 +31,19 @@ export function useTenantManager({
   const [statusFilter, setStatusFilter] = useState<TenantStatusFilter>("ALL");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingTenantConfirmation | null>(null);
   const [maxMenusDraft, setMaxMenusDraft] = useState("1");
+  const [keepMenuIds, setKeepMenuIds] = useState<string[]>([]);
   const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [managingTenantId, setManagingTenantId] = useState<string | null>(null);
 
   const filteredTenants = useMemo(
     () => filterTenantRows(tenants, search, statusFilter),
     [search, statusFilter, tenants],
+  );
+
+  const managingTenant = useMemo(
+    () => (managingTenantId ? tenants.find((tenant) => tenant.id === managingTenantId) ?? null : null),
+    [managingTenantId, tenants],
   );
 
   const setBusy = useCallback((key: string, busy: boolean) => {
@@ -78,7 +88,8 @@ export function useTenantManager({
 
   const submitCreate = useCallback(
     async (formData: FormData) => {
-      await run("create", createTenant, formData);
+      const outcome = await run("create", createTenant, formData);
+      if (outcome.ok) setShowCreateModal(false);
     },
     [createTenant, run],
   );
@@ -90,15 +101,35 @@ export function useTenantManager({
     [run, updateTenant],
   );
 
+  const openManageTenant = useCallback((tenant: TenantRow) => {
+    setManagingTenantId(tenant.id);
+  }, []);
+
+  const closeManageTenant = useCallback(() => {
+    setManagingTenantId(null);
+  }, []);
+
   const requestConfirmation = useCallback((pending: PendingTenantConfirmation) => {
     setConfirmationError(null);
     if (pending.type === "multiMenu" && !pending.tenant.multiMenuEnabled) {
       setMaxMenusDraft(String(Math.max(1, pending.tenant.maxMenus || 1)));
     }
     if (pending.type === "maxMenus") {
-      setMaxMenusDraft(String(Math.max(1, pending.tenant.maxMenus || 1)));
+      const draft = String(Math.max(1, pending.tenant.maxMenus || 1));
+      setMaxMenusDraft(draft);
+      setKeepMenuIds(pending.tenant.menus.slice(0, Number(draft)).map((menu) => menu.id));
+    } else {
+      setKeepMenuIds([]);
     }
     setPendingConfirmation(pending);
+  }, []);
+
+  const toggleKeepMenu = useCallback((menuId: string, maxAllowed: number) => {
+    setKeepMenuIds((current) => {
+      if (current.includes(menuId)) return current.filter((id) => id !== menuId);
+      if (current.length >= maxAllowed) return current;
+      return [...current, menuId];
+    });
   }, []);
 
   const confirmPendingAction = useCallback(async () => {
@@ -115,6 +146,14 @@ export function useTenantManager({
         return;
       }
       formData.set("maxMenus", String(parsed));
+
+      if (type === "maxMenus" && tenant.menus.length > parsed) {
+        if (keepMenuIds.length !== parsed) {
+          setConfirmationError(`Elegí exactamente ${parsed} menús para conservar.`);
+          return;
+        }
+        for (const id of keepMenuIds) formData.append("keepMenuId", id);
+      }
     }
 
     let outcome: { ok: true } | { ok: false; message: string };
@@ -127,6 +166,11 @@ export function useTenantManager({
       outcome = await run(`multiMenu:${tenant.id}`, toggleMultiMenu, formData);
     } else if (type === "maxMenus") {
       outcome = await run(`maxMenus:${tenant.id}`, setMaxMenus, formData);
+    } else if (type === "deleteMenus") {
+      formData.delete("id");
+      formData.set("tenantId", tenant.id);
+      for (const id of pendingConfirmation.projectIds) formData.append("projectId", id);
+      outcome = await run(`deleteMenus:${tenant.id}`, deleteMenus, formData);
     } else if (type === "reset") {
       outcome = await run(`reset:${tenant.id}`, resetPassword, formData, tenant.id);
     } else {
@@ -137,10 +181,23 @@ export function useTenantManager({
     if (outcome.ok) {
       setPendingConfirmation(null);
       setConfirmationError(null);
+      setKeepMenuIds([]);
+      if (type === "delete") setManagingTenantId(null);
     } else {
       setConfirmationError(outcome.message);
     }
-  }, [deleteTenant, maxMenusDraft, pendingConfirmation, resetPassword, run, setMaxMenus, toggleMultiMenu, toggleTenant]);
+  }, [
+    deleteMenus,
+    deleteTenant,
+    keepMenuIds,
+    maxMenusDraft,
+    pendingConfirmation,
+    resetPassword,
+    run,
+    setMaxMenus,
+    toggleMultiMenu,
+    toggleTenant,
+  ]);
 
   const clearFilters = useCallback(() => {
     setSearch("");
@@ -149,7 +206,10 @@ export function useTenantManager({
 
   const isBusy = useCallback((key: string) => busyKeys.has(key), [busyKeys]);
   const isTenantBusy = useCallback(
-    (tenantId: string) => ["update", "toggle", "multiMenu", "maxMenus", "reset", "delete"].some((operation) => busyKeys.has(`${operation}:${tenantId}`)),
+    (tenantId: string) =>
+      ["update", "toggle", "multiMenu", "maxMenus", "deleteMenus", "reset", "delete"].some((operation) =>
+        busyKeys.has(`${operation}:${tenantId}`),
+      ),
     [busyKeys],
   );
 
@@ -168,15 +228,30 @@ export function useTenantManager({
     setStatusFilter,
     clearFilters,
     hasActiveFilters: Boolean(search.trim()) || statusFilter !== "ALL",
+    showCreateModal,
+    openCreateModal: () => setShowCreateModal(true),
+    closeCreateModal: () => setShowCreateModal(false),
+    managingTenant,
+    openManageTenant,
+    closeManageTenant,
     pendingConfirmation,
     requestConfirmation,
     closeConfirmation: () => {
       setPendingConfirmation(null);
       setConfirmationError(null);
+      setKeepMenuIds([]);
     },
     confirmPendingAction,
     maxMenusDraft,
-    setMaxMenusDraft,
+    setMaxMenusDraft: (value: string) => {
+      setMaxMenusDraft(value);
+      const parsed = Number(value);
+      if (Number.isInteger(parsed) && parsed >= 1) {
+        setKeepMenuIds((current) => current.slice(0, parsed));
+      }
+    },
+    keepMenuIds,
+    toggleKeepMenu,
     confirmationError,
     submitCreate,
     submitUpdate,
