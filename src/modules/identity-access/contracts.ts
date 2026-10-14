@@ -8,7 +8,7 @@ export const loginCommandSchema = z.object({
 export const changePasswordCommandSchema = z
   .object({
     currentPassword: z.string().min(1),
-    newPassword: z.string().min(12).max(128),
+    newPassword: z.string().min(8, "La contraseña debe tener al menos 8 caracteres").max(128),
     confirmPassword: z.string(),
   })
   .refine((value) => value.newPassword === value.confirmPassword, {

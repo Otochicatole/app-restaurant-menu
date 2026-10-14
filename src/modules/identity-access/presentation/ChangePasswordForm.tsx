@@ -78,12 +78,12 @@ export function ChangePasswordForm({
           id="newPassword"
           name="newPassword"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           required
           autoComplete="new-password"
           disabled={loading}
-          placeholder="Mínimo 12 caracteres"
+          placeholder="Mínimo 8 caracteres"
           className={`${inputClassName} mt-1.5`}
         />
       </div>
@@ -96,7 +96,7 @@ export function ChangePasswordForm({
           id="confirmPassword"
           name="confirmPassword"
           type="password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           required
           autoComplete="new-password"

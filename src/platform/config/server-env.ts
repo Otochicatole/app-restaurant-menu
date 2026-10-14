@@ -19,7 +19,7 @@ const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   STORAGE_ROOT: z.string().min(1).default("./storage"),
   SUPER_ADMIN_EMAIL: z.string().email().optional(),
-  SUPER_ADMIN_PASSWORD: z.string().min(12).optional(),
+  SUPER_ADMIN_PASSWORD: z.string().min(8).optional(),
   TRUST_PROXY: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 });
 

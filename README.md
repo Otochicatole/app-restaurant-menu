@@ -14,7 +14,7 @@ El editor incluye tres presets globales (Minimalista vertical, Cafetería y Gour
 
 ## Configuración
 
-Copiá `.env.example` a `.env` y definí `DATABASE_URL`, `JWT_SECRET`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `APP_URL` y `STORAGE_ROOT`. La contraseña del superadministrador debe tener al menos 12 caracteres y el secreto JWT al menos 32. Dejá `TRUST_PROXY=false` salvo que la aplicación sólo sea accesible detrás de un proxy que sanee los headers reenviados.
+Copiá `.env.example` a `.env` y definí `DATABASE_URL`, `JWT_SECRET`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `APP_URL` y `STORAGE_ROOT`. La contraseña del superadministrador debe tener al menos 8 caracteres y el secreto JWT al menos 32. Dejá `TRUST_PROXY=false` salvo que la aplicación sólo sea accesible detrás de un proxy que sanee los headers reenviados.
 
 SQLite y el storage usan rutas absolutas en producción. Para `APP_RELEASE_ROOT=/opt/app-res`, los valores requeridos son `DATABASE_URL=file:/opt/app-res/shared/database/app.db` y `STORAGE_ROOT=/opt/app-res/shared/storage`. La base nunca debe quedar dentro de `releases/<id>`. `TEST_DATABASE_URL` debe apuntar a otro archivo SQLite descartable y exclusivo para pruebas.
 

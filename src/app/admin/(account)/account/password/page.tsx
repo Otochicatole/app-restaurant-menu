@@ -46,11 +46,11 @@ export default async function ChangePasswordPage() {
             </h1>
             <p className="mt-4 max-w-lg text-[15px] leading-7 text-zinc-500">
               {actor.mustChangePassword
-                ? "Este paso es obligatorio antes de administrar el menú. Elegí una clave de al menos 12 caracteres."
-                : "Elegí una clave de al menos 12 caracteres para mantener tu cuenta protegida."}
+                ? "Este paso es obligatorio antes de administrar el menú. Elegí una clave de al menos 8 caracteres."
+                : "Elegí una clave de al menos 8 caracteres para mantener tu cuenta protegida."}
             </p>
             <ul className="mt-8 space-y-2.5 border-l border-zinc-200 pl-4 text-sm leading-6 text-zinc-500">
-              <li>Mínimo 12 caracteres en la nueva contraseña.</li>
+              <li>Mínimo 8 caracteres en la nueva contraseña.</li>
               <li>Al guardar, cerramos las demás sesiones activas.</li>
             </ul>
           </section>

@@ -23,4 +23,21 @@ describe("server environment", () => {
       parseServerEnv({ DATABASE_URL: "postgresql://localhost/app", JWT_SECRET: "x".repeat(32) }),
     ).toThrow(/SQLite/);
   });
+
+  it("validates SUPER_ADMIN_PASSWORD minimum length of 8 characters", () => {
+    const valid = parseServerEnv({
+      DATABASE_URL: "file:./storage/app.db",
+      JWT_SECRET: "x".repeat(32),
+      SUPER_ADMIN_PASSWORD: "12345678",
+    });
+    expect(valid.SUPER_ADMIN_PASSWORD).toBe("12345678");
+
+    expect(() =>
+      parseServerEnv({
+        DATABASE_URL: "file:./storage/app.db",
+        JWT_SECRET: "x".repeat(32),
+        SUPER_ADMIN_PASSWORD: "1234567",
+      }),
+    ).toThrow();
+  });
 });

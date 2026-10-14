@@ -14,14 +14,14 @@ async function main() {
   const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SUPER_ADMIN_PASSWORD;
   if (!email || !password) throw new Error("SUPER_ADMIN_EMAIL y SUPER_ADMIN_PASSWORD son obligatorios para ejecutar el seed.");
-  if (password.length < 12) throw new Error("SUPER_ADMIN_PASSWORD debe tener al menos 12 caracteres.");
+  if (password.length < 8) throw new Error("SUPER_ADMIN_PASSWORD debe tener al menos 8 caracteres.");
 
   const tenantId = process.env.SEED_RESTAURANT_ID?.trim() || "tenant-fuzion";
   const tenantName = process.env.SEED_RESTAURANT_NAME?.trim() || "Fuzion";
   const tenantSlug = process.env.SEED_RESTAURANT_SLUG?.trim().toLowerCase() || "fuzion";
   const tenantEmail = (process.env.SEED_RESTAURANT_ADMIN_EMAIL?.trim().toLowerCase() || "admin@fuzion.local");
   const tenantPassword = process.env.SEED_RESTAURANT_ADMIN_PASSWORD || "FuzionAdmin2026!";
-  if (tenantPassword.length < 12) throw new Error("SEED_RESTAURANT_ADMIN_PASSWORD debe tener al menos 12 caracteres.");
+  if (tenantPassword.length < 8) throw new Error("SEED_RESTAURANT_ADMIN_PASSWORD debe tener al menos 8 caracteres.");
   const existingTenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
   const seedTenantId = existingTenant?.id ?? tenantId;
 
