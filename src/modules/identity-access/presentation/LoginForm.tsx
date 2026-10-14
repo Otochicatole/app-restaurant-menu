@@ -51,11 +51,11 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label htmlFor="email" className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#4d584e]">
+        <label htmlFor="email" className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#3d4a3e]">
           Correo electrónico
         </label>
         <div className="group relative mt-2">
-          <Mail aria-hidden="true" size={17} strokeWidth={1.8} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8a9189] transition-colors group-focus-within:text-[#7a55a8]" />
+          <Mail aria-hidden="true" size={17} strokeWidth={1.8} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#7d877b] transition-colors group-focus-within:text-[#253621]" />
           <input
             type="email"
             id="email"
@@ -63,17 +63,17 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             required
             autoComplete="email"
             disabled={loading}
-            className="block w-full rounded-2xl border border-[#26351f]/12 bg-white/65 py-3.5 pl-11 pr-4 text-sm text-[#172019] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] outline-none transition duration-200 placeholder:text-[#92988f] hover:border-[#26351f]/25 focus:border-[#8a61b6] focus:bg-white focus:ring-4 focus:ring-[#cfb1fc]/25 disabled:cursor-not-allowed disabled:opacity-60"
+            className="block w-full rounded-xl border border-zinc-300 bg-white py-3.5 pl-11 pr-4 text-sm text-[#141d14] outline-none transition duration-150 placeholder:text-zinc-400 hover:border-zinc-400 focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15 disabled:cursor-not-allowed disabled:opacity-60"
             placeholder="nombre@restaurante.com"
           />
         </div>
       </div>
       <div>
-        <label htmlFor="password" className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#4d584e]">
+        <label htmlFor="password" className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#3d4a3e]">
           Contraseña
         </label>
         <div className="group relative mt-2">
-          <LockKeyhole aria-hidden="true" size={17} strokeWidth={1.8} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8a9189] transition-colors group-focus-within:text-[#7a55a8]" />
+          <LockKeyhole aria-hidden="true" size={17} strokeWidth={1.8} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#7d877b] transition-colors group-focus-within:text-[#253621]" />
           <input
             type={showPassword ? "text" : "password"}
             id="password"
@@ -83,7 +83,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             maxLength={128}
             autoComplete="current-password"
             disabled={loading}
-            className="block w-full rounded-2xl border border-[#26351f]/12 bg-white/65 py-3.5 pl-11 pr-12 text-sm text-[#172019] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] outline-none transition duration-200 placeholder:text-[#92988f] hover:border-[#26351f]/25 focus:border-[#8a61b6] focus:bg-white focus:ring-4 focus:ring-[#cfb1fc]/25 disabled:cursor-not-allowed disabled:opacity-60"
+            className="block w-full rounded-xl border border-zinc-300 bg-white py-3.5 pl-11 pr-12 text-sm text-[#141d14] outline-none transition duration-150 placeholder:text-zinc-400 hover:border-zinc-400 focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15 disabled:cursor-not-allowed disabled:opacity-60"
             placeholder="Ingresá tu contraseña"
           />
           <button
@@ -92,13 +92,13 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             aria-pressed={showPassword}
             disabled={loading}
             onClick={() => setShowPassword((visible) => !visible)}
-            className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#767e76] transition hover:bg-[#3a4824]/8 hover:text-[#27351f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8a61b6] disabled:opacity-50"
+            className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#253621] disabled:opacity-50"
           >
             {showPassword ? <EyeOff size={17} strokeWidth={1.8} /> : <Eye size={17} strokeWidth={1.8} />}
           </button>
         </div>
       </div>
-      <div aria-live="polite" className={error ? "flex items-start gap-2.5 rounded-xl border border-[#b74f3e]/20 bg-[#fff5f1] px-3.5 py-3 text-sm leading-5 text-[#9a3e31]" : "sr-only"}>
+      <div aria-live="polite" className={error ? "flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-800" : "sr-only"}>
         {error && <CircleAlert aria-hidden="true" size={17} className="mt-0.5 shrink-0" />}
         <span>{error ?? ""}</span>
       </div>
@@ -106,7 +106,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         type="submit"
         disabled={loading}
         aria-busy={loading}
-        className="flex w-full flex-row items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(110deg,#24351f_0%,#3a4824_58%,#7652a4_145%)] px-4 py-3.5 text-sm font-semibold text-white shadow-[0_18px_38px_-19px_rgba(27,45,25,0.9)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_45px_-18px_rgba(27,45,25,0.8)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#cfb1fc]/40 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55"
+        className="flex w-full flex-row items-center justify-center gap-2 rounded-xl bg-[#162315] px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition duration-150 hover:bg-[#0f180f] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#253621]/30 disabled:cursor-not-allowed disabled:opacity-55"
       >
         {loading ? <><LoaderCircle className="animate-spin" size={17} /> Preparando tu espacio…</> : <><span>Iniciar sesión</span><LogIn size={17} /></>}
       </button>

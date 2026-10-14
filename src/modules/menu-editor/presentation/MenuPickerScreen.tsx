@@ -105,20 +105,20 @@ export function MenuPickerScreen({
   const selectedCount = selected.size;
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-[#fafafa] text-zinc-900">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-[#f8faf7] text-zinc-900">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(24,24,27,0.06),transparent)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(24,38,24,0.06),transparent)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,rgba(24,24,27,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.03)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
+        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,rgba(24,38,24,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,38,24,0.03)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
       />
 
       <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-2xl flex-col px-5 pb-16 pt-12 sm:px-8 sm:pt-16">
         <header className="animate-[menuPickerIn_0.45s_ease-out_both]">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 shadow-sm backdrop-blur">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#182618]/10 bg-white/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#3d5934] shadow-xs backdrop-blur">
               <UtensilsCrossed size={13} strokeWidth={2.25} />
               Tus menús
             </div>
@@ -132,7 +132,7 @@ export function MenuPickerScreen({
               }}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 managing
-                  ? "bg-zinc-900 text-white"
+                  ? "bg-[#182618] text-white"
                   : "border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900"
               }`}
             >
@@ -293,7 +293,7 @@ export function MenuPickerScreen({
                       type="submit"
                       disabled={pending}
                       className={`group flex w-full items-center gap-4 px-4 py-4 text-left transition duration-200 disabled:opacity-60 sm:gap-5 sm:px-5 sm:py-5 ${
-                        active ? "bg-zinc-950 text-white" : "bg-white hover:bg-zinc-50"
+                        active ? "bg-[#182618] text-white" : "bg-white hover:bg-zinc-50"
                       }`}
                     >
                       <span
@@ -413,7 +413,7 @@ export function MenuPickerScreen({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="inline-flex items-center gap-2 rounded-xl bg-zinc-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#182618] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#101c10] disabled:opacity-50"
                 >
                   {pending && pendingId === "create" ? "Creando…" : "Crear y abrir"}
                   <ArrowRight size={15} />

@@ -1,11 +1,11 @@
 import { Plus } from "lucide-react";
 
 export const adminButtonClass =
-  "inline-flex cursor-pointer flex-row items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex cursor-pointer flex-row items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50";
 
-export const adminPrimaryButtonClass = `${adminButtonClass} bg-emerald-950 text-white shadow-sm hover:bg-emerald-900`;
-export const adminSecondaryButtonClass = `${adminButtonClass} border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50`;
-export const adminDangerButtonClass = `${adminButtonClass} border border-red-200 bg-white text-red-700 hover:bg-red-50`;
+export const adminPrimaryButtonClass = `${adminButtonClass} bg-[#182618] text-white shadow-sm hover:bg-[#101c10] active:scale-[0.99] focus:ring-[#182618]/25`;
+export const adminSecondaryButtonClass = `${adminButtonClass} border border-zinc-200/90 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] focus:ring-zinc-400/25`;
+export const adminDangerButtonClass = `${adminButtonClass} border border-red-200 bg-white text-red-700 hover:bg-red-50 hover:border-red-300 focus:ring-red-500/25`;
 
 export function AdminPageHeader({
   eyebrow,
@@ -19,19 +19,41 @@ export function AdminPageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        {eyebrow && <p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">{eyebrow}</p>}
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">{title}</h1>
-        {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">{description}</p>}
+        {eyebrow && (
+          <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#3d5934]">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-500">
+            {description}
+          </p>
+        )}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
     </div>
   );
 }
 
-export function AdminCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-zinc-200/80 bg-white shadow-[0_12px_40px_-28px_rgba(24,24,27,0.45)] ${className}`}>{children}</section>;
+export function AdminCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`rounded-2xl border border-zinc-200/80 bg-white shadow-[0_4px_24px_-8px_rgba(24,24,27,0.06)] ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
 export function AdminStatCard({
@@ -48,28 +70,49 @@ export function AdminStatCard({
   accent?: "emerald" | "amber" | "terracotta";
 }) {
   const accentClasses = {
-    emerald: "bg-emerald-100 text-emerald-800",
-    amber: "bg-amber-100 text-amber-800",
-    terracotta: "bg-orange-100 text-orange-800",
+    emerald: "bg-[#e8efe6] text-[#2b4226]",
+    amber: "bg-amber-50 text-amber-800 border border-amber-200/50",
+    terracotta: "bg-orange-50 text-orange-800 border border-orange-200/50",
   };
   return (
-    <a href={href} className="group cursor-pointer rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(24,24,27,0.45)] transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg">
+    <a
+      href={href}
+      className="group cursor-pointer rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-[0_4px_24px_-8px_rgba(24,24,27,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md"
+    >
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm font-medium text-zinc-500">{label}</p>
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${accentClasses[accent]}`}>Panel</span>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${accentClasses[accent]}`}
+        >
+          Panel
+        </span>
       </div>
-      <p className="mt-5 text-4xl font-semibold tracking-tight text-zinc-950">{value}</p>
-      <p className="mt-2 text-sm text-zinc-500 group-hover:text-zinc-700">{detail}</p>
+      <p className="mt-4 text-3xl font-bold tabular-nums tracking-tight text-zinc-950 sm:text-4xl">
+        {value}
+      </p>
+      <p className="mt-1 text-xs text-zinc-500 transition-colors group-hover:text-zinc-700">
+        {detail}
+      </p>
     </a>
   );
 }
 
-export function AdminEmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+export function AdminEmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="flex min-h-52 flex-col p-20 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800"><Plus size={20} /></div>
+    <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/60 p-12 text-center sm:p-16">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8efe6] text-[#2b4226]">
+        <Plus size={22} strokeWidth={2} />
+      </div>
       <h2 className="mt-4 text-base font-semibold text-zinc-900">{title}</h2>
-      <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">{description}</p>
+      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-zinc-500">{description}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
   );

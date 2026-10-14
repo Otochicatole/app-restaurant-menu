@@ -27,9 +27,9 @@ type InspectorProps = {
   onUngroup: () => void;
 };
 
-const fieldClass = "mt-1.5 min-w-0 w-full rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-xs text-zinc-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100 disabled:text-zinc-400";
+const fieldClass = "mt-1.5 min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-xs text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15 disabled:bg-zinc-100 disabled:text-zinc-400";
 const labelClass = "block min-w-0 text-xs font-medium text-zinc-700";
-const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:opacity-40";
+const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-[#253621] disabled:opacity-40";
 
 export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
   if (group) {
@@ -46,8 +46,8 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
       </>}
       footer={<div className="space-y-2"><button type="button" className={buttonClass + " w-full"} disabled={state.effectiveLocked} onClick={onDuplicate}><Copy size={14} aria-hidden="true" />Duplicar grupo</button><button type="button" className={buttonClass + " w-full border-red-200 text-red-700 hover:bg-red-50"} disabled={state.effectiveLocked} onClick={onUngroup}><Layers size={14} aria-hidden="true" />Desagrupar y conservar capas</button><ClipboardShortcutHint /></div>}>
       <InspectorSection title="Estado del grupo" icon={<Layers size={16} />} description="Ocultar o bloquear el grupo no cambia el estado individual de sus capas." defaultOpen>
-        <label className="flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={group.visible} onChange={(event) => onGroupChange({ visible: event.target.checked })} />Mostrar grupo</label>
-        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={group.locked} onChange={(event) => onGroupChange({ locked: event.target.checked })} />Bloquear grupo</label>
+        <label className="flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-[#253621]" type="checkbox" checked={group.visible} onChange={(event) => onGroupChange({ visible: event.target.checked })} />Mostrar grupo</label>
+        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-[#253621]" type="checkbox" checked={group.locked} onChange={(event) => onGroupChange({ locked: event.target.checked })} />Bloquear grupo</label>
       </InspectorSection>
       <InspectorSection title="Orden" icon={<Layers size={16} />} defaultOpen>
         <div className="grid grid-cols-2 gap-2"><button type="button" className={buttonClass} disabled={state.effectiveLocked} onClick={() => onMoveLayer(1)}><ArrowUp size={14} />Adelante</button><button type="button" className={buttonClass} disabled={state.effectiveLocked} onClick={() => onMoveLayer(-1)}><ArrowDown size={14} />Atrás</button></div>
@@ -82,8 +82,8 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
         <div className="mt-4"><PercentRangeField label="Opacidad de la selección" value={node.opacity} disabled={false} onChange={(opacity) => onChangeSelected({ opacity })} /></div>
       </InspectorSection>
       <InspectorSection title="Estado de la selección" icon={<Layers size={16} />} defaultOpen>
-        <label className="flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={node.locked} onChange={(event) => onChangeSelected({ locked: event.target.checked })} />Bloquear selección</label>
-        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-emerald-700" type="checkbox" checked={node.visible} onChange={(event) => onChangeSelected({ visible: event.target.checked })} />Mostrar objetos</label>
+        <label className="flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-[#253621]" type="checkbox" checked={node.locked} onChange={(event) => onChangeSelected({ locked: event.target.checked })} />Bloquear selección</label>
+        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-zinc-700"><input className="accent-[#253621]" type="checkbox" checked={node.visible} onChange={(event) => onChangeSelected({ visible: event.target.checked })} />Mostrar objetos</label>
       </InspectorSection>
     </InspectorLayout>;
   }
@@ -170,10 +170,10 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
           {modalAsset && <p className="mt-1 text-xs text-zinc-500">{modalAsset.kind === "VIDEO" ? "Video" : "Imagen"}</p>}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" disabled={disabled} className={buttonClass + " flex-1 border-emerald-200 text-emerald-800 hover:bg-emerald-50"} onClick={onOpenModalMedia}>{node.modalAssetId ? "Cambiar multimedia" : "Elegir multimedia"}</button>
+          <button type="button" disabled={disabled} className={buttonClass + " flex-1 border-[#253621]/20 text-[#253621] hover:bg-[#253621]/5"} onClick={onOpenModalMedia}>{node.modalAssetId ? "Cambiar multimedia" : "Elegir multimedia"}</button>
           {node.modalAssetId && <button type="button" disabled={disabled} className={buttonClass} onClick={() => onChange({ modalAssetId: null })}>Quitar</button>}
         </div>
-        {node.modalAssetId && <p className="mt-2 text-xs leading-5 text-emerald-800">La multimedia tiene prioridad sobre el enlace.</p>}
+        {node.modalAssetId && <p className="mt-2 text-xs leading-5 text-[#253621]">La multimedia tiene prioridad sobre el enlace.</p>}
       </div>}
     </InspectorSection>
 
@@ -227,7 +227,7 @@ function InspectorSection({ title, description, icon, defaultOpen = false, child
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
   return <section className="border-b border-zinc-200 last:border-b-0" aria-labelledby={id + "-title"}>
-    <h3><button id={id + "-title"} type="button" className="flex w-full items-start gap-2.5 py-4 text-left text-zinc-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600" aria-expanded={open} aria-controls={id + "-content"} onClick={() => setOpen(!open)}>
+    <h3><button id={id + "-title"} type="button" className="flex w-full items-start gap-2.5 py-4 text-left text-zinc-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#253621]" aria-expanded={open} aria-controls={id + "-content"} onClick={() => setOpen(!open)}>
       <span className="mt-0.5 shrink-0 text-zinc-500" aria-hidden="true">{icon}</span>
       <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{title}</span>{description && <span className="mt-1 block text-xs font-normal leading-4 text-zinc-500">{description}</span>}</span>
       <ChevronDown size={16} aria-hidden="true" className={"mt-0.5 shrink-0 text-zinc-400 transition-transform " + (open ? "rotate-180" : "")} />
@@ -264,7 +264,7 @@ function AlphaColorField({ label, value, onChange, disabled = false }: { label: 
       <HexColorInput label={label} value={base} disabled={disabled} allowAlpha={false} onChange={(color) => onChange(withColorAlpha(color, alpha))} />
     </div>
     <label className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-600"><span>Opacidad</span><span className="flex items-center gap-1.5"><input aria-label={"Porcentaje de transparencia de " + label.toLowerCase()} disabled={disabled} className="w-16 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-right text-xs disabled:bg-zinc-100" type="number" min="0" max="100" step="1" value={Math.round(alpha * 100)} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value) / 100))} /><span>%</span></span></label>
-    <input aria-label={"Transparencia de " + label.toLowerCase()} disabled={disabled} className="mt-3 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={alpha} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value)))} />
+    <input aria-label={"Transparencia de " + label.toLowerCase()} disabled={disabled} className="mt-3 block w-full accent-[#253621] disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={alpha} onChange={(event) => onChange(withColorAlpha(base, Number(event.target.value)))} />
   </div>;
 }
 
@@ -297,7 +297,7 @@ function RectFillField({ node, assets, disabled, onChange, onOpenBackgroundImage
   };
   return <div className="mt-4 space-y-3">
     <FillLayer title="Imagen de fondo" description="Sobre el color base." active={Boolean(backgroundImage)} open={imageOpen} onToggle={() => setImageOpen(!imageOpen)}
-      action={<button type="button" disabled={disabled} aria-label={backgroundImage ? "Quitar imagen de fondo" : "Elegir imagen de fondo"} className={buttonClass + " shrink-0 px-2 text-emerald-800"} onClick={backgroundImage ? () => onChange({ backgroundImage: null }) : () => { setImageOpen(true); onOpenBackgroundImage(); }}>{backgroundImage ? "Quitar" : "Elegir"}</button>}>
+      action={<button type="button" disabled={disabled} aria-label={backgroundImage ? "Quitar imagen de fondo" : "Elegir imagen de fondo"} className={buttonClass + " shrink-0 px-2 text-[#253621]"} onClick={backgroundImage ? () => onChange({ backgroundImage: null }) : () => { setImageOpen(true); onOpenBackgroundImage(); }}>{backgroundImage ? "Quitar" : "Elegir"}</button>}>
       {backgroundImage && <div className="space-y-4">
         <div className="flex min-w-0 items-center gap-3"><span className="h-10 w-10 shrink-0 border border-zinc-200 bg-zinc-100 bg-cover bg-center" style={imageAsset ? { backgroundImage: "url(" + imageAsset.url + ")" } : undefined} aria-hidden="true" /><p className="min-w-0 flex-1 break-words text-xs font-medium text-zinc-700">{imageAsset?.name ?? "Imagen no disponible"}</p></div>
         <button type="button" disabled={disabled} className={buttonClass + " w-full"} onClick={onOpenBackgroundImage}>Cambiar imagen</button>
@@ -309,7 +309,7 @@ function RectFillField({ node, assets, disabled, onChange, onOpenBackgroundImage
     </FillLayer>
 
     <FillLayer title="Degradado lineal" description="Sobre el color y la imagen." active={Boolean(gradient)} open={gradientOpen} onToggle={() => setGradientOpen(!gradientOpen)}
-      action={<button type="button" disabled={disabled} aria-label={gradient ? "Quitar degradado" : "Agregar degradado"} className={buttonClass + " shrink-0 px-2 text-emerald-800"} onClick={() => { setGradientOpen(true); changeGradient(gradient ? null : defaultGradient()); }}>{gradient ? "Quitar" : "Agregar"}</button>}>
+      action={<button type="button" disabled={disabled} aria-label={gradient ? "Quitar degradado" : "Agregar degradado"} className={buttonClass + " shrink-0 px-2 text-[#253621]"} onClick={() => { setGradientOpen(true); changeGradient(gradient ? null : defaultGradient()); }}>{gradient ? "Quitar" : "Agregar"}</button>}>
       {gradient && <div className="space-y-4">
         <div className="h-8 w-full rounded-md border border-zinc-200" style={{ background: "linear-gradient(" + gradient.angle + "deg, " + gradient.stops[0].color + " " + gradient.stops[0].offset * 100 + "%, " + gradient.stops[1].color + " " + gradient.stops[1].offset * 100 + "%)" }} aria-label="Vista previa del degradado" role="img" />
         <div>
@@ -317,15 +317,15 @@ function RectFillField({ node, assets, disabled, onChange, onOpenBackgroundImage
           <div className="mt-2 grid grid-cols-4 gap-2" role="group" aria-label="Dirección del degradado">
             {GRADIENT_PRESETS.map((preset) => {
               const selected = Math.abs(((gradient.angle - preset.angle + 540) % 360) - 180) < 0.1;
-              return <button key={preset.label} type="button" disabled={disabled} aria-pressed={selected} aria-label={"Degradado hacia " + preset.label} title={"Hacia " + preset.label} className={buttonClass + " px-0 text-base " + (selected ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "")} onClick={() => changeGradient({ ...gradient, angle: preset.angle })}>{preset.symbol}</button>;
+              return <button key={preset.label} type="button" disabled={disabled} aria-pressed={selected} aria-label={"Degradado hacia " + preset.label} title={"Hacia " + preset.label} className={buttonClass + " px-0 text-base " + (selected ? "border-[#253621]/30 bg-[#253621]/10 text-[#182618]" : "")} onClick={() => changeGradient({ ...gradient, angle: preset.angle })}>{preset.symbol}</button>;
             })}
           </div>
           <div className="mt-3"><NumberField label="Ángulo del degradado" unit="°" value={gradient.angle} disabled={disabled} onChange={(angle) => changeGradient({ ...gradient, angle: Math.max(0, Math.min(360, angle)) })} /></div>
-          <input aria-label="Barra de ángulo del degradado" disabled={disabled} className="mt-3 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="360" step="1" value={gradient.angle} onChange={(event) => changeGradient({ ...gradient, angle: Number(event.target.value) })} />
+          <input aria-label="Barra de ángulo del degradado" disabled={disabled} className="mt-3 block w-full accent-[#253621] disabled:opacity-40" type="range" min="0" max="360" step="1" value={gradient.angle} onChange={(event) => changeGradient({ ...gradient, angle: Number(event.target.value) })} />
         </div>
         {gradient.stops.map((stop, index) => <div key={index} className="min-w-0 border-t border-zinc-200 pt-4">
           <AlphaColorField label={index === 0 ? "Color inicial" : "Color final"} value={stop.color} disabled={disabled} onChange={(color) => updateStop(index as 0 | 1, { color })} />
-          <label className="mt-3 block text-xs font-medium text-zinc-700"><span className="flex items-center justify-between"><span>Posición</span><output className="font-normal tabular-nums text-zinc-500">{Math.round(stop.offset * 100)}%</output></span><input aria-label={"Posición " + (index === 0 ? "inicial" : "final") + " del degradado"} disabled={disabled} className="mt-2 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={stop.offset} onChange={(event) => updateOffset(index as 0 | 1, Number(event.target.value))} /></label>
+          <label className="mt-3 block text-xs font-medium text-zinc-700"><span className="flex items-center justify-between"><span>Posición</span><output className="font-normal tabular-nums text-zinc-500">{Math.round(stop.offset * 100)}%</output></span><input aria-label={"Posición " + (index === 0 ? "inicial" : "final") + " del degradado"} disabled={disabled} className="mt-2 block w-full accent-[#253621] disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={stop.offset} onChange={(event) => updateOffset(index as 0 | 1, Number(event.target.value))} /></label>
         </div>)}
       </div>}
     </FillLayer>
@@ -357,8 +357,8 @@ function PercentRangeField({ label, value, disabled, onChange }: { label: string
   const safeValue = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 1));
   const percentage = Math.round(safeValue * 100);
   return <div className="min-w-0">
-    <label className="flex items-center justify-between gap-3 text-xs font-medium text-zinc-700"><span>{label}</span><span className="flex shrink-0 items-center gap-1.5"><input aria-label={label + " porcentaje"} disabled={disabled} className="w-16 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-right text-xs tabular-nums outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-zinc-100" type="number" min="0" max="100" step="1" value={percentage} onChange={(event) => onChange(Math.max(0, Math.min(1, (Number(event.target.value) || 0) / 100)))} /><span className="font-normal text-zinc-500">%</span></span></label>
-    <input aria-label={"Barra de " + label.toLowerCase()} disabled={disabled} className="mt-3 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={safeValue} onChange={(event) => onChange(Number(event.target.value))} />
+    <label className="flex items-center justify-between gap-3 text-xs font-medium text-zinc-700"><span>{label}</span><span className="flex shrink-0 items-center gap-1.5"><input aria-label={label + " porcentaje"} disabled={disabled} className="w-16 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-right text-xs tabular-nums outline-none focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15 disabled:bg-zinc-100" type="number" min="0" max="100" step="1" value={percentage} onChange={(event) => onChange(Math.max(0, Math.min(1, (Number(event.target.value) || 0) / 100)))} /><span className="font-normal text-zinc-500">%</span></span></label>
+    <input aria-label={"Barra de " + label.toLowerCase()} disabled={disabled} className="mt-3 block w-full accent-[#253621] disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={safeValue} onChange={(event) => onChange(Number(event.target.value))} />
   </div>;
 }
 
@@ -366,8 +366,8 @@ function RectBorderSidesField({ value, disabled, onChange }: { value: StrokeSide
   const allSelected = hasAllStrokeSides(value);
   const labels: Record<StrokeSide, string> = { top: "Arriba", right: "Derecha", bottom: "Abajo", left: "Izquierda" };
   return <div className="mt-3">
-    <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">Lados del borde</span><button type="button" disabled={disabled} className="text-[11px] font-medium text-emerald-800 hover:underline disabled:opacity-40" onClick={() => onChange(allSelected ? [] : [...STROKE_SIDES])}>{allSelected ? "Ninguno" : "Todos"}</button></div>
-    <div className="mt-2 grid grid-cols-2 gap-1.5" role="group" aria-label="Lados del borde del rectángulo">{STROKE_SIDES.map((side) => <button key={side} type="button" disabled={disabled} aria-pressed={value.includes(side)} aria-label={`Borde ${labels[side].toLowerCase()}`} className={`rounded-md border px-2 py-2 text-[11px] font-medium transition disabled:opacity-40 ${value.includes(side) ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"}`} onClick={() => onChange(toggleStrokeSide(value, side))}>{labels[side]}</button>)}</div>
+    <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">Lados del borde</span><button type="button" disabled={disabled} className="text-[11px] font-medium text-[#253621] hover:underline disabled:opacity-40" onClick={() => onChange(allSelected ? [] : [...STROKE_SIDES])}>{allSelected ? "Ninguno" : "Todos"}</button></div>
+    <div className="mt-2 grid grid-cols-2 gap-1.5" role="group" aria-label="Lados del borde del rectángulo">{STROKE_SIDES.map((side) => <button key={side} type="button" disabled={disabled} aria-pressed={value.includes(side)} aria-label={`Borde ${labels[side].toLowerCase()}`} className={`rounded-md border px-2 py-2 text-[11px] font-medium transition disabled:opacity-40 ${value.includes(side) ? "border-[#253621]/30 bg-[#253621]/10 text-[#182618]" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"}`} onClick={() => onChange(toggleStrokeSide(value, side))}>{labels[side]}</button>)}</div>
   </div>;
 }
 
@@ -381,9 +381,9 @@ function RectCornerRadiiField({ width, height, value, disabled, onChange }: { wi
   return <div>
     <NumberField label="Valor común (px)" value={commonRadius} disabled={disabled} onChange={applyCommon} />
     <p className="mt-1.5 text-xs leading-5 text-zinc-500">Al cambiarlo, se aplica a las cuatro esquinas.</p>
-    <label className="mt-3 block text-xs font-medium text-zinc-700"><span className="flex items-center justify-between"><span>Porcentaje de radio</span><span className="font-normal tabular-nums text-zinc-500">{Math.round(commonPercentage)}%</span></span><input aria-label="Barra de valor común" disabled={disabled} className="mt-2 block w-full accent-emerald-700 disabled:opacity-40" type="range" min="0" max="100" step="1" value={commonPercentage} onChange={(event) => applyCommon(maxCommonRadius * Number(event.target.value) / 100)} /></label>
+    <label className="mt-3 block text-xs font-medium text-zinc-700"><span className="flex items-center justify-between"><span>Porcentaje de radio</span><span className="font-normal tabular-nums text-zinc-500">{Math.round(commonPercentage)}%</span></span><input aria-label="Barra de valor común" disabled={disabled} className="mt-2 block w-full accent-[#253621] disabled:opacity-40" type="range" min="0" max="100" step="1" value={commonPercentage} onChange={(event) => applyCommon(maxCommonRadius * Number(event.target.value) / 100)} /></label>
     <div className="mt-4 border-t border-zinc-200 pt-4">
-      <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-zinc-800">Por esquina</span><button type="button" disabled={disabled} className="text-xs font-medium text-emerald-800 hover:underline disabled:opacity-40" onClick={() => onChange(allCornerRadii(commonRadius))}>Igualar esquinas</button></div>
+      <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-zinc-800">Por esquina</span><button type="button" disabled={disabled} className="text-xs font-medium text-[#253621] hover:underline disabled:opacity-40" onClick={() => onChange(allCornerRadii(commonRadius))}>Igualar esquinas</button></div>
       <div className="mt-3 grid grid-cols-2 gap-3">{corners.map((corner) => <NumberField key={corner} label={labels[corner]} unit="px" value={value[corner]} disabled={disabled} onChange={(radius) => onChange({ ...value, [corner]: Math.max(0, Math.min(10_000, radius)) })} />)}</div>
     </div>
   </div>;

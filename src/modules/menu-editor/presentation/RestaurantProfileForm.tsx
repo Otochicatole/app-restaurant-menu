@@ -137,7 +137,7 @@ export function RestaurantProfileForm({
         <label className="block text-sm font-medium text-zinc-700">
           Nombre del menú
           <input
-            className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15"
             value={data.name}
             onChange={(event) => updateField("name", event.target.value)}
             required
@@ -148,7 +148,7 @@ export function RestaurantProfileForm({
         <label className="block text-sm font-medium text-zinc-700">
           Descripción pública
           <textarea
-            className="mt-1 min-h-24 w-full rounded-lg border border-zinc-200 px-3 py-2 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            className="mt-1 min-h-24 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15"
             value={data.publicDescription}
             onChange={(event) => updateField("publicDescription", event.target.value)}
             maxLength={500}
@@ -159,7 +159,7 @@ export function RestaurantProfileForm({
           <label className="block text-sm font-medium text-zinc-700">
             Slug público
             <input
-              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 font-mono text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 font-mono text-sm text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15"
               value={data.slug}
               onChange={(event) => updateField("slug", event.target.value.toLowerCase())}
               required
@@ -175,7 +175,7 @@ export function RestaurantProfileForm({
             Correo de acceso
             <input
               type="email"
-              className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15"
               value={data.email}
               onChange={(event) => updateField("email", event.target.value)}
               required
@@ -194,7 +194,7 @@ export function RestaurantProfileForm({
             </p>
           )}
           <button
-            className="rounded-lg bg-emerald-950 px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+            className={adminPrimaryButtonClass}
             type="submit"
             disabled={saveState === "saving"}
           >
@@ -240,7 +240,7 @@ export function RestaurantProfileForm({
               if (confirmError) setConfirmError(null);
             }}
             disabled={saveState === "saving"}
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-normal text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:opacity-50"
+            className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm font-normal text-zinc-900 outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15 disabled:opacity-50"
             placeholder="Confirmá tu contraseña"
             onKeyDown={(event) => {
               if (event.key === "Enter") {

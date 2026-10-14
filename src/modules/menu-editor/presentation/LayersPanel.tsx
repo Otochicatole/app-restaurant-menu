@@ -149,8 +149,8 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
           <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] text-zinc-500">{document.nodes.length}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-zinc-200 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={selectedGroupLocked} onClick={onCreateGroup}><FolderPlus size={14} aria-hidden="true" />Nuevo grupo</button>
-          <button type="button" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-zinc-200 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={selectedGroupLocked || (!selectedIds.length && !selectedGroupId)} onClick={onGroupSelection}><Layers2 size={14} aria-hidden="true" />Agrupar</button>
+          <button type="button" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={selectedGroupLocked} onClick={onCreateGroup}><FolderPlus size={14} aria-hidden="true" />Nuevo grupo</button>
+          <button type="button" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40" disabled={selectedGroupLocked || (!selectedIds.length && !selectedGroupId)} onClick={onGroupSelection}><Layers2 size={14} aria-hidden="true" />Agrupar</button>
         </div>
       </header>
 
@@ -186,11 +186,11 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
               </div>
             </SortableContext>
             <RootDropZone active={Boolean(activeRef)} />
-            <DragOverlay dropAnimation={{ duration: 160, easing: "ease-out" }}>{activeRef ? <div className="flex h-9 w-56 items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-medium text-emerald-900 shadow-xl"><GripVertical size={14} /><span className="truncate">{activeLabel}</span></div> : null}</DragOverlay>
+            <DragOverlay dropAnimation={{ duration: 160, easing: "ease-out" }}>{activeRef ? <div className="flex h-9 w-56 items-center gap-2 rounded-lg border border-[#253621]/20 bg-white px-3 text-xs font-medium text-[#182618] shadow-xl"><GripVertical size={14} /><span className="truncate">{activeLabel}</span></div> : null}</DragOverlay>
           </DndContext>
         )}
       </div>
-      {selectedGroupId && <footer className="shrink-0 border-t border-zinc-100 p-2"><button type="button" disabled={selectedGroupLocked} className="w-full rounded-md px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 disabled:opacity-40" onClick={() => onUngroup(selectedGroupId)}>Desagrupar y conservar capas</button></footer>}
+      {selectedGroupId && <footer className="shrink-0 border-t border-zinc-100 p-2"><button type="button" disabled={selectedGroupLocked} className="w-full rounded-lg px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 disabled:opacity-40" onClick={() => onUngroup(selectedGroupId)}>Desagrupar y conservar capas</button></footer>}
     </aside>
   );
 }
@@ -229,11 +229,11 @@ function SortableLayerRow({ row, node, group, selected, collapsed, editing, name
     className={`relative ${isDragging ? "z-10 opacity-30" : ""}`}
   >
     {row.depth > 0 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 opacity-70" style={{ width: indent, backgroundImage: "repeating-linear-gradient(to right, transparent 0, transparent 12px, #e4e4e7 13px, transparent 14px)" }} />}
-    <div className={`group/row flex min-w-0 items-center rounded-md border transition-colors ${selected ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-transparent text-zinc-700 hover:border-zinc-100 hover:bg-zinc-50"} ${!row.effectiveVisible ? "opacity-55" : ""}`}>
-      <button type="button" disabled={row.effectiveLocked} className="flex h-8 w-6 shrink-0 touch-none cursor-grab items-center justify-center text-zinc-400 hover:text-emerald-700 active:cursor-grabbing disabled:cursor-default disabled:opacity-40" aria-label={`Reordenar ${group ? "grupo" : "capa"} ${label}`} {...attributes} {...listeners}><GripVertical size={13} /></button>
+    <div className={`group/row flex min-w-0 items-center rounded-lg border transition-colors ${selected ? "border-[#253621]/20 bg-[#253621]/8 text-[#182618] font-medium" : "border-transparent text-zinc-700 hover:border-zinc-100 hover:bg-zinc-50"} ${!row.effectiveVisible ? "opacity-55" : ""}`}>
+      <button type="button" disabled={row.effectiveLocked} className="flex h-8 w-6 shrink-0 touch-none cursor-grab items-center justify-center text-zinc-400 hover:text-[#253621] active:cursor-grabbing disabled:cursor-default disabled:opacity-40" aria-label={`Reordenar ${group ? "grupo" : "capa"} ${label}`} {...attributes} {...listeners}><GripVertical size={13} /></button>
       {group ? <button type="button" className="flex h-8 w-6 shrink-0 items-center justify-center text-zinc-500" aria-label={collapsed ? `Expandir grupo ${label}` : `Contraer grupo ${label}`} onClick={onToggleCollapsed}>{collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button> : <span className="w-6 shrink-0" aria-hidden="true" />}
-      <div ref={setInsideRef} className={`min-w-0 flex-1 rounded ${isInsideOver ? "bg-emerald-100 ring-1 ring-emerald-400" : ""}`}>
-        {editing && group ? <input autoFocus aria-label={`Nombre del grupo ${group.name}`} className="h-7 w-full min-w-0 rounded border border-emerald-300 bg-white px-1.5 text-xs outline-none ring-2 ring-emerald-100" value={nameDraft} maxLength={100} onFocus={(event) => event.currentTarget.select()} onChange={(event) => onNameDraftChange(event.target.value)} onBlur={() => onFinishRename(true)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); onFinishRename(false); } }} /> : <button type="button" className="flex h-8 w-full min-w-0 items-center gap-1.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500" aria-pressed={selected} title={group ? "Doble clic para renombrar" : label} onClick={(event) => onSelect(event.shiftKey)} onDoubleClick={group ? onBeginRename : undefined}>{group && <Folder size={14} className="shrink-0 text-amber-600" aria-hidden="true" />}<span className="truncate">{label}</span></button>}
+      <div ref={setInsideRef} className={`min-w-0 flex-1 rounded ${isInsideOver ? "bg-[#253621]/15 ring-1 ring-[#253621]/40" : ""}`}>
+        {editing && group ? <input autoFocus aria-label={`Nombre del grupo ${group.name}`} className="h-7 w-full min-w-0 rounded border border-[#253621]/40 bg-white px-1.5 text-xs outline-none ring-2 ring-[#253621]/15" value={nameDraft} maxLength={100} onFocus={(event) => event.currentTarget.select()} onChange={(event) => onNameDraftChange(event.target.value)} onBlur={() => onFinishRename(true)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); onFinishRename(false); } }} /> : <button type="button" className="flex h-8 w-full min-w-0 items-center gap-1.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#253621]" aria-pressed={selected} title={group ? "Doble clic para renombrar" : label} onClick={(event) => onSelect(event.shiftKey)} onDoubleClick={group ? onBeginRename : undefined}>{group && <Folder size={14} className="shrink-0 text-amber-600" aria-hidden="true" />}<span className="truncate">{label}</span></button>}
       </div>
       <button type="button" className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${row.inheritedHidden && ownVisible ? "text-amber-600" : ""}`} aria-label={`${ownVisible ? "Ocultar" : "Mostrar"} ${group ? "grupo" : "capa"} ${label}`} aria-pressed={ownVisible} title={row.inheritedHidden && ownVisible ? "Oculto por un grupo superior" : ownVisible ? "Ocultar" : "Mostrar"} onClick={onToggleVisible}>{ownVisible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
       <button type="button" className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${row.inheritedLocked && !ownLocked ? "text-amber-600" : ""}`} aria-label={`${ownLocked ? "Desbloquear" : "Bloquear"} ${group ? "grupo" : "capa"} ${label}`} aria-pressed={ownLocked} title={row.inheritedLocked && !ownLocked ? "Bloqueado por un grupo superior" : ownLocked ? "Desbloquear" : "Bloquear"} onClick={onToggleLocked}>{ownLocked ? <LockKeyhole size={14} /> : <Unlock size={14} />}</button>
@@ -244,7 +244,7 @@ function SortableLayerRow({ row, node, group, selected, collapsed, editing, name
 function RootDropZone({ active }: { active: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: "root-drop", disabled: !active });
   if (!active) return null;
-  return <div ref={setNodeRef} className={`mt-2 rounded-md border border-dashed px-3 py-2 text-center text-[10px] ${isOver ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-zinc-200 text-zinc-400"}`}>Soltar en la raíz</div>;
+  return <div ref={setNodeRef} className={`mt-2 rounded-lg border border-dashed px-3 py-2 text-center text-[10px] ${isOver ? "border-[#253621]/40 bg-[#253621]/10 text-[#182618]" : "border-zinc-200 text-zinc-400"}`}>Soltar en la raíz</div>;
 }
 
 function layerDndId(ref: CanvasLayerRef): string { return `layer:${ref.kind}:${ref.id}`; }

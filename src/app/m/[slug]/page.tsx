@@ -21,5 +21,19 @@ export default async function PublicMenuPage({ params }: { params: Promise<{ slu
 }
 
 function PreparationScreen() {
-  return <main className="flex min-h-[100dvh] items-center justify-center bg-[#F3EEDC] px-6 text-center text-[#3A4824]"><div><p className="text-xs font-bold uppercase tracking-[0.25em] text-[#AB5641]">Menú digital</p><h1 className="mt-4 text-4xl font-semibold">Carta en preparación</h1><p className="mt-3 text-sm text-[#3A4824]/70">Este restaurante todavía no publicó su diseño.</p></div></main>;
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[#f8f5ee] px-6 text-center text-[#1c2c1a]">
+      <div className="max-w-md rounded-3xl border border-[#1c2c1a]/10 bg-white/75 p-8 shadow-sm backdrop-blur-xs sm:p-12">
+        <span className="inline-flex rounded-full bg-[#eef3eb] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#3d5934]">
+          Menú digital
+        </span>
+        <h1 className="mt-5 text-3xl font-bold tracking-tight text-[#141d14] sm:text-4xl">
+          Carta en preparación
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-[#556353]">
+          El equipo de cocina y sala está preparando su propuesta. Pronto estará disponible en este enlace.
+        </p>
+      </div>
+    </main>
+  );
 }

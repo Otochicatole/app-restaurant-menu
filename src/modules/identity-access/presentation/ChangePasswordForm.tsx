@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { ApiEnvelope } from "../contracts";
 
 const inputClassName =
-  "block w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3.5 text-sm text-zinc-900 outline-none transition duration-200 placeholder:text-zinc-400 hover:border-zinc-300 hover:bg-white focus:border-zinc-900 focus:bg-white focus:ring-2 focus:ring-zinc-200/80 disabled:cursor-not-allowed disabled:opacity-60";
+  "block w-full rounded-xl border border-zinc-300 bg-white px-4 py-3.5 text-sm text-zinc-900 outline-none transition duration-150 placeholder:text-zinc-400 hover:border-zinc-400 focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15 disabled:cursor-not-allowed disabled:opacity-60";
 
 const labelClassName = "block text-xs font-medium text-zinc-700";
 
@@ -122,7 +122,7 @@ export function ChangePasswordForm({
         type="submit"
         disabled={loading}
         aria-busy={loading}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#182618] px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#101c10] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#253621]/30 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? (
           <>

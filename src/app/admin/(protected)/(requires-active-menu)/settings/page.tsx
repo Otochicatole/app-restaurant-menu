@@ -28,10 +28,10 @@ export default async function AdminSettingsPage() {
         <AdminCard className="overflow-hidden">
           <Link
             href="/admin/settings/fonts"
-            className="flex items-center justify-between gap-4 px-6 py-5 transition hover:bg-emerald-50/40 sm:px-7"
+            className="flex items-center justify-between gap-4 px-6 py-5 transition hover:bg-[#253621]/5 sm:px-7"
           >
             <div className="flex items-center gap-4">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#253621]/10 text-[#253621]">
                 <Type size={20} />
               </span>
               <div>
@@ -46,10 +46,10 @@ export default async function AdminSettingsPage() {
 
           <Link
             href="/admin/account/password"
-            className="flex items-center justify-between gap-4 border-t border-zinc-100 px-6 py-5 transition hover:bg-emerald-50/40 sm:px-7"
+            className="flex items-center justify-between gap-4 border-t border-zinc-100 px-6 py-5 transition hover:bg-[#253621]/5 sm:px-7"
           >
             <div className="flex items-center gap-4">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#253621]/10 text-[#253621]">
                 <KeyRound size={20} />
               </span>
               <div>

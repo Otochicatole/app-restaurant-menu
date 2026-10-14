@@ -40,11 +40,11 @@ export function LogoutButton({ compact = false, sidebar = false }: { compact?: b
           title={compact ? "Cerrar sesión" : undefined}
         >
           <span className="flex h-full items-center justify-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors group-hover:bg-zinc-100 group-hover:text-emerald-950">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors group-hover:bg-zinc-100 group-hover:text-[#182618]">
               <LogOut size={16} />
             </span>
           </span>
-          <span className={`min-w-[180px] whitespace-nowrap pr-4 transition-opacity duration-150 ease-out group-hover:text-emerald-950 ${compact ? "opacity-100 lg:pointer-events-none lg:opacity-0" : "opacity-100 delay-100"}`}>
+          <span className={`min-w-[180px] whitespace-nowrap pr-4 transition-opacity duration-150 ease-out group-hover:text-[#182618] ${compact ? "opacity-100 lg:pointer-events-none lg:opacity-0" : "opacity-100 delay-100"}`}>
             {loading ? "Cerrando..." : "Cerrar sesión"}
           </span>
         </button>
@@ -61,7 +61,7 @@ export function LogoutButton({ compact = false, sidebar = false }: { compact?: b
         type="button"
         onClick={handleLogout}
         disabled={loading}
-        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-emerald-950 disabled:opacity-60 ${compact ? "justify-center px-0" : ""}`}
+        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-[#182618] disabled:opacity-60 ${compact ? "justify-center px-0" : ""}`}
         title={compact ? "Cerrar sesión" : undefined}
       >
         <LogOut size={16} />

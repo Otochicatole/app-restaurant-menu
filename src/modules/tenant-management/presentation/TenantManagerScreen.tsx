@@ -26,7 +26,7 @@ import type { PendingTenantConfirmation, TenantRow } from "./tenant-manager.type
 type Props = { controller: TenantManagerController };
 
 const fieldClass =
-  "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100";
+  "w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#253621] focus:ring-4 focus:ring-[#253621]/15";
 
 function confirmationCopy(pending: PendingTenantConfirmation | null) {
   if (!pending) return null;
@@ -130,8 +130,8 @@ export function TenantManagerScreen({ controller }: Props) {
 
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-400">Clientes</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">Cuentas</h2>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#4a6341]">Clientes</p>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Cuentas</h2>
           <p className="mt-1.5 max-w-xl text-sm leading-6 text-zinc-500">
             Accesos, estados y menús de cada restaurante.
           </p>
@@ -316,7 +316,7 @@ function TenantRow({ tenant, controller }: { tenant: TenantRow; controller: Tena
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-[15px] font-semibold text-zinc-950">{tenant.name}</p>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isSuspended ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isSuspended ? "bg-amber-100 text-amber-900" : "bg-[#253621]/10 text-[#253621]"}`}>
               {isSuspended ? "Suspendido" : "Activo"}
             </span>
           </div>
@@ -402,7 +402,7 @@ function ManageTenantModal({ tenant, controller }: { tenant: TenantRow; controll
     >
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${isSuspended ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${isSuspended ? "bg-amber-100 text-amber-900" : "bg-[#253621]/10 text-[#253621]"}`}>
             {isSuspended ? <PauseCircle size={12} /> : <CheckCircle2 size={12} />}
             {isSuspended ? "Suspendido" : "Activo"}
           </span>

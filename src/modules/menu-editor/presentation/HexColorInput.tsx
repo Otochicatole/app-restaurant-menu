@@ -22,7 +22,7 @@ export function HexColorInput({ label, value, disabled = false, allowAlpha = tru
       aria-invalid={!valid}
       aria-describedby={!valid ? hintId : undefined}
       disabled={disabled}
-      className={`w-full rounded-md border bg-white px-2.5 py-2 font-mono text-xs outline-none transition focus:ring-2 disabled:bg-zinc-100 disabled:text-zinc-400 ${valid ? "border-zinc-300 focus:border-emerald-600 focus:ring-emerald-100" : "border-red-400 text-red-700 focus:border-red-500 focus:ring-red-100"}`}
+      className={`w-full rounded-lg border bg-white px-2.5 py-2 font-mono text-xs outline-none transition focus:ring-2 disabled:bg-zinc-100 disabled:text-zinc-400 ${valid ? "border-zinc-300 focus:border-[#253621] focus:ring-[#253621]/15" : "border-red-400 text-red-700 focus:border-red-500 focus:ring-red-100"}`}
       type="text"
       inputMode="text"
       autoCapitalize="characters"
