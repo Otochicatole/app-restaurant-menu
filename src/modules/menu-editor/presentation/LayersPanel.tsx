@@ -5,7 +5,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   pointerWithin,
   TouchSensor,
   useDroppable,
@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, FolderPlus, GripVertical, Layers2, LockKeyhole, Unlock } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, FolderPlus, Layers2, LockKeyhole, Unlock } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CanvasDocumentV1, CanvasGroup, CanvasNode } from "../contracts";
 import { layerTreeRows, type CanvasLayerIndex, type CanvasLayerMoveDestination, type CanvasLayerRef, type CanvasLayerRow } from "../domain/layer-tree";
@@ -68,14 +68,13 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
   }, [collapsed, layerIndex, selectedGroupId]);
   const rows = useMemo(() => layerTreeRows(document, displayedCollapsed, layerIndex), [document, displayedCollapsed, layerIndex]);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const collisionDetection = useMemo<CollisionDetection>(() => (args) => {
     const pointerCollisions = pointerWithin(args);
-    const inside = pointerCollisions.find((collision) => String(collision.id).startsWith("inside:"));
-    if (inside) return [inside];
+    if (pointerCollisions.length > 0) return pointerCollisions;
     return closestCenter(args);
   }, []);
 
@@ -128,9 +127,18 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
     if (event.delta.x < -36) { onMove(active, { type: "outdent" }); return; }
     const overId = String(event.over.id);
     if (overId === "root-drop") { onMove(active, { type: "root-front" }); return; }
-    if (overId.startsWith("inside:")) { onMove(active, { type: "inside", groupId: overId.slice("inside:".length) }); return; }
     const target = parseLayerDndId(overId);
     if (!target) return;
+    if (target.kind === "group" && active.id !== target.id) {
+      const overRect = event.over.rect;
+      const translated = event.active.rect.current.translated;
+      const activeCenter = translated ? translated.top + translated.height / 2 : overRect.top + overRect.height / 2;
+      const relativeRatio = (activeCenter - overRect.top) / overRect.height;
+      if (relativeRatio >= 0.25 && relativeRatio <= 0.75) {
+        onMove(active, { type: "inside", groupId: target.id });
+        return;
+      }
+    }
     const translated = event.active.rect.current.translated;
     const activeCenter = translated ? translated.top + translated.height / 2 : event.over.rect.top;
     const targetCenter = event.over.rect.top + event.over.rect.height / 2;
@@ -144,7 +152,7 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Capas</p>
-            <p className="mt-1 text-[10px] text-zinc-400">Arrastrá para ordenar o anidar</p>
+            <p className="mt-1 text-[10px] text-zinc-400">Arrastrá para reordenar o anidar</p>
           </div>
           <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] text-zinc-500">{document.nodes.length}</span>
         </div>
@@ -173,6 +181,7 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
                     selected={row.ref.kind === "group" ? selectedGroupId === row.ref.id : !selectedGroupId && selectedIdSet.has(row.ref.id)}
                     collapsed={group ? displayedCollapsed.has(group.id) : false}
                     editing={group?.id === (editingGroupId ?? renameGroupId)}
+                    activeRef={activeRef}
                     nameDraft={editingGroupId ? nameDraft : group?.name ?? ""}
                     onNameDraftChange={changeNameDraft}
                     onFinishRename={finishRename}
@@ -186,7 +195,18 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
               </div>
             </SortableContext>
             <RootDropZone active={Boolean(activeRef)} />
-            <DragOverlay dropAnimation={{ duration: 160, easing: "ease-out" }}>{activeRef ? <div className="flex h-9 w-56 items-center gap-2 rounded-lg border border-[#253621]/20 bg-white px-3 text-xs font-medium text-[#182618] shadow-xl"><GripVertical size={14} /><span className="truncate">{activeLabel}</span></div> : null}</DragOverlay>
+            <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+              {activeRef ? (
+                <div className="flex h-8 w-full min-w-0 select-none items-center gap-1.5 rounded-lg border border-[#253621]/30 bg-white px-2.5 text-xs font-medium text-[#182618] shadow-2xl ring-2 ring-[#253621]/20 cursor-grabbing">
+                  {activeRef.kind === "group" ? (
+                    <Folder size={14} className="shrink-0 text-amber-600" aria-hidden="true" />
+                  ) : (
+                    <Layers2 size={14} className="shrink-0 text-[#253621]" aria-hidden="true" />
+                  )}
+                  <span className="truncate">{activeLabel}</span>
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         )}
       </div>
@@ -195,13 +215,14 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
   );
 }
 
-function SortableLayerRow({ row, node, group, selected, collapsed, editing, nameDraft, onNameDraftChange, onFinishRename, onBeginRename, onToggleCollapsed, onSelect, onToggleVisible, onToggleLocked }: {
+function SortableLayerRow({ row, node, group, selected, collapsed, editing, activeRef, nameDraft, onNameDraftChange, onFinishRename, onBeginRename, onToggleCollapsed, onSelect, onToggleVisible, onToggleLocked }: {
   row: CanvasLayerRow;
   node?: CanvasNode;
   group?: CanvasGroup;
   selected: boolean;
   collapsed: boolean;
   editing: boolean;
+  activeRef: CanvasLayerRef | null;
   nameDraft: string;
   onNameDraftChange(value: string): void;
   onFinishRename(save: boolean): void;
@@ -215,30 +236,122 @@ function SortableLayerRow({ row, node, group, selected, collapsed, editing, name
   const label = group ? group.name : node ? getNodeLabel(node) : "Capa";
   const ownVisible = group ? group.visible : node?.visible ?? true;
   const ownLocked = group ? group.locked : node?.locked ?? false;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: layerDndId(ref), disabled: row.effectiveLocked });
-  const { setNodeRef: setInsideRef, isOver: isInsideOver } = useDroppable({ id: group ? `inside:${group.id}` : `inside-disabled:${ref.id}`, disabled: !group || row.effectiveLocked });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
+    id: layerDndId(ref),
+    disabled: row.effectiveLocked || editing,
+  });
   const indent = Math.min(72, row.depth * 14);
+  const isTargetGroup = Boolean(group && activeRef && isOver && activeRef.id !== group.id);
 
-  return <div
-    ref={setNodeRef}
-    role="treeitem"
-    aria-level={row.depth + 1}
-    aria-selected={selected}
-    aria-expanded={group ? !collapsed : undefined}
-    style={{ transform: CSS.Transform.toString(transform), transition, willChange: isDragging ? "transform" : "auto", paddingLeft: indent, contentVisibility: "auto", containIntrinsicSize: "32px" }}
-    className={`relative ${isDragging ? "z-10 opacity-30" : ""}`}
-  >
-    {row.depth > 0 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 opacity-70" style={{ width: indent, backgroundImage: "repeating-linear-gradient(to right, transparent 0, transparent 12px, #e4e4e7 13px, transparent 14px)" }} />}
-    <div className={`group/row flex min-w-0 items-center rounded-lg border transition-colors ${selected ? "border-[#253621]/20 bg-[#253621]/8 text-[#182618] font-medium" : "border-transparent text-zinc-700 hover:border-zinc-100 hover:bg-zinc-50"} ${!row.effectiveVisible ? "opacity-55" : ""}`}>
-      <button type="button" disabled={row.effectiveLocked} className="flex h-8 w-6 shrink-0 touch-none cursor-grab items-center justify-center text-zinc-400 hover:text-[#253621] active:cursor-grabbing disabled:cursor-default disabled:opacity-40" aria-label={`Reordenar ${group ? "grupo" : "capa"} ${label}`} {...attributes} {...listeners}><GripVertical size={13} /></button>
-      {group ? <button type="button" className="flex h-8 w-6 shrink-0 items-center justify-center text-zinc-500" aria-label={collapsed ? `Expandir grupo ${label}` : `Contraer grupo ${label}`} onClick={onToggleCollapsed}>{collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button> : <span className="w-6 shrink-0" aria-hidden="true" />}
-      <div ref={setInsideRef} className={`min-w-0 flex-1 rounded ${isInsideOver ? "bg-[#253621]/15 ring-1 ring-[#253621]/40" : ""}`}>
-        {editing && group ? <input autoFocus aria-label={`Nombre del grupo ${group.name}`} className="h-7 w-full min-w-0 rounded border border-[#253621]/40 bg-white px-1.5 text-xs outline-none ring-2 ring-[#253621]/15" value={nameDraft} maxLength={100} onFocus={(event) => event.currentTarget.select()} onChange={(event) => onNameDraftChange(event.target.value)} onBlur={() => onFinishRename(true)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); onFinishRename(false); } }} /> : <button type="button" className="flex h-8 w-full min-w-0 items-center gap-1.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#253621]" aria-pressed={selected} title={group ? "Doble clic para renombrar" : label} onClick={(event) => onSelect(event.shiftKey)} onDoubleClick={group ? onBeginRename : undefined}>{group && <Folder size={14} className="shrink-0 text-amber-600" aria-hidden="true" />}<span className="truncate">{label}</span></button>}
+  return (
+    <div
+      ref={setNodeRef}
+      role="treeitem"
+      aria-level={row.depth + 1}
+      aria-selected={selected}
+      aria-expanded={group ? !collapsed : undefined}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition: isDragging ? undefined : transition,
+        paddingLeft: indent,
+      }}
+      className={`relative ${isDragging ? "z-20 opacity-25" : ""}`}
+    >
+      {row.depth > 0 && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 opacity-70"
+          style={{
+            width: indent,
+            backgroundImage: "repeating-linear-gradient(to right, transparent 0, transparent 12px, #e4e4e7 13px, transparent 14px)",
+          }}
+        />
+      )}
+      <div
+        className={`group/row flex min-w-0 items-center rounded-lg border transition-colors ${
+          isTargetGroup
+            ? "border-[#253621]/40 bg-[#253621]/15 text-[#182618] ring-1 ring-[#253621]/30 font-medium"
+            : selected
+            ? "border-[#253621]/20 bg-[#253621]/8 text-[#182618] font-medium"
+            : "border-transparent text-zinc-700 hover:border-zinc-100 hover:bg-zinc-50"
+        } ${!row.effectiveVisible ? "opacity-55" : ""}`}
+      >
+        {group ? (
+          <button
+            type="button"
+            className="flex h-8 w-6 shrink-0 items-center justify-center text-zinc-400 hover:text-zinc-700"
+            aria-label={collapsed ? `Expandir grupo ${label}` : `Contraer grupo ${label}`}
+            onClick={onToggleCollapsed}
+          >
+            {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          </button>
+        ) : (
+          <span className="w-3 shrink-0" aria-hidden="true" />
+        )}
+        <div className="min-w-0 flex-1">
+          {editing && group ? (
+            <input
+              autoFocus
+              aria-label={`Nombre del grupo ${group.name}`}
+              className="h-7 w-full min-w-0 rounded border border-[#253621]/40 bg-white px-1.5 text-xs outline-none ring-2 ring-[#253621]/15"
+              value={nameDraft}
+              maxLength={100}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => onNameDraftChange(event.target.value)}
+              onBlur={() => onFinishRename(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  onFinishRename(false);
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={row.effectiveLocked}
+              className={`flex h-8 w-full min-w-0 select-none touch-none items-center gap-1.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#253621] ${
+                row.effectiveLocked ? "cursor-default disabled:opacity-50" : "cursor-grab active:cursor-grabbing"
+              }`}
+              title={group ? "Doble clic para renombrar · Mantené apretado para mover" : `${label} · Mantené apretado para mover`}
+              onClick={(event) => onSelect(event.shiftKey)}
+              onDoubleClick={group ? onBeginRename : undefined}
+              {...attributes}
+              {...listeners}
+            >
+              {group && <Folder size={14} className="shrink-0 text-amber-600" aria-hidden="true" />}
+              <span className="truncate">{label}</span>
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${
+            row.inheritedHidden && ownVisible ? "text-amber-600" : ""
+          }`}
+          aria-label={`${ownVisible ? "Ocultar" : "Mostrar"} ${group ? "grupo" : "capa"} ${label}`}
+          aria-pressed={ownVisible}
+          title={row.inheritedHidden && ownVisible ? "Oculto por un grupo superior" : ownVisible ? "Ocultar" : "Mostrar"}
+          onClick={onToggleVisible}
+        >
+          {ownVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+        <button
+          type="button"
+          className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${
+            row.inheritedLocked && !ownLocked ? "text-amber-600" : ""
+          }`}
+          aria-label={`${ownLocked ? "Desbloquear" : "Bloquear"} ${group ? "grupo" : "capa"} ${label}`}
+          aria-pressed={ownLocked}
+          title={row.inheritedLocked && !ownLocked ? "Bloqueado por un grupo superior" : ownLocked ? "Desbloquear" : "Bloquear"}
+          onClick={onToggleLocked}
+        >
+          {ownLocked ? <LockKeyhole size={14} /> : <Unlock size={14} />}
+        </button>
       </div>
-      <button type="button" className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${row.inheritedHidden && ownVisible ? "text-amber-600" : ""}`} aria-label={`${ownVisible ? "Ocultar" : "Mostrar"} ${group ? "grupo" : "capa"} ${label}`} aria-pressed={ownVisible} title={row.inheritedHidden && ownVisible ? "Oculto por un grupo superior" : ownVisible ? "Ocultar" : "Mostrar"} onClick={onToggleVisible}>{ownVisible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-      <button type="button" className={`flex h-8 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-white hover:text-zinc-800 ${row.inheritedLocked && !ownLocked ? "text-amber-600" : ""}`} aria-label={`${ownLocked ? "Desbloquear" : "Bloquear"} ${group ? "grupo" : "capa"} ${label}`} aria-pressed={ownLocked} title={row.inheritedLocked && !ownLocked ? "Bloqueado por un grupo superior" : ownLocked ? "Desbloquear" : "Bloquear"} onClick={onToggleLocked}>{ownLocked ? <LockKeyhole size={14} /> : <Unlock size={14} />}</button>
     </div>
-  </div>;
+  );
 }
 
 function RootDropZone({ active }: { active: boolean }) {
