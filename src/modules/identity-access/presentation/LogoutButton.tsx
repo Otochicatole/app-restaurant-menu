@@ -61,7 +61,7 @@ export function LogoutButton({ compact = false, sidebar = false }: { compact?: b
         type="button"
         onClick={handleLogout}
         disabled={loading}
-        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-[#182618] disabled:opacity-60 ${compact ? "justify-center px-0" : ""}`}
+        className={`flex items-center rounded-xl text-zinc-500 transition-colors disabled:opacity-60 ${compact ? "h-10 w-10 justify-center hover:bg-red-50 hover:text-red-700 active:scale-95" : "w-full gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-zinc-100 hover:text-[#182618]"}`}
         title={compact ? "Cerrar sesión" : undefined}
       >
         <LogOut size={16} />
