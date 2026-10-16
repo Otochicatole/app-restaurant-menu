@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { ExternalLink, Layers3, LayoutGrid, Menu, MonitorCog, Settings, X } from "lucide-react";
+import { Layers3, LayoutGrid, Menu, MonitorCog, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navigation = [
@@ -16,13 +16,11 @@ export function AdminShell({
   children,
   brandTitle,
   brandSubtitle,
-  menuHref,
   showMenuPickerLink,
 }: {
   children: React.ReactNode;
   brandTitle: string;
   brandSubtitle: string;
-  menuHref: string;
   showMenuPickerLink: boolean;
 }) {
   const pathname = usePathname();
@@ -162,26 +160,6 @@ export function AdminShell({
                 </Link>
               );
             })}
-
-            <Link
-              href={menuHref}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setMobileOpen(false)}
-              title={desktopNavCollapsed ? "Ver menú público" : undefined}
-              className="group grid h-12 w-72 shrink-0 grid-cols-[4rem_1fr] items-center whitespace-nowrap text-sm transition-colors hover:bg-zinc-50"
-            >
-              <span className="flex h-full items-center justify-center">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl text-[#3d5934] transition-colors group-hover:bg-[#eef3eb]">
-                  <ExternalLink size={16} />
-                </span>
-              </span>
-              <span
-                className={`min-w-[180px] whitespace-nowrap pr-4 font-medium text-zinc-600 transition-opacity duration-150 ease-out group-hover:text-zinc-950 ${labelVisibility}`}
-              >
-                Ver carta pública
-              </span>
-            </Link>
           </nav>
 
           {/* Footer with Logout */}
