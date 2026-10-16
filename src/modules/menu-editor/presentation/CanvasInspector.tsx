@@ -14,8 +14,10 @@ type InspectorProps = {
   document: CanvasDocumentV1;
   assets: MenuAssetView[];
   onCanvasSizeChange: (dimension: "width" | "height", value: number) => void;
+  onBackgroundChange: (background: string) => void;
   onOpenModalMedia: () => void;
   onOpenBackgroundImage: () => void;
+  onOpenImageMedia?: () => void;
   onChange: (patch: Partial<CanvasNode>) => void;
   onChangeSelected: (patch: Partial<CanvasNode>) => void;
   onDuplicate: () => void;
@@ -31,7 +33,7 @@ const fieldClass = "mt-1.5 min-w-0 w-full rounded-lg border border-zinc-300 bg-w
 const labelClass = "block min-w-0 text-xs font-medium text-zinc-700";
 const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-[#253621] disabled:opacity-40";
 
-export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
+export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onBackgroundChange, onOpenModalMedia, onOpenBackgroundImage, onOpenImageMedia, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
   if (group) {
     const state = groupLayerState(document, group);
     const descendants = descendantNodeIds(document, group.id);
@@ -56,7 +58,10 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
   }
 
   if (!node) {
-    return <InspectorLayout title="Lienzo" description="Seleccioná un objeto para editar sus propiedades.">
+    return <InspectorLayout title="Lienzo" description="Configurá el tamaño y el fondo de tu carta digital.">
+      <InspectorSection title="Fondo del lienzo" icon={<Paintbrush size={16} />} description="Color y transparencia del fondo de la carta." defaultOpen>
+        <AlphaColorField label="Color de fondo" value={document.background} onChange={onBackgroundChange} />
+      </InspectorSection>
       <InspectorSection title="Tamaño de la carta" icon={<Scan size={16} />} description="El área visible de tu menú público." defaultOpen>
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Ancho" value={document.canvasBounds.width} unit="px" onChange={(value) => onCanvasSizeChange("width", value)} />
@@ -92,6 +97,7 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
   const layerState = nodeLayerState(document, node);
   const disabled = layerState.effectiveLocked;
   const modalAsset = node.type === "text" && node.modalAssetId ? assets.find((asset) => asset.id === node.modalAssetId) : undefined;
+  const imageNodeAsset = node.type === "image" ? assets.find((asset) => asset.id === node.assetId) : undefined;
   return <InspectorLayout title={typeLabel}
     header={<>
       <div className="mt-3 flex items-end gap-2">
@@ -138,6 +144,18 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
     </>}
 
     {node.type === "image" && <InspectorSection title="Imagen" icon={<Paintbrush size={16} />} defaultOpen>
+      {imageNodeAsset && (
+        <div className="mb-3 flex min-w-0 items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
+          <span className="h-10 w-10 shrink-0 rounded-lg border border-zinc-200 bg-zinc-100 bg-cover bg-center" style={{ backgroundImage: "url(" + imageNodeAsset.url + ")" }} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-zinc-800">{imageNodeAsset.name}</p>
+            <p className="text-[10px] text-zinc-500">Imagen actual</p>
+          </div>
+        </div>
+      )}
+      {onOpenImageMedia && (
+        <button type="button" disabled={disabled} className={buttonClass + " mb-3 w-full border-[#253621]/20 text-[#253621] hover:bg-[#253621]/5"} onClick={onOpenImageMedia}>Cambiar imagen</button>
+      )}
       <label className={labelClass}>Ajuste<select disabled={disabled} className={fieldClass} value={node.fit} onChange={(event) => onChange({ fit: event.target.value as typeof node.fit })}><option value="contain">Contener — imagen completa</option><option value="cover">Cubrir — llenar el espacio</option><option value="stretch">Estirar — adaptar al tamaño</option></select></label>
       <div className="mt-3"><NumberField label="Redondeado" unit="px" value={node.cornerRadius} disabled={disabled} onChange={(value) => onChange({ cornerRadius: Math.max(0, value) })} /></div>
     </InspectorSection>}

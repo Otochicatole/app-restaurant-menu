@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Arrow, Ellipse, Image as KonvaImage, Layer, Line, Rect, RegularPolygon, Shape, Star, Stage, Text, Transformer } from "react-konva";
 import type Konva from "konva";
+import { Hand, MousePointer2 } from "lucide-react";
 import type { CanvasDocumentV1, CanvasNode } from "../contracts";
 import { cameraForViewport, screenRectToWorld, snapFrameToCanvasGrid, snapValueToCanvasGrid, visibleCanvasGridLines, zoomViewportAt } from "../domain/canvas-geometry";
 import { canvasGroupBounds, type CanvasLayerIndex } from "../domain/layer-tree";
@@ -10,6 +11,7 @@ import { RectangleVisual } from "../ui/RectangleVisual";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 import { useSharedImage } from "../ui/use-shared-image";
 import type { CanvasDropItem } from "./EditorToolsPanel";
+import { computeSmartGuides, type RectBounds, type SmartGuide } from "../domain/canvas-smart-guides";
 
 type Viewport = CanvasDocumentV1["initialViewport"];
 type EditorCanvasAsset = { url: string; kind: "IMAGE" | "VIDEO" | "FONT"; fontFamily: string | null };
@@ -21,9 +23,29 @@ type DragSession = {
   targets: Map<string, Konva.Node>;
   delta: { x: number; y: number };
   includeLocked: boolean;
+  movingBounds: RectBounds;
 };
 
-export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selectedGroupId, deepSelectedId, showGrid, onSelect, onSelectMany, onDropItem, onChange, onChangeMany, viewport, onViewportChange }: {
+export type CanvasToolMode = "select" | "hand";
+
+export function KonvaCanvas({
+  document,
+  layerIndex,
+  assets,
+  selectedIds,
+  selectedGroupId,
+  deepSelectedId,
+  showGrid,
+  onSelect,
+  onSelectMany,
+  onDropItem,
+  onChange,
+  onChangeMany,
+  viewport,
+  onViewportChange,
+  toolMode: propToolMode,
+  onToolModeChange,
+}: {
   document: CanvasDocumentV1;
   layerIndex: CanvasLayerIndex;
   assets: Record<string, EditorCanvasAsset>;
@@ -38,6 +60,8 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
   onChangeMany: (ids: string[], delta: { x: number; y: number }, includeLocked?: boolean) => void;
   viewport: Viewport;
   onViewportChange: (viewport: Viewport) => void;
+  toolMode?: CanvasToolMode;
+  onToolModeChange?: (mode: CanvasToolMode) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -45,6 +69,14 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
   const groupOutlineRef = useRef<Konva.Rect>(null);
   const [size, setSize] = useState({ width: 900, height: 640 });
   const [spacePressed, setSpacePressed] = useState(false);
+  const [internalToolMode, setInternalToolMode] = useState<CanvasToolMode>("select");
+  const toolMode = propToolMode ?? internalToolMode;
+  const setToolMode = useCallback((mode: CanvasToolMode) => {
+    setInternalToolMode(mode);
+    onToolModeChange?.(mode);
+  }, [onToolModeChange]);
+  const isPanMode = toolMode === "hand" || spacePressed;
+
   const [panStart, setPanStart] = useState<{ x: number; y: number; viewport: Viewport } | null>(null);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -56,6 +88,7 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
   const viewportFrameRef = useRef<number | null>(null);
   const pendingViewportRef = useRef<{ externalKey: string; value: Viewport } | null>(null);
   const dragSession = useRef<DragSession | null>(null);
+  const activeGuidesRef = useRef<SmartGuide[]>([]);
   const bounds = document.canvasBounds;
   const selectedGroup = selectedGroupId ? layerIndex.groupsById.get(selectedGroupId) ?? null : null;
   const selectedGroupIds = selectedGroup ? layerIndex.descendantNodeIds(selectedGroup.id) : EMPTY_IDS;
@@ -118,13 +151,35 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
   }, [selectedIds, selectedGroupId, document, layerIndex]);
 
   useEffect(() => {
-    const isFormTarget = (event: KeyboardEvent) => Boolean((event.target as HTMLElement | null)?.closest("input, textarea, select"));
-    const down = (event: KeyboardEvent) => { if (isFormTarget(event)) return; if (event.code === "Space") { event.preventDefault(); setSpacePressed(true); } };
-    const up = (event: KeyboardEvent) => { if (isFormTarget(event)) return; if (event.code === "Space") { event.preventDefault(); setSpacePressed(false); setPanStart(null); onViewportChange(viewportRef.current); } };
+    const isFormTarget = (event: KeyboardEvent) => Boolean((event.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable='true']"));
+    const down = (event: KeyboardEvent) => {
+      if (isFormTarget(event)) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        setSpacePressed(true);
+        return;
+      }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.code === "KeyH") {
+          setToolMode("hand");
+        } else if (event.code === "KeyV" || event.code === "Escape") {
+          setToolMode("select");
+        }
+      }
+    };
+    const up = (event: KeyboardEvent) => {
+      if (isFormTarget(event)) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        setSpacePressed(false);
+        setPanStart(null);
+        onViewportChange(viewportRef.current);
+      }
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [onViewportChange]);
+  }, [onViewportChange, setToolMode]);
 
   const zoomAt = (factor: number, pointer: { x: number; y: number }) => {
     updateViewport(zoomViewportAt(viewportRef.current, bounds, sceneSize, factor, { x: pointer.x - scenePadding, y: pointer.y - scenePadding }));
@@ -133,7 +188,7 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
   const pointer = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => event.target.getStage()?.getPointerPosition();
   const beginPan = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const button = "button" in event.evt ? event.evt.button : 0;
-    if (!spacePressed && button !== 1) return;
+    if (!isPanMode && button !== 1) return;
     const position = pointer(event);
     if (!position) return;
     event.evt.preventDefault();
@@ -147,7 +202,7 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
     updateViewport(cameraForViewport({ ...panStart.viewport, x: panStart.viewport.x - (position.x - panStart.x) / scale, y: panStart.viewport.y - (position.y - panStart.y) / scale }, bounds, sceneSize).camera);
   };
   const beginSelection = (event: Konva.KonvaEventObject<MouseEvent>) => {
-    if (spacePressed || event.evt.button !== 0 || event.target !== event.target.getStage()) return;
+    if (isPanMode || event.evt.button !== 0 || event.target !== event.target.getStage()) return;
     const position = pointer(event);
     if (!position) return;
     setSelectionStart(position);
@@ -206,7 +261,13 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
       const target = stage?.findOne(`#node-${selectedId}`);
       return target ? [[selectedId, target] as const] : [];
     }));
-    dragSession.current = { activeId: id, ids, starts, targets, delta: { x: 0, y: 0 }, includeLocked };
+    const movingNodes = ids.map((selectedId) => layerIndex.nodesById.get(selectedId)).filter(Boolean) as CanvasNode[];
+    const minX = Math.min(...movingNodes.map((n) => n.x));
+    const minY = Math.min(...movingNodes.map((n) => n.y));
+    const maxX = Math.max(...movingNodes.map((n) => n.x + n.width));
+    const maxY = Math.max(...movingNodes.map((n) => n.y + n.height));
+    const movingBounds = { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+    dragSession.current = { activeId: id, ids, starts, targets, delta: { x: 0, y: 0 }, includeLocked, movingBounds };
     event.target.position(starts[id]);
   }, [deepSelectedId, layerIndex, selectedGroupId, selectedGroupIds, selectedIds]);
 
@@ -217,11 +278,45 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
     const start = session.starts[id];
     if (!start) return;
     const rawDelta = { x: event.target.x() - start.x, y: event.target.y() - start.y };
-    const delta = showGrid ? {
-      x: snapValueToCanvasGrid(start.x + rawDelta.x, bounds.x) - start.x,
-      y: snapValueToCanvasGrid(start.y + rawDelta.y, bounds.y) - start.y,
-    } : rawDelta;
+
+    const movingIdsSet = new Set(session.ids);
+    const otherNodes: RectBounds[] = [];
+    document.nodes.forEach((n) => {
+      if (!movingIdsSet.has(n.id)) {
+        const state = layerIndex.nodeStates.get(n.id);
+        if (state?.effectiveVisible !== false) {
+          otherNodes.push({ x: n.x, y: n.y, width: n.width, height: n.height });
+        }
+      }
+    });
+
+    const { snappedDelta, guides } = computeSmartGuides({
+      movingBounds: session.movingBounds,
+      rawDelta,
+      otherNodes,
+      canvasBounds: bounds,
+      scale,
+    });
+
+    const hasVGuide = guides.some((g) => g.orientation === "vertical");
+    const hasHGuide = guides.some((g) => g.orientation === "horizontal");
+
+    const deltaX = hasVGuide
+      ? snappedDelta.x
+      : showGrid
+      ? snapValueToCanvasGrid(start.x + rawDelta.x, bounds.x) - start.x
+      : rawDelta.x;
+
+    const deltaY = hasHGuide
+      ? snappedDelta.y
+      : showGrid
+      ? snapValueToCanvasGrid(start.y + rawDelta.y, bounds.y) - start.y
+      : rawDelta.y;
+
+    const delta = { x: deltaX, y: deltaY };
     session.delta = delta;
+    activeGuidesRef.current = guides;
+
     session.ids.forEach((selectedId) => {
       const node = session.targets.get(selectedId);
       const origin = session.starts[selectedId];
@@ -232,12 +327,16 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
     if (session.includeLocked && selectedBounds) groupOutlineRef.current?.position({ x: selectedBounds.x + delta.x, y: selectedBounds.y + delta.y });
     if (!session.includeLocked) transformerRef.current?.forceUpdate();
     stageRef.current?.batchDraw();
-  }, [bounds.x, bounds.y, selectedBounds, showGrid]);
+  }, [bounds, document.nodes, layerIndex, scale, selectedBounds, showGrid]);
 
   const finishNodeDrag = useCallback((id: string, event: Konva.KonvaEventObject<DragEvent>) => {
     event.cancelBubble = true;
+    activeGuidesRef.current = [];
     const session = dragSession.current;
-    if (!session || session.activeId !== id) return;
+    if (!session || session.activeId !== id) {
+      stageRef.current?.batchDraw();
+      return;
+    }
     const { ids, delta, starts, includeLocked } = session;
     if (ids.length > 1 || includeLocked) onChangeMany(ids, delta, includeLocked);
     else {
@@ -246,16 +345,31 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
     }
     if (!includeLocked) transformerRef.current?.forceUpdate();
     dragSession.current = null;
+    stageRef.current?.batchDraw();
   }, [onChange, onChangeMany]);
 
-  return <div ref={containerRef} className={`relative h-full w-full overflow-hidden ${spacePressed ? panStart ? "cursor-grabbing" : "cursor-grab" : "cursor-default"}`} style={{ backgroundColor: document.background, cursor: spacePressed ? panStart ? "grabbing" : "grab" : "default" }} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  const cursorStyle = isPanMode ? (panStart ? "grabbing" : "grab") : "default";
+
+  return <div
+    ref={containerRef}
+    className={`relative h-full w-full overflow-hidden select-none ${isPanMode ? (panStart ? "cursor-grabbing" : "cursor-grab") : "cursor-default"}`}
+    style={{ backgroundColor: document.background, cursor: cursorStyle }}
+    onDragOver={(event) => event.preventDefault()}
+    onDrop={handleDrop}
+    onContextMenu={(event) => event.preventDefault()}
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        onSelect(null, false, false);
+      }
+    }}
+  >
     <Stage
       ref={stageRef}
       width={size.width}
       height={size.height}
       draggable={false}
       onMouseDown={(event) => {
-        if (spacePressed) {
+        if (isPanMode) {
           beginPan(event);
           return;
         }
@@ -264,10 +378,27 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
           beginSelection(event);
         }
       }}
+      onClick={(event) => {
+        if (isPanMode) return;
+        if (event.target === event.target.getStage()) {
+          onSelect(null, false, false);
+        }
+      }}
+      onTap={(event) => {
+        if (isPanMode) return;
+        if (event.target === event.target.getStage()) {
+          onSelect(null, false, false);
+        }
+      }}
       onMouseMove={(event) => { movePan(event); moveSelection(event); }}
       onMouseUp={() => { if (panStart) onViewportChange(viewportRef.current); setPanStart(null); finishSelection(); }}
       onMouseLeave={() => { if (panStart) onViewportChange(viewportRef.current); setPanStart(null); }}
-      onTouchStart={(event) => { if (event.target === event.target.getStage()) beginPan(event); }}
+      onTouchStart={(event) => {
+        if (isPanMode || event.target === event.target.getStage()) {
+          if (!isPanMode) onSelect(null, false, false);
+          beginPan(event);
+        }
+      }}
       onTouchMove={movePan}
       onTouchEnd={() => { if (panStart) onViewportChange(viewportRef.current); setPanStart(null); }}
       onWheel={(event) => {
@@ -279,17 +410,109 @@ export function KonvaCanvas({ document, layerIndex, assets, selectedIds, selecte
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={document.background} listening={false} />
         <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} stroke="#10b981" strokeWidth={2 / scale} dash={[10 / scale, 8 / scale]} listening={false} />
         {showGrid && <GridOverlay bounds={bounds} viewport={camera} scale={scale} />}
-        <CanvasNodes document={document} assets={assets} layerIndex={layerIndex} selectedIds={selectedIds} selectedGroupId={selectedGroupId} deepSelectedId={deepSelectedId} showGrid={showGrid} bounds={bounds} spacePressed={spacePressed} onSelect={onSelect} onChange={onChange} onDragStart={beginNodeDrag} onDragMove={moveNodeDrag} onDragEnd={finishNodeDrag} />
+        <CanvasNodes
+          document={document}
+          assets={assets}
+          layerIndex={layerIndex}
+          selectedIds={selectedIds}
+          selectedGroupId={selectedGroupId}
+          deepSelectedId={deepSelectedId}
+          showGrid={showGrid}
+          bounds={bounds}
+          isPanMode={isPanMode}
+          onSelect={onSelect}
+          onChange={onChange}
+          onDragStart={beginNodeDrag}
+          onDragMove={moveNodeDrag}
+          onDragEnd={finishNodeDrag}
+        />
         {selectedBounds && selectedGroupState?.effectiveVisible && <Rect ref={groupOutlineRef} id="selected-group-outline" x={selectedBounds.x} y={selectedBounds.y} width={selectedBounds.width} height={selectedBounds.height} stroke="#059669" strokeWidth={2 / scale} dash={[8 / scale, 5 / scale]} listening={false} />}
-        <Transformer id="selection-transformer" ref={transformerRef} rotateEnabled={!selectedGroupId} flipEnabled={false} boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox} />
+        <Transformer
+          id="selection-transformer"
+          ref={transformerRef}
+          rotateEnabled={!selectedGroupId && !isPanMode}
+          enabledAnchors={isPanMode ? [] : undefined}
+          listening={!isPanMode}
+          flipEnabled={false}
+          boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox}
+        />
+        <SmartGuidesOverlay guidesRef={activeGuidesRef} scale={scale} />
       </Layer>
       {selectionBox && <Layer listening={false}><Rect x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} fill="rgba(16,185,129,0.16)" stroke="#10b981" dash={[6, 4]} strokeWidth={1} /></Layer>}
     </Stage>
+
+    {/* Figma-style Floating Toolbar Dock (Light Mode) */}
+    <div
+      role="toolbar"
+      aria-label="Herramientas del lienzo"
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-2xl bg-white/95 p-1.5 shadow-xl shadow-zinc-950/10 backdrop-blur-md border border-zinc-200"
+    >
+      <button
+        type="button"
+        title="Seleccionar (V)"
+        aria-label="Herramienta Seleccionar (V)"
+        aria-pressed={toolMode === "select"}
+        onClick={() => setToolMode("select")}
+        className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+          toolMode === "select"
+            ? "bg-[#0d99ff] text-white shadow-sm"
+            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+        }`}
+      >
+        <MousePointer2 className="h-4 w-4" strokeWidth={2.2} />
+      </button>
+
+      <button
+        type="button"
+        title="Mover lienzo / Mano (H)"
+        aria-label="Herramienta Mano para mover lienzo (H)"
+        aria-pressed={toolMode === "hand"}
+        onClick={() => setToolMode("hand")}
+        className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+          toolMode === "hand"
+            ? "bg-[#0d99ff] text-white shadow-sm"
+            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+        }`}
+      >
+        <Hand className="h-4 w-4" strokeWidth={2.2} />
+      </button>
+    </div>
+
     <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-white/90 px-2 py-1 text-xs text-zinc-600 shadow">{Math.round(scale * 100)}%</div>
   </div>;
 }
 
-const CanvasNodes = memo(function CanvasNodes({ document, assets, layerIndex, selectedIds, selectedGroupId, deepSelectedId, showGrid, bounds, spacePressed, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { document: CanvasDocumentV1; assets: Record<string, EditorCanvasAsset>; layerIndex: CanvasLayerIndex; selectedIds: string[]; selectedGroupId: string | null; deepSelectedId: string | null; showGrid: boolean; bounds: CanvasDocumentV1["canvasBounds"]; spacePressed: boolean; onSelect: (id: string | null, additive: boolean, deep?: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
+const CanvasNodes = memo(function CanvasNodes({
+  document,
+  assets,
+  layerIndex,
+  selectedIds,
+  selectedGroupId,
+  deepSelectedId,
+  showGrid,
+  bounds,
+  isPanMode,
+  onSelect,
+  onChange,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  document: CanvasDocumentV1;
+  assets: Record<string, EditorCanvasAsset>;
+  layerIndex: CanvasLayerIndex;
+  selectedIds: string[];
+  selectedGroupId: string | null;
+  deepSelectedId: string | null;
+  showGrid: boolean;
+  bounds: CanvasDocumentV1["canvasBounds"];
+  isPanMode: boolean;
+  onSelect: (id: string | null, additive: boolean, deep?: boolean) => void;
+  onChange: (id: string, patch: Partial<CanvasNode>) => void;
+  onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+}) {
   return <>{document.nodes.flatMap((node) => {
     const state = layerIndex.nodeStates.get(node.id);
     if (!state?.effectiveVisible) return [];
@@ -297,8 +520,26 @@ const CanvasNodes = memo(function CanvasNodes({ document, assets, layerIndex, se
     const outerGroupState = outerGroupId ? layerIndex.groupStates.get(outerGroupId) : null;
     const deepSelected = !selectedGroupId && deepSelectedId === node.id;
     const canUseOuterGroup = Boolean(outerGroupId && !outerGroupState?.effectiveLocked);
-    const interactive = deepSelected ? !state.effectiveLocked : canUseOuterGroup || !state.effectiveLocked;
-    return [<CanvasNodeView key={node.id} node={node} selectedIds={selectedIds} showGrid={showGrid} gridBounds={bounds} spacePressed={spacePressed} interactive={interactive} draggable={interactive && !spacePressed} selectOuterGroup={Boolean(outerGroupId && !selectedGroupId && deepSelectedId !== node.id)} imageAsset={node.type === "image" ? assets[node.assetId] : undefined} backgroundAsset={node.type === "shape" && node.shape === "rect" && node.backgroundImage ? assets[node.backgroundImage.assetId] : undefined} fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined} onSelect={onSelect} onChange={onChange} onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd} />];
+    const interactive = !isPanMode && (deepSelected ? !state.effectiveLocked : canUseOuterGroup || !state.effectiveLocked);
+    return [<CanvasNodeView
+      key={node.id}
+      node={node}
+      selectedIds={selectedIds}
+      showGrid={showGrid}
+      gridBounds={bounds}
+      isPanMode={isPanMode}
+      interactive={interactive}
+      draggable={interactive}
+      selectOuterGroup={Boolean(outerGroupId && !selectedGroupId && deepSelectedId !== node.id)}
+      imageAsset={node.type === "image" ? assets[node.assetId] : undefined}
+      backgroundAsset={node.type === "shape" && node.shape === "rect" && node.backgroundImage ? assets[node.backgroundImage.assetId] : undefined}
+      fontAsset={node.type === "text" && node.fontAssetId ? assets[node.fontAssetId] : undefined}
+      onSelect={onSelect}
+      onChange={onChange}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+    />];
   })}</>;
 }, (previous, next) => previous.document === next.document
   && previous.assets === next.assets
@@ -308,11 +549,98 @@ const CanvasNodes = memo(function CanvasNodes({ document, assets, layerIndex, se
   && previous.deepSelectedId === next.deepSelectedId
   && previous.showGrid === next.showGrid
   && previous.bounds === next.bounds
-  && previous.spacePressed === next.spacePressed);
+  && previous.isPanMode === next.isPanMode);
 
-const CanvasNodeView = memo(function CanvasNodeView({ node, selectedIds, showGrid, gridBounds, spacePressed, interactive, draggable, selectOuterGroup, imageAsset, backgroundAsset, fontAsset, onSelect, onChange, onDragStart, onDragMove, onDragEnd }: { node: CanvasNode; selectedIds: string[]; showGrid: boolean; gridBounds: CanvasDocumentV1["canvasBounds"]; spacePressed: boolean; interactive: boolean; draggable: boolean; selectOuterGroup: boolean; imageAsset?: { url: string }; backgroundAsset?: { url: string; width?: number | null; height?: number | null }; fontAsset?: { fontFamily: string | null }; onSelect: (id: string | null, additive: boolean, deep?: boolean) => void; onChange: (id: string, patch: Partial<CanvasNode>) => void; onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void; onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void }) {
-  const nodeX = finiteOr(node.x, 0); const nodeY = finiteOr(node.y, 0); const nodeWidth = Math.max(4, finiteOr(node.width, 4)); const nodeHeight = Math.max(4, finiteOr(node.height, 4)); const nodeRotation = finiteOr(node.rotation, 0); const nodeOpacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
-  const common = { id: `node-${node.id}`, x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight, rotation: nodeRotation, opacity: nodeOpacity, listening: interactive, draggable, onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; if (selectOuterGroup || event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey, false); }, onDblClick: (event: Konva.KonvaEventObject<MouseEvent>) => { if (spacePressed) return; event.cancelBubble = true; onSelect(node.id, false, true); }, onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; if (selectOuterGroup || !selectedIds.includes(node.id)) onSelect(node.id, false, false); }, onDblTap: (event: Konva.KonvaEventObject<TouchEvent>) => { event.cancelBubble = true; onSelect(node.id, false, true); }, onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event), onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event), onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { event.cancelBubble = true; const target = event.target; const scaleX = finiteOr(target.scaleX(), 1); const scaleY = finiteOr(target.scaleY(), 1); target.scaleX(1); target.scaleY(1); const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) }; const snappedFrame = showGrid ? snapFrameToCanvasGrid(frame, gridBounds) : frame; const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) }; if (node.type === "text") { const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01; onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch); } else onChange(node.id, patch); } };
+const CanvasNodeView = memo(function CanvasNodeView({
+  node,
+  selectedIds,
+  showGrid,
+  gridBounds,
+  isPanMode,
+  interactive,
+  draggable,
+  selectOuterGroup,
+  imageAsset,
+  backgroundAsset,
+  fontAsset,
+  onSelect,
+  onChange,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  node: CanvasNode;
+  selectedIds: string[];
+  showGrid: boolean;
+  gridBounds: CanvasDocumentV1["canvasBounds"];
+  isPanMode: boolean;
+  interactive: boolean;
+  draggable: boolean;
+  selectOuterGroup: boolean;
+  imageAsset?: { url: string };
+  backgroundAsset?: { url: string; width?: number | null; height?: number | null };
+  fontAsset?: { fontFamily: string | null };
+  onSelect: (id: string | null, additive: boolean, deep?: boolean) => void;
+  onChange: (id: string, patch: Partial<CanvasNode>) => void;
+  onDragStart: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragMove: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragEnd: (id: string, event: Konva.KonvaEventObject<DragEvent>) => void;
+}) {
+  const nodeX = finiteOr(node.x, 0);
+  const nodeY = finiteOr(node.y, 0);
+  const nodeWidth = Math.max(4, finiteOr(node.width, 4));
+  const nodeHeight = Math.max(4, finiteOr(node.height, 4));
+  const nodeRotation = finiteOr(node.rotation, 0);
+  const nodeOpacity = Math.max(0, Math.min(1, finiteOr(node.opacity, 1)));
+  const common = {
+    id: `node-${node.id}`,
+    x: nodeX,
+    y: nodeY,
+    width: nodeWidth,
+    height: nodeHeight,
+    rotation: nodeRotation,
+    opacity: nodeOpacity,
+    listening: interactive,
+    draggable,
+    onMouseDown: (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (isPanMode) return;
+      event.cancelBubble = true;
+      if (selectOuterGroup || event.evt.shiftKey || !selectedIds.includes(node.id)) onSelect(node.id, event.evt.shiftKey, false);
+    },
+    onDblClick: (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (isPanMode) return;
+      event.cancelBubble = true;
+      onSelect(node.id, false, true);
+    },
+    onTouchStart: (event: Konva.KonvaEventObject<TouchEvent>) => {
+      if (isPanMode) return;
+      event.cancelBubble = true;
+      if (selectOuterGroup || !selectedIds.includes(node.id)) onSelect(node.id, false, false);
+    },
+    onDblTap: (event: Konva.KonvaEventObject<TouchEvent>) => {
+      if (isPanMode) return;
+      event.cancelBubble = true;
+      onSelect(node.id, false, true);
+    },
+    onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => onDragStart(node.id, event),
+    onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => onDragMove(node.id, event),
+    onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onDragEnd(node.id, event),
+    onTransformEnd: (event: Konva.KonvaEventObject<Event>) => {
+      event.cancelBubble = true;
+      const target = event.target;
+      const scaleX = finiteOr(target.scaleX(), 1);
+      const scaleY = finiteOr(target.scaleY(), 1);
+      target.scaleX(1);
+      target.scaleY(1);
+      const frame = { x: finiteOr(target.x(), nodeX), y: finiteOr(target.y(), nodeY), width: Math.max(4, finiteOr(target.width() * scaleX, nodeWidth)), height: Math.max(4, finiteOr(target.height() * scaleY, nodeHeight)) };
+      const snappedFrame = showGrid ? snapFrameToCanvasGrid(frame, gridBounds) : frame;
+      const patch: Partial<CanvasNode> = { ...snappedFrame, rotation: finiteOr(target.rotation(), nodeRotation) };
+      if (node.type === "text") {
+        const scalesBothAxes = Math.abs(scaleX - 1) > 0.01 && Math.abs(scaleY - 1) > 0.01;
+        onChange(node.id, scalesBothAxes ? { ...patch, fontSize: Math.max(1, finiteOr(node.fontSize * scaleY, node.fontSize)), letterSpacing: node.letterSpacing * scaleX } as Partial<CanvasNode> : patch);
+      } else onChange(node.id, patch);
+    }
+  };
   if (node.type === "text") return <Text {...common} text={node.text} wrap="word" fontSize={node.fontSize} fontStyle={node.fontStyle} fontVariant={`normal ${node.fontWeight}`} fontFamily={fontAsset?.fontFamily ?? (node.fontAssetId ? `editor-font-${node.fontAssetId}` : node.fontFamily ?? "Arial")} textDecoration={node.textDecoration} align={node.align} verticalAlign={node.verticalAlign} lineHeight={node.lineHeight} letterSpacing={node.letterSpacing} fill={node.fill} />;
   if (node.type === "image") return <LoadedImage {...common} url={imageAsset?.url} cornerRadius={node.cornerRadius} />;
   if (node.type === "shape") {
@@ -338,6 +666,42 @@ function GridOverlay({ bounds, viewport, scale }: { bounds: CanvasDocumentV1["ca
     lines.horizontal.forEach((y) => { context.moveTo(left, y); context.lineTo(right, y); });
     context.strokeShape(shape);
   }} />;
+}
+
+function SmartGuidesOverlay({ guidesRef, scale }: { guidesRef: React.MutableRefObject<SmartGuide[]>; scale: number }) {
+  const tickSize = 4 / scale;
+  return (
+    <Shape
+      listening={false}
+      perfectDrawEnabled={false}
+      shadowForStrokeEnabled={false}
+      stroke="#f43f5e"
+      strokeWidth={1 / scale}
+      sceneFunc={(context, shape) => {
+        const guides = guidesRef.current;
+        if (!guides || !guides.length) return;
+        context.beginPath();
+        for (const guide of guides) {
+          if (guide.orientation === "vertical") {
+            context.moveTo(guide.coordinate, guide.start);
+            context.lineTo(guide.coordinate, guide.end);
+            context.moveTo(guide.coordinate - tickSize, guide.start);
+            context.lineTo(guide.coordinate + tickSize, guide.start);
+            context.moveTo(guide.coordinate - tickSize, guide.end);
+            context.lineTo(guide.coordinate + tickSize, guide.end);
+          } else {
+            context.moveTo(guide.start, guide.coordinate);
+            context.lineTo(guide.end, guide.coordinate);
+            context.moveTo(guide.start, guide.coordinate - tickSize);
+            context.lineTo(guide.start, guide.coordinate + tickSize);
+            context.moveTo(guide.end, guide.coordinate - tickSize);
+            context.lineTo(guide.end, guide.coordinate + tickSize);
+          }
+        }
+        context.strokeShape(shape);
+      }}
+    />
+  );
 }
 
 function LoadedImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) {

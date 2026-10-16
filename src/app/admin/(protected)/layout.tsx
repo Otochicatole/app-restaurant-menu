@@ -14,14 +14,12 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   const active = workspace.active;
   const brandTitle = active?.name ?? actor.tenantSlug;
   const brandSubtitle = active?.publicDescription ?? "Menú digital";
-  const menuHref = active ? `/m/${active.slug}` : "/admin/menus";
   const showMenuPickerLink = workspace.multiMenuEnabled || workspace.menus.length > 1;
 
   return (
     <AdminShell
       brandTitle={brandTitle}
       brandSubtitle={brandSubtitle}
-      menuHref={menuHref}
       showMenuPickerLink={showMenuPickerLink}
     >
       {children}
