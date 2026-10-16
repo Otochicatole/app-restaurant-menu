@@ -11,6 +11,7 @@ export type TenantManagerProps = {
   updateTenant: TenantFormAction;
   toggleTenant: TenantFormAction;
   toggleMultiMenu: TenantFormAction;
+  toggleLanding: TenantFormAction;
   setMaxMenus: TenantFormAction;
   deleteMenus: TenantFormAction;
   resetPassword: TenantFormAction;
@@ -20,6 +21,7 @@ export type TenantManagerProps = {
 export type PendingTenantConfirmation =
   | { type: "toggle"; tenant: TenantRow }
   | { type: "multiMenu"; tenant: TenantRow }
+  | { type: "landing"; tenant: TenantRow }
   | { type: "maxMenus"; tenant: TenantRow }
   | { type: "deleteMenus"; tenant: TenantRow; projectIds: string[] }
   | { type: "reset"; tenant: TenantRow }

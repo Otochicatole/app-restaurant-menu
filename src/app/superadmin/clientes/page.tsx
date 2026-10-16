@@ -3,6 +3,7 @@ import {
   deleteTenantAction,
   deleteTenantMenusAction,
   resetTenantPasswordAction,
+  setTenantLandingAction,
   setTenantMaxMenusAction,
   setTenantMultiMenuAction,
   setTenantStatusAction,
@@ -21,6 +22,7 @@ export default async function SuperAdminClientsPage() {
         updateTenant={updateTenantAction}
         toggleTenant={setTenantStatusAction}
         toggleMultiMenu={setTenantMultiMenuAction}
+        toggleLanding={setTenantLandingAction}
         setMaxMenus={setTenantMaxMenusAction}
         deleteMenus={deleteTenantMenusAction}
         resetPassword={resetTenantPasswordAction}

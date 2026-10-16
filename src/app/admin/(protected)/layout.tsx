@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthenticatedAccount } from "@/modules/identity-access/server";
+import { landingManagement } from "@/modules/landing-management/server";
 import { loadActiveMenuWorkspace } from "@/modules/menu-editor/server";
 import { AdminShell } from "@/ui/admin/AdminShell";
 
@@ -9,7 +10,10 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   if (actor.kind === "super-admin") redirect("/superadmin");
   if (actor.mustChangePassword) redirect("/admin/account/password");
 
-  const workspace = await loadActiveMenuWorkspace(actor.tenantId);
+  const [workspace, landingEnabled] = await Promise.all([
+    loadActiveMenuWorkspace(actor.tenantId),
+    landingManagement.isLandingEnabled(actor.tenantId),
+  ]);
 
   const active = workspace.active;
   const brandTitle = active?.name ?? actor.tenantSlug;
@@ -21,6 +25,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
       brandTitle={brandTitle}
       brandSubtitle={brandSubtitle}
       showMenuPickerLink={showMenuPickerLink}
+      landingEnabled={landingEnabled}
     >
       {children}
     </AdminShell>

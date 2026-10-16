@@ -5,28 +5,34 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { Layers3, LayoutGrid, Menu, Settings } from "lucide-react";
+import { Globe, Layers3, LayoutGrid, Menu, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-
-const navigation = [
-  { label: "Editor", href: "/admin", exact: true, icon: Layers3 },
-  { label: "Configuración", href: "/admin/settings", icon: Settings },
-];
 
 export function AdminShell({
   children,
   brandTitle,
   brandSubtitle,
   showMenuPickerLink,
+  landingEnabled = false,
 }: {
   children: React.ReactNode;
   brandTitle: string;
   brandSubtitle: string;
   showMenuPickerLink: boolean;
+  landingEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isMenusPage = pathname === "/admin/menus" || pathname.startsWith("/admin/menus/");
+  const isLandingPage = pathname === "/admin/landing" || pathname.startsWith("/admin/landing/");
+
+  const navigation = [
+    { label: "Editor", href: "/admin", exact: true, icon: Layers3 },
+    ...(landingEnabled
+      ? [{ label: "Landing", href: "/admin/landing", exact: true, icon: Globe }]
+      : []),
+    { label: "Configuración", href: "/admin/settings", icon: Settings },
+  ];
 
   const isActive = (item: (typeof navigation)[number]) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
@@ -146,9 +152,13 @@ export function AdminShell({
         <Menu size={18} />
       </button>
 
-      {/* Contenido principal para vistas no-editor (ej. /admin/settings) */}
+      {/* Contenido principal: vista completa para /admin/landing o contenedor con padding para settings */}
       <div className="md:pl-16">
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
+        {isLandingPage ? (
+          <div className="h-screen w-full flex flex-col">{children}</div>
+        ) : (
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
+        )}
       </div>
     </div>
   );

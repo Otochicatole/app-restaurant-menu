@@ -10,6 +10,7 @@ import {
   deleteTenantCommandSchema,
   deleteTenantMenusCommandSchema,
   resetTenantPasswordCommandSchema,
+  setTenantLandingCommandSchema,
   setTenantMaxMenusCommandSchema,
   setTenantMultiMenuCommandSchema,
   setTenantStatusCommandSchema,
@@ -131,9 +132,25 @@ export async function deleteTenantAction(formData: FormData): Promise<TenantActi
   }, "No se pudo borrar el cliente");
 }
 
+export async function setTenantLandingAction(formData: FormData): Promise<TenantActionResult> {
+  return run(async () => {
+    await requireSuperAdmin();
+    const command = setTenantLandingCommandSchema.parse({
+      id: String(formData.get("id") ?? ""),
+      landingEnabled: formData.get("landingEnabled") === "true",
+    });
+    await tenantManagementService.setTenantLanding(command);
+    revalidateTenantViews();
+    return actionSuccess({});
+  }, "No se pudo actualizar el estado de la landing");
+}
+
 function revalidateTenantViews() {
   revalidatePath("/superadmin");
+  revalidatePath("/superadmin/clientes", "page");
+  revalidatePath("/admin", "layout");
   revalidatePath("/m/[slug]", "page");
+  revalidatePath("/l/[slug]", "page");
 }
 
 async function run(

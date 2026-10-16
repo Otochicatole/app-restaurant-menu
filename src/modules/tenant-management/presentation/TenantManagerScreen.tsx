@@ -9,6 +9,7 @@ import {
   Clock3,
   Copy,
   ExternalLink,
+  Globe,
   KeyRound,
   Layers3,
   MoreHorizontal,
@@ -60,6 +61,23 @@ function confirmationCopy(pending: PendingTenantConfirmation | null) {
           title: `¿Habilitar varios menús para ${pending.tenant.name}?`,
           description: "La cuenta podrá crear lienzos adicionales con su propio slug público.",
           confirmLabel: "Habilitar",
+          loadingLabel: "Actualizando...",
+          danger: false,
+        };
+  }
+  if (pending.type === "landing") {
+    return pending.tenant.landingEnabled
+      ? {
+          title: `¿Deshabilitar Landing para ${pending.tenant.name}?`,
+          description: "El negocio ya no verá la sección de Landing en su panel ni se podrá visualizar públicamente en /l/.",
+          confirmLabel: "Deshabilitar Landing",
+          loadingLabel: "Actualizando...",
+          danger: true,
+        }
+      : {
+          title: `¿Habilitar Landing para ${pending.tenant.name}?`,
+          description: "El negocio podrá diseñar y publicar su propia landing page con HTML/CSS/JS puro desde su panel.",
+          confirmLabel: "Habilitar Landing",
           loadingLabel: "Actualizando...",
           danger: false,
         };
@@ -319,12 +337,23 @@ function TenantRow({ tenant, controller }: { tenant: TenantRow; controller: Tena
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isSuspended ? "bg-amber-100 text-amber-900" : "bg-[#253621]/10 text-[#253621]"}`}>
               {isSuspended ? "Suspendido" : "Activo"}
             </span>
+            {tenant.landingEnabled && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                <Globe size={10} />
+                Landing
+              </span>
+            )}
           </div>
           <p className="mt-0.5 truncate text-sm text-zinc-500">{tenant.email}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
             <Link href={`/m/${tenant.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-zinc-600 hover:text-zinc-900">
               <ExternalLink size={12} /> /m/{tenant.slug}
             </Link>
+            {tenant.landingEnabled && (
+              <Link href={`/l/${tenant.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:text-emerald-900">
+                <Globe size={12} /> /l/{tenant.slug}
+              </Link>
+            )}
             <span className="inline-flex items-center gap-1">
               <Layers3 size={12} />
               {menuCount} {menuCount === 1 ? "menú" : "menús"}
@@ -521,6 +550,54 @@ function ManageTenantModal({ tenant, controller }: { tenant: TenantRow; controll
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe size={16} className="text-zinc-600" />
+                <h3 className="text-sm font-semibold text-zinc-950">Landing Page</h3>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tenant.landingEnabled ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-500"}`}>
+                  {tenant.landingEnabled ? "Habilitada" : "Deshabilitada"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">
+                {tenant.landingEnabled
+                  ? "El negocio puede diseñar y publicar su landing en /l/. Podés editarla con Monaco aquí como Super Admin."
+                  : "Habilitá esta función para que el negocio tenga acceso al editor de landing en su panel."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => controller.requestConfirmation({ type: "landing", tenant })}
+                className={adminSecondaryButtonClass}
+              >
+                {tenant.landingEnabled ? "Deshabilitar" : "Habilitar"}
+              </button>
+              <Link
+                href={`/superadmin/clientes/${tenant.id}/landing`}
+                className={adminSecondaryButtonClass}
+              >
+                Editar Landing
+              </Link>
+            </div>
+          </div>
+          {tenant.landingEnabled && (
+            <div className="mt-3 flex items-center gap-2 border-t border-zinc-100 pt-2 text-xs text-zinc-500">
+              <span>URL pública:</span>
+              <Link
+                href={`/l/${tenant.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-mono text-zinc-700 hover:text-zinc-950"
+              >
+                <ExternalLink size={12} /> /l/{tenant.slug}
+              </Link>
+            </div>
           )}
         </section>
 

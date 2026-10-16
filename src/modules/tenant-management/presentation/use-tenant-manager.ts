@@ -18,6 +18,7 @@ export function useTenantManager({
   updateTenant,
   toggleTenant,
   toggleMultiMenu,
+  toggleLanding,
   setMaxMenus,
   deleteMenus,
   resetPassword,
@@ -164,6 +165,10 @@ export function useTenantManager({
       const enabling = !tenant.multiMenuEnabled;
       formData.set("multiMenuEnabled", enabling ? "true" : "false");
       outcome = await run(`multiMenu:${tenant.id}`, toggleMultiMenu, formData);
+    } else if (type === "landing") {
+      const enabling = !tenant.landingEnabled;
+      formData.set("landingEnabled", enabling ? "true" : "false");
+      outcome = await run(`landing:${tenant.id}`, toggleLanding, formData);
     } else if (type === "maxMenus") {
       outcome = await run(`maxMenus:${tenant.id}`, setMaxMenus, formData);
     } else if (type === "deleteMenus") {
@@ -195,6 +200,7 @@ export function useTenantManager({
     resetPassword,
     run,
     setMaxMenus,
+    toggleLanding,
     toggleMultiMenu,
     toggleTenant,
   ]);
@@ -207,7 +213,7 @@ export function useTenantManager({
   const isBusy = useCallback((key: string) => busyKeys.has(key), [busyKeys]);
   const isTenantBusy = useCallback(
     (tenantId: string) =>
-      ["update", "toggle", "multiMenu", "maxMenus", "deleteMenus", "reset", "delete"].some((operation) =>
+      ["update", "toggle", "multiMenu", "landing", "maxMenus", "deleteMenus", "reset", "delete"].some((operation) =>
         busyKeys.has(`${operation}:${tenantId}`),
       ),
     [busyKeys],

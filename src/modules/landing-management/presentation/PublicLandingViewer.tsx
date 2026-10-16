@@ -1,0 +1,52 @@
+import Link from "next/link";
+import { Utensils } from "lucide-react";
+
+export function PublicLandingViewer({
+  html,
+  restaurantName,
+}: {
+  html: string;
+  restaurantName: string;
+}) {
+  return (
+    <iframe
+      title={`Landing - ${restaurantName}`}
+      srcDoc={html}
+      className="fixed inset-0 h-full w-full border-0 bg-white"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+    />
+  );
+}
+
+export function LandingPreparationScreen({
+  restaurantName,
+  restaurantSlug,
+}: {
+  restaurantName: string;
+  restaurantSlug: string;
+}) {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[#f8f5ee] px-6 text-center text-[#1c2c1a]">
+      <div className="max-w-md rounded-3xl border border-[#1c2c1a]/10 bg-white/80 p-8 shadow-sm backdrop-blur-xs sm:p-12">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef3eb] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#3d5934]">
+          <Utensils size={12} />
+          {restaurantName}
+        </span>
+        <h1 className="mt-5 text-3xl font-bold tracking-tight text-[#141d14] sm:text-4xl">
+          Landing en preparación
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-[#556353]">
+          Estamos preparando nuestro nuevo sitio web. Muy pronto podrás conocer más sobre nuestra propuesta aquí.
+        </p>
+        <div className="mt-6 pt-6 border-t border-[#1c2c1a]/10">
+          <Link
+            href={`/m/${restaurantSlug}`}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#253621] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1a2817]"
+          >
+            Ver Carta Digital interactiva
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}

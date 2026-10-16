@@ -14,6 +14,7 @@ function createRepository(): TenantAccountRepository {
       status: "ACTIVE",
       multiMenuEnabled: false,
       maxMenus: 1,
+      landingEnabled: false,
       email: input.email,
       lastLoginAt: null,
       createdAt: new Date(0).toISOString(),
@@ -23,6 +24,7 @@ function createRepository(): TenantAccountRepository {
     setStatus: vi.fn(),
     setMultiMenuEnabled: vi.fn(),
     setMaxMenus: vi.fn(),
+    setLandingEnabled: vi.fn(),
     deleteMenus: vi.fn(),
     replacePassword: vi.fn(),
     delete: vi.fn(),
@@ -84,6 +86,7 @@ describe("tenant management use cases", () => {
       status: "ACTIVE" as const,
       multiMenuEnabled: false,
       maxMenus: 1,
+      landingEnabled: false,
       email: "admin@cafe.test",
       lastLoginAt: null,
       createdAt: new Date(0).toISOString(),
@@ -103,11 +106,13 @@ describe("tenant management use cases", () => {
     await expect(useCases.listTenants()).resolves.toEqual([row]);
     await expect(useCases.updateTenant({ id: "tenant-1", name: " Nuevo nombre ", email: "NEW@CAFE.TEST" })).resolves.toMatchObject({ name: "Nuevo nombre" });
     await useCases.setTenantStatus({ id: "tenant-1", status: "SUSPENDED" });
+    await useCases.setTenantLanding({ id: "tenant-1", landingEnabled: true });
     await expect(useCases.resetTenantPassword({ id: "tenant-1" })).resolves.toBe("temporary-secret");
     await useCases.deleteTenant({ id: "tenant-1", confirmationSlug: "cafe-central" });
 
     expect(repository.findActiveBySlug).toHaveBeenCalledWith("cafe-central");
     expect(repository.update).toHaveBeenCalledWith({ id: "tenant-1", name: "Nuevo nombre", email: "new@cafe.test" });
+    expect(repository.setLandingEnabled).toHaveBeenCalledWith({ id: "tenant-1", landingEnabled: true });
     expect(repository.replacePassword).toHaveBeenCalledWith({ id: "tenant-1", passwordHash: "hashed:temporary-secret" });
     expect(repository.delete).toHaveBeenCalledWith({ id: "tenant-1", confirmationSlug: "cafe-central" });
   });

@@ -6,6 +6,7 @@ import type {
   CreateTenantCommand,
   DeleteTenantCommand,
   DeleteTenantMenusCommand,
+  SetTenantLandingCommand,
   SetTenantMaxMenusCommand,
   SetTenantMultiMenuCommand,
   SetTenantStatusCommand,
@@ -22,6 +23,7 @@ type TenantWithAdmin = {
   status: "ACTIVE" | "SUSPENDED";
   multiMenuEnabled: boolean;
   maxMenus: number;
+  landingEnabled: boolean;
   createdAt: Date;
   admin: { email: string; lastLoginAt: Date | null } | null;
   menuProjects?: TenantMenuSummary[];
@@ -36,6 +38,7 @@ function toListItem(tenant: TenantWithAdmin): TenantListItem {
     status: tenant.status,
     multiMenuEnabled: tenant.multiMenuEnabled,
     maxMenus: tenant.maxMenus,
+    landingEnabled: tenant.landingEnabled,
     email: tenant.admin.email,
     lastLoginAt: tenant.admin.lastLoginAt?.toISOString() ?? null,
     createdAt: tenant.createdAt.toISOString(),
@@ -247,6 +250,15 @@ export class PrismaTenantAccountRepository implements TenantAccountRepository {
           data: { revoked: true },
         });
       }
+    });
+  }
+
+  async setLandingEnabled(input: SetTenantLandingCommand): Promise<void> {
+    const tenant = await prisma.tenant.findUnique({ where: { id: input.id } });
+    if (!tenant) throw new NotFoundError("Tenant");
+    await prisma.tenant.update({
+      where: { id: input.id },
+      data: { landingEnabled: input.landingEnabled },
     });
   }
 

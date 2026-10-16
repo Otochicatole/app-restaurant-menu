@@ -40,9 +40,11 @@ model Tenant {
   status    TenantStatus @default(ACTIVE)
   multiMenuEnabled Boolean @default(false)
   maxMenus  Int          @default(1)
+  landingEnabled Boolean @default(false)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   admin     Admin?
+  landingPage LandingPage?
   menuProjects MenuProject[]
   menuAssets MenuAsset[]
   menuAssetReferences MenuAssetReference[]
@@ -218,4 +220,19 @@ model MenuTemplateAssetReference {
 
   @@id([templateId, assetId])
   @@index([tenantId, assetId])
+}
+
+model LandingPage {
+  id          String    @id @default(cuid())
+  tenantId    String    @unique
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  htmlContent String    @default("")
+  cssContent  String    @default("")
+  jsContent   String    @default("")
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId])
 }

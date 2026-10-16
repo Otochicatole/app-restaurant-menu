@@ -4,6 +4,7 @@ import {
   deleteTenantCommandSchema,
   deleteTenantMenusCommandSchema,
   resetTenantPasswordCommandSchema,
+  setTenantLandingCommandSchema,
   setTenantMaxMenusCommandSchema,
   setTenantMultiMenuCommandSchema,
   setTenantStatusCommandSchema,
@@ -14,6 +15,7 @@ import {
   type CreatedTenant,
   type DeleteTenantCommand,
   type DeleteTenantMenusCommand,
+  type SetTenantLandingCommand,
   type SetTenantMaxMenusCommand,
   type SetTenantMultiMenuCommand,
   type SetTenantStatusCommand,
@@ -70,6 +72,10 @@ export function createTenantUseCases(dependencies: Dependencies) {
 
     setTenantMaxMenus(input: SetTenantMaxMenusCommand): Promise<void> {
       return dependencies.repository.setMaxMenus(setTenantMaxMenusCommandSchema.parse(input));
+    },
+
+    setTenantLanding(input: SetTenantLandingCommand): Promise<void> {
+      return dependencies.repository.setLandingEnabled(setTenantLandingCommandSchema.parse(input));
     },
 
     deleteTenantMenus(input: DeleteTenantMenusCommand): Promise<{ deletedIds: string[] }> {

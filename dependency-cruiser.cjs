@@ -1,5 +1,6 @@
 const businessModules = [
   "identity-access",
+  "landing-management",
   "menu-editor",
   "public-menu",
   "tenant-management",
