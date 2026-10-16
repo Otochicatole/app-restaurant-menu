@@ -27,6 +27,7 @@ import { CanvasInspector } from "./CanvasInspector";
 import { LayersPanel } from "./LayersPanel";
 import { EditorToolsPanel, IconPickerContent, MediaPickerContent, TemplateLibrary, type CanvasDropItem } from "./EditorToolsPanel";
 import { FloatingModalWindow } from "./FloatingModalWindow";
+import { MediaSelectorModal, type MediaSelectorTarget } from "./MediaSelectorModal";
 import { CanvasStage } from "../ui/CanvasStage";
 import { MediaModal, type MediaModalAsset } from "@/ui/MediaModal";
 import { LUCIDE_ICON_NAMES } from "../domain/lucide-icon-catalog";
@@ -44,12 +45,13 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [layersOpen, setLayersOpen] = useState(true);
   const [iconsOpen, setIconsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
-  const [mediaPickerMode, setMediaPickerMode] = useState<"insert" | "modal" | "background">("insert");
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [mediaSelectorTarget, setMediaSelectorTarget] = useState<MediaSelectorTarget | null>(null);
   const [modalZIndices, setModalZIndices] = useState<Record<string, number>>({
     media: 70,
     icons: 71,
     templates: 72,
+    mediaSelector: 75,
   });
 
   const bringModalToFront = (id: string) => {
@@ -308,9 +310,116 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const addImage = (asset: MenuAssetView, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "image", assetId: asset.id, ...newNodeFrame(280, 180, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: asset.name });
   const handleCanvasDrop = (item: CanvasDropItem, point: { x: number; y: number }) => { if (item.kind === "text") addText(point); if (item.kind === "shape" && item.shape) addShape(item.shape, point); if (item.kind === "icon" && item.iconKey) addIcon(item.iconKey, point); if (item.kind === "image" && item.assetId) { const asset = assets.find((candidate) => candidate.id === item.assetId); if (asset) addImage(asset, point); } };
   const uploadAsset = async (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
-  const openModalMediaPicker = () => { setMediaPickerMode("modal"); setImagesOpen(true); bringModalToFront("media"); };
-  const openBackgroundImagePicker = () => { setMediaPickerMode("background"); setImagesOpen(true); bringModalToFront("media"); };
-  const selectMedia = (asset: MenuAssetView) => { if (mediaPickerMode === "modal" && selected?.type === "text") { patchNode(selected.id, { modalAssetId: asset.id }); setImagesOpen(false); return; } if (mediaPickerMode === "background" && selected?.type === "shape" && selected.shape === "rect" && asset.kind === "IMAGE") { patchNode(selected.id, { backgroundImage: { assetId: asset.id, fit: "cover", positionX: 0.5, positionY: 0.5, opacity: 1 } }); setImagesOpen(false); return; } if (asset.kind === "IMAGE") addImage(asset); };
+  const openModalMediaPicker = () => {
+    if (!selected) return;
+    const displayName = selected.name?.trim() || (selected.type === "text" ? `"${selected.text.slice(0, 30).trim()}${selected.text.length > 30 ? "…" : ""}"` : "Texto");
+    setMediaSelectorTarget({
+      nodeId: selected.id,
+      nodeType: selected.type,
+      nodeName: displayName,
+      role: "modal",
+      currentAssetId: selected.type === "text" ? selected.modalAssetId : null,
+    });
+    bringModalToFront("mediaSelector");
+  };
+
+  const openBackgroundImagePicker = () => {
+    if (!selected) return;
+    const displayName = selected.name?.trim() || "Rectángulo";
+    const currentBg = selected.type === "shape" && selected.shape === "rect" ? selected.backgroundImage : null;
+    setMediaSelectorTarget({
+      nodeId: selected.id,
+      nodeType: selected.type,
+      nodeName: displayName,
+      role: "background",
+      currentAssetId: currentBg?.assetId ?? null,
+    });
+    bringModalToFront("mediaSelector");
+  };
+
+  const openImageMediaPicker = () => {
+    if (!selected || selected.type !== "image") return;
+    const displayName = selected.name?.trim() || selected.alt?.trim() || "Imagen";
+    setMediaSelectorTarget({
+      nodeId: selected.id,
+      nodeType: selected.type,
+      nodeName: displayName,
+      role: "imageAsset",
+      currentAssetId: selected.assetId,
+    });
+    bringModalToFront("mediaSelector");
+  };
+
+  const handleAssignMediaToTarget = (asset: MenuAssetView) => {
+    if (!mediaSelectorTarget) return;
+    const { nodeId, role } = mediaSelectorTarget;
+    if (role === "modal") {
+      patchNode(nodeId, { modalAssetId: asset.id });
+    } else if (role === "background") {
+      const targetNode = document.nodes.find((n) => n.id === nodeId);
+      const currentBg = targetNode && targetNode.type === "shape" && targetNode.shape === "rect" ? targetNode.backgroundImage : null;
+      patchNode(nodeId, {
+        backgroundImage: {
+          assetId: asset.id,
+          fit: currentBg?.fit ?? "cover",
+          positionX: currentBg?.positionX ?? 0.5,
+          positionY: currentBg?.positionY ?? 0.5,
+          opacity: currentBg?.opacity ?? 1,
+        },
+      });
+    } else if (role === "imageAsset") {
+      patchNode(nodeId, { assetId: asset.id });
+    }
+    setMediaSelectorTarget(null);
+  };
+
+  const handleRemoveMediaFromTarget = () => {
+    if (!mediaSelectorTarget) return;
+    const { nodeId, role } = mediaSelectorTarget;
+    if (role === "modal") {
+      patchNode(nodeId, { modalAssetId: null });
+    } else if (role === "background") {
+      patchNode(nodeId, { backgroundImage: null });
+    }
+    setMediaSelectorTarget(null);
+  };
+
+  const handleUploadAndAssignToTarget = async (kind: "IMAGE" | "VIDEO", file: File) => {
+    const form = new FormData();
+    form.set("kind", kind);
+    form.set("file", file);
+    const response = await fetch("/api/editor/assets", { method: "POST", body: form });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      throw new Error(payload?.error?.message ?? "No se pudo subir el archivo");
+    }
+    const newAsset: MenuAssetView = payload.data;
+    setAssets((items) => [newAsset, ...items]);
+    handleAssignMediaToTarget(newAsset);
+  };
+
+  const activeSelectorTarget = useMemo<MediaSelectorTarget | null>(() => {
+    if (!mediaSelectorTarget) return null;
+    const targetNode = document.nodes.find((n) => n.id === mediaSelectorTarget.nodeId);
+    if (!targetNode) return null;
+    let currentAssetId: string | null = null;
+    if (mediaSelectorTarget.role === "modal" && targetNode.type === "text") {
+      currentAssetId = targetNode.modalAssetId;
+    } else if (mediaSelectorTarget.role === "background" && targetNode.type === "shape" && targetNode.shape === "rect") {
+      currentAssetId = targetNode.backgroundImage?.assetId ?? null;
+    } else if (mediaSelectorTarget.role === "imageAsset" && targetNode.type === "image") {
+      currentAssetId = targetNode.assetId;
+    }
+    return {
+      ...mediaSelectorTarget,
+      nodeName: targetNode.name?.trim() || mediaSelectorTarget.nodeName,
+      currentAssetId,
+    };
+  }, [mediaSelectorTarget, document.nodes]);
+
+  const selectMedia = (asset: MenuAssetView) => {
+    if (asset.kind === "IMAGE") addImage(asset);
+  };
   const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`/api/editor/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
   const publish = async () => {
     if (saving || publishingRef.current || conflict) return;
@@ -406,7 +515,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         layersOpen={layersOpen}
         onToggleLayers={() => setLayersOpen((open) => !open)}
         onOpenIcons={(open) => { setIconsOpen(open); if (open) bringModalToFront("icons"); }}
-        onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); if (open) bringModalToFront("media"); }}
+        onOpenImages={(open) => { setImagesOpen(open); if (open) bringModalToFront("media"); }}
         onOpenTemplates={(open) => { setTemplatesOpen(open); if (open) bringModalToFront("templates"); }}
         onBackgroundChange={(value) => commit({ ...document, background: value })}
         onAddText={addText}
@@ -417,7 +526,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />
       )}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} layerIndex={layerIndex} assets={assetMap} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} deepSelectedId={deepSelectedId} showGrid={gridEnabled} toolMode={toolMode} onToolModeChange={setToolMode} onSelect={selectCanvasNode} onSelectMany={(ids) => { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(ids.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked)); }} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
-      <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!layerIndex.nodeStates.get(selected.id)?.effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
+      <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onOpenImageMedia={openImageMediaPicker} onChange={(patch) => selected && (!layerIndex.nodeStates.get(selected.id)?.effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
     </div>
     </div>
     {clipboardNotice && <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-2 text-xs font-semibold text-white shadow-xl">{clipboardNotice}</div>}
@@ -441,7 +550,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       onFocus={() => bringModalToFront("media")}
     >
       <MediaPickerContent
-        images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")}
+        images={assets}
         onSelect={selectMedia}
         onDelete={deleteAsset}
         onUpload={uploadAsset}
@@ -490,6 +599,18 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         />
       </div>
     </FloatingModalWindow>
+
+    <MediaSelectorModal
+      target={activeSelectorTarget}
+      assets={assets}
+      isOpen={activeSelectorTarget !== null}
+      onClose={() => setMediaSelectorTarget(null)}
+      onSelectAsset={handleAssignMediaToTarget}
+      onRemoveAsset={handleRemoveMediaFromTarget}
+      onUploadAsset={handleUploadAndAssignToTarget}
+      zIndex={modalZIndices.mediaSelector ?? 75}
+      onFocus={() => bringModalToFront("mediaSelector")}
+    />
   </>;
 }
 
