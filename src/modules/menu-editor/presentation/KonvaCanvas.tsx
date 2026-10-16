@@ -11,6 +11,7 @@ import { RectangleVisual } from "../ui/RectangleVisual";
 import { LucideKonvaIcon } from "../ui/LucideKonvaIcon";
 import { useSharedImage } from "../ui/use-shared-image";
 import type { CanvasDropItem } from "./EditorToolsPanel";
+import { computeSmartGuides, type RectBounds, type SmartGuide } from "../domain/canvas-smart-guides";
 
 type Viewport = CanvasDocumentV1["initialViewport"];
 type EditorCanvasAsset = { url: string; kind: "IMAGE" | "VIDEO" | "FONT"; fontFamily: string | null };
@@ -22,6 +23,7 @@ type DragSession = {
   targets: Map<string, Konva.Node>;
   delta: { x: number; y: number };
   includeLocked: boolean;
+  movingBounds: RectBounds;
 };
 
 export type CanvasToolMode = "select" | "hand";
@@ -86,6 +88,7 @@ export function KonvaCanvas({
   const viewportFrameRef = useRef<number | null>(null);
   const pendingViewportRef = useRef<{ externalKey: string; value: Viewport } | null>(null);
   const dragSession = useRef<DragSession | null>(null);
+  const activeGuidesRef = useRef<SmartGuide[]>([]);
   const bounds = document.canvasBounds;
   const selectedGroup = selectedGroupId ? layerIndex.groupsById.get(selectedGroupId) ?? null : null;
   const selectedGroupIds = selectedGroup ? layerIndex.descendantNodeIds(selectedGroup.id) : EMPTY_IDS;
@@ -258,7 +261,13 @@ export function KonvaCanvas({
       const target = stage?.findOne(`#node-${selectedId}`);
       return target ? [[selectedId, target] as const] : [];
     }));
-    dragSession.current = { activeId: id, ids, starts, targets, delta: { x: 0, y: 0 }, includeLocked };
+    const movingNodes = ids.map((selectedId) => layerIndex.nodesById.get(selectedId)).filter(Boolean) as CanvasNode[];
+    const minX = Math.min(...movingNodes.map((n) => n.x));
+    const minY = Math.min(...movingNodes.map((n) => n.y));
+    const maxX = Math.max(...movingNodes.map((n) => n.x + n.width));
+    const maxY = Math.max(...movingNodes.map((n) => n.y + n.height));
+    const movingBounds = { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+    dragSession.current = { activeId: id, ids, starts, targets, delta: { x: 0, y: 0 }, includeLocked, movingBounds };
     event.target.position(starts[id]);
   }, [deepSelectedId, layerIndex, selectedGroupId, selectedGroupIds, selectedIds]);
 
@@ -269,11 +278,45 @@ export function KonvaCanvas({
     const start = session.starts[id];
     if (!start) return;
     const rawDelta = { x: event.target.x() - start.x, y: event.target.y() - start.y };
-    const delta = showGrid ? {
-      x: snapValueToCanvasGrid(start.x + rawDelta.x, bounds.x) - start.x,
-      y: snapValueToCanvasGrid(start.y + rawDelta.y, bounds.y) - start.y,
-    } : rawDelta;
+
+    const movingIdsSet = new Set(session.ids);
+    const otherNodes: RectBounds[] = [];
+    document.nodes.forEach((n) => {
+      if (!movingIdsSet.has(n.id)) {
+        const state = layerIndex.nodeStates.get(n.id);
+        if (state?.effectiveVisible !== false) {
+          otherNodes.push({ x: n.x, y: n.y, width: n.width, height: n.height });
+        }
+      }
+    });
+
+    const { snappedDelta, guides } = computeSmartGuides({
+      movingBounds: session.movingBounds,
+      rawDelta,
+      otherNodes,
+      canvasBounds: bounds,
+      scale,
+    });
+
+    const hasVGuide = guides.some((g) => g.orientation === "vertical");
+    const hasHGuide = guides.some((g) => g.orientation === "horizontal");
+
+    const deltaX = hasVGuide
+      ? snappedDelta.x
+      : showGrid
+      ? snapValueToCanvasGrid(start.x + rawDelta.x, bounds.x) - start.x
+      : rawDelta.x;
+
+    const deltaY = hasHGuide
+      ? snappedDelta.y
+      : showGrid
+      ? snapValueToCanvasGrid(start.y + rawDelta.y, bounds.y) - start.y
+      : rawDelta.y;
+
+    const delta = { x: deltaX, y: deltaY };
     session.delta = delta;
+    activeGuidesRef.current = guides;
+
     session.ids.forEach((selectedId) => {
       const node = session.targets.get(selectedId);
       const origin = session.starts[selectedId];
@@ -284,12 +327,16 @@ export function KonvaCanvas({
     if (session.includeLocked && selectedBounds) groupOutlineRef.current?.position({ x: selectedBounds.x + delta.x, y: selectedBounds.y + delta.y });
     if (!session.includeLocked) transformerRef.current?.forceUpdate();
     stageRef.current?.batchDraw();
-  }, [bounds.x, bounds.y, selectedBounds, showGrid]);
+  }, [bounds, document.nodes, layerIndex, scale, selectedBounds, showGrid]);
 
   const finishNodeDrag = useCallback((id: string, event: Konva.KonvaEventObject<DragEvent>) => {
     event.cancelBubble = true;
+    activeGuidesRef.current = [];
     const session = dragSession.current;
-    if (!session || session.activeId !== id) return;
+    if (!session || session.activeId !== id) {
+      stageRef.current?.batchDraw();
+      return;
+    }
     const { ids, delta, starts, includeLocked } = session;
     if (ids.length > 1 || includeLocked) onChangeMany(ids, delta, includeLocked);
     else {
@@ -298,6 +345,7 @@ export function KonvaCanvas({
     }
     if (!includeLocked) transformerRef.current?.forceUpdate();
     dragSession.current = null;
+    stageRef.current?.batchDraw();
   }, [onChange, onChangeMany]);
 
   const cursorStyle = isPanMode ? (panStart ? "grabbing" : "grab") : "default";
@@ -388,6 +436,7 @@ export function KonvaCanvas({
           flipEnabled={false}
           boundBoxFunc={(oldBox, nextBox) => nextBox.width < 4 || nextBox.height < 4 ? oldBox : nextBox}
         />
+        <SmartGuidesOverlay guidesRef={activeGuidesRef} scale={scale} />
       </Layer>
       {selectionBox && <Layer listening={false}><Rect x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} fill="rgba(16,185,129,0.16)" stroke="#10b981" dash={[6, 4]} strokeWidth={1} /></Layer>}
     </Stage>
@@ -617,6 +666,42 @@ function GridOverlay({ bounds, viewport, scale }: { bounds: CanvasDocumentV1["ca
     lines.horizontal.forEach((y) => { context.moveTo(left, y); context.lineTo(right, y); });
     context.strokeShape(shape);
   }} />;
+}
+
+function SmartGuidesOverlay({ guidesRef, scale }: { guidesRef: React.MutableRefObject<SmartGuide[]>; scale: number }) {
+  const tickSize = 4 / scale;
+  return (
+    <Shape
+      listening={false}
+      perfectDrawEnabled={false}
+      shadowForStrokeEnabled={false}
+      stroke="#f43f5e"
+      strokeWidth={1 / scale}
+      sceneFunc={(context, shape) => {
+        const guides = guidesRef.current;
+        if (!guides || !guides.length) return;
+        context.beginPath();
+        for (const guide of guides) {
+          if (guide.orientation === "vertical") {
+            context.moveTo(guide.coordinate, guide.start);
+            context.lineTo(guide.coordinate, guide.end);
+            context.moveTo(guide.coordinate - tickSize, guide.start);
+            context.lineTo(guide.coordinate + tickSize, guide.start);
+            context.moveTo(guide.coordinate - tickSize, guide.end);
+            context.lineTo(guide.coordinate + tickSize, guide.end);
+          } else {
+            context.moveTo(guide.start, guide.coordinate);
+            context.lineTo(guide.end, guide.coordinate);
+            context.moveTo(guide.start, guide.coordinate - tickSize);
+            context.lineTo(guide.start, guide.coordinate + tickSize);
+            context.moveTo(guide.end, guide.coordinate - tickSize);
+            context.lineTo(guide.end, guide.coordinate + tickSize);
+          }
+        }
+        context.strokeShape(shape);
+      }}
+    />
+  );
 }
 
 function LoadedImage(props: Record<string, unknown> & { url?: string; cornerRadius?: number }) {
