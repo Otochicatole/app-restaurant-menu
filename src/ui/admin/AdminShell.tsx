@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -46,14 +47,14 @@ export function AdminShell({
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
-        {/* Brand / Logo superior */}
-        <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b border-zinc-100">
+        {/* Logo de la aplicación */}
+        <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b shadow-xs border-zinc-200">
           <Link
             href="/admin"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#182618] text-[#f5f2eb] shadow-2xs transition-all hover:scale-105 hover:bg-[#253621] hover:shadow-sm active:scale-95"
-            aria-label={`Menú activo: ${brandTitle}`}
+            className="flex h-10 w-10 items-center justify-center rounded-xl p-2 transition-all hover:scale-105 hover:bg-black/10 hover:border-zinc-300 active:scale-95"
+            aria-label={brandTitle}
           >
-            <span className="text-xs font-bold tracking-tight">M</span>
+            <Image src="/icon.svg" alt="Logo" width={22} height={22} priority />
           </Link>
           <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden flex-col rounded-lg bg-zinc-900 px-3 py-1.5 text-xs text-white shadow-xl whitespace-nowrap group-hover:flex">
             <span className="font-semibold text-zinc-100">{brandTitle}</span>

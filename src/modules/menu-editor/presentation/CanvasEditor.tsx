@@ -505,15 +505,10 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       {/* Lado izquierdo: Información del Menú y Estado */}
       <div className="flex min-w-0 items-center gap-3">
         <h1 className="sr-only">Editor de carta: {restaurantName}</h1>
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#182618] text-[11px] font-bold text-white shadow-2xs">
-            M
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight text-zinc-900" title={restaurantName}>
-              {restaurantName}
-            </p>
-          </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold tracking-tight text-zinc-900" title={restaurantName}>
+            {restaurantName}
+          </p>
         </div>
 
         <div className="hidden h-4 w-px bg-zinc-200 sm:block" />
