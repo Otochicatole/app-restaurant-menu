@@ -22,7 +22,6 @@ export function EditorToolsPanel({
   onBackgroundChange,
   onAddText,
   onAddShape,
-  onUpload,
 }: {
   background: string;
   layersOpen: boolean;
@@ -33,7 +32,6 @@ export function EditorToolsPanel({
   onBackgroundChange: (value: string) => void;
   onAddText: () => void;
   onAddShape: (shape: Shape) => void;
-  onUpload: (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => Promise<void>;
 }) {
   const [open, setOpen] = useState<Section>("add");
 
@@ -91,7 +89,7 @@ export function EditorToolsPanel({
 
       <div className="border-t border-zinc-100 pt-1 space-y-2">
         <ToolSection id="add" label="Agregar formas" open={open === "add"} onToggle={() => setOpen(open === "add" ? "canvas" : "add")}>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1.5">
             <ToolButton dragData={{ kind: "text" }} icon={<Type size={16} />} label="Texto" onClick={() => onAddText()} />
             <ToolButton dragData={{ kind: "shape", shape: "rect" }} icon={<Square size={16} />} label="Rectángulo" onClick={() => onAddShape("rect")} />
             <ToolButton dragData={{ kind: "shape", shape: "ellipse" }} icon={<Circle size={16} />} label="Elipse" onClick={() => onAddShape("ellipse")} />
@@ -112,12 +110,6 @@ export function EditorToolsPanel({
             <input aria-label="Opacidad del fondo" className="mt-1 w-full accent-[#253621]" type="range" min="0" max="1" step="0.01" value={alphaFromColor(background)} onChange={(event) => onBackgroundChange(withAlpha(background.slice(0, 7), Number(event.target.value)))} />
           </label>
         </ToolSection>
-
-        <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2">
-          <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Subir rápido</p>
-          <UploadButton label="Subir imagen" accept="image/jpeg,image/png,image/webp" onUpload={(file) => onUpload("IMAGE", file)} />
-          <UploadButton label="Subir video" accept="video/mp4,video/webm" onUpload={(file) => onUpload("VIDEO", file)} />
-        </div>
       </div>
     </aside>
   );
@@ -295,9 +287,23 @@ function ToolSection({ label, open, onToggle, children }: { id: Section; label: 
 
 function ToolButton({ icon, label, onClick, dragData }: { icon: React.ReactNode; label: string; onClick: () => void; dragData?: CanvasDropItem }) {
   return (
-    <button draggable={Boolean(dragData)} onDragStart={(event) => { if (dragData) { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-menu-editor-item", JSON.stringify(dragData)); } }} onClick={onClick} className="flex flex-col items-center gap-1 rounded-xl border border-zinc-200 px-2 py-3 text-[11px] text-zinc-700 transition hover:border-[#253621]/40 hover:bg-[#253621]/5 hover:text-[#182618]">
-      {icon}
-      <span>{label}</span>
+    <button
+      type="button"
+      draggable={Boolean(dragData)}
+      onDragStart={(event) => {
+        if (dragData) {
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData("application/x-menu-editor-item", JSON.stringify(dragData));
+        }
+      }}
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-xs font-medium text-zinc-700 shadow-2xs transition hover:border-[#253621]/40 hover:bg-[#253621]/5 hover:text-[#182618]"
+    >
+      <span className="flex items-center gap-2.5">
+        <span className="text-[#253621]">{icon}</span>
+        <span className="font-semibold text-zinc-800">{label}</span>
+      </span>
+      <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">Agregar</span>
     </button>
   );
 }

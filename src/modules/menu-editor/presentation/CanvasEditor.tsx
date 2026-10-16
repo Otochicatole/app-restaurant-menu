@@ -520,7 +520,6 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         onBackgroundChange={(value) => commit({ ...document, background: value })}
         onAddText={addText}
         onAddShape={addShape}
-        onUpload={uploadAsset}
       />
       {layersOpen && (
         <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />
