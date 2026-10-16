@@ -6,34 +6,28 @@ import { DynamicIcon } from "lucide-react/dynamic";
 import { LUCIDE_ICON_NAMES, humanizeLucideIconName, searchLucideIconNames, type LucideIconName } from "../domain/lucide-icon-catalog";
 import { createCanvasLayerIndex } from "../domain/layer-tree";
 import type { CanvasNode, MenuAssetView, MenuTemplateView } from "../contracts";
-import { HexColorInput } from "./HexColorInput";
 
-type Section = "canvas" | "add";
 type Shape = "rect" | "ellipse" | "line" | "arrow" | "triangle" | "star";
 export type CanvasDropItem = { kind: "text" | "shape" | "icon" | "image"; shape?: Shape; iconKey?: string; assetId?: string };
 
 export function EditorToolsPanel({
-  background,
   layersOpen,
   onToggleLayers,
   onOpenIcons,
   onOpenImages,
   onOpenTemplates,
-  onBackgroundChange,
   onAddText,
   onAddShape,
 }: {
-  background: string;
   layersOpen: boolean;
   onToggleLayers: () => void;
   onOpenIcons: (open: boolean) => void;
   onOpenImages: (open: boolean) => void;
   onOpenTemplates: (open: boolean) => void;
-  onBackgroundChange: (value: string) => void;
   onAddText: () => void;
   onAddShape: (shape: Shape) => void;
 }) {
-  const [open, setOpen] = useState<Section>("add");
+  const [openAdd, setOpenAdd] = useState(true);
 
   return (
     <aside className="w-56 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 flex flex-col gap-3">
@@ -88,27 +82,13 @@ export function EditorToolsPanel({
       </div>
 
       <div className="border-t border-zinc-100 pt-1 space-y-2">
-        <ToolSection id="add" label="Agregar formas" open={open === "add"} onToggle={() => setOpen(open === "add" ? "canvas" : "add")}>
+        <ToolSection label="Agregar formas" open={openAdd} onToggle={() => setOpenAdd(!openAdd)}>
           <div className="flex flex-col gap-1.5">
             <ToolButton dragData={{ kind: "text" }} icon={<Type size={16} />} label="Texto" onClick={() => onAddText()} />
             <ToolButton dragData={{ kind: "shape", shape: "rect" }} icon={<Square size={16} />} label="Rectángulo" onClick={() => onAddShape("rect")} />
             <ToolButton dragData={{ kind: "shape", shape: "ellipse" }} icon={<Circle size={16} />} label="Elipse" onClick={() => onAddShape("ellipse")} />
             <ToolButton dragData={{ kind: "shape", shape: "line" }} icon={<Minus size={16} />} label="Línea" onClick={() => onAddShape("line")} />
           </div>
-        </ToolSection>
-
-        <ToolSection id="canvas" label="Lienzo" open={open === "canvas"} onToggle={() => setOpen(open === "canvas" ? "add" : "canvas")}>
-          <div className="rounded-lg bg-zinc-50 px-2 py-2">
-            <p className="text-xs font-medium">Color de fondo</p>
-            <div className="mt-2 flex items-start gap-2">
-              <input aria-label="Color de fondo" className="h-9 w-10 shrink-0 rounded border border-zinc-200 bg-white p-1" type="color" value={background.endsWith("00") ? "#ffffff" : background.slice(0, 7)} onChange={(event) => onBackgroundChange(withAlpha(event.target.value, alphaFromColor(background)))} />
-              <HexColorInput label="Color de fondo" allowAlpha={false} value={background.endsWith("00") ? "#ffffff" : background.slice(0, 7)} onChange={(color) => onBackgroundChange(withAlpha(color, alphaFromColor(background)))} />
-            </div>
-          </div>
-          <label className="mt-3 block px-1 text-xs">
-            Opacidad <span className="float-right text-zinc-500">{Math.round(alphaFromColor(background) * 100)}%</span>
-            <input aria-label="Opacidad del fondo" className="mt-1 w-full accent-[#253621]" type="range" min="0" max="1" step="0.01" value={alphaFromColor(background)} onChange={(event) => onBackgroundChange(withAlpha(background.slice(0, 7), Number(event.target.value)))} />
-          </label>
         </ToolSection>
       </div>
     </aside>
@@ -273,7 +253,7 @@ function miniatureStrokeStyle(node: CanvasNode, scale: number) {
   };
 }
 
-function ToolSection({ label, open, onToggle, children }: { id: Section; label: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+function ToolSection({ label, open, onToggle, children }: { label: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <section className="border-b border-zinc-100 py-1">
       <button type="button" className="flex w-full items-center justify-between px-1 py-2 text-left text-xs font-semibold text-zinc-700" onClick={onToggle} aria-expanded={open}>
@@ -574,6 +554,3 @@ export function AssetThumbnail({ asset }: { asset: MenuAssetView }) {
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={asset.url} alt={asset.name} loading="lazy" decoding="async" className="h-full w-full bg-zinc-100 object-cover" />;
 }
-
-function alphaFromColor(value: string): number { if (!/^#[0-9a-f]{8}$/i.test(value)) return 1; return parseInt(value.slice(7, 9), 16) / 255; }
-function withAlpha(value: string, alpha: number): string { const base = value.slice(0, 7); if (alpha >= 0.999) return base; return `${base}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0")}`; }

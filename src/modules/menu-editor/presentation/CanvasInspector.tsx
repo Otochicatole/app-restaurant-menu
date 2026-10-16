@@ -14,6 +14,7 @@ type InspectorProps = {
   document: CanvasDocumentV1;
   assets: MenuAssetView[];
   onCanvasSizeChange: (dimension: "width" | "height", value: number) => void;
+  onBackgroundChange: (background: string) => void;
   onOpenModalMedia: () => void;
   onOpenBackgroundImage: () => void;
   onOpenImageMedia?: () => void;
@@ -32,7 +33,7 @@ const fieldClass = "mt-1.5 min-w-0 w-full rounded-lg border border-zinc-300 bg-w
 const labelClass = "block min-w-0 text-xs font-medium text-zinc-700";
 const buttonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-[#253621] disabled:opacity-40";
 
-export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onOpenModalMedia, onOpenBackgroundImage, onOpenImageMedia, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
+export function CanvasInspector({ node, group, selectedCount, document, assets, onCanvasSizeChange, onBackgroundChange, onOpenModalMedia, onOpenBackgroundImage, onOpenImageMedia, onChange, onChangeSelected, onDuplicate, onMoveLayer, onDelete, onRename, onOpacityChange, onGroupChange, onUngroup }: InspectorProps) {
   if (group) {
     const state = groupLayerState(document, group);
     const descendants = descendantNodeIds(document, group.id);
@@ -57,7 +58,10 @@ export function CanvasInspector({ node, group, selectedCount, document, assets, 
   }
 
   if (!node) {
-    return <InspectorLayout title="Lienzo" description="Seleccioná un objeto para editar sus propiedades.">
+    return <InspectorLayout title="Lienzo" description="Configurá el tamaño y el fondo de tu carta digital.">
+      <InspectorSection title="Fondo del lienzo" icon={<Paintbrush size={16} />} description="Color y transparencia del fondo de la carta." defaultOpen>
+        <AlphaColorField label="Color de fondo" value={document.background} onChange={onBackgroundChange} />
+      </InspectorSection>
       <InspectorSection title="Tamaño de la carta" icon={<Scan size={16} />} description="El área visible de tu menú público." defaultOpen>
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Ancho" value={document.canvasBounds.width} unit="px" onChange={(value) => onCanvasSizeChange("width", value)} />

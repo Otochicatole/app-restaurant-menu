@@ -14,6 +14,7 @@ const textNode = document.nodes.find((node) => node.type === "text")!;
 function inspectorProps(overrides: Partial<React.ComponentProps<typeof CanvasInspector>> = {}): React.ComponentProps<typeof CanvasInspector> {
   return {
     node: rectangle, group: null, selectedCount: 1, document, assets: [], onCanvasSizeChange: vi.fn(),
+    onBackgroundChange: vi.fn(),
     onOpenModalMedia: vi.fn(), onOpenBackgroundImage: vi.fn(), onChange: vi.fn(),
     onChangeSelected: vi.fn(), onDuplicate: vi.fn(), onMoveLayer: vi.fn(), onDelete: vi.fn(),
     onRename: vi.fn(), onOpacityChange: vi.fn(), onGroupChange: vi.fn(), onUngroup: vi.fn(), ...overrides,
@@ -97,6 +98,14 @@ describe("CanvasInspector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Vertical" }));
     expect(props.onCanvasSizeChange).toHaveBeenNthCalledWith(1, "width", 1080);
     expect(props.onCanvasSizeChange).toHaveBeenNthCalledWith(2, "height", 1920);
+  });
+
+  it("edits the canvas background color and opacity when no object is selected", () => {
+    const props = inspectorProps({ node: null, selectedCount: 0 });
+    render(React.createElement(CanvasInspector, props));
+    expect(screen.getByRole("heading", { name: /^Fondo del lienzo/ })).not.toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Código HEX de color de fondo" }), { target: { value: "#121212" } });
+    expect(props.onBackgroundChange).toHaveBeenCalledWith("#121212");
   });
 
   it("shows group-specific controls without resize or rotation actions", async () => {

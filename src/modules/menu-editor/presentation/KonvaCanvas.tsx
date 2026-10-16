@@ -309,6 +309,11 @@ export function KonvaCanvas({
     onDragOver={(event) => event.preventDefault()}
     onDrop={handleDrop}
     onContextMenu={(event) => event.preventDefault()}
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        onSelect(null, false, false);
+      }
+    }}
   >
     <Stage
       ref={stageRef}
@@ -325,11 +330,24 @@ export function KonvaCanvas({
           beginSelection(event);
         }
       }}
+      onClick={(event) => {
+        if (isPanMode) return;
+        if (event.target === event.target.getStage()) {
+          onSelect(null, false, false);
+        }
+      }}
+      onTap={(event) => {
+        if (isPanMode) return;
+        if (event.target === event.target.getStage()) {
+          onSelect(null, false, false);
+        }
+      }}
       onMouseMove={(event) => { movePan(event); moveSelection(event); }}
       onMouseUp={() => { if (panStart) onViewportChange(viewportRef.current); setPanStart(null); finishSelection(); }}
       onMouseLeave={() => { if (panStart) onViewportChange(viewportRef.current); setPanStart(null); }}
       onTouchStart={(event) => {
         if (isPanMode || event.target === event.target.getStage()) {
+          if (!isPanMode) onSelect(null, false, false);
           beginPan(event);
         }
       }}
