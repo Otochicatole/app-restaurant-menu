@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { CheckCircle2, ChevronDown, Circle, Download, Film, FileUp, ImagePlus, LayoutTemplate, LoaderCircle, Minus, Search, Square, Type, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, Download, Film, FileUp, ImagePlus, LayoutTemplate, Layers, LoaderCircle, Minus, Search, Square, Type, Upload, X } from "lucide-react";
 import { DynamicIcon } from "lucide-react/dynamic";
 import { LUCIDE_ICON_NAMES, humanizeLucideIconName, searchLucideIconNames, type LucideIconName } from "../domain/lucide-icon-catalog";
 import { createCanvasLayerIndex } from "../domain/layer-tree";
@@ -31,15 +31,38 @@ export function EditorToolsPanel({
 
   return (
     <aside className="w-56 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 flex flex-col gap-3">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between rounded-xl border border-zinc-200 px-3 py-2 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition"
-        onClick={onToggleLayers}
-        aria-expanded={layersOpen}
-      >
-        <span>Capas</span>
-        <span className="text-[11px] font-normal text-zinc-400">{layersOpen ? "Ocultar" : "Mostrar"}</span>
-      </button>
+      <div className="space-y-1.5">
+        <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Capas</p>
+        <button
+          type="button"
+          onClick={onToggleLayers}
+          aria-pressed={layersOpen}
+          aria-label={layersOpen ? "Ocultar panel de capas" : "Mostrar panel de capas"}
+          title={layersOpen ? "Ocultar panel de capas" : "Mostrar panel de capas"}
+          className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-xs font-medium transition shadow-xs ${
+            layersOpen
+              ? "border-[#253621]/25 bg-[#253621]/5 text-[#182618]"
+              : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Layers size={16} className={layersOpen ? "text-[#253621]" : "text-zinc-400"} />
+            <span className="font-semibold text-zinc-800">Panel de capas</span>
+          </span>
+          <span
+            aria-hidden="true"
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out ${
+              layersOpen ? "bg-[#253621]" : "bg-zinc-200"
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs transition-transform duration-200 ease-in-out ${
+                layersOpen ? "translate-x-4.5" : "translate-x-1"
+              }`}
+            />
+          </span>
+        </button>
+      </div>
 
       {/* Direct Buttons for Media, Iconos, Plantillas (Opens Movable & Resizable Modals) */}
       <div className="space-y-1.5">
