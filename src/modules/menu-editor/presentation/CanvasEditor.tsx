@@ -2,12 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Grid2X2, ImagePlus, LayoutTemplate, QrCode, Redo2, Search, Undo2 } from "lucide-react";
+import { AlertTriangle, Bookmark, Check, ExternalLink, Grid2X2, ImagePlus, LayoutTemplate, Loader2, QrCode, Redo2, Search, Undo2, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { STROKE_SIDES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
 import { copyCanvasSelection, pasteCanvasSelection, type CanvasClipboardSnapshot } from "../domain/canvas-clipboard";
 import {
-  createCanvasGroup,
+  createCanvasGroup, 
   createCanvasLayerIndex,
   descendantNodeIds,
   groupCanvasSelection,
@@ -501,9 +501,187 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     </div>
     <div className="fixed inset-y-0 right-0 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-4 shadow-sm backdrop-blur">
-      <div className="flex min-w-0 items-center gap-3"><h1 className="sr-only">Resumen del menú</h1><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Menú activo</p><p className="truncate text-sm font-semibold text-zinc-900">{restaurantName}</p></div><span className="hidden rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-500 sm:inline-flex">{status}</span></div>
-      <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-[#253621]" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button><button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={14} aria-hidden="true" />Descargar QR</button><a href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[#253621]/20 px-3 py-2 text-[11px] font-semibold text-[#253621] hover:bg-[#253621]/5" title="Ver carta pública"><ExternalLink size={14} aria-hidden="true" />Vista previa</a>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621] disabled:opacity-40" onClick={publish} disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}>Publicar</button></div>
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-zinc-200 bg-white/95 px-4 shadow-2xs backdrop-blur-md z-20">
+      {/* Lado izquierdo: Información del Menú y Estado */}
+      <div className="flex min-w-0 items-center gap-3">
+        <h1 className="sr-only">Editor de carta: {restaurantName}</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#182618] text-[11px] font-bold text-white shadow-2xs">
+            M
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-tight text-zinc-900" title={restaurantName}>
+              {restaurantName}
+            </p>
+          </div>
+        </div>
+
+        <div className="hidden h-4 w-px bg-zinc-200 sm:block" />
+
+        {/* Indicador de estado dinámico */}
+        <div className="hidden sm:flex items-center">
+          {conflict ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-medium text-red-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+              Conflicto
+            </span>
+          ) : saving ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-[11px] font-medium text-zinc-600">
+              <Loader2 size={11} className="animate-spin text-zinc-500" />
+              Guardando...
+            </span>
+          ) : dirty ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700" title="Hay cambios guardados como borrador pendientes de publicar">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              {status}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700" title="Todos los cambios están publicados y al día">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {status}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Lado derecho: Barra de herramientas y Acciones */}
+      <div className="flex shrink-0 items-center gap-2">
+        {/* Historial: Deshacer / Rehacer */}
+        <div className="flex items-center rounded-lg border border-zinc-200 bg-zinc-50/70 p-0.5 shadow-2xs">
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-600 transition hover:bg-white hover:text-zinc-900 hover:shadow-2xs disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none"
+            onClick={undo}
+            disabled={!history.length}
+            title="Deshacer (Ctrl+Z)"
+            aria-label="Deshacer"
+          >
+            <Undo2 size={14} />
+          </button>
+          <div className="mx-0.5 h-3.5 w-px bg-zinc-200" />
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-600 transition hover:bg-white hover:text-zinc-900 hover:shadow-2xs disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none"
+            onClick={redo}
+            disabled={!future.length}
+            title="Rehacer (Ctrl+Y)"
+            aria-label="Rehacer"
+          >
+            <Redo2 size={14} />
+          </button>
+        </div>
+
+        <div className="hidden h-5 w-px bg-zinc-200 sm:block" />
+
+        {/* Herramientas de visualización del lienzo */}
+        <div className="hidden sm:flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setGridEnabled((g) => !g)}
+            aria-pressed={gridEnabled}
+            title={gridEnabled ? "Ocultar cuadrícula" : "Mostrar cuadrícula"}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
+              gridEnabled
+                ? "border-[#253621]/30 bg-[#253621]/10 text-[#182618]"
+                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 shadow-2xs"
+            }`}
+          >
+            <Grid2X2 size={14} aria-hidden="true" />
+            <span className="hidden xl:inline">Cuadrícula</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              commit({ ...document, initialViewport: viewport });
+              showClipboardNotice("Vista inicial guardada");
+            }}
+            title="Guardar el encuadre y zoom actual como vista por defecto al abrir el menú"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-600 shadow-2xs transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <Bookmark size={14} aria-hidden="true" />
+            <span className="hidden xl:inline">Fijar vista</span>
+          </button>
+        </div>
+
+        <div className="h-5 w-px bg-zinc-200" />
+
+        {/* Acciones: Descargar QR y Vista previa */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void downloadQr()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 shadow-2xs transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+            title="Descargar código QR del menú"
+          >
+            <QrCode size={14} aria-hidden="true" />
+            <span className="hidden sm:inline">QR</span>
+          </button>
+
+          <a
+            href={`/m/${encodeURIComponent(restaurantSlug)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 sm:px-3 text-xs font-medium text-zinc-700 shadow-2xs transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+            title="Abrir carta pública en una pestaña nueva"
+          >
+            <ExternalLink size={14} aria-hidden="true" />
+            <span>Vista previa</span>
+          </a>
+        </div>
+
+        {/* Resolución de conflictos si se detecta versión desactualizada */}
+        {conflict && (
+          <div className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 p-1 text-xs shadow-2xs">
+            <AlertTriangle size={13} className="ml-1 shrink-0 text-amber-600" />
+            <button
+              type="button"
+              className="rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100/50"
+              onClick={reloadServerVersion}
+            >
+              Cargar servidor
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-amber-600 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-amber-700"
+              onClick={overwriteServerVersion}
+            >
+              Sobrescribir
+            </button>
+          </div>
+        )}
+
+        <div className="mx-0.5 h-5 w-px bg-zinc-200" />
+
+        {/* Botón Principal: Publicar */}
+        <button
+          type="button"
+          onClick={publish}
+          disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-xs font-semibold shadow-2xs transition-all ${
+            saving || publishing || conflict || (!dirty && publishedRevision === revision)
+              ? "cursor-not-allowed border border-zinc-200 bg-zinc-100 text-zinc-400"
+              : "bg-[#182618] text-white shadow-sm hover:bg-[#253621] hover:shadow active:scale-[0.98]"
+          }`}
+        >
+          {publishing ? (
+            <>
+              <Loader2 size={13} className="animate-spin text-zinc-400" />
+              <span>Publicando...</span>
+            </>
+          ) : !dirty && publishedRevision === revision ? (
+            <>
+              <Check size={13} className="text-emerald-500" strokeWidth={2.5} />
+              <span>Publicado</span>
+            </>
+          ) : (
+            <>
+              <Upload size={13} />
+              <span>Publicar</span>
+            </>
+          )}
+        </button>
+      </div>
     </header>
     <div className="flex min-h-0 flex-1">
       <EditorToolsPanel
