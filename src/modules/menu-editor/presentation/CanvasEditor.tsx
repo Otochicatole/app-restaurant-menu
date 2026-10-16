@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Grid2X2, QrCode, Redo2, Undo2 } from "lucide-react";
+import { Grid2X2, ImagePlus, LayoutTemplate, QrCode, Redo2, Search, Undo2 } from "lucide-react";
 import QRCode from "qrcode";
 import { STROKE_SIDES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
 import { copyCanvasSelection, pasteCanvasSelection, type CanvasClipboardSnapshot } from "../domain/canvas-clipboard";
@@ -25,9 +25,11 @@ import { placeNodeInCanvas } from "../domain/node-placement";
 import { allCornerRadii } from "../domain/rectangle-border";
 import { CanvasInspector } from "./CanvasInspector";
 import { LayersPanel } from "./LayersPanel";
-import { EditorToolsPanel, IconPickerDrawer, MediaPickerDrawer, TemplatePickerDrawer, type CanvasDropItem } from "./EditorToolsPanel";
+import { EditorToolsPanel, IconPickerContent, MediaPickerContent, TemplateLibrary, type CanvasDropItem } from "./EditorToolsPanel";
+import { FloatingModalWindow } from "./FloatingModalWindow";
 import { CanvasStage } from "../ui/CanvasStage";
 import { MediaModal, type MediaModalAsset } from "@/ui/MediaModal";
+import { LUCIDE_ICON_NAMES } from "../domain/lucide-icon-catalog";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
@@ -44,6 +46,19 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const [imagesOpen, setImagesOpen] = useState(false);
   const [mediaPickerMode, setMediaPickerMode] = useState<"insert" | "modal" | "background">("insert");
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [modalZIndices, setModalZIndices] = useState<Record<string, number>>({
+    media: 70,
+    icons: 71,
+    templates: 72,
+  });
+
+  const bringModalToFront = (id: string) => {
+    setModalZIndices((prev) => {
+      const highest = Math.max(...Object.values(prev), 70);
+      if (prev[id] === highest) return prev;
+      return { ...prev, [id]: highest + 1 };
+    });
+  };
   const [assets, setAssets] = useState(initialAssets);
   const [templates, setTemplates] = useState(initialTemplates);
   const [history, setHistory] = useState<CanvasDocumentV1[]>([]);
@@ -293,8 +308,8 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const addImage = (asset: MenuAssetView, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "image", assetId: asset.id, ...newNodeFrame(280, 180, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: asset.name });
   const handleCanvasDrop = (item: CanvasDropItem, point: { x: number; y: number }) => { if (item.kind === "text") addText(point); if (item.kind === "shape" && item.shape) addShape(item.shape, point); if (item.kind === "icon" && item.iconKey) addIcon(item.iconKey, point); if (item.kind === "image" && item.assetId) { const asset = assets.find((candidate) => candidate.id === item.assetId); if (asset) addImage(asset, point); } };
   const uploadAsset = async (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
-  const openModalMediaPicker = () => { setMediaPickerMode("modal"); setImagesOpen(true); setIconsOpen(false); setTemplatesOpen(false); setLayersOpen(true); };
-  const openBackgroundImagePicker = () => { setMediaPickerMode("background"); setImagesOpen(true); setIconsOpen(false); setTemplatesOpen(false); setLayersOpen(true); };
+  const openModalMediaPicker = () => { setMediaPickerMode("modal"); setImagesOpen(true); bringModalToFront("media"); };
+  const openBackgroundImagePicker = () => { setMediaPickerMode("background"); setImagesOpen(true); bringModalToFront("media"); };
   const selectMedia = (asset: MenuAssetView) => { if (mediaPickerMode === "modal" && selected?.type === "text") { patchNode(selected.id, { modalAssetId: asset.id }); setImagesOpen(false); return; } if (mediaPickerMode === "background" && selected?.type === "shape" && selected.shape === "rect" && asset.kind === "IMAGE") { patchNode(selected.id, { backgroundImage: { assetId: asset.id, fit: "cover", positionX: 0.5, positionY: 0.5, opacity: 1 } }); setImagesOpen(false); return; } if (asset.kind === "IMAGE") addImage(asset); };
   const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`/api/editor/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
   const publish = async () => {
@@ -386,8 +401,21 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
       <div className="flex shrink-0 items-center gap-1.5"><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={undo} disabled={!history.length} aria-label="Deshacer"><Undo2 size={16} /></button><button className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30" onClick={redo} disabled={!future.length} aria-label="Rehacer"><Redo2 size={16} /></button><label className="hidden cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"><Grid2X2 size={14} aria-hidden="true" /><span>Cuadrícula</span><input className="peer sr-only" type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} /><span aria-hidden="true" className={`relative h-4 w-7 rounded-full transition-colors ${gridEnabled ? "bg-[#253621]" : "bg-zinc-300"}`}><span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${gridEnabled ? "translate-x-3.5" : "translate-x-0.5"}`} /></span></label><button className="hidden rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 sm:block" onClick={() => commit({ ...document, initialViewport: viewport })}>Guardar vista inicial</button><button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={14} aria-hidden="true" />Descargar QR</button><button className="rounded-lg border border-[#253621]/20 px-3 py-2 text-[11px] font-semibold text-[#253621] hover:bg-[#253621]/5" onClick={() => setPreviewOpen(true)}>Vista previa</button>{conflict && <><button className="rounded-lg border border-amber-300 px-2 py-1.5 text-[11px] text-amber-800" onClick={reloadServerVersion}>Cargar servidor</button><button className="rounded-lg border border-red-300 px-2 py-1.5 text-[11px] text-red-800" onClick={overwriteServerVersion}>Sobrescribir</button></>}<button className="rounded-lg bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621] disabled:opacity-40" onClick={publish} disabled={saving || publishing || conflict || (!dirty && publishedRevision === revision)}>Publicar</button></div>
     </header>
     <div className="flex min-h-0 flex-1">
-      <EditorToolsPanel background={document.background} layersOpen={layersOpen} onToggleLayers={() => { setIconsOpen(false); setImagesOpen(false); setTemplatesOpen(false); setLayersOpen((open) => !open); }} onOpenIcons={(open) => { setIconsOpen(open); setImagesOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); setIconsOpen(false); setTemplatesOpen(false); if (open) setLayersOpen(true); }} onOpenTemplates={(open) => { setTemplatesOpen(open); setIconsOpen(false); setImagesOpen(false); if (open) setLayersOpen(true); }} onBackgroundChange={(value) => commit({ ...document, background: value })} onAddText={addText} onAddShape={addShape} onUpload={uploadAsset} />
-      {layersOpen && (iconsOpen ? <IconPickerDrawer onClose={() => setIconsOpen(false)} onSelect={addIcon} /> : imagesOpen ? <MediaPickerDrawer images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")} onClose={() => setImagesOpen(false)} onSelect={selectMedia} onDelete={deleteAsset} /> : templatesOpen ? <TemplatePickerDrawer templates={templates} assets={assets} onClose={() => setTemplatesOpen(false)} onApply={applyTemplate} onSaveTemplate={saveTemplate} onDelete={deleteTemplate} onImport={importTemplate} /> : <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />)}
+      <EditorToolsPanel
+        background={document.background}
+        layersOpen={layersOpen}
+        onToggleLayers={() => setLayersOpen((open) => !open)}
+        onOpenIcons={(open) => { setIconsOpen(open); if (open) bringModalToFront("icons"); }}
+        onOpenImages={(open) => { setMediaPickerMode("insert"); setImagesOpen(open); if (open) bringModalToFront("media"); }}
+        onOpenTemplates={(open) => { setTemplatesOpen(open); if (open) bringModalToFront("templates"); }}
+        onBackgroundChange={(value) => commit({ ...document, background: value })}
+        onAddText={addText}
+        onAddShape={addShape}
+        onUpload={uploadAsset}
+      />
+      {layersOpen && (
+        <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />
+      )}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} layerIndex={layerIndex} assets={assetMap} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} deepSelectedId={deepSelectedId} showGrid={gridEnabled} toolMode={toolMode} onToolModeChange={setToolMode} onSelect={selectCanvasNode} onSelectMany={(ids) => { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(ids.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked)); }} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
       <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onChange={(patch) => selected && (!layerIndex.nodeStates.get(selected.id)?.effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
     </div>
@@ -396,6 +424,72 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     {previewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><div className="relative h-[min(90vh,720px)] w-[min(92vw,1100px)] overflow-hidden rounded-2xl bg-zinc-100 shadow-2xl" role="dialog" aria-modal="true" aria-label="Vista previa del menú"><button type="button" className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-800 shadow" onClick={() => setPreviewOpen(false)}>Cerrar vista previa</button><CanvasStage document={document} assets={assetMap} onTextModalOpen={setPreviewAsset} /></div></div>}
     <MediaModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
     {modal && <EditorModal state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { setModal(null); await confirmOverwrite(serverRevision); }} />}
+
+    {/* Floating Movable & Resizable Modals for Media, Icons, and Templates */}
+    <FloatingModalWindow
+      id="media"
+      title="Multimedia"
+      subtitle={`${assets.length} archivos`}
+      icon={<ImagePlus size={16} className="text-[#253621]" />}
+      isOpen={imagesOpen}
+      onClose={() => setImagesOpen(false)}
+      initialPosition={{ x: 360, y: 70 }}
+      initialSize={{ width: 440, height: 560 }}
+      minWidth={320}
+      minHeight={320}
+      zIndex={modalZIndices.media}
+      onFocus={() => bringModalToFront("media")}
+    >
+      <MediaPickerContent
+        images={assets.filter((asset) => mediaPickerMode === "background" ? asset.kind === "IMAGE" : asset.kind === "IMAGE" || asset.kind === "VIDEO")}
+        onSelect={selectMedia}
+        onDelete={deleteAsset}
+        onUpload={uploadAsset}
+      />
+    </FloatingModalWindow>
+
+    <FloatingModalWindow
+      id="icons"
+      title="Iconos"
+      subtitle={`${LUCIDE_ICON_NAMES.length} diseños`}
+      icon={<Search size={16} className="text-[#253621]" />}
+      isOpen={iconsOpen}
+      onClose={() => setIconsOpen(false)}
+      initialPosition={{ x: 400, y: 90 }}
+      initialSize={{ width: 400, height: 540 }}
+      minWidth={300}
+      minHeight={320}
+      zIndex={modalZIndices.icons}
+      onFocus={() => bringModalToFront("icons")}
+    >
+      <IconPickerContent onSelect={addIcon} />
+    </FloatingModalWindow>
+
+    <FloatingModalWindow
+      id="templates"
+      title="Plantillas"
+      subtitle="Diseños listos para tu carta"
+      icon={<LayoutTemplate size={16} className="text-[#253621]" />}
+      isOpen={templatesOpen}
+      onClose={() => setTemplatesOpen(false)}
+      initialPosition={{ x: 440, y: 75 }}
+      initialSize={{ width: 440, height: 600 }}
+      minWidth={340}
+      minHeight={360}
+      zIndex={modalZIndices.templates}
+      onFocus={() => bringModalToFront("templates")}
+    >
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <TemplateLibrary
+          templates={templates}
+          assets={assets}
+          onApply={applyTemplate}
+          onSaveTemplate={saveTemplate}
+          onDelete={deleteTemplate}
+          onImport={importTemplate}
+        />
+      </div>
+    </FloatingModalWindow>
   </>;
 }
 
