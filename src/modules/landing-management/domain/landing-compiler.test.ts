@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSubElementScopedCss,
   compileLandingDocument,
   compileLandingFromDocument,
   createDefaultLandingDocument,
   createDefaultLandingTemplate,
+  deleteSubElementInBlock,
+  duplicateSubElementInBlock,
   extractTemplateVariables,
+  insertInnerElementInBlock,
+  moveSubElementInBlock,
+  parseSubElementStyles,
+  serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
+  updateSubElementAttributeInBlock,
 } from "./landing-compiler";
+import {
+  BUILTIN_LANDING_MODULES,
+  createBlockFromBuiltinModule,
+} from "./landing-module-catalog";
 import {
   decodeLandingTemplateBundle,
   encodeLandingTemplateBundle,
@@ -52,19 +64,21 @@ describe("landing-compiler", () => {
 
   it("extracts {{variables}} from HTML and syncs field definitions", () => {
     const vars = extractTemplateVariables(
-      '<article><h3>{{title}}</h3><p>{{price}}</p><a href="{{ctaHref}}">{{title}}</a></article>',
+      '<article><h3>{{title}}</h3><p>{{price}}</p><a href="{{ctaHref}}">{{title}}</a><img src="{{dishImage}}" /></article>',
     );
-    expect(vars).toEqual(["title", "price", "ctaHref"]);
+    expect(vars).toEqual(["title", "price", "ctaHref", "dishImage"]);
 
     const synced = syncFieldsWithHtmlTemplate(
       [{ key: "title", label: "Título Custom", type: "text", defaultValue: "Mi Card" }],
-      { title: "Bife", badge: "Nuevo" },
-      '<article><h3>{{title}}</h3><p>{{badge}}</p></article>',
+      { title: "Bife", badge: "Nuevo", dishImage: "https://example.com/a.jpg" },
+      '<article><h3>{{title}}</h3><p>{{badge}}</p><img src="{{dishImage}}" /></article>',
     );
 
-    expect(synced.fields).toHaveLength(2);
+    expect(synced.fields).toHaveLength(3);
     expect(synced.fields[0]?.label).toBe("Título Custom");
     expect(synced.fields[1]?.key).toBe("badge");
+    expect(synced.fields[2]?.key).toBe("dishImage");
+    expect(synced.fields[2]?.type).toBe("image");
     expect(synced.values.badge).toBe("Nuevo");
   });
 
@@ -80,7 +94,7 @@ describe("landing-compiler", () => {
     expect(compiled.fullHtml).toContain("<!DOCTYPE html>");
   });
 
-  it("compiles interactive editor assets with live DOM patching and link neutralization", () => {
+  it("compiles interactive editor assets with live DOM patching, <l-field>, and sub-element selection", () => {
     const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
     const compiled = compileLandingFromDocument(
       doc,
@@ -95,9 +109,106 @@ describe("landing-compiler", () => {
 
     expect(compiled.fullHtml).toContain('id="__landing-blocks-root"');
     expect(compiled.fullHtml).toContain("LANDING_LIVE_PATCH");
+    expect(compiled.fullHtml).toContain("LANDING_SELECT_SUBELEMENT");
+    expect(compiled.fullHtml).toContain("<l-field data-landing-field=");
     expect(compiled.fullHtml).toContain("neutralizeLinks");
     expect(compiled.previewCss).toContain("--color-primary");
     expect(compiled.previewCss).toContain("__landing-editor-toolbar");
+    expect(compiled.previewCss).toContain('[data-sub-selected="true"]');
+  });
+
+  it("compiles granular sub-element scoped CSS from __subStyles", () => {
+    const stylesMap = {
+      "section:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1)": {
+        color: "#ff5500",
+        fontSize: "52px",
+        textAlign: "center",
+      },
+    };
+    const serialized = serializeSubElementStyles(stylesMap);
+    const parsed = parseSubElementStyles(serialized);
+    expect(parsed).toEqual(stylesMap);
+
+    const css = buildSubElementScopedCss("blk-hero-1", {
+      __subStyles: serialized,
+    });
+    expect(css).toContain(
+      '[data-landing-block="blk-hero-1"] > section:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1)',
+    );
+    expect(css).toContain("color: #ff5500 !important;");
+    expect(css).toContain("font-size: 52px !important;");
+    expect(css).toContain("text-align: center !important;");
+  });
+
+  it("duplicates, moves, and deletes sub-elements in a block AST with independent {{variables}}", () => {
+    const specialtiesMod = BUILTIN_LANDING_MODULES.find(
+      (m) => m.moduleKey === "specialties-grid",
+    )!;
+    const block = createBlockFromBuiltinModule(specialtiesMod);
+    const firstCardSelector =
+      "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > article:nth-of-type(1)";
+
+    // Add a sub-element style to the first card
+    block.values.__subStyles = serializeSubElementStyles({
+      [firstCardSelector]: { backgroundColor: "#112233" },
+    });
+
+    // Duplicate first card -> becomes article:nth-of-type(2) with fresh {{variables}}
+    const dupResult = duplicateSubElementInBlock(block, firstCardSelector);
+    expect(dupResult).not.toBeNull();
+    const afterDup = dupResult!.block;
+    expect(dupResult!.newSelector).toBe(
+      "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > article:nth-of-type(2)",
+    );
+    expect(afterDup.fields.length).toBeGreaterThan(block.fields.length);
+
+    const dupSubStyles = parseSubElementStyles(afterDup.values.__subStyles);
+    expect(dupSubStyles[dupResult!.newSelector]?.backgroundColor).toBe("#112233");
+
+    // Move duplicated card (nth-of-type(2)) to next -> becomes article:nth-of-type(3)
+    const moveResult = moveSubElementInBlock(
+      afterDup,
+      dupResult!.newSelector,
+      "next",
+    );
+    expect(moveResult).not.toBeNull();
+    expect(moveResult!.newSelector).toBe(
+      "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > article:nth-of-type(3)",
+    );
+
+    // Delete the card
+    const afterDelete = deleteSubElementInBlock(
+      moveResult!.block,
+      moveResult!.newSelector,
+    );
+    expect(afterDelete).not.toBeNull();
+    expect(afterDelete!.fields.length).toBe(block.fields.length);
+  });
+
+  it("inserts inner elements and updates sub-element attributes in a block", () => {
+    const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+    const block = createBlockFromBuiltinModule(heroMod);
+
+    const withImage = insertInnerElementInBlock(
+      block,
+      "section:nth-of-type(1) > div:nth-of-type(1)",
+      "image",
+    );
+    expect(withImage.htmlTemplate).toContain("<img");
+    expect(withImage.fields.some((f) => f.type === "image")).toBe(true);
+
+    const imgSelector =
+      "section:nth-of-type(1) > div:nth-of-type(1) > img:nth-of-type(1)";
+    const updatedImg = updateSubElementAttributeInBlock(
+      withImage,
+      imgSelector,
+      "src",
+      "https://example.com/custom-dish.jpg",
+    );
+    const imgField = updatedImg.fields.find((f) => f.type === "image")!;
+    expect(updatedImg.values[imgField.key]).toBe(
+      "https://example.com/custom-dish.jpg",
+    );
   });
 
   it("encodes and decodes a portable .landingtemplate bundle (RLAND001)", () => {
@@ -124,5 +235,6 @@ describe("landing-compiler", () => {
     expect(decoded.document.blocks.length).toBe(doc.blocks.length);
   });
 });
+
 
 

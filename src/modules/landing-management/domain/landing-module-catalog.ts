@@ -933,11 +933,11 @@ if (navToggle && navMenu) {
     fields: [
       { key: "tag", label: "Etiqueta superior", type: "text", defaultValue: "Galería" },
       { key: "title", label: "Título de sección", type: "text", defaultValue: "Nuestra atmósfera y cocina" },
-      { key: "img1Url", label: "Foto 1 (URL)", type: "url", defaultValue: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80" },
+      { key: "img1Url", label: "Foto 1", type: "image", defaultValue: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80" },
       { key: "img1Caption", label: "Pie de foto 1", type: "text", defaultValue: "Salón Principal" },
-      { key: "img2Url", label: "Foto 2 (URL)", type: "url", defaultValue: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=900&q=80" },
+      { key: "img2Url", label: "Foto 2", type: "image", defaultValue: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=900&q=80" },
       { key: "img2Caption", label: "Pie de foto 2", type: "text", defaultValue: "Cocina de Autor" },
-      { key: "img3Url", label: "Foto 3 (URL)", type: "url", defaultValue: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80" },
+      { key: "img3Url", label: "Foto 3", type: "image", defaultValue: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80" },
       { key: "img3Caption", label: "Pie de foto 3", type: "text", defaultValue: "Barra & Coctelería" },
     ],
     htmlTemplate: `<section class="section">
@@ -991,6 +991,79 @@ if (navToggle && navMenu) {
   color: #ffffff;
   font-weight: 600;
   font-size: 0.95rem;
+}`,
+    jsTemplate: "",
+  },
+  {
+    moduleKey: "image-spotlight",
+    name: "Sección con Imagen Destacada",
+    description: "Bloque visual de dos columnas con fotografía protagonista, texto editorial y botón de acción.",
+    category: "contenido",
+    fields: [
+      { key: "kicker", label: "Etiqueta superior", type: "text", defaultValue: "Especialidad de Temporada" },
+      { key: "title", label: "Título principal", type: "text", defaultValue: "Sabores auténticos pensados para compartir" },
+      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Cada plato combina técnicas contemporáneas con productos frescos de estación seleccionados cada mañana." },
+      { key: "photoUrl", label: "Fotografía destacada", type: "image", defaultValue: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1000&q=80" },
+      { key: "photoCaption", label: "Etiqueta sobre la foto", type: "text", defaultValue: "Elaboración propia todos los días" },
+      { key: "ctaText", label: "Texto del botón", type: "text", defaultValue: "Ver en la Carta Digital" },
+      { key: "ctaUrl", label: "URL del botón", type: "url", defaultValue: "{{menuUrl}}" },
+    ],
+    htmlTemplate: `<section class="section image-spotlight-section">
+  <div class="container image-spotlight-grid">
+    <div class="image-spotlight-media">
+      <img src="{{photoUrl}}" alt="{{title}}" loading="lazy" />
+      <span class="image-spotlight-caption">{{photoCaption}}</span>
+    </div>
+    <div class="image-spotlight-copy">
+      <span class="section-kicker">{{kicker}}</span>
+      <h2 class="section-title">{{title}}</h2>
+      <p class="section-description">{{description}}</p>
+      <div class="image-spotlight-actions">
+        <a href="{{ctaUrl}}" target="_top" class="btn btn-primary btn-lg">{{ctaText}}</a>
+      </div>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: `.image-spotlight-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 52px;
+  align-items: center;
+}
+.image-spotlight-media {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+  aspect-ratio: 4 / 3;
+}
+.image-spotlight-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.image-spotlight-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(18, 25, 18, 0.82);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.image-spotlight-actions {
+  margin-top: 28px;
+}
+@media (max-width: 868px) {
+  .image-spotlight-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
 }`,
     jsTemplate: "",
   },

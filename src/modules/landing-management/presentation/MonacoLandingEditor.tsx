@@ -58,6 +58,11 @@ import {
   PanelBottom,
   Compass,
   X,
+  ArrowLeft,
+  ArrowRight,
+  CornerLeftUp,
+  Link2,
+  MousePointerClick,
 } from "lucide-react";
 import type {
   LandingBlock,
@@ -65,6 +70,7 @@ import type {
   LandingDocumentV1,
   LandingTemplateView,
   LandingTheme,
+  SubElementStyleOverride,
 } from "../contracts";
 import type { LandingEditorView } from "../application/landing-use-cases";
 import {
@@ -72,13 +78,21 @@ import {
   createBlockFromBuiltinModule,
   createBlockFromCustomModule,
   type BuiltinLandingModuleDefinition,
-} from "../domain/landing-module-catalog";
+} from "./../domain/landing-module-catalog";
 import {
   compileLandingDocument,
   compileLandingFromDocument,
   createDefaultLandingDocument,
   createDefaultLandingTemplate,
+  deleteSubElementInBlock,
+  duplicateSubElementInBlock,
+  insertInnerElementInBlock,
+  moveSubElementInBlock,
+  parseSubElementStyles,
+  serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
+  updateSubElementAttributeInBlock,
+  type InsertableInnerElementKind,
 } from "../domain/landing-compiler";
 import {
   saveLandingDraftAction,
@@ -90,6 +104,7 @@ import {
   exportLandingTemplateAction,
   importLandingTemplateAction,
 } from "./actions";
+import { LandingMediaModal } from "./LandingMediaModal";
 
 loader.config({
   paths: {
@@ -102,6 +117,74 @@ type LeftSidebarTab = "layers" | "components";
 type RightSidebarTab = "properties" | "design";
 type CodeDrawerMode = "closed" | "block" | "global";
 type CodeTab = "html" | "css" | "js" | "json";
+
+type SubElementAncestor = {
+  selector: string;
+  label: string;
+  tagName: string;
+  isRepeatable: boolean;
+};
+
+type SelectedSubElementInfo = {
+  blockId: string;
+  selector: string;
+  tagName: string;
+  label: string;
+  isImage: boolean;
+  isLink: boolean;
+  isRepeatable: boolean;
+  boundTextField: string | null;
+  boundSrcField: string | null;
+  boundHrefField: string | null;
+  boundAltField: string | null;
+  currentSrc: string;
+  currentAlt: string;
+  currentHref: string;
+  ancestors: SubElementAncestor[];
+  computedStyles?: {
+    fontSize?: string;
+    fontWeight?: string;
+    color?: string;
+    backgroundColor?: string;
+    borderRadius?: string;
+    paddingTop?: string;
+    paddingBottom?: string;
+    paddingLeft?: string;
+    paddingRight?: string;
+    textAlign?: string;
+  };
+};
+
+type MediaPickerTarget =
+  | {
+      kind: "field";
+      blockId: string;
+      fieldKey: string;
+      currentUrl: string;
+      title: string;
+    }
+  | {
+      kind: "block-bg";
+      blockId: string;
+      currentUrl: string;
+      title: string;
+    }
+  | {
+      kind: "sub-img";
+      blockId: string;
+      selector: string;
+      boundSrcField: string | null;
+      boundAltField: string | null;
+      currentUrl: string;
+      title: string;
+    }
+  | {
+      kind: "sub-bg";
+      blockId: string;
+      selector: string;
+      currentUrl: string;
+      title: string;
+    };
 
 interface MonacoLandingEditorProps {
   initialData: LandingEditorView;
@@ -281,7 +364,7 @@ function getModuleIcon(moduleKey: string) {
   if (moduleKey === "contact-hours") return MapPin;
   if (moduleKey === "footer") return PanelBottom;
   if (moduleKey === "stats-strip") return BarChart3;
-  if (moduleKey === "gallery-grid") return ImageIcon;
+  if (moduleKey === "gallery-grid" || moduleKey === "image-spotlight") return ImageIcon;
   if (moduleKey === "faq-accordion") return HelpCircle;
   if (moduleKey.startsWith("custom:")) return Wrench;
   return Code2;
@@ -306,6 +389,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(
     initialDoc.blocks[0]?.id ?? null,
   );
+  const [selectedSubElement, setSelectedSubElement] =
+    useState<SelectedSubElementInfo | null>(null);
+  const [mediaPickerTarget, setMediaPickerTarget] =
+    useState<MediaPickerTarget | null>(null);
 
   // Raw code state (for Global Code mode or synced from visual blocks)
   const [rawHtml, setRawHtml] = useState<string>(initialData.landingPage.htmlContent);
@@ -365,13 +452,21 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const inlineEditingRef = useRef<boolean>(false);
   const inlineEditSnapshotRef = useRef<LandingDocumentV1 | null>(null);
   const pendingScrollBlockIdRef = useRef<string | null>(null);
+  const pendingSubSelectorRef = useRef<string | null | undefined>(undefined);
   const iframeScrollYRef = useRef<number>(0);
   const selectedBlockIdRef = useRef<string | null>(selectedBlockId);
+  const selectedSubElementRef = useRef<SelectedSubElementInfo | null>(
+    selectedSubElement,
+  );
   const interactiveCanvasRef = useRef<boolean>(interactiveCanvas);
 
   useEffect(() => {
     selectedBlockIdRef.current = selectedBlockId;
   }, [selectedBlockId]);
+
+  useEffect(() => {
+    selectedSubElementRef.current = selectedSubElement;
+  }, [selectedSubElement]);
 
   useEffect(() => {
     interactiveCanvasRef.current = interactiveCanvas;
@@ -531,6 +626,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     inlineEditingRef.current = false;
     const scrollIntoViewBlockId = pendingScrollBlockIdRef.current;
     pendingScrollBlockIdRef.current = null;
+    const explicitSubSelector = pendingSubSelectorRef.current;
+    pendingSubSelectorRef.current = undefined;
+
+    const currentSub =
+      explicitSubSelector !== undefined
+        ? explicitSubSelector
+        : selectedSubElementRef.current?.blockId === selectedBlockIdRef.current
+          ? selectedSubElementRef.current?.selector ?? null
+          : null;
 
     win.postMessage(
       {
@@ -538,6 +642,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         htmlContent: compiledVisual.htmlContent,
         cssContent: compiledVisual.previewCss,
         selectedBlockId: selectedBlockIdRef.current,
+        subSelector: currentSub,
+        notifySubElement: explicitSubSelector !== undefined && Boolean(explicitSubSelector),
         previewMode: !interactiveCanvas,
         skipDomHtmlUpdate,
         scrollIntoViewBlockId,
@@ -554,10 +660,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   // Sync selection highlight whenever selectedBlockId changes programmatically
   useEffect(() => {
     if (documentState.mode !== "visual") return;
+    const currentSub =
+      selectedSubElementRef.current?.blockId === selectedBlockId
+        ? selectedSubElementRef.current?.selector ?? null
+        : null;
     iframeRef.current?.contentWindow?.postMessage(
       {
         type: "LANDING_SET_SELECTED_BLOCK",
         blockId: selectedBlockId,
+        subSelector: currentSub,
         scrollIntoView: false,
       },
       "*",
@@ -569,10 +680,63 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     [documentState.blocks, selectedBlockId],
   );
 
+  const activeSubElement = useMemo(
+    () =>
+      selectedBlock &&
+      selectedSubElement &&
+      selectedSubElement.blockId === selectedBlock.id
+        ? selectedSubElement
+        : null,
+    [selectedBlock, selectedSubElement],
+  );
+
+  const curStyle = useMemo<SubElementStyleOverride>(() => {
+    if (!selectedBlock || !activeSubElement) return {};
+    const map = parseSubElementStyles(selectedBlock.values.__subStyles);
+    return map[activeSubElement.selector] ?? {};
+  }, [selectedBlock, activeSubElement]);
+
+  const hasSubStyleOverrides = useMemo(
+    () => Object.keys(curStyle).length > 0,
+    [curStyle],
+  );
+
+  const repeatableParent = useMemo(() => {
+    if (!activeSubElement) return undefined;
+    return [...(activeSubElement.ancestors ?? [])]
+      .reverse()
+      .find((a) => a.isRepeatable);
+  }, [activeSubElement]);
+
+  const effectiveSrc = useMemo(() => {
+    if (!selectedBlock || !activeSubElement) return "";
+    return activeSubElement.boundSrcField
+      ? selectedBlock.values[activeSubElement.boundSrcField] ??
+          activeSubElement.currentSrc
+      : activeSubElement.currentSrc;
+  }, [selectedBlock, activeSubElement]);
+
+  const effectiveAlt = useMemo(() => {
+    if (!selectedBlock || !activeSubElement) return "";
+    return activeSubElement.boundAltField
+      ? selectedBlock.values[activeSubElement.boundAltField] ??
+          activeSubElement.currentAlt
+      : activeSubElement.currentAlt;
+  }, [selectedBlock, activeSubElement]);
+
+  const effectiveHref = useMemo(() => {
+    if (!selectedBlock || !activeSubElement) return "";
+    return activeSubElement.boundHrefField
+      ? selectedBlock.values[activeSubElement.boundHrefField] ??
+          activeSubElement.currentHref
+      : activeSubElement.currentHref;
+  }, [selectedBlock, activeSubElement]);
+
   // Select block & notify iframe without full reload
   const selectBlockOnStudio = useCallback(
     (blockId: string | null, scrollIntoView = false) => {
       setSelectedBlockId(blockId);
+      setSelectedSubElement(null);
       if (blockId) {
         setRightTab("properties");
       }
@@ -581,7 +745,31 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           {
             type: "LANDING_SET_SELECTED_BLOCK",
             blockId,
+            subSelector: null,
             scrollIntoView,
+          },
+          "*",
+        );
+      }
+    },
+    [],
+  );
+
+  const selectSubElementOnStudio = useCallback(
+    (blockId: string, subSelector: string | null) => {
+      setSelectedBlockId(blockId);
+      setRightTab("properties");
+      if (!subSelector) {
+        setSelectedSubElement(null);
+      }
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          {
+            type: "LANDING_SET_SELECTED_BLOCK",
+            blockId,
+            subSelector,
+            notifySubElement: Boolean(subSelector),
+            scrollIntoView: false,
           },
           "*",
         );
@@ -620,6 +808,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         };
       });
       setSelectedBlockId(created.id);
+      setSelectedSubElement(null);
       setRightTab("properties");
     },
     [updateDocument],
@@ -711,6 +900,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         return { ...prev, blocks: nextBlocks };
       });
       setSelectedBlockId(copyId);
+      setSelectedSubElement(null);
     },
     [updateDocument],
   );
@@ -721,6 +911,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         const nextBlocks = prev.blocks.filter((b) => b.id !== blockId);
         if (selectedBlockId === blockId) {
           setSelectedBlockId(nextBlocks[0]?.id ?? null);
+          setSelectedSubElement(null);
         }
         return { ...prev, blocks: nextBlocks };
       });
@@ -806,6 +997,173 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     [updateDocument],
   );
 
+  // Sub-element style & structural handlers
+  const handleUpdateSubElementStyle = useCallback(
+    (
+      blockId: string,
+      selector: string,
+      patch: Partial<SubElementStyleOverride>,
+    ) => {
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          const map = parseSubElementStyles(b.values.__subStyles);
+          const current = map[selector] ?? {};
+          const nextStyle: SubElementStyleOverride = { ...current, ...patch };
+          for (const [k, v] of Object.entries(nextStyle)) {
+            if (!v || !v.trim()) {
+              delete nextStyle[k as keyof SubElementStyleOverride];
+            }
+          }
+          if (Object.keys(nextStyle).length > 0) {
+            map[selector] = nextStyle;
+          } else {
+            delete map[selector];
+          }
+          return {
+            ...b,
+            values: {
+              ...b.values,
+              __subStyles: serializeSubElementStyles(map),
+            },
+          };
+        }),
+      }));
+    },
+    [updateDocument],
+  );
+
+  const handleResetSubElementStyles = useCallback(
+    (blockId: string, selector: string) => {
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          const map = parseSubElementStyles(b.values.__subStyles);
+          delete map[selector];
+          return {
+            ...b,
+            values: {
+              ...b.values,
+              __subStyles: serializeSubElementStyles(map),
+            },
+          };
+        }),
+      }));
+    },
+    [updateDocument],
+  );
+
+  const handleDuplicateSubElement = useCallback(
+    (blockId: string, selector: string) => {
+      let nextSel: string | null = null;
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          const res = duplicateSubElementInBlock(b, selector);
+          if (!res) return b;
+          nextSel = res.newSelector;
+          return res.block;
+        }),
+      }));
+      if (nextSel) {
+        pendingSubSelectorRef.current = nextSel;
+        setFeedback({
+          type: "success",
+          message: "Elemento duplicado con variables independientes.",
+        });
+      }
+    },
+    [updateDocument],
+  );
+
+  const handleMoveSubElement = useCallback(
+    (blockId: string, selector: string, direction: "prev" | "next") => {
+      let nextSel: string | null = null;
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          const res = moveSubElementInBlock(b, selector, direction);
+          if (!res) return b;
+          nextSel = res.newSelector;
+          return res.block;
+        }),
+      }));
+      if (nextSel) {
+        pendingSubSelectorRef.current = nextSel;
+      }
+    },
+    [updateDocument],
+  );
+
+  const handleDeleteSubElement = useCallback(
+    (blockId: string, selector: string) => {
+      pendingSubSelectorRef.current = null;
+      setSelectedSubElement(null);
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          return deleteSubElementInBlock(b, selector) ?? b;
+        }),
+      }));
+    },
+    [updateDocument],
+  );
+
+  const handleInsertInnerElement = useCallback(
+    (
+      blockId: string,
+      targetSelector: string | null,
+      kind: InsertableInnerElementKind,
+    ) => {
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          return insertInnerElementInBlock(b, targetSelector, kind);
+        }),
+      }));
+      setFeedback({
+        type: "success",
+        message: "Nuevo elemento agregado al bloque.",
+      });
+    },
+    [updateDocument],
+  );
+
+  const handleUpdateSubElementAttribute = useCallback(
+    (
+      blockId: string,
+      selector: string,
+      attrName: "src" | "href" | "alt",
+      value: string,
+    ) => {
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          return updateSubElementAttributeInBlock(b, selector, attrName, value);
+        }),
+      }));
+      setSelectedSubElement((prev) => {
+        if (!prev || prev.blockId !== blockId || prev.selector !== selector) {
+          return prev;
+        }
+        return {
+          ...prev,
+          ...(attrName === "src" ? { currentSrc: value } : {}),
+          ...(attrName === "href" ? { currentHref: value } : {}),
+          ...(attrName === "alt" ? { currentAlt: value } : {}),
+        };
+      });
+    },
+    [updateDocument],
+  );
+
   const handleUpdateTheme = useCallback(
     (patch: Partial<LandingTheme>) => {
       updateDocument((prev) => ({
@@ -854,7 +1212,49 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         iframeScrollYRef.current = data.scrollY;
       } else if (data.type === "LANDING_SELECT_BLOCK" && typeof data.blockId === "string") {
         setSelectedBlockId(data.blockId);
+        setSelectedSubElement(null);
         setRightTab("properties");
+      } else if (
+        data.type === "LANDING_SELECT_SUBELEMENT" &&
+        typeof data.blockId === "string" &&
+        data.subElement &&
+        typeof data.subElement === "object"
+      ) {
+        setSelectedBlockId(data.blockId);
+        setSelectedSubElement({
+          blockId: data.blockId,
+          ...(data.subElement as Omit<SelectedSubElementInfo, "blockId">),
+        });
+        setRightTab("properties");
+      } else if (
+        data.type === "LANDING_SUBELEMENT_ACTION" &&
+        typeof data.blockId === "string" &&
+        typeof data.selector === "string" &&
+        typeof data.action === "string"
+      ) {
+        if (data.action === "move-prev") {
+          handleMoveSubElement(data.blockId, data.selector, "prev");
+        } else if (data.action === "move-next") {
+          handleMoveSubElement(data.blockId, data.selector, "next");
+        } else if (data.action === "duplicate") {
+          handleDuplicateSubElement(data.blockId, data.selector);
+        } else if (data.action === "delete") {
+          handleDeleteSubElement(data.blockId, data.selector);
+        } else if (data.action === "pick-image") {
+          const curSub =
+            selectedSubElementRef.current?.selector === data.selector
+              ? selectedSubElementRef.current
+              : null;
+          setMediaPickerTarget({
+            kind: "sub-img",
+            blockId: data.blockId,
+            selector: data.selector,
+            boundSrcField: curSub ? curSub.boundSrcField : null,
+            boundAltField: curSub ? curSub.boundAltField : null,
+            currentUrl: curSub ? curSub.currentSrc : "",
+            title: "Cambiar Imagen del Elemento",
+          });
+        }
       } else if (
         data.type === "LANDING_INLINE_FIELD_CHANGE" &&
         typeof data.blockId === "string" &&
@@ -907,8 +1307,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   }, [
     documentState.blocks,
     handleDeleteBlock,
+    handleDeleteSubElement,
     handleDuplicateBlock,
+    handleDuplicateSubElement,
     handleMoveBlock,
+    handleMoveSubElement,
     handleRedo,
     handleSaveDraft,
     handleUndo,
@@ -2098,469 +2501,1282 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
           {rightTab === "properties" ? (
             /* ============================================================= */
-            /* PROPERTIES TAB (Framely / OpenPage Inspector)                  */
+            /* PROPERTIES TAB (Block & Granular Sub-Element Inspector)       */
             /* ============================================================= */
             selectedBlock ? (
               <div className="flex-1 overflow-y-auto divide-y divide-zinc-200">
-                {/* Block Header & Module Actions */}
-                <div className="p-3.5 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                      {selectedBlock.moduleKey}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveBlock(selectedBlock.id, "up")}
-                        className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
-                        title="Subir bloque"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
+                {/* Breadcrumb Hierarchy Bar */}
+                <div className="bg-zinc-50 px-3.5 py-2 flex flex-wrap items-center gap-1 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => selectSubElementOnStudio(selectedBlock.id, null)}
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold transition ${
+                      !activeSubElement
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900"
+                    }`}
+                  >
+                    <Layers className="h-3 w-3" />
+                    <span className="max-w-28 truncate">{selectedBlock.name}</span>
+                  </button>
+
+                  {activeSubElement?.ancestors.map((anc) => (
+                    <React.Fragment key={anc.selector}>
+                      <span className="text-zinc-400">›</span>
                       <button
                         type="button"
                         onClick={() =>
-                          handleMoveBlock(selectedBlock.id, "down")
+                          selectSubElementOnStudio(selectedBlock.id, anc.selector)
                         }
-                        className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
-                        title="Bajar bloque"
+                        className="rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900"
                       >
-                        <ChevronDown className="h-3.5 w-3.5" />
+                        {anc.label}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicateBlock(selectedBlock)}
-                        className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
-                        title="Duplicar bloque"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBlock(selectedBlock.id)}
-                        className="p-1 rounded bg-zinc-100 hover:bg-red-50 text-zinc-600 hover:text-red-600"
-                        title="Eliminar bloque"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                    </React.Fragment>
+                  ))}
 
-                  <div>
-                    <label className="block text-[11px] font-medium text-zinc-600 mb-1">
-                      Nombre de la Capa
-                    </label>
-                    <input
-                      type="text"
-                      value={selectedBlock.name}
-                      onChange={(e) =>
-                        handleUpdateBlockName(selectedBlock.id, e.target.value)
-                      }
-                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                    />
-                  </div>
-
-                  {/* Quick Buttons: Edit Module Code & Save as Reusable Module */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCodeDrawerMode((m) =>
-                          m === "block" ? "closed" : "block",
-                        );
-                        setCodeTab("html");
-                      }}
-                      className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition-colors ${
-                        codeDrawerMode === "block"
-                          ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs"
-                          : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200"
-                      }`}
-                    >
-                      <Code2 className="h-3.5 w-3.5 text-amber-600" />
-                      Código HTML/JS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModuleName(selectedBlock.name);
-                        setModuleDesc("");
-                        setShowSaveModuleModal(true);
-                      }}
-                      className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200 transition-colors"
-                    >
-                      <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600" />
-                      Guardar Módulo
-                    </button>
-                  </div>
-                </div>
-
-                {/* Content Fields ({{variables}}) */}
-                <div className="p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                      <Type className="h-3.5 w-3.5 text-zinc-400" />
-                      Contenido Editable ({selectedBlock.fields.length})
-                    </span>
-                  </div>
-
-                  {selectedBlock.fields.length === 0 ? (
-                    <p className="text-xs text-zinc-500">
-                      Este módulo no tiene variables{" "}
-                      <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">{"{{variable}}"}</code>.
-                      Abrí <strong>Código HTML/JS</strong> para agregarlas.
-                    </p>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {selectedBlock.fields.map((field) => {
-                        const val =
-                          selectedBlock.values[field.key] ??
-                          field.defaultValue ??
-                          "";
-                        return (
-                          <div key={field.key} className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-medium text-zinc-700">
-                                {field.label}
-                              </label>
-                              <code className="text-[10px] text-zinc-400 font-mono">
-                                {`{{${field.key}}}`}
-                              </code>
-                            </div>
-
-                            {field.type === "textarea" ? (
-                              <textarea
-                                rows={2}
-                                value={val}
-                                onChange={(e) =>
-                                  handleUpdateBlockValue(
-                                    selectedBlock.id,
-                                    field.key,
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                              />
-                            ) : field.type === "color" ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="color"
-                                  value={
-                                    val.startsWith("#") ? val : "#c49a45"
-                                  }
-                                  onChange={(e) =>
-                                    handleUpdateBlockValue(
-                                      selectedBlock.id,
-                                      field.key,
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="h-7 w-8 rounded bg-transparent border border-zinc-300 cursor-pointer"
-                                />
-                                <input
-                                  type="text"
-                                  value={val}
-                                  onChange={(e) =>
-                                    handleUpdateBlockValue(
-                                      selectedBlock.id,
-                                      field.key,
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                />
-                              </div>
-                            ) : (
-                              <input
-                                type="text"
-                                value={val}
-                                onChange={(e) =>
-                                  handleUpdateBlockValue(
-                                    selectedBlock.id,
-                                    field.key,
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {activeSubElement && (
+                    <>
+                      <span className="text-zinc-400">›</span>
+                      <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 font-semibold text-white shadow-2xs">
+                        {activeSubElement.label}
+                      </span>
+                    </>
                   )}
                 </div>
 
-                {/* Appearance & Layout Overrides (Framely Right Panel style!) */}
-                <div className="p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                      Appearance & Layout
-                    </span>
-                    {(selectedBlock.values.__bgColor ||
-                      selectedBlock.values.__textColor ||
-                      selectedBlock.values.__paddingY ||
-                      selectedBlock.values.__textAlign ||
-                      (selectedBlock.values.__borderWidth &&
-                        selectedBlock.values.__borderWidth !== "0px") ||
-                      selectedBlock.values.__borderColor ||
-                      (selectedBlock.values.__borderRadius &&
-                        selectedBlock.values.__borderRadius !== "0px")) && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUpdateBlockValues(selectedBlock.id, {
-                            __bgColor: "",
-                            __textColor: "",
-                            __paddingY: "",
-                            __textAlign: "",
-                            __borderWidth: "",
-                            __borderColor: "",
-                            __borderRadius: "",
-                          })
-                        }
-                        className="text-[10px] text-zinc-500 hover:text-zinc-800 underline"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
+                {activeSubElement ? (
+                  /* ========================================================= */
+                  /* GRANULAR SUB-ELEMENT INSPECTOR                            */
+                  /* ========================================================= */
+                  <>
+                    {/* Sub-Element Header & Structural Actions */}
+                    <div className="p-3.5 space-y-3 bg-violet-50/35">
+                      <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200">
+                                {activeSubElement.label}
+                              </span>
+                              <code className="text-[10px] text-zinc-500 font-mono">
+                                &lt;{activeSubElement.tagName}&gt;
+                              </code>
+                            </div>
 
-                  {/* Fill Color */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-600">Fill Color</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="color"
-                        value={
-                          selectedBlock.values.__bgColor ||
-                          documentState.theme.bgColor
-                        }
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__bgColor",
-                            e.target.value,
-                          )
-                        }
-                        className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Por defecto"
-                        value={selectedBlock.values.__bgColor ?? ""}
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__bgColor",
-                            e.target.value,
-                          )
-                        }
-                        className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
-                      />
-                      {selectedBlock.values.__bgColor && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateBlockValue(
-                              selectedBlock.id,
-                              "__bgColor",
-                              "",
-                            )
-                          }
-                          className="p-0.5 text-zinc-400 hover:text-zinc-700"
-                          title="Quitar color personalizado"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                selectSubElementOnStudio(selectedBlock.id, null)
+                              }
+                              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                              title="Volver a las propiedades del bloque"
+                            >
+                              <CornerLeftUp className="h-3 w-3" />
+                              Bloque
+                            </button>
+                          </div>
 
-                  {/* Text Color */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-600">Text Color</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="color"
-                        value={
-                          selectedBlock.values.__textColor ||
-                          documentState.theme.textColor
-                        }
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__textColor",
-                            e.target.value,
-                          )
-                        }
-                        className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Por defecto"
-                        value={selectedBlock.values.__textColor ?? ""}
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__textColor",
-                            e.target.value,
-                          )
-                        }
-                        className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
-                      />
-                      {selectedBlock.values.__textColor && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateBlockValue(
-                              selectedBlock.id,
-                              "__textColor",
-                              "",
-                            )
-                          }
-                          className="p-0.5 text-zinc-400 hover:text-zinc-700"
-                          title="Quitar color personalizado"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                          {/* Structural Actions: Move, Duplicate, Delete */}
+                          <div className="grid grid-cols-4 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMoveSubElement(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  "prev",
+                                )
+                              }
+                              className="flex items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50"
+                              title="Mover antes del elemento anterior"
+                            >
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                              Antes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMoveSubElement(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  "next",
+                                )
+                              }
+                              className="flex items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50"
+                              title="Mover después del elemento siguiente"
+                            >
+                              Después
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDuplicateSubElement(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                )
+                              }
+                              className="flex items-center justify-center gap-1 rounded-lg border border-violet-200 bg-violet-600 py-1.5 px-2 text-[11px] font-semibold text-white hover:bg-violet-500"
+                              title="Duplicar este elemento con variables propias"
+                            >
+                              <Copy className="h-3 w-3" />
+                              Duplicar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteSubElement(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                )
+                              }
+                              className="flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white py-1.5 px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                              title="Eliminar este elemento"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
 
-                  {/* Text Alignment */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-600">
-                      Text Alignment
-                    </span>
-                    <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                      {[
-                        { val: "left", icon: AlignLeft },
-                        { val: "center", icon: AlignCenter },
-                        { val: "right", icon: AlignRight },
-                      ].map(({ val, icon: AlignIcon }) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() =>
-                            handleUpdateBlockValue(
-                              selectedBlock.id,
-                              "__textAlign",
-                              selectedBlock.values.__textAlign === val
-                                ? ""
-                                : val,
-                            )
-                          }
-                          className={`p-1.5 rounded-md transition-colors ${
-                            selectedBlock.values.__textAlign === val
-                              ? "bg-white text-zinc-900 shadow-2xs"
-                              : "text-zinc-500 hover:text-zinc-800"
-                          }`}
-                        >
-                          <AlignIcon className="h-3.5 w-3.5" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                          {/* Parent Repeatable Card Helper */}
+                          {repeatableParent && (
+                            <div className="flex items-center justify-between gap-2 rounded-lg border border-violet-200/80 bg-white px-2.5 py-2">
+                              <div className="min-w-0">
+                                <span className="block text-[10px] font-semibold text-zinc-500">
+                                  Contenedor: {repeatableParent.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    selectSubElementOnStudio(
+                                      selectedBlock.id,
+                                      repeatableParent.selector,
+                                    )
+                                  }
+                                  className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                                >
+                                  Seleccionar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDuplicateSubElement(
+                                      selectedBlock.id,
+                                      repeatableParent.selector,
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded bg-violet-100 px-2 py-1 text-[10px] font-semibold text-violet-800 hover:bg-violet-200"
+                                >
+                                  <Copy className="h-2.5 w-2.5" />
+                                  Duplicar {repeatableParent.label}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
-                  {/* Vertical Padding */}
-                  <div>
-                    <span className="block text-xs text-zinc-600 mb-1.5">
-                      Vertical Spacing
-                    </span>
-                    <div className="grid grid-cols-4 gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200">
-                      {[
-                        { label: "S", val: "24px" },
-                        { label: "M", val: "48px" },
-                        { label: "L", val: "80px" },
-                        { label: "XL", val: "112px" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.val}
-                          type="button"
-                          onClick={() =>
-                            handleUpdateBlockValue(
-                              selectedBlock.id,
-                              "__paddingY",
-                              selectedBlock.values.__paddingY === opt.val
-                                ? ""
-                                : opt.val,
-                            )
-                          }
-                          className={`py-1 rounded text-[11px] font-semibold transition-colors ${
-                            selectedBlock.values.__paddingY === opt.val
-                              ? "bg-white text-zinc-900 shadow-2xs"
-                              : "text-zinc-500 hover:text-zinc-800"
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                        {/* Direct Content / Attributes (Text, Image, Link) */}
+                        {(activeSubElement.boundTextField ||
+                          activeSubElement.isImage ||
+                          activeSubElement.isLink) && (
+                          <div className="p-3.5 space-y-3">
+                            <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                              Contenido del Elemento
+                            </span>
 
-                  {/* Stroke & Corner Radius */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="block text-[11px] text-zinc-600 mb-1">
-                        Border Width
-                      </span>
-                      <select
-                        value={selectedBlock.values.__borderWidth || "0px"}
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__borderWidth",
-                            e.target.value === "0px" ? "" : e.target.value,
-                          )
-                        }
-                        className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
-                      >
-                        <option value="0px">0px (Sin borde)</option>
-                        <option value="1px">1px</option>
-                        <option value="2px">2px</option>
-                        <option value="4px">4px</option>
-                      </select>
-                    </div>
-                    <div>
-                      <span className="block text-[11px] text-zinc-600 mb-1">
-                        Border Radius
-                      </span>
-                      <select
-                        value={selectedBlock.values.__borderRadius || "0px"}
-                        onChange={(e) =>
-                          handleUpdateBlockValue(
-                            selectedBlock.id,
-                            "__borderRadius",
-                            e.target.value === "0px" ? "" : e.target.value,
-                          )
-                        }
-                        className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
-                      >
-                        <option value="0px">0px</option>
-                        <option value="12px">12px</option>
-                        <option value="20px">20px</option>
-                        <option value="32px">32px</option>
-                      </select>
-                    </div>
-                  </div>
+                            {activeSubElement.boundTextField && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="text-[11px] font-medium text-zinc-700">
+                                    Texto visible
+                                  </label>
+                                  <code className="text-[10px] text-zinc-400 font-mono">
+                                    {`{{${activeSubElement.boundTextField}}}`}
+                                  </code>
+                                </div>
+                                <textarea
+                                  rows={2}
+                                  value={
+                                    selectedBlock.values[
+                                      activeSubElement.boundTextField
+                                    ] ?? ""
+                                  }
+                                  onChange={(e) =>
+                                    handleUpdateBlockValue(
+                                      selectedBlock.id,
+                                      activeSubElement.boundTextField!,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-violet-500 focus:bg-white"
+                                />
+                              </div>
+                            )}
 
-                  {selectedBlock.values.__borderWidth &&
-                    selectedBlock.values.__borderWidth !== "0px" && (
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        <span className="text-xs text-zinc-600">
-                          Border Color
+                            {activeSubElement.isImage && (
+                              <div className="space-y-2.5">
+                                <div className="flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+                                  <div className="h-14 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                                    {effectiveSrc ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={effectiveSrc}
+                                        alt={effectiveAlt || "Imagen"}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                                        <ImageIcon className="h-5 w-5" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setMediaPickerTarget({
+                                          kind: "sub-img",
+                                          blockId: selectedBlock.id,
+                                          selector: activeSubElement.selector,
+                                          boundSrcField:
+                                            activeSubElement.boundSrcField,
+                                          boundAltField:
+                                            activeSubElement.boundAltField,
+                                          currentUrl: effectiveSrc,
+                                          title: "Seleccionar o Subir Imagen",
+                                        })
+                                      }
+                                      className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 shadow-2xs"
+                                    >
+                                      <ImageIcon className="h-3.5 w-3.5" />
+                                      Elegir / Subir Imagen
+                                    </button>
+                                    <p className="mt-1 text-[10px] text-zinc-500 truncate">
+                                      Galeria del restaurante o URL
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-[11px] font-medium text-zinc-700 mb-1">
+                                    URL de imagen (src)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={effectiveSrc}
+                                    onChange={(e) => {
+                                      if (activeSubElement.boundSrcField) {
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          activeSubElement.boundSrcField,
+                                          e.target.value,
+                                        );
+                                      } else {
+                                        handleUpdateSubElementAttribute(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          "src",
+                                          e.target.value,
+                                        );
+                                      }
+                                    }}
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[11px] font-medium text-zinc-700 mb-1">
+                                      Texto alternativo (alt)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={effectiveAlt}
+                                      onChange={(e) => {
+                                        if (activeSubElement.boundAltField) {
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            activeSubElement.boundAltField,
+                                            e.target.value,
+                                          );
+                                        } else {
+                                          handleUpdateSubElementAttribute(
+                                            selectedBlock.id,
+                                            activeSubElement.selector,
+                                            "alt",
+                                            e.target.value,
+                                          );
+                                        }
+                                      }}
+                                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-900 focus:bg-white"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[11px] font-medium text-zinc-700 mb-1">
+                                      Encuadre (Fit)
+                                    </label>
+                                    <select
+                                      value={curStyle.objectFit || "cover"}
+                                      onChange={(e) =>
+                                        handleUpdateSubElementStyle(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          { objectFit: e.target.value },
+                                        )
+                                      }
+                                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                    >
+                                      <option value="cover">Cubrir (Cover)</option>
+                                      <option value="contain">Ajustar (Contain)</option>
+                                      <option value="fill">Estirar (Fill)</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {activeSubElement.isLink && (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[11px] font-medium text-zinc-700 mb-1 flex items-center gap-1">
+                                    <Link2 className="h-3 w-3 text-zinc-400" />
+                                    Destino del Botón / Enlace (href)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={effectiveHref}
+                                    onChange={(e) => {
+                                      if (activeSubElement.boundHrefField) {
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          activeSubElement.boundHrefField,
+                                          e.target.value,
+                                        );
+                                      } else {
+                                        handleUpdateSubElementAttribute(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          "href",
+                                          e.target.value,
+                                        );
+                                      }
+                                    }}
+                                    placeholder="/m/mi-restaurante o #contacto"
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {[
+                                    { label: "Carta Digital", url: `/m/${tenant.slug}` },
+                                    { label: "#destacados", url: "#destacados" },
+                                    { label: "#experiencia", url: "#experiencia" },
+                                    { label: "#contacto", url: "#contacto" },
+                                    { label: "WhatsApp", url: "https://wa.me/" },
+                                  ].map((preset) => (
+                                    <button
+                                      key={preset.label}
+                                      type="button"
+                                      onClick={() => {
+                                        if (activeSubElement.boundHrefField) {
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            activeSubElement.boundHrefField,
+                                            preset.url,
+                                          );
+                                        } else {
+                                          handleUpdateSubElementAttribute(
+                                            selectedBlock.id,
+                                            activeSubElement.selector,
+                                            "href",
+                                            preset.url,
+                                          );
+                                        }
+                                      }}
+                                      className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                    >
+                                      {preset.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Granular CSS Style Overrides for Sub-Element */}
+                        <div className="p-3.5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                              Estilo del Elemento
+                            </span>
+                            {hasSubStyleOverrides && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleResetSubElementStyles(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                  )
+                                }
+                                className="text-[10px] text-violet-600 hover:text-violet-800 underline font-medium"
+                              >
+                                Reset estilos
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Typography: Font Size & Weight */}
+                          {!activeSubElement.isImage && (
+                            <>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="block text-[11px] text-zinc-600 mb-1">
+                                    Tamaño de Letra
+                                  </span>
+                                  <select
+                                    value={curStyle.fontSize || ""}
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { fontSize: e.target.value },
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                  >
+                                    <option value="">Por defecto</option>
+                                    <option value="12px">12px (XS)</option>
+                                    <option value="14px">14px (SM)</option>
+                                    <option value="16px">16px (Base)</option>
+                                    <option value="18px">18px (MD)</option>
+                                    <option value="20px">20px (LG)</option>
+                                    <option value="24px">24px (XL)</option>
+                                    <option value="32px">32px (2XL)</option>
+                                    <option value="40px">40px (3XL)</option>
+                                    <option value="48px">48px (4XL)</option>
+                                    <option value="56px">56px (Hero)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <span className="block text-[11px] text-zinc-600 mb-1">
+                                    Peso (Grosor)
+                                  </span>
+                                  <select
+                                    value={curStyle.fontWeight || ""}
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { fontWeight: e.target.value },
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                  >
+                                    <option value="">Por defecto</option>
+                                    <option value="400">400 Normal</option>
+                                    <option value="500">500 Medium</option>
+                                    <option value="600">600 Semibold</option>
+                                    <option value="700">700 Bold</option>
+                                    <option value="800">800 ExtraBold</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Text Color */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-zinc-600">
+                                  Color de Texto
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="color"
+                                    value={
+                                      curStyle.color?.startsWith("#")
+                                        ? curStyle.color
+                                        : documentState.theme.textColor
+                                    }
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { color: e.target.value },
+                                      )
+                                    }
+                                    className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Auto"
+                                    value={curStyle.color ?? ""}
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { color: e.target.value },
+                                      )
+                                    }
+                                    className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
+                                  />
+                                  {curStyle.color && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleUpdateSubElementStyle(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          { color: "" },
+                                        )
+                                      }
+                                      className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Text Align */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-zinc-600">
+                                  Alineación
+                                </span>
+                                <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                                  {[
+                                    { val: "left", icon: AlignLeft },
+                                    { val: "center", icon: AlignCenter },
+                                    { val: "right", icon: AlignRight },
+                                  ].map(({ val, icon: AlignIcon }) => (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() =>
+                                        handleUpdateSubElementStyle(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          {
+                                            textAlign:
+                                              curStyle.textAlign === val
+                                                ? ""
+                                                : val,
+                                          },
+                                        )
+                                      }
+                                      className={`p-1.5 rounded-md transition-colors ${
+                                        curStyle.textAlign === val
+                                          ? "bg-white text-zinc-900 shadow-2xs"
+                                          : "text-zinc-500 hover:text-zinc-800"
+                                      }`}
+                                    >
+                                      <AlignIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Background Color */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-zinc-600">
+                              Color de Fondo
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={
+                                  curStyle.backgroundColor?.startsWith("#")
+                                    ? curStyle.backgroundColor
+                                    : documentState.theme.cardBgColor
+                                }
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { backgroundColor: e.target.value },
+                                  )
+                                }
+                                className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Auto"
+                                value={curStyle.backgroundColor ?? ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { backgroundColor: e.target.value },
+                                  )
+                                }
+                                className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
+                              />
+                              {curStyle.backgroundColor && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { backgroundColor: "" },
+                                    )
+                                  }
+                                  className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Background Image for Container / Card */}
+                          {!activeSubElement.isImage && (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs text-zinc-600">
+                                Imagen de Fondo
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMediaPickerTarget({
+                                      kind: "sub-bg",
+                                      blockId: selectedBlock.id,
+                                      selector: activeSubElement.selector,
+                                      currentUrl:
+                                        curStyle.backgroundImage ?? "",
+                                      title: "Imagen de Fondo del Elemento",
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                                >
+                                  <ImageIcon className="h-3 w-3 text-blue-600" />
+                                  {curStyle.backgroundImage
+                                    ? "Cambiar fondo"
+                                    : "Elegir imagen"}
+                                </button>
+                                {curStyle.backgroundImage && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { backgroundImage: "" },
+                                      )
+                                    }
+                                    className="p-1 text-zinc-400 hover:text-red-600"
+                                    title="Quitar imagen de fondo"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Padding & Margin */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Padding Vertical
+                              </span>
+                              <select
+                                value={curStyle.paddingTop || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      paddingTop: e.target.value,
+                                      paddingBottom: e.target.value,
+                                    },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Por defecto</option>
+                                <option value="0px">0px</option>
+                                <option value="8px">8px</option>
+                                <option value="12px">12px</option>
+                                <option value="16px">16px</option>
+                                <option value="24px">24px</option>
+                                <option value="32px">32px</option>
+                                <option value="48px">48px</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Padding Horizontal
+                              </span>
+                              <select
+                                value={curStyle.paddingLeft || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      paddingLeft: e.target.value,
+                                      paddingRight: e.target.value,
+                                    },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Por defecto</option>
+                                <option value="0px">0px</option>
+                                <option value="12px">12px</option>
+                                <option value="16px">16px</option>
+                                <option value="24px">24px</option>
+                                <option value="32px">32px</option>
+                                <option value="44px">44px</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Dimensions & Spacing */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Ancho (Width)
+                              </span>
+                              <select
+                                value={curStyle.width || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { width: e.target.value },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Auto</option>
+                                <option value="100%">100% (Ancho total)</option>
+                                <option value="fit-content">Ajustado al texto</option>
+                                <option value="240px">240px</option>
+                                <option value="320px">320px</option>
+                                <option value="480px">480px</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Margen Inferior
+                              </span>
+                              <select
+                                value={curStyle.marginBottom || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { marginBottom: e.target.value },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Por defecto</option>
+                                <option value="0px">0px</option>
+                                <option value="8px">8px</option>
+                                <option value="16px">16px</option>
+                                <option value="24px">24px</option>
+                                <option value="36px">36px</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Border & Radius */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Borde
+                              </span>
+                              <select
+                                value={curStyle.borderWidth || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { borderWidth: e.target.value },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Por defecto</option>
+                                <option value="0px">Sin borde (0px)</option>
+                                <option value="1px">1px</option>
+                                <option value="2px">2px</option>
+                                <option value="3px">3px</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Esquinas (Radius)
+                              </span>
+                              <select
+                                value={curStyle.borderRadius || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { borderRadius: e.target.value },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Por defecto</option>
+                                <option value="0px">Recto (0px)</option>
+                                <option value="8px">Suave (8px)</option>
+                                <option value="14px">Medio (14px)</option>
+                                <option value="24px">Redondeado (24px)</option>
+                                <option value="9999px">Píldora (Full)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {curStyle.borderWidth &&
+                            curStyle.borderWidth !== "0px" && (
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-zinc-600">
+                                  Color de Borde
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="color"
+                                    value={
+                                      curStyle.borderColor?.startsWith("#")
+                                        ? curStyle.borderColor
+                                        : documentState.theme.borderColor
+                                    }
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { borderColor: e.target.value },
+                                      )
+                                    }
+                                    className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={curStyle.borderColor ?? ""}
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { borderColor: e.target.value },
+                                      )
+                                    }
+                                    className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Shadow */}
+                          <div>
+                            <span className="block text-[11px] text-zinc-600 mb-1">
+                              Sombra (Shadow)
+                            </span>
+                            <select
+                              value={curStyle.boxShadow || ""}
+                              onChange={(e) =>
+                                handleUpdateSubElementStyle(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  { boxShadow: e.target.value },
+                                )
+                              }
+                              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                            >
+                              <option value="">Por defecto</option>
+                              <option value="none">Sin sombra</option>
+                              <option value="0 4px 12px rgba(0,0,0,0.06)">
+                                Sombra sutil
+                              </option>
+                              <option value="0 12px 28px -6px rgba(0,0,0,0.14)">
+                                Sombra media
+                              </option>
+                              <option value="0 20px 44px -10px rgba(0,0,0,0.24)">
+                                Sombra pronunciada
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Insert Inner Element next to / inside selected sub-element */}
+                        <div className="p-3.5 space-y-2.5">
+                          <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                            + Insertar Elemento Aquí
+                          </span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(
+                              [
+                                { kind: "button", label: "+ Botón" },
+                                { kind: "image", label: "+ Imagen" },
+                                { kind: "heading", label: "+ Título" },
+                                { kind: "text", label: "+ Párrafo" },
+                                { kind: "badge", label: "+ Insignia" },
+                                { kind: "card", label: "+ Tarjeta" },
+                              ] as const
+                            ).map((item) => (
+                              <button
+                                key={item.kind}
+                                type="button"
+                                onClick={() =>
+                                  handleInsertInnerElement(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    item.kind,
+                                  )
+                                }
+                                className="rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 transition"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                ) : (
+                  /* ========================================================= */
+                  /* BLOCK ROOT INSPECTOR                                      */
+                  /* ========================================================= */
+                  <>
+                    {/* Block Header & Module Actions */}
+                    <div className="p-3.5 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          {selectedBlock.moduleKey}
                         </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveBlock(selectedBlock.id, "up")}
+                            className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
+                            title="Subir bloque"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleMoveBlock(selectedBlock.id, "down")
+                            }
+                            className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
+                            title="Bajar bloque"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateBlock(selectedBlock)}
+                            className="p-1 rounded bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900"
+                            title="Duplicar bloque"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBlock(selectedBlock.id)}
+                            className="p-1 rounded bg-zinc-100 hover:bg-red-50 text-zinc-600 hover:text-red-600"
+                            title="Eliminar bloque"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-zinc-600 mb-1">
+                          Nombre de la Capa
+                        </label>
+                        <input
+                          type="text"
+                          value={selectedBlock.name}
+                          onChange={(e) =>
+                            handleUpdateBlockName(
+                              selectedBlock.id,
+                              e.target.value,
+                            )
+                          }
+                          className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 rounded-lg border border-violet-200/80 bg-violet-50/50 px-2.5 py-2 text-[11px] text-violet-900">
+                        <MousePointerClick className="h-4 w-4 shrink-0 text-violet-600" />
+                        <span>
+                          Hacé clic en cualquier <strong>botón, tarjeta, título o foto</strong> dentro del lienzo para editar su estilo o duplicarlo.
+                        </span>
+                      </div>
+
+                      {/* Quick Buttons: Edit Module Code & Save as Reusable Module */}
+                      <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCodeDrawerMode((m) =>
+                              m === "block" ? "closed" : "block",
+                            );
+                            setCodeTab("html");
+                          }}
+                          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            codeDrawerMode === "block"
+                              ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs"
+                              : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200"
+                          }`}
+                        >
+                          <Code2 className="h-3.5 w-3.5 text-amber-600" />
+                          Código HTML/JS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModuleName(selectedBlock.name);
+                            setModuleDesc("");
+                            setShowSaveModuleModal(true);
+                          }}
+                          className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200 transition-colors"
+                        >
+                          <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600" />
+                          Guardar Módulo
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Insert Inner Elements into Block without touching code */}
+                    <div className="p-3.5 space-y-2.5">
+                      <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                        + Insertar Elemento en el Bloque
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(
+                          [
+                            { kind: "button", label: "+ Botón CTA" },
+                            { kind: "image", label: "+ Imagen" },
+                            { kind: "heading", label: "+ Título" },
+                            { kind: "text", label: "+ Párrafo" },
+                            { kind: "badge", label: "+ Insignia" },
+                            { kind: "card", label: "+ Tarjeta" },
+                          ] as const
+                        ).map((item) => (
+                          <button
+                            key={item.kind}
+                            type="button"
+                            onClick={() =>
+                              handleInsertInnerElement(
+                                selectedBlock.id,
+                                null,
+                                item.kind,
+                              )
+                            }
+                            className="rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Content Fields ({{variables}}) */}
+                    <div className="p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                          <Type className="h-3.5 w-3.5 text-zinc-400" />
+                          Contenido Editable ({selectedBlock.fields.length})
+                        </span>
+                      </div>
+
+                      {selectedBlock.fields.length === 0 ? (
+                        <p className="text-xs text-zinc-500">
+                          Este módulo no tiene variables{" "}
+                          <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                            {"{{variable}}"}
+                          </code>
+                          . Usá los botones de arriba o abrí{" "}
+                          <strong>Código HTML/JS</strong>.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {selectedBlock.fields.map((field) => {
+                            const val =
+                              selectedBlock.values[field.key] ??
+                              field.defaultValue ??
+                              "";
+                            const isImageField =
+                              field.type === "image" ||
+                              /image|img|photo|foto|logo|banner|thumb/i.test(
+                                field.key,
+                              );
+
+                            return (
+                              <div key={field.key} className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] font-medium text-zinc-700">
+                                    {field.label}
+                                  </label>
+                                  <code className="text-[10px] text-zinc-400 font-mono">
+                                    {`{{${field.key}}}`}
+                                  </code>
+                                </div>
+
+                                {isImageField ? (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-10 w-12 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
+                                        {val ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={val}
+                                            alt={field.label}
+                                            className="h-full w-full object-cover"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setMediaPickerTarget({
+                                            kind: "field",
+                                            blockId: selectedBlock.id,
+                                            fieldKey: field.key,
+                                            currentUrl: val,
+                                            title: `Imagen: ${field.label}`,
+                                          })
+                                        }
+                                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                      >
+                                        <ImageIcon className="h-3.5 w-3.5" />
+                                        Elegir / Subir Foto
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="URL de la imagen..."
+                                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-[11px] text-zinc-700 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                    />
+                                  </div>
+                                ) : field.type === "textarea" ? (
+                                  <textarea
+                                    rows={2}
+                                    value={val}
+                                    onChange={(e) =>
+                                      handleUpdateBlockValue(
+                                        selectedBlock.id,
+                                        field.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                ) : field.type === "color" ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="color"
+                                      value={
+                                        val.startsWith("#") ? val : "#c49a45"
+                                      }
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="h-7 w-8 rounded bg-transparent border border-zinc-300 cursor-pointer"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                    />
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onChange={(e) =>
+                                      handleUpdateBlockValue(
+                                        selectedBlock.id,
+                                        field.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Appearance & Layout Overrides (Framely Right Panel style!) */}
+                    <div className="p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                          Appearance & Layout
+                        </span>
+                        {(selectedBlock.values.__bgColor ||
+                          selectedBlock.values.__bgImage ||
+                          selectedBlock.values.__textColor ||
+                          selectedBlock.values.__paddingY ||
+                          selectedBlock.values.__textAlign ||
+                          (selectedBlock.values.__borderWidth &&
+                            selectedBlock.values.__borderWidth !== "0px") ||
+                          selectedBlock.values.__borderColor ||
+                          (selectedBlock.values.__borderRadius &&
+                            selectedBlock.values.__borderRadius !== "0px")) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateBlockValues(selectedBlock.id, {
+                                __bgColor: "",
+                                __bgImage: "",
+                                __textColor: "",
+                                __paddingY: "",
+                                __textAlign: "",
+                                __borderWidth: "",
+                                __borderColor: "",
+                                __borderRadius: "",
+                              })
+                            }
+                            className="text-[10px] text-zinc-500 hover:text-zinc-800 underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Fill Color */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-zinc-600">Fill Color</span>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="color"
                             value={
-                              selectedBlock.values.__borderColor ||
-                              documentState.theme.borderColor
+                              selectedBlock.values.__bgColor ||
+                              documentState.theme.bgColor
                             }
                             onChange={(e) =>
                               handleUpdateBlockValue(
                                 selectedBlock.id,
-                                "__borderColor",
+                                "__bgColor",
                                 e.target.value,
                               )
                             }
@@ -2569,20 +3785,287 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           <input
                             type="text"
                             placeholder="Por defecto"
-                            value={selectedBlock.values.__borderColor ?? ""}
+                            value={selectedBlock.values.__bgColor ?? ""}
                             onChange={(e) =>
                               handleUpdateBlockValue(
                                 selectedBlock.id,
-                                "__borderColor",
+                                "__bgColor",
                                 e.target.value,
                               )
                             }
                             className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
                           />
+                          {selectedBlock.values.__bgColor && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__bgColor",
+                                  "",
+                                )
+                              }
+                              className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                              title="Quitar color personalizado"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
-                    )}
-                </div>
+
+                      {/* Background Image */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-zinc-600">
+                          Background Image
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMediaPickerTarget({
+                                kind: "block-bg",
+                                blockId: selectedBlock.id,
+                                currentUrl:
+                                  selectedBlock.values.__bgImage ?? "",
+                                title: `Fondo de ${selectedBlock.name}`,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                          >
+                            <ImageIcon className="h-3 w-3 text-blue-600" />
+                            {selectedBlock.values.__bgImage
+                              ? "Cambiar foto"
+                              : "Elegir foto"}
+                          </button>
+                          {selectedBlock.values.__bgImage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__bgImage",
+                                  "",
+                                )
+                              }
+                              className="p-1 text-zinc-400 hover:text-red-600"
+                              title="Quitar imagen de fondo"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Text Color */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-zinc-600">Text Color</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={
+                              selectedBlock.values.__textColor ||
+                              documentState.theme.textColor
+                            }
+                            onChange={(e) =>
+                              handleUpdateBlockValue(
+                                selectedBlock.id,
+                                "__textColor",
+                                e.target.value,
+                              )
+                            }
+                            className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Por defecto"
+                            value={selectedBlock.values.__textColor ?? ""}
+                            onChange={(e) =>
+                              handleUpdateBlockValue(
+                                selectedBlock.id,
+                                "__textColor",
+                                e.target.value,
+                              )
+                            }
+                            className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
+                          />
+                          {selectedBlock.values.__textColor && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__textColor",
+                                  "",
+                                )
+                              }
+                              className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                              title="Quitar color personalizado"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Text Alignment */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-zinc-600">
+                          Text Alignment
+                        </span>
+                        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                          {[
+                            { val: "left", icon: AlignLeft },
+                            { val: "center", icon: AlignCenter },
+                            { val: "right", icon: AlignRight },
+                          ].map(({ val, icon: AlignIcon }) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__textAlign",
+                                  selectedBlock.values.__textAlign === val
+                                    ? ""
+                                    : val,
+                                )
+                              }
+                              className={`p-1.5 rounded-md transition-colors ${
+                                selectedBlock.values.__textAlign === val
+                                  ? "bg-white text-zinc-900 shadow-2xs"
+                                  : "text-zinc-500 hover:text-zinc-800"
+                              }`}
+                            >
+                              <AlignIcon className="h-3.5 w-3.5" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Vertical Padding */}
+                      <div>
+                        <span className="block text-xs text-zinc-600 mb-1.5">
+                          Vertical Spacing
+                        </span>
+                        <div className="grid grid-cols-4 gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200">
+                          {[
+                            { label: "S", val: "24px" },
+                            { label: "M", val: "48px" },
+                            { label: "L", val: "80px" },
+                            { label: "XL", val: "112px" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.val}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__paddingY",
+                                  selectedBlock.values.__paddingY === opt.val
+                                    ? ""
+                                    : opt.val,
+                                )
+                              }
+                              className={`py-1 rounded text-[11px] font-semibold transition-colors ${
+                                selectedBlock.values.__paddingY === opt.val
+                                  ? "bg-white text-zinc-900 shadow-2xs"
+                                  : "text-zinc-500 hover:text-zinc-800"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Stroke & Corner Radius */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="block text-[11px] text-zinc-600 mb-1">
+                            Border Width
+                          </span>
+                          <select
+                            value={selectedBlock.values.__borderWidth || "0px"}
+                            onChange={(e) =>
+                              handleUpdateBlockValue(
+                                selectedBlock.id,
+                                "__borderWidth",
+                                e.target.value === "0px" ? "" : e.target.value,
+                              )
+                            }
+                            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
+                          >
+                            <option value="0px">0px (Sin borde)</option>
+                            <option value="1px">1px</option>
+                            <option value="2px">2px</option>
+                            <option value="4px">4px</option>
+                          </select>
+                        </div>
+                        <div>
+                          <span className="block text-[11px] text-zinc-600 mb-1">
+                            Border Radius
+                          </span>
+                          <select
+                            value={selectedBlock.values.__borderRadius || "0px"}
+                            onChange={(e) =>
+                              handleUpdateBlockValue(
+                                selectedBlock.id,
+                                "__borderRadius",
+                                e.target.value === "0px" ? "" : e.target.value,
+                              )
+                            }
+                            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
+                          >
+                            <option value="0px">0px</option>
+                            <option value="12px">12px</option>
+                            <option value="20px">20px</option>
+                            <option value="32px">32px</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {selectedBlock.values.__borderWidth &&
+                        selectedBlock.values.__borderWidth !== "0px" && (
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <span className="text-xs text-zinc-600">
+                              Border Color
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={
+                                  selectedBlock.values.__borderColor ||
+                                  documentState.theme.borderColor
+                                }
+                                onChange={(e) =>
+                                  handleUpdateBlockValue(
+                                    selectedBlock.id,
+                                    "__borderColor",
+                                    e.target.value,
+                                  )
+                                }
+                                className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Por defecto"
+                                value={selectedBlock.values.__borderColor ?? ""}
+                                onChange={(e) =>
+                                  handleUpdateBlockValue(
+                                    selectedBlock.id,
+                                    "__borderColor",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
+                              />
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-400">
@@ -2591,8 +4074,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   Ningún bloque seleccionado
                 </p>
                 <p className="text-[11px] text-zinc-500 mt-1">
-                  Hacé clic en cualquier bloque del lienzo central o de la lista
-                  de capas para editar sus propiedades.
+                  Hacé clic en cualquier bloque o elemento del lienzo central
+                  para editar sus propiedades.
                 </p>
               </div>
             )
@@ -3141,6 +4624,73 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {mediaPickerTarget && (
+        <LandingMediaModal
+          open={true}
+          tenantSlug={tenant.slug}
+          currentUrl={mediaPickerTarget.currentUrl}
+          title={mediaPickerTarget.title}
+          onClose={() => setMediaPickerTarget(null)}
+          onSelectUrl={(url, altSuggestion) => {
+            if (mediaPickerTarget.kind === "field") {
+              handleUpdateBlockValue(
+                mediaPickerTarget.blockId,
+                mediaPickerTarget.fieldKey,
+                url,
+              );
+            } else if (mediaPickerTarget.kind === "block-bg") {
+              handleUpdateBlockValue(
+                mediaPickerTarget.blockId,
+                "__style_bgImage",
+                url,
+              );
+            } else if (mediaPickerTarget.kind === "sub-img") {
+              if (mediaPickerTarget.boundSrcField) {
+                const patch: Record<string, string> = {
+                  [mediaPickerTarget.boundSrcField]: url,
+                };
+                if (
+                  altSuggestion &&
+                  mediaPickerTarget.boundAltField &&
+                  selectedSubElement &&
+                  !selectedSubElement.currentAlt
+                ) {
+                  patch[mediaPickerTarget.boundAltField] = altSuggestion;
+                }
+                handleUpdateBlockValues(mediaPickerTarget.blockId, patch);
+                setSelectedSubElement((prev) =>
+                  prev &&
+                  prev.blockId === mediaPickerTarget.blockId &&
+                  prev.selector === mediaPickerTarget.selector
+                    ? {
+                        ...prev,
+                        currentSrc: url,
+                        ...(altSuggestion && !prev.currentAlt
+                          ? { currentAlt: altSuggestion }
+                          : {}),
+                      }
+                    : prev,
+                );
+              } else {
+                handleUpdateSubElementAttribute(
+                  mediaPickerTarget.blockId,
+                  mediaPickerTarget.selector,
+                  "src",
+                  url,
+                );
+              }
+            } else if (mediaPickerTarget.kind === "sub-bg") {
+              handleUpdateSubElementStyle(
+                mediaPickerTarget.blockId,
+                mediaPickerTarget.selector,
+                { backgroundImage: url },
+              );
+            }
+            setMediaPickerTarget(null);
+          }}
+        />
       )}
     </div>
   );

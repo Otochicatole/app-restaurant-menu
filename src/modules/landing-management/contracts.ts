@@ -5,9 +5,45 @@ export const landingFieldTypeSchema = z.enum([
   "textarea",
   "color",
   "url",
+  "image",
 ]);
 
 export type LandingFieldType = z.infer<typeof landingFieldTypeSchema>;
+
+export const subElementStyleOverrideSchema = z.object({
+  fontSize: z.string().max(40).optional(),
+  fontWeight: z.string().max(40).optional(),
+  color: z.string().max(80).optional(),
+  textAlign: z.string().max(40).optional(),
+  lineHeight: z.string().max(40).optional(),
+  letterSpacing: z.string().max(40).optional(),
+  backgroundColor: z.string().max(120).optional(),
+  backgroundImage: z.string().max(600).optional(),
+  backgroundSize: z.string().max(60).optional(),
+  backgroundPosition: z.string().max(60).optional(),
+  opacity: z.string().max(40).optional(),
+  paddingTop: z.string().max(40).optional(),
+  paddingBottom: z.string().max(40).optional(),
+  paddingLeft: z.string().max(40).optional(),
+  paddingRight: z.string().max(40).optional(),
+  marginTop: z.string().max(40).optional(),
+  marginBottom: z.string().max(40).optional(),
+  width: z.string().max(60).optional(),
+  maxWidth: z.string().max(60).optional(),
+  minHeight: z.string().max(60).optional(),
+  height: z.string().max(60).optional(),
+  gap: z.string().max(40).optional(),
+  borderWidth: z.string().max(40).optional(),
+  borderColor: z.string().max(80).optional(),
+  borderRadius: z.string().max(40).optional(),
+  boxShadow: z.string().max(160).optional(),
+  objectFit: z.string().max(40).optional(),
+});
+
+export type SubElementStyleOverride = z.infer<
+  typeof subElementStyleOverrideSchema
+>;
+export type SubElementStylesMap = Record<string, SubElementStyleOverride>;
 
 export const landingModuleFieldSchema = z.object({
   key: z
@@ -29,7 +65,7 @@ export const landingBlockSchema = z.object({
   name: z.string().trim().min(1).max(120),
   visible: z.boolean().default(true),
   fields: z.array(landingModuleFieldSchema).max(60),
-  values: z.record(z.string(), z.string().max(10_000)),
+  values: z.record(z.string(), z.string().max(25_000)),
   htmlTemplate: z.string().max(250_000),
   cssTemplate: z.string().max(250_000),
   jsTemplate: z.string().max(250_000),

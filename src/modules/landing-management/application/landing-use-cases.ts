@@ -195,6 +195,10 @@ export function createLandingUseCases(repository: LandingRepository) {
       return repository.findTenantById(tenantId);
     },
 
+    async getTenantBySlug(slug: string): Promise<TenantInfo | null> {
+      return repository.findTenantBySlug(slug);
+    },
+
     // Reusable Custom Modules
     async listCustomModules(
       tenantId: string,
