@@ -1357,7 +1357,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         setLastSavedAt(res.data.updatedAt);
         setFeedback({
           type: "success",
-          message: `¡Landing publicada en /${tenant.slug}!`,
+          message: `¡Landing publicada en /l/${tenant.slug}!`,
         });
       } else {
         setFeedback({
@@ -1795,7 +1795,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         <div className="flex items-center gap-2">
           {isPublished && (
             <a
-              href={`/${tenant.slug}`}
+              href={`/l/${tenant.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 shadow-2xs transition-colors"
@@ -2240,7 +2240,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
                   </div>
                   <div className="px-3 py-0.5 rounded-md bg-white border border-zinc-200 text-[11px] font-mono text-zinc-600 shadow-2xs">
-                    /{tenant.slug}
+                    /l/{tenant.slug}
                   </div>
                   <div className="w-10" />
                 </div>
