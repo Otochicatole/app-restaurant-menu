@@ -13,7 +13,7 @@ export function PublicLandingViewer({
       title={`Landing - ${restaurantName}`}
       srcDoc={html}
       className="fixed inset-0 h-full w-full border-0 bg-white"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
     />
   );
 }

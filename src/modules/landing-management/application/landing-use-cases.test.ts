@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLandingUseCases } from "./landing-use-cases";
 import type { LandingRepository, TenantInfo } from "./ports";
-import type { LandingPageData } from "../contracts";
+import type {
+  LandingCustomModuleView,
+  LandingPageData,
+  LandingTemplateView,
+} from "../contracts";
+import { createDefaultLandingDocument } from "../domain/landing-compiler";
 
 function createMockRepository(): LandingRepository {
   const store = new Map<string, LandingPageData>();
   const storage = new Map<string, string>();
+  const customModules = new Map<string, LandingCustomModuleView>();
+  const templates = new Map<string, LandingTemplateView>();
+
   const tenant: TenantInfo = {
     id: "tenant-123",
     name: "La Trattoria",
@@ -23,6 +31,7 @@ function createMockRepository(): LandingRepository {
         htmlContent: command.htmlContent,
         cssContent: command.cssContent,
         jsContent: command.jsContent,
+        document: command.document ?? null,
         published: false,
         publishedAt: null,
         createdAt: new Date().toISOString(),
@@ -38,6 +47,7 @@ function createMockRepository(): LandingRepository {
         htmlContent: command.htmlContent,
         cssContent: command.cssContent,
         jsContent: command.jsContent,
+        document: command.document ?? null,
         published: true,
         publishedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
@@ -51,16 +61,127 @@ function createMockRepository(): LandingRepository {
     findTenantBySlug: vi.fn(async (slug) => (slug === tenant.slug ? tenant : null)),
     findTenantById: vi.fn(async (id) => (id === tenant.id ? tenant : null)),
     isLandingEnabledForTenant: vi.fn(async (id) => (id === tenant.id ? tenant.landingEnabled : false)),
+    listCustomModules: vi.fn(async (tenantId) =>
+      Array.from(customModules.values()).filter((m) => m.tenantId === tenantId),
+    ),
+    createCustomModule: vi.fn(async (command) => {
+      const created: LandingCustomModuleView = {
+        id: `mod-${customModules.size + 1}`,
+        tenantId: command.tenantId,
+        name: command.name,
+        description: command.description,
+        category: command.category,
+        htmlTemplate: command.htmlTemplate,
+        cssTemplate: command.cssTemplate,
+        jsTemplate: command.jsTemplate,
+        fields: command.fields,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      customModules.set(created.id, created);
+      return created;
+    }),
+    deleteCustomModule: vi.fn(async (tenantId, moduleId) => {
+      const mod = customModules.get(moduleId);
+      if (mod?.tenantId === tenantId) customModules.delete(moduleId);
+    }),
+    listTemplates: vi.fn(async () => Array.from(templates.values())),
+    createPrivateTemplate: vi.fn(async (command) => {
+      const tpl: LandingTemplateView = {
+        id: `tpl-${templates.size + 1}`,
+        name: command.name,
+        description: command.description,
+        visibility: "PRIVATE",
+        status: "DRAFT",
+        isSystem: false,
+        tenantId: command.tenantId,
+        rejectionReason: null,
+        htmlContent: command.htmlContent,
+        cssContent: command.cssContent,
+        jsContent: command.jsContent,
+        document: command.document,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      templates.set(tpl.id, tpl);
+      return tpl;
+    }),
+    submitPublicTemplate: vi.fn(async (command) => {
+      const tpl: LandingTemplateView = {
+        id: `tpl-${templates.size + 1}`,
+        name: command.name,
+        description: command.description,
+        visibility: "PUBLIC",
+        status: "PENDING",
+        isSystem: false,
+        tenantId: command.tenantId,
+        rejectionReason: null,
+        htmlContent: command.htmlContent,
+        cssContent: command.cssContent,
+        jsContent: command.jsContent,
+        document: command.document,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      templates.set(tpl.id, tpl);
+      return tpl;
+    }),
+    deletePrivateTemplate: vi.fn(async (_tenantId, templateId) => {
+      templates.delete(templateId);
+    }),
+    exportPortableTemplate: vi.fn(async () => ({
+      name: "Exportada",
+      description: "Desc",
+      document: createDefaultLandingDocument(tenant.name, tenant.slug),
+      htmlContent: "<section>Export</section>",
+      cssContent: "",
+      jsContent: "",
+    })),
+    importPortableTemplate: vi.fn(async (_tenantId, portable) => {
+      const tpl: LandingTemplateView = {
+        id: "tpl-imported",
+        name: portable.name,
+        description: portable.description,
+        visibility: "PRIVATE",
+        status: "DRAFT",
+        isSystem: false,
+        tenantId: tenant.id,
+        rejectionReason: null,
+        htmlContent: portable.htmlContent,
+        cssContent: portable.cssContent,
+        jsContent: portable.jsContent,
+        document: portable.document,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      templates.set(tpl.id, tpl);
+      return tpl;
+    }),
+    listTemplatesForSuperadmin: vi.fn(async () => ({
+      items: Array.from(templates.values()).map((t) => ({ ...t, owner: null })),
+      total: templates.size,
+      page: 1,
+      pageSize: 24,
+    })),
+    moderateTemplate: vi.fn(async (templateId) => {
+      const existing = templates.get(templateId);
+      if (existing) return existing;
+      throw new Error("Not found");
+    }),
+    deletePublicTemplate: vi.fn(async (templateId) => {
+      templates.delete(templateId);
+    }),
   };
 }
 
 describe("landing-use-cases", () => {
-  it("provides initial starter template when no landing exists yet", async () => {
+  it("provides initial starter template with visual document and templates when no landing exists yet", async () => {
     const repository = createMockRepository();
     const useCases = createLandingUseCases(repository);
 
     const data = await useCases.getLandingEditorData("tenant-123");
     expect(data.landingPage.htmlContent).toContain("La Trattoria");
+    expect(data.landingPage.document?.blocks.length).toBeGreaterThan(0);
     expect(data.landingPage.published).toBe(false);
     expect(data.tenant.landingEnabled).toBe(true);
   });
@@ -90,6 +211,25 @@ describe("landing-use-cases", () => {
 
     expect(published.published).toBe(true);
     expect(repository.publish).toHaveBeenCalled();
+  });
+
+  it("creates custom reusable modules with synced {{variables}}", async () => {
+    const repository = createMockRepository();
+    const useCases = createLandingUseCases(repository);
+
+    const mod = await useCases.createCustomModule({
+      tenantId: "tenant-123",
+      name: "Card Promo",
+      description: "Card con precio y badge",
+      category: "card",
+      htmlTemplate: "<div><h3>{{title}}</h3><span>{{price}}</span></div>",
+      cssTemplate: "div { padding: 1rem; }",
+      jsTemplate: "",
+      fields: [],
+    });
+
+    expect(mod.name).toBe("Card Promo");
+    expect(mod.fields.map((f) => f.key)).toEqual(["title", "price"]);
   });
 
   it("resolves public landing page status correctly", async () => {
@@ -139,3 +279,4 @@ describe("landing-use-cases", () => {
     expect(result).toEqual({ kind: "disabled" });
   });
 });
+
