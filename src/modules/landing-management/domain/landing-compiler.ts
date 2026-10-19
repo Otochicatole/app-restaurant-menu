@@ -65,6 +65,61 @@ function sanitizeInlineScript(js: string): string {
   return js.replace(/<\/script/gi, "<\\/script");
 }
 
+export const LANDING_RUNTIME_NAVIGATION_SCRIPT = `(function() {
+  if (window.__landingNavBound) return;
+  window.__landingNavBound = true;
+  document.addEventListener('click', function(e) {
+    if (document.getElementById('__landing-blocks-root') && document.documentElement.getAttribute('data-preview-mode') !== 'true') {
+      return;
+    }
+    var el = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement ? e.target.parentElement : null);
+    var link = el && el.closest ? el.closest('a') : null;
+    if (!link) return;
+    var rawHref = (link.getAttribute('data-original-href') || link.getAttribute('href') || '').trim();
+    if (!rawHref || rawHref === 'javascript:void(0)') return;
+
+    if (rawHref.charAt(0) === '#') {
+      e.preventDefault();
+      e.stopPropagation();
+      var cleanId = rawHref.replace(/^#+/, '').trim();
+      if (!cleanId || cleanId === 'top') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+        return;
+      }
+      var targetEl =
+        document.getElementById(cleanId) ||
+        document.querySelector('[data-anchor-id="' + cleanId + '"]') ||
+        document.querySelector('[data-landing-block="' + cleanId + '"]');
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (cleanId === 'inicio' || cleanId === 'hero') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    if (document.getElementById('__landing-blocks-root')) {
+      e.preventDefault();
+      return;
+    }
+
+    var targetAttr = (link.getAttribute('target') || '').toLowerCase();
+    if (targetAttr === '_blank') {
+      return;
+    }
+    e.preventDefault();
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = link.href;
+      } else {
+        window.location.href = link.href;
+      }
+    } catch (_err) {
+      window.open(link.href, '_top');
+    }
+  }, true);
+})();`;
+
 export function compileLandingDocument({
   htmlContent,
   cssContent,
@@ -73,6 +128,7 @@ export function compileLandingDocument({
 }: CompileLandingInput): string {
   const safeCss = sanitizeInlineStyle(cssContent);
   const safeJs = sanitizeInlineScript(jsContent);
+  const navScriptTag = `<script id="landing-runtime-nav">\n${LANDING_RUNTIME_NAVIGATION_SCRIPT}\n</script>`;
   const hasHtmlTag = /<html[\s>]/i.test(htmlContent);
 
   if (hasHtmlTag) {
@@ -87,13 +143,17 @@ export function compileLandingDocument({
       }
     }
 
-    if (safeJs.trim()) {
-      const scriptTag = `<script id="custom-landing-js">\n${safeJs}\n</script>`;
-      if (/<\/body>/i.test(result)) {
-        result = result.replace(/<\/body>/i, `${scriptTag}\n</body>`);
-      } else {
-        result = `${result}\n${scriptTag}`;
-      }
+    const scriptsToInject = [
+      navScriptTag,
+      ...(safeJs.trim()
+        ? [`<script id="custom-landing-js">\n${safeJs}\n</script>`]
+        : []),
+    ].join("\n");
+
+    if (/<\/body>/i.test(result)) {
+      result = result.replace(/<\/body>/i, `${scriptsToInject}\n</body>`);
+    } else {
+      result = `${result}\n${scriptsToInject}`;
     }
 
     return result;
@@ -114,6 +174,7 @@ ${safeCss}
 </head>
 <body>
 ${htmlContent}
+  ${navScriptTag}
   <script id="custom-landing-js">
 ${safeJs}
   </script>
@@ -249,7 +310,91 @@ h1, h2, h3 {
 .btn-lg {
   padding: 15px 32px;
   font-size: 1.04rem;
+}
+
+[data-landing-block],
+section[id],
+div[id] {
+  scroll-margin-top: 76px;
 }`;
+}
+
+export type BlockAnchorInfo = {
+  blockId: string;
+  blockName: string;
+  moduleKey: string;
+  anchorId: string;
+  href: string;
+};
+
+const DEFAULT_MODULE_ANCHOR_MAP: Record<string, string> = {
+  header: "inicio",
+  hero: "hero",
+  "specialties-grid": "destacados",
+  specialties: "destacados",
+  "experience-split": "experiencia",
+  story: "experiencia",
+  "contact-hours": "contacto",
+  "gallery-grid": "galeria",
+  "faq-accordion": "preguntas",
+  testimonials: "resenas",
+  "promo-banner": "promo",
+  "stats-strip": "cifras",
+  "image-spotlight": "destacado",
+  "custom-card": "especial",
+  footer: "pie",
+};
+
+export function sanitizeAnchorSlug(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^#+/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function resolveDocumentBlockAnchors(
+  blocks: LandingBlock[],
+): BlockAnchorInfo[] {
+  const used = new Set<string>();
+  return blocks
+    .filter((b) => b.visible)
+    .map((block) => {
+      const customRaw = block.values.__anchorId
+        ? sanitizeAnchorSlug(block.values.__anchorId)
+        : "";
+      const templateIdMatch =
+        /<(?:section|div|article|header|footer)\b[^>]*\bid\s*=\s*["']([a-zA-Z0-9_-]+)["']/i.exec(
+          block.htmlTemplate,
+        );
+      const templateId = templateIdMatch?.[1]
+        ? sanitizeAnchorSlug(templateIdMatch[1])
+        : "";
+      const fallbackSlug =
+        DEFAULT_MODULE_ANCHOR_MAP[block.moduleKey] ||
+        sanitizeAnchorSlug(block.name) ||
+        "seccion";
+
+      const base = customRaw || templateId || fallbackSlug;
+      let candidate = base;
+      let counter = 2;
+      while (used.has(candidate)) {
+        candidate = `${base}-${counter}`;
+        counter++;
+      }
+      used.add(candidate);
+
+      return {
+        blockId: block.id,
+        blockName: block.name,
+        moduleKey: block.moduleKey,
+        anchorId: candidate,
+        href: `#${candidate}`,
+      };
+    });
 }
 
 export function interpolateBlockHtml(
@@ -976,13 +1121,36 @@ a[data-original-href] {
     }
   }, true);
 
+  function scrollToAnchorTarget(rawHash) {
+    if (!rawHash || typeof rawHash !== 'string') return false;
+    var cleanId = rawHash.replace(/^#+/, '').trim();
+    if (!cleanId) return false;
+    var targetEl =
+      document.getElementById(cleanId) ||
+      document.querySelector('[data-anchor-id="' + cleanId + '"]') ||
+      document.querySelector('[data-landing-block="' + cleanId + '"]');
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return true;
+    }
+    return false;
+  }
+
   document.addEventListener('click', function(e) {
     if (closestEl(e.target, '#__landing-editor-toolbar')) return;
     var link = closestEl(e.target, 'a');
+    var isPreview = document.documentElement.getAttribute('data-preview-mode') === 'true';
     if (link) {
       e.preventDefault();
+      if (isPreview) {
+        var origHref = link.getAttribute('data-original-href') || link.getAttribute('href') || '';
+        if (origHref.indexOf('#') === 0 && origHref.length > 1) {
+          scrollToAnchorTarget(origHref);
+        }
+        return;
+      }
     }
-    if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
+    if (isPreview) return;
     var blockEl = closestEl(e.target, '[data-landing-block]');
     if (!blockEl) return;
     var id = blockEl.getAttribute('data-landing-block');
@@ -1126,6 +1294,10 @@ a[data-original-href] {
 
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'LANDING_SCROLL_TO_ANCHOR' && typeof e.data.anchor === 'string') {
+      scrollToAnchorTarget(e.data.anchor);
+      return;
+    }
     if (e.data.type === 'LANDING_SET_SELECTED_BLOCK') {
       var nextSub = typeof e.data.subSelector === 'string' ? e.data.subSelector : null;
       var res = applySelection(e.data.blockId, nextSub);
@@ -1215,6 +1387,10 @@ export function compileLandingFromDocument(
   fullHtml: string;
 } {
   const visibleBlocks = document.blocks.filter((b) => b.visible);
+  const blockAnchors = resolveDocumentBlockAnchors(visibleBlocks);
+  const anchorByBlockId = new Map(
+    blockAnchors.map((a) => [a.blockId, a.anchorId]),
+  );
 
   const htmlParts: string[] = [];
   const cssParts: string[] = [buildThemeBaseCss(document.theme)];
@@ -1223,14 +1399,24 @@ export function compileLandingFromDocument(
   const jsParts: string[] = [];
 
   for (const block of visibleBlocks) {
+    const anchorId = anchorByBlockId.get(block.id) || sanitizeAnchorSlug(block.id);
     const wrapperStyle = buildBlockWrapperStyle(block.values);
     const styleAttr = wrapperStyle ? ` style="${escapeHtml(wrapperStyle)}"` : "";
     const selectedAttr =
       options?.interactiveEditor && options?.selectedBlockId === block.id
         ? ' data-selected="true"'
         : "";
+    const innerHtml = interpolateBlockHtml(block, context, {
+      interactiveEditor: options?.interactiveEditor,
+    });
+    const innerHasSameId = new RegExp(
+      `\\bid\\s*=\\s*["']${anchorId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`,
+      "i",
+    ).test(innerHtml);
+    const idAttr = innerHasSameId ? "" : ` id="${escapeHtml(anchorId)}"`;
+
     htmlParts.push(
-      `<div data-landing-block="${escapeHtml(block.id)}" data-module-key="${escapeHtml(block.moduleKey)}" data-block-label="${escapeHtml(block.name)}"${selectedAttr}${styleAttr}>\n${interpolateBlockHtml(block, context, { interactiveEditor: options?.interactiveEditor })}\n</div>`,
+      `<div${idAttr} data-landing-block="${escapeHtml(block.id)}" data-anchor-id="${escapeHtml(anchorId)}" data-module-key="${escapeHtml(block.moduleKey)}" data-block-label="${escapeHtml(block.name)}"${selectedAttr}${styleAttr}>\n${innerHtml}\n</div>`,
     );
 
     const trimmedCss = block.cssTemplate.trim();

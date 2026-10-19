@@ -89,6 +89,8 @@ import {
   insertInnerElementInBlock,
   moveSubElementInBlock,
   parseSubElementStyles,
+  resolveDocumentBlockAnchors,
+  sanitizeAnchorSlug,
   serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
   updateSubElementAttributeInBlock,
@@ -731,6 +733,26 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           activeSubElement.currentHref
       : activeSubElement.currentHref;
   }, [selectedBlock, activeSubElement]);
+
+  const pageAnchors = useMemo(
+    () => resolveDocumentBlockAnchors(documentState.blocks),
+    [documentState.blocks],
+  );
+
+  const selectedBlockAnchor = useMemo(
+    () => pageAnchors.find((a) => a.blockId === selectedBlock?.id) ?? null,
+    [pageAnchors, selectedBlock],
+  );
+
+  const handlePreviewScrollToAnchor = useCallback((anchorHref: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: "LANDING_SCROLL_TO_ANCHOR",
+        anchor: anchorHref,
+      },
+      "*",
+    );
+  }, []);
 
   // Select block & notify iframe without full reload
   const selectBlockOnStudio = useCallback(
@@ -2836,12 +2858,29 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             )}
 
                             {activeSubElement.isLink && (
-                              <div className="space-y-2">
+                              <div className="space-y-2.5">
                                 <div>
-                                  <label className="block text-[11px] font-medium text-zinc-700 mb-1 flex items-center gap-1">
-                                    <Link2 className="h-3 w-3 text-zinc-400" />
-                                    Destino del Botón / Enlace (href)
-                                  </label>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="text-[11px] font-medium text-zinc-700 flex items-center gap-1">
+                                      <Link2 className="h-3 w-3 text-zinc-400" />
+                                      Destino del Botón / Enlace (href)
+                                    </label>
+                                    {effectiveHref.startsWith("#") &&
+                                      effectiveHref.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handlePreviewScrollToAnchor(
+                                              effectiveHref,
+                                            )
+                                          }
+                                          className="inline-flex items-center gap-1 rounded bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 hover:bg-violet-100"
+                                          title="Desplazar el lienzo hasta esta sección para probar el ancla"
+                                        >
+                                          Probar scroll ⤵
+                                        </button>
+                                      )}
+                                  </div>
                                   <input
                                     type="text"
                                     value={effectiveHref}
@@ -2861,42 +2900,138 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                         );
                                       }
                                     }}
-                                    placeholder="/m/mi-restaurante o #contacto"
+                                    placeholder="/m/mi-restaurante o #destacados"
                                     className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
                                   />
                                 </div>
+
+                                {/* Selector directo de secciones reales de la página */}
+                                <div>
+                                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500 mb-1">
+                                    Ir a una sección de tu página (Scroll):
+                                  </label>
+                                  <select
+                                    value={
+                                      pageAnchors.some(
+                                        (a) => a.href === effectiveHref,
+                                      )
+                                        ? effectiveHref
+                                        : ""
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (!val) return;
+                                      if (activeSubElement.boundHrefField) {
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          activeSubElement.boundHrefField,
+                                          val,
+                                        );
+                                      } else {
+                                        handleUpdateSubElementAttribute(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          "href",
+                                          val,
+                                        );
+                                      }
+                                      handlePreviewScrollToAnchor(val);
+                                    }}
+                                    className="w-full rounded-lg bg-white border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none focus:border-violet-500"
+                                  >
+                                    <option value="">
+                                      — Elegir sección de la página —
+                                    </option>
+                                    {pageAnchors.map((anc) => (
+                                      <option key={anc.blockId} value={anc.href}>
+                                        📍 {anc.blockName} ({anc.href})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
                                 <div className="flex flex-wrap gap-1">
-                                  {[
-                                    { label: "Carta Digital", url: `/m/${tenant.slug}` },
-                                    { label: "#destacados", url: "#destacados" },
-                                    { label: "#experiencia", url: "#experiencia" },
-                                    { label: "#contacto", url: "#contacto" },
-                                    { label: "WhatsApp", url: "https://wa.me/" },
-                                  ].map((preset) => (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const url = `/m/${tenant.slug}`;
+                                      if (activeSubElement.boundHrefField) {
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          activeSubElement.boundHrefField,
+                                          url,
+                                        );
+                                      } else {
+                                        handleUpdateSubElementAttribute(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          "href",
+                                          url,
+                                        );
+                                      }
+                                    }}
+                                    className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+                                      effectiveHref === `/m/${tenant.slug}`
+                                        ? "border-blue-300 bg-blue-50 text-blue-800"
+                                        : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                    }`}
+                                  >
+                                    Carta Digital
+                                  </button>
+                                  {pageAnchors.map((anc) => (
                                     <button
-                                      key={preset.label}
+                                      key={anc.blockId}
                                       type="button"
                                       onClick={() => {
                                         if (activeSubElement.boundHrefField) {
                                           handleUpdateBlockValue(
                                             selectedBlock.id,
                                             activeSubElement.boundHrefField,
-                                            preset.url,
+                                            anc.href,
                                           );
                                         } else {
                                           handleUpdateSubElementAttribute(
                                             selectedBlock.id,
                                             activeSubElement.selector,
                                             "href",
-                                            preset.url,
+                                            anc.href,
                                           );
                                         }
+                                        handlePreviewScrollToAnchor(anc.href);
                                       }}
-                                      className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                      title={`Hacer scroll a: ${anc.blockName}`}
+                                      className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+                                        effectiveHref === anc.href
+                                          ? "border-violet-300 bg-violet-100 text-violet-900 font-semibold"
+                                          : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                      }`}
                                     >
-                                      {preset.label}
+                                      {anc.href}
                                     </button>
                                   ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const url = "https://wa.me/";
+                                      if (activeSubElement.boundHrefField) {
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          activeSubElement.boundHrefField,
+                                          url,
+                                        );
+                                      } else {
+                                        handleUpdateSubElementAttribute(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          "href",
+                                          url,
+                                        );
+                                      }
+                                    }}
+                                    className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                  >
+                                    WhatsApp
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -3502,6 +3637,47 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         />
                       </div>
 
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-medium text-zinc-600 flex items-center gap-1">
+                            <Link2 className="h-3 w-3 text-zinc-400" />
+                            Ancla de Scroll (ID de esta sección)
+                          </label>
+                          {selectedBlockAnchor && (
+                            <code className="text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                              {selectedBlockAnchor.href}
+                            </code>
+                          )}
+                        </div>
+                        <div className="flex items-center rounded-lg bg-zinc-50 border border-zinc-200 focus-within:border-blue-500 focus-within:bg-white overflow-hidden">
+                          <span className="px-2.5 py-1.5 text-xs font-mono font-bold text-zinc-400 bg-zinc-100 border-r border-zinc-200">
+                            #
+                          </span>
+                          <input
+                            type="text"
+                            value={
+                              selectedBlock.values.__anchorId ??
+                              selectedBlockAnchor?.anchorId ??
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleUpdateBlockValue(
+                                selectedBlock.id,
+                                "__anchorId",
+                                sanitizeAnchorSlug(e.target.value),
+                              )
+                            }
+                            placeholder="ej: destacados, galeria, contacto"
+                            className="flex-1 bg-transparent px-2.5 py-1.5 text-xs font-mono text-zinc-900 focus:outline-none"
+                          />
+                        </div>
+                        <p className="mt-1 text-[10px] text-zinc-500">
+                          Cualquier botón con destino{" "}
+                          <strong>{selectedBlockAnchor?.href ?? "#seccion"}</strong>{" "}
+                          hará scroll suave hasta este bloque.
+                        </p>
+                      </div>
+
                       <div className="flex items-center gap-2 rounded-lg border border-violet-200/80 bg-violet-50/50 px-2.5 py-2 text-[11px] text-violet-900">
                         <MousePointerClick className="h-4 w-4 shrink-0 text-violet-600" />
                         <span>
@@ -3704,6 +3880,73 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       }
                                       className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
                                     />
+                                  </div>
+                                ) : field.type === "url" ? (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={val}
+                                        onChange={(e) =>
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            field.key,
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="/m/mi-restaurante o #destacados"
+                                        className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                      />
+                                      {val.startsWith("#") && val.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handlePreviewScrollToAnchor(val)
+                                          }
+                                          className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+                                          title="Probar scroll hacia esta sección"
+                                        >
+                                          ⤵ Ir
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            field.key,
+                                            `/m/${tenant.slug}`,
+                                          )
+                                        }
+                                        className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-100"
+                                      >
+                                        Carta Digital
+                                      </button>
+                                      {pageAnchors.map((anc) => (
+                                        <button
+                                          key={anc.blockId}
+                                          type="button"
+                                          onClick={() => {
+                                            handleUpdateBlockValue(
+                                              selectedBlock.id,
+                                              field.key,
+                                              anc.href,
+                                            );
+                                            handlePreviewScrollToAnchor(anc.href);
+                                          }}
+                                          title={`Scroll a: ${anc.blockName}`}
+                                          className={`rounded border px-1.5 py-0.5 text-[10px] transition ${
+                                            val === anc.href
+                                              ? "border-blue-300 bg-blue-50 text-blue-800 font-semibold"
+                                              : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                                          }`}
+                                        >
+                                          {anc.href}
+                                        </button>
+                                      ))}
+                                    </div>
                                   </div>
                                 ) : (
                                   <input

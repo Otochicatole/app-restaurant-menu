@@ -1,5 +1,17 @@
 import Link from "next/link";
 import { Utensils } from "lucide-react";
+import { LANDING_RUNTIME_NAVIGATION_SCRIPT } from "../domain/landing-compiler";
+
+function ensureRuntimeNavigationScript(html: string): string {
+  if (html.includes("__landingNavBound")) {
+    return html;
+  }
+  const tag = `<script>${LANDING_RUNTIME_NAVIGATION_SCRIPT}</script>`;
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${tag}\n</body>`);
+  }
+  return `${html}\n${tag}`;
+}
 
 export function PublicLandingViewer({
   html,
@@ -8,12 +20,14 @@ export function PublicLandingViewer({
   html: string;
   restaurantName: string;
 }) {
+  const enhancedHtml = ensureRuntimeNavigationScript(html);
+
   return (
     <iframe
       title={`Landing - ${restaurantName}`}
-      srcDoc={html}
+      srcDoc={enhancedHtml}
       className="fixed inset-0 h-full w-full border-0 bg-white"
-      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+      sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
     />
   );
 }
