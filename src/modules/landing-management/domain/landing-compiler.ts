@@ -1008,21 +1008,32 @@ a[data-original-href] {
     var selector = computeRelativeSelector(blockEl, subEl);
     if (!selector) return null;
     var tag = subEl.tagName.toLowerCase();
-    var boundFieldEl = subEl.hasAttribute('data-landing-field')
-      ? subEl
-      : subEl.querySelector('[data-landing-field]');
-    var boundTextField = boundFieldEl ? boundFieldEl.getAttribute('data-landing-field') : null;
+    var boundFieldEl = null;
+    if (subEl.hasAttribute('data-landing-field')) {
+      boundFieldEl = subEl;
+    } else {
+      var isTextTag = /^(h[1-6]|p|a|button|span|strong|em|small|time|li|summary|label|b|i)$/.test(tag);
+      if (isTextTag) {
+        for (var ci = 0; ci < subEl.children.length; ci++) {
+          var ch = subEl.children[ci];
+          if (ch.hasAttribute('data-landing-field')) {
+            boundFieldEl = ch;
+            break;
+          }
+          if (ch.tagName.toLowerCase() === 'l-field') {
+            boundFieldEl = ch;
+            break;
+          }
+        }
+      }
+    }
+    var boundTextField = boundFieldEl ? (boundFieldEl.getAttribute('data-landing-field') || boundFieldEl.getAttribute('key')) : null;
     var boundSrcField = subEl.getAttribute('data-bound-src') || null;
     var boundHrefField = subEl.getAttribute('data-bound-href') || null;
     var boundAltField = subEl.getAttribute('data-bound-alt') || null;
 
-    var childFieldKeys = [];
-    if (boundTextField) childFieldKeys.push(boundTextField);
-    var innerFields = subEl.querySelectorAll('[data-landing-field]');
-    innerFields.forEach(function(f) {
-      var k = f.getAttribute('data-landing-field');
-      if (k && childFieldKeys.indexOf(k) === -1) childFieldKeys.push(k);
-    });
+    // Single Responsibility: each element manages only its own direct field, never descendants
+    var childFieldKeys = boundTextField ? [boundTextField] : [];
 
     var ancestors = [];
     var cur = subEl.parentElement;
