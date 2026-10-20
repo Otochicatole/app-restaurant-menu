@@ -11,8 +11,11 @@ import {
   duplicateSubElementInBlock,
   extractTemplateVariables,
   insertInnerElementInBlock,
+  moveBlockIntoBlock,
+  moveSubElementBetweenBlocks,
   moveSubElementInBlock,
   parseSubElementStyles,
+  reparentSubElementInBlock,
   serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
   updateSubElementAttributeInBlock,
@@ -422,6 +425,113 @@ describe("landing-compiler", () => {
 
       expect(block.htmlTemplate).not.toContain("Columna 2 — Arrastrá componentes aquí");
       expect(block.htmlTemplate).toContain("btn-primary");
+    });
+  });
+
+  describe("Drag and Drop layer moving & reparenting", () => {
+    it("moves a sub-layer inside another container layer within the same block", () => {
+      let block = createBlankContainerBlock("columns-2");
+      // col 1 and col 2
+      const tree = buildBlockSubLayerTree(block);
+      const root = tree[0];
+      const grid = root.children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(grid).toBeDefined();
+      const col1Selector = grid!.children[0].selector;
+      const col2Selector = grid!.children[1].selector;
+
+      // Insert button in col 1
+      block = insertInnerElementInBlock(block, col1Selector, "button");
+      const treeAfterBtn = buildBlockSubLayerTree(block);
+      const col1 = treeAfterBtn[0].children[0]?.children.find((c) => c.label.includes("Grilla"))?.children[0];
+      const btnNode = col1?.children.find((c) => c.tag === "a");
+      expect(btnNode).toBeDefined();
+
+      // Add a custom style to the button
+      block.values.__subStyles = serializeSubElementStyles({
+        [btnNode!.selector]: { backgroundColor: "#ff0000" },
+      });
+
+      // Move the button from Columna 1 INSIDE Columna 2
+      const reparentResult = reparentSubElementInBlock(
+        block,
+        btnNode!.selector,
+        col2Selector,
+        "inside",
+      );
+
+      expect(reparentResult).not.toBeNull();
+      const updatedBlock = reparentResult!.block;
+      expect(reparentResult!.newSelector).toContain(col2Selector);
+
+      // Verify the new tree has button inside col 2
+      const treeAfterMove = buildBlockSubLayerTree(updatedBlock);
+      const gridAfterMove = treeAfterMove[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(gridAfterMove).toBeDefined();
+      const col1AfterMove = gridAfterMove!.children[0];
+      const col2AfterMove = gridAfterMove!.children[1];
+
+      expect(col1AfterMove.children.some((c) => c.tag === "a")).toBe(false);
+      expect(col2AfterMove.children.some((c) => c.tag === "a")).toBe(true);
+
+      // Verify sub-styles transferred to the new selector
+      const subStyles = parseSubElementStyles(updatedBlock.values.__subStyles);
+      expect(subStyles[reparentResult!.newSelector]?.backgroundColor).toBe("#ff0000");
+    });
+
+    it("prevents circular moves (moving a parent inside its child or itself)", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const block = createBlockFromBuiltinModule(heroMod);
+      const parentSelector = "section:nth-of-type(1) > div:nth-of-type(1)";
+      const childSelector = "section:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1)";
+
+      // Attempting to move container into itself
+      expect(reparentSubElementInBlock(block, parentSelector, parentSelector, "inside")).toBeNull();
+
+      // Attempting to move container into its own child (h1)
+      expect(reparentSubElementInBlock(block, parentSelector, childSelector, "inside")).toBeNull();
+    });
+
+    it("moves a sub-layer between two different blocks", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const sourceBlock = createBlockFromBuiltinModule(heroMod);
+      const targetBlock = createBlankContainerBlock("container");
+
+      const sourceTree = buildBlockSubLayerTree(sourceBlock);
+      const heroContent = sourceTree[0].children[0]?.children[0];
+      const h1Node = heroContent?.children.find((c) => c.tag === "h1");
+      expect(h1Node).toBeDefined();
+
+      const targetTree = buildBlockSubLayerTree(targetBlock);
+      const targetContainer = targetTree[0].children[0]?.children[0];
+      expect(targetContainer).toBeDefined();
+
+      const res = moveSubElementBetweenBlocks(
+        sourceBlock,
+        h1Node!.selector,
+        targetBlock,
+        targetContainer!.selector,
+        "inside",
+      );
+
+      expect(res).not.toBeNull();
+      expect(res!.sourceBlock.htmlTemplate).not.toContain("<h1");
+      expect(res!.targetBlock.htmlTemplate).toContain("<h1");
+      // Values/variables synced
+      expect(res!.targetBlock.fields.some((f) => f.key.startsWith("title"))).toBe(true);
+    });
+
+    it("moves a whole block into another block container", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const heroBlock = createBlockFromBuiltinModule(heroMod);
+      const containerBlock = createBlankContainerBlock("container");
+
+      const res = moveBlockIntoBlock(
+        heroBlock,
+        containerBlock,
+      );
+
+      expect(res).not.toBeNull();
+      expect(res!.targetBlock.htmlTemplate).toContain("nested-block-hero");
     });
   });
 });

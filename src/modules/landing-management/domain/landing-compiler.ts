@@ -2032,6 +2032,462 @@ export function moveSubElementInBlock(
   };
 }
 
+export const CONTAINER_TAGS = new Set([
+  "div",
+  "section",
+  "article",
+  "header",
+  "footer",
+  "nav",
+  "main",
+  "aside",
+  "figure",
+  "details",
+  "ul",
+  "ol",
+  "li",
+  "form",
+  "blockquote",
+  "fieldset",
+]);
+
+const DRAG_MOVE_MARKER = "data-landing-move-marker";
+
+function insertMarkerIntoHtml(html: string): string {
+  const match = /<([a-zA-Z0-9-]+)(\s|>)/.exec(html);
+  if (!match) return html;
+  const insertIndex = match.index + match[1].length + 1;
+  return (
+    html.slice(0, insertIndex) +
+    ` ${DRAG_MOVE_MARKER}="true"` +
+    html.slice(insertIndex)
+  );
+}
+
+function stripMarkerFromHtml(html: string): string {
+  return html.replace(new RegExp(`\\s*${DRAG_MOVE_MARKER}="true"`, "g"), "");
+}
+
+export function findSelectorForAstNode(
+  rootNodes: HtmlAstNode[],
+  predicate: (node: HtmlAstNode) => boolean,
+): string | null {
+  function search(siblings: HtmlAstNode[], parentPath: string): string | null {
+    const tagCounts = new Map<string, number>();
+    for (const child of siblings) {
+      const tag = child.tagName.toLowerCase();
+      const count = (tagCounts.get(tag) || 0) + 1;
+      tagCounts.set(tag, count);
+      const step = `${tag}:nth-of-type(${count})`;
+      const currentPath = parentPath ? `${parentPath} > ${step}` : step;
+      if (predicate(child)) {
+        return currentPath;
+      }
+      if (child.children.length > 0) {
+        const found = search(child.children, currentPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return search(rootNodes, "");
+}
+
+export function isPlaceholderParagraph(n: HtmlAstNode, html: string): boolean {
+  if (n.tagName.toLowerCase() !== "p") return false;
+  const inner = html.slice(n.innerStartOffset, n.innerEndOffset);
+  return /Arrastr[áa]|Contenedor Libre|Columna \d|Fila Flexible|Solt[áa] o agreg[áa]/i.test(
+    inner,
+  );
+}
+
+export function reparentSubElementInBlock(
+  block: LandingBlock,
+  sourceSelector: string,
+  targetSelector: string,
+  position: "inside" | "before" | "after" = "inside",
+): { block: LandingBlock; newSelector: string } | null {
+  const ast = parseHtmlTemplateAst(block.htmlTemplate);
+  const sourceFound = findAstNodeByRelativeSelector(ast, sourceSelector);
+  const targetFound = findAstNodeByRelativeSelector(ast, targetSelector);
+  if (!sourceFound || !targetFound) return null;
+
+  // Cannot drop into itself or its own descendant
+  if (sourceSelector === targetSelector) return null;
+  if (targetSelector.startsWith(sourceSelector + " > ")) return null;
+  if (
+    (position === "before" || position === "after") &&
+    sourceFound.node === targetFound.node
+  ) {
+    return null;
+  }
+
+  let effectivePosition = position;
+  if (effectivePosition === "inside") {
+    if (
+      targetFound.node.selfClosing ||
+      VOID_HTML_TAGS.has(targetFound.node.tagName) ||
+      !CONTAINER_TAGS.has(targetFound.node.tagName)
+    ) {
+      effectivePosition = "after";
+    }
+  }
+
+  const rawSourceHtml = block.htmlTemplate.slice(
+    sourceFound.node.startOffset,
+    sourceFound.node.endOffset,
+  );
+  const markedSourceHtml = insertMarkerIntoHtml(rawSourceHtml);
+
+  const sStart = sourceFound.node.startOffset;
+  const sEnd = sourceFound.node.endOffset;
+
+  let replaceRange: { start: number; end: number } | null = null;
+  let targetOffset = 0;
+
+  if (effectivePosition === "inside") {
+    const placeholderChild = targetFound.node.children.find((c) =>
+      isPlaceholderParagraph(c, block.htmlTemplate),
+    );
+    if (placeholderChild) {
+      replaceRange = {
+        start: placeholderChild.startOffset,
+        end: placeholderChild.endOffset,
+      };
+    } else {
+      targetOffset = targetFound.node.innerEndOffset;
+    }
+  } else if (effectivePosition === "before") {
+    targetOffset = targetFound.node.startOffset;
+  } else {
+    targetOffset = targetFound.node.endOffset;
+  }
+
+  let nextHtmlTemplate = "";
+  if (replaceRange) {
+    if (replaceRange.start < sStart) {
+      nextHtmlTemplate =
+        block.htmlTemplate.slice(0, replaceRange.start) +
+        markedSourceHtml +
+        block.htmlTemplate.slice(replaceRange.end, sStart) +
+        block.htmlTemplate.slice(sEnd);
+    } else if (replaceRange.start >= sEnd) {
+      nextHtmlTemplate =
+        block.htmlTemplate.slice(0, sStart) +
+        block.htmlTemplate.slice(sEnd, replaceRange.start) +
+        markedSourceHtml +
+        block.htmlTemplate.slice(replaceRange.end);
+    } else {
+      return null;
+    }
+  } else {
+    if (targetOffset <= sStart) {
+      nextHtmlTemplate =
+        block.htmlTemplate.slice(0, targetOffset) +
+        "\n" +
+        markedSourceHtml +
+        "\n" +
+        block.htmlTemplate.slice(targetOffset, sStart) +
+        block.htmlTemplate.slice(sEnd);
+    } else if (targetOffset >= sEnd) {
+      nextHtmlTemplate =
+        block.htmlTemplate.slice(0, sStart) +
+        block.htmlTemplate.slice(sEnd, targetOffset) +
+        "\n" +
+        markedSourceHtml +
+        "\n" +
+        block.htmlTemplate.slice(targetOffset);
+    } else {
+      return null;
+    }
+  }
+
+  const nextAst = parseHtmlTemplateAst(nextHtmlTemplate);
+  const newSelector = findSelectorForAstNode(nextAst, (n) =>
+    nextHtmlTemplate
+      .slice(n.startOffset, n.openTagEndOffset)
+      .includes(DRAG_MOVE_MARKER),
+  );
+  const finalHtmlTemplate = stripMarkerFromHtml(nextHtmlTemplate);
+
+  if (!newSelector) {
+    return null;
+  }
+
+  const nextValues = { ...block.values };
+  if (nextValues.__subStyles) {
+    const subStyles = parseSubElementStyles(nextValues.__subStyles);
+    const updatedSubStyles: Record<string, SubElementStyleOverride> = {};
+    for (const [sel, st] of Object.entries(subStyles)) {
+      if (sel === sourceSelector) {
+        updatedSubStyles[newSelector] = st;
+      } else if (sel.startsWith(sourceSelector + " > ")) {
+        const suffix = sel.slice((sourceSelector + " > ").length);
+        updatedSubStyles[`${newSelector} > ${suffix}`] = st;
+      } else {
+        updatedSubStyles[sel] = st;
+      }
+    }
+    nextValues.__subStyles = serializeSubElementStyles(updatedSubStyles);
+  }
+
+  const synced = syncFieldsWithHtmlTemplate(
+    block.fields,
+    nextValues,
+    finalHtmlTemplate,
+  );
+
+  return {
+    block: {
+      ...block,
+      htmlTemplate: finalHtmlTemplate,
+      fields: synced.fields,
+      values: synced.values,
+    },
+    newSelector,
+  };
+}
+
+export function moveSubElementBetweenBlocks(
+  sourceBlock: LandingBlock,
+  sourceSelector: string,
+  targetBlock: LandingBlock,
+  targetSelector: string | null,
+  position: "inside" | "before" | "after" = "inside",
+): {
+  sourceBlock: LandingBlock;
+  targetBlock: LandingBlock;
+  newSelector: string;
+} | null {
+  const sourceAst = parseHtmlTemplateAst(sourceBlock.htmlTemplate);
+  const sourceFound = findAstNodeByRelativeSelector(sourceAst, sourceSelector);
+  if (!sourceFound) return null;
+
+  const rawSourceHtml = sourceBlock.htmlTemplate.slice(
+    sourceFound.node.startOffset,
+    sourceFound.node.endOffset,
+  );
+
+  // 1. Remove from sourceBlock
+  const sourceNextHtml =
+    sourceBlock.htmlTemplate.slice(0, sourceFound.node.startOffset) +
+    sourceBlock.htmlTemplate.slice(sourceFound.node.endOffset);
+
+  // Clean source values / subStyles
+  const nextSourceValues = { ...sourceBlock.values };
+  const transferredStyles: Record<string, SubElementStyleOverride> = {};
+  if (nextSourceValues.__subStyles) {
+    const subStyles = parseSubElementStyles(nextSourceValues.__subStyles);
+    for (const [sel, st] of Object.entries(subStyles)) {
+      if (sel === sourceSelector || sel.startsWith(sourceSelector + " > ")) {
+        transferredStyles[sel] = st;
+        delete subStyles[sel];
+      }
+    }
+    nextSourceValues.__subStyles = serializeSubElementStyles(subStyles);
+  }
+
+  const sourceSynced = syncFieldsWithHtmlTemplate(
+    sourceBlock.fields,
+    nextSourceValues,
+    sourceNextHtml,
+  );
+  const updatedSourceBlock: LandingBlock = {
+    ...sourceBlock,
+    htmlTemplate: sourceNextHtml,
+    fields: sourceSynced.fields,
+    values: sourceSynced.values,
+  };
+
+  // 2. Prepare variables for targetBlock
+  const usedKeys = new Set<string>([
+    ...extractTemplateVariables(targetBlock.htmlTemplate),
+    ...targetBlock.fields.map((f) => f.key),
+    ...Object.keys(targetBlock.values),
+  ]);
+
+  const sourceVars = extractTemplateVariables(rawSourceHtml);
+  const keyMap = new Map<string, string>();
+  const nextTargetFields = [...targetBlock.fields];
+  const nextTargetValues = { ...targetBlock.values };
+
+  for (const oldKey of sourceVars) {
+    if (SYSTEM_VARIABLES.has(oldKey)) continue;
+
+    const existingField = targetBlock.fields.find((f) => f.key === oldKey);
+    const sourceField = sourceBlock.fields.find((f) => f.key === oldKey);
+    const sourceVal =
+      sourceBlock.values[oldKey] ?? sourceField?.defaultValue ?? "";
+
+    if (existingField && targetBlock.values[oldKey] !== sourceVal) {
+      const newKey = generateUniqueFieldKey(oldKey, usedKeys);
+      keyMap.set(oldKey, newKey);
+      nextTargetValues[newKey] = sourceVal;
+      if (sourceField) {
+        nextTargetFields.push({ ...sourceField, key: newKey });
+      }
+    } else {
+      if (!existingField && sourceField) {
+        nextTargetFields.push(sourceField);
+      }
+      nextTargetValues[oldKey] = sourceVal;
+      usedKeys.add(oldKey);
+    }
+  }
+
+  let mappedSnippet = rawSourceHtml;
+  if (keyMap.size > 0) {
+    mappedSnippet = rawSourceHtml.replace(
+      /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+      (full, k: string) => {
+        const mapped = keyMap.get(k);
+        return mapped ? `{{${mapped}}}` : full;
+      },
+    );
+  }
+
+  const markedSnippet = insertMarkerIntoHtml(mappedSnippet);
+
+  // 3. Find insertion location in targetBlock
+  const targetAst = parseHtmlTemplateAst(targetBlock.htmlTemplate);
+  let replaceRange: { start: number; end: number } | null = null;
+  let targetOffset = targetBlock.htmlTemplate.length;
+
+  if (targetSelector) {
+    const targetFound = findAstNodeByRelativeSelector(targetAst, targetSelector);
+    if (targetFound) {
+      let effectivePosition = position;
+      if (effectivePosition === "inside") {
+        if (
+          targetFound.node.selfClosing ||
+          VOID_HTML_TAGS.has(targetFound.node.tagName) ||
+          !CONTAINER_TAGS.has(targetFound.node.tagName)
+        ) {
+          effectivePosition = "after";
+        }
+      }
+
+      if (effectivePosition === "inside") {
+        const placeholderChild = targetFound.node.children.find((c) =>
+          isPlaceholderParagraph(c, targetBlock.htmlTemplate),
+        );
+        if (placeholderChild) {
+          replaceRange = {
+            start: placeholderChild.startOffset,
+            end: placeholderChild.endOffset,
+          };
+        } else {
+          targetOffset = targetFound.node.innerEndOffset;
+        }
+      } else if (effectivePosition === "before") {
+        targetOffset = targetFound.node.startOffset;
+      } else {
+        targetOffset = targetFound.node.endOffset;
+      }
+    }
+  } else if (targetAst.length > 0) {
+    const rootNode = targetAst[0]!;
+    const placeholder = rootNode.children.find((c) =>
+      isPlaceholderParagraph(c, targetBlock.htmlTemplate),
+    );
+    if (placeholder) {
+      replaceRange = {
+        start: placeholder.startOffset,
+        end: placeholder.endOffset,
+      };
+    } else {
+      const firstContainer =
+        rootNode.children.find((c) => c.tagName === "div") ?? rootNode;
+      targetOffset = firstContainer.innerEndOffset;
+    }
+  }
+
+  const nextTargetHtml = replaceRange
+    ? targetBlock.htmlTemplate.slice(0, replaceRange.start) +
+      markedSnippet +
+      targetBlock.htmlTemplate.slice(replaceRange.end)
+    : targetBlock.htmlTemplate.slice(0, targetOffset) +
+      "\n" +
+      markedSnippet +
+      "\n" +
+      targetBlock.htmlTemplate.slice(targetOffset);
+
+  const nextTargetAst = parseHtmlTemplateAst(nextTargetHtml);
+  const newSelector = findSelectorForAstNode(nextTargetAst, (n) =>
+    nextTargetHtml
+      .slice(n.startOffset, n.openTagEndOffset)
+      .includes(DRAG_MOVE_MARKER),
+  );
+  const finalTargetHtml = stripMarkerFromHtml(nextTargetHtml);
+
+  if (!newSelector) return null;
+
+  // Transfer sub-element styles to targetBlock
+  if (Object.keys(transferredStyles).length > 0) {
+    const targetSubStyles = parseSubElementStyles(nextTargetValues.__subStyles);
+    for (const [sel, st] of Object.entries(transferredStyles)) {
+      if (sel === sourceSelector) {
+        targetSubStyles[newSelector] = st;
+      } else if (sel.startsWith(sourceSelector + " > ")) {
+        const suffix = sel.slice((sourceSelector + " > ").length);
+        targetSubStyles[`${newSelector} > ${suffix}`] = st;
+      }
+    }
+    nextTargetValues.__subStyles = serializeSubElementStyles(targetSubStyles);
+  }
+
+  const targetSynced = syncFieldsWithHtmlTemplate(
+    nextTargetFields,
+    nextTargetValues,
+    finalTargetHtml,
+  );
+
+  const updatedTargetBlock: LandingBlock = {
+    ...targetBlock,
+    htmlTemplate: finalTargetHtml,
+    fields: targetSynced.fields,
+    values: targetSynced.values,
+  };
+
+  return {
+    sourceBlock: updatedSourceBlock,
+    targetBlock: updatedTargetBlock,
+    newSelector,
+  };
+}
+
+export function moveBlockIntoBlock(
+  sourceBlock: LandingBlock,
+  targetBlock: LandingBlock,
+  targetSelector?: string | null,
+): {
+  targetBlock: LandingBlock;
+  newSelector: string;
+} | null {
+  const sourceSnippet = `<div class="nested-block nested-block-${sourceBlock.moduleKey}" style="width: 100%; box-sizing: border-box; margin: 16px 0;">\n${sourceBlock.htmlTemplate}\n</div>`;
+
+  const tempSourceBlock: LandingBlock = {
+    ...sourceBlock,
+    htmlTemplate: sourceSnippet,
+  };
+
+  const result = moveSubElementBetweenBlocks(
+    tempSourceBlock,
+    "div:nth-of-type(1)",
+    targetBlock,
+    targetSelector ?? null,
+    "inside",
+  );
+
+  if (!result) return null;
+
+  return {
+    targetBlock: result.targetBlock,
+    newSelector: result.newSelector,
+  };
+}
+
 export function deleteSubElementInBlock(
   block: LandingBlock,
   relativeSelector: string,
@@ -2189,14 +2645,6 @@ export function insertInnerElementInBlock(
     snippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
   } else if (kind === "flex-row") {
     snippet = `<div class="flex-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
-  }
-
-  function isPlaceholderParagraph(n: HtmlAstNode, html: string): boolean {
-    if (n.tagName.toLowerCase() !== "p") return false;
-    const inner = html.slice(n.innerStartOffset, n.innerEndOffset);
-    return /Arrastr[áa]|Contenedor Libre|Columna \d|Fila Flexible|Solt[áa] o agreg[áa]/i.test(
-      inner,
-    );
   }
 
   const ast = parseHtmlTemplateAst(block.htmlTemplate);

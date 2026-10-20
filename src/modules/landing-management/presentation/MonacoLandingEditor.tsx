@@ -94,8 +94,11 @@ import {
   deleteSubElementInBlock,
   duplicateSubElementInBlock,
   insertInnerElementInBlock,
+  moveBlockIntoBlock,
+  moveSubElementBetweenBlocks,
   moveSubElementInBlock,
   parseSubElementStyles,
+  reparentSubElementInBlock,
   resolveDocumentBlockAnchors,
   sanitizeAnchorSlug,
   serializeSubElementStyles,
@@ -530,6 +533,21 @@ function SubLayerIcon({
   }
 }
 
+export type DraggedLayerItem =
+  | {
+      type: "block";
+      blockId: string;
+      blockIndex: number;
+      label: string;
+    }
+  | {
+      type: "sublayer";
+      blockId: string;
+      selector: string;
+      label: string;
+      tag: string;
+    };
+
 interface SubLayerTreeRowProps {
   block: LandingBlock;
   node: LandingSubLayerNode;
@@ -548,12 +566,21 @@ interface SubLayerTreeRowProps {
     kind: InsertableInnerElementKind,
   ) => void;
   draggedComponentKind?: InsertableInnerElementKind | null;
+  draggedLayerItem?: DraggedLayerItem | null;
+  onDragStartLayer?: (item: DraggedLayerItem, e: React.DragEvent) => void;
+  onDragEndLayer?: () => void;
+  onDropLayerOnSubElement?: (
+    targetBlockId: string,
+    targetSelector: string,
+    position: "inside" | "before" | "after",
+  ) => void;
 }
 
 interface LandingDragWindow extends Window {
   __draggedComponentKind?: InsertableInnerElementKind | null;
   __draggedBuiltinKey?: string | null;
   __draggedCustomId?: string | null;
+  __draggedLayerItem?: DraggedLayerItem | null;
 }
 
 function getDragWindow(): LandingDragWindow | null {
@@ -575,17 +602,72 @@ function SubLayerTreeRow({
   onDeleteSubElement,
   onDropComponentOnSubElement,
   draggedComponentKind,
+  draggedLayerItem,
+  onDragStartLayer,
+  onDragEndLayer,
+  onDropLayerOnSubElement,
 }: SubLayerTreeRowProps) {
-  const [isDropOver, setIsDropOver] = useState(false);
+  const [dropPosition, setDropPosition] = useState<
+    "inside" | "before" | "after" | null
+  >(null);
+  const autoExpandTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const isSelected =
     selectedBlockId === block.id &&
     activeSubElementSelector === node.selector;
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedSubLayerIds[node.id] !== false; // default expanded
 
+  const isSelfDragging =
+    draggedLayerItem?.type === "sublayer" &&
+    draggedLayerItem.blockId === block.id &&
+    draggedLayerItem.selector === node.selector;
+
+  const isDropInside = dropPosition === "inside";
+
   return (
     <div className="flex flex-col">
       <div
+        draggable
+        onDragStart={(e) => {
+          if ((e.target as HTMLElement).closest("button")) {
+            e.preventDefault();
+            return;
+          }
+          const item: DraggedLayerItem = {
+            type: "sublayer",
+            blockId: block.id,
+            selector: node.selector,
+            label: node.label,
+            tag: node.tag,
+          };
+          onDragStartLayer?.(item, e);
+          const win = getDragWindow();
+          if (win) win.__draggedLayerItem = item;
+          try {
+            e.dataTransfer.setData(
+              "application/x-landing-layer",
+              JSON.stringify(item),
+            );
+            e.dataTransfer.setData(
+              "text/plain",
+              `landing-layer:${item.blockId}:${item.selector}`,
+            );
+            e.dataTransfer.effectAllowed = "move";
+          } catch {
+            // ignore
+          }
+        }}
+        onDragEnd={() => {
+          if (autoExpandTimerRef.current) {
+            clearTimeout(autoExpandTimerRef.current);
+            autoExpandTimerRef.current = null;
+          }
+          onDragEndLayer?.();
+          const win = getDragWindow();
+          if (win) win.__draggedLayerItem = null;
+          setDropPosition(null);
+        }}
         onClick={(e) => {
           e.stopPropagation();
           onSelectSubElement(block.id, node.selector);
@@ -593,39 +675,95 @@ function SubLayerTreeRow({
         onMouseEnter={() => onHoverSubElement(block.id, node.selector)}
         onMouseLeave={() => onHoverSubElement(null, null)}
         onDragOver={(e) => {
-          let hasComponent = Boolean(
-            draggedComponentKind ||
-              (typeof window !== "undefined" &&
-                (window as unknown as LandingDragWindow)
-                  ?.__draggedComponentKind),
-          );
-          if (!hasComponent && e.dataTransfer) {
+          const win = getDragWindow();
+          const currentLayer = draggedLayerItem || win?.__draggedLayerItem;
+          const compKind = draggedComponentKind || win?.__draggedComponentKind;
+
+          // Prevent dropping onto self or descendants
+          if (
+            currentLayer?.type === "sublayer" &&
+            currentLayer.blockId === block.id
+          ) {
+            if (
+              currentLayer.selector === node.selector ||
+              node.selector.startsWith(currentLayer.selector + " > ")
+            ) {
+              return;
+            }
+          }
+
+          let isAcceptable = Boolean(compKind || currentLayer);
+          if (!isAcceptable && e.dataTransfer) {
             try {
               const plain = e.dataTransfer.getData("text/plain") || "";
               if (
                 plain.startsWith("landing-component:") ||
-                e.dataTransfer.types.includes("application/x-landing-component")
+                plain.startsWith("landing-layer:") ||
+                e.dataTransfer.types.includes(
+                  "application/x-landing-component",
+                ) ||
+                e.dataTransfer.types.includes("application/x-landing-layer")
               ) {
-                hasComponent = true;
+                isAcceptable = true;
               }
             } catch {
               // ignore
             }
           }
-          if (hasComponent) {
+
+          if (isAcceptable) {
             e.preventDefault();
             e.stopPropagation();
-            setIsDropOver(true);
+
+            if (hasChildren && !isExpanded) {
+              if (!autoExpandTimerRef.current) {
+                autoExpandTimerRef.current = setTimeout(() => {
+                  onToggleExpand(node.id, e as unknown as React.MouseEvent);
+                  autoExpandTimerRef.current = null;
+                }, 600);
+              }
+            }
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            const relY = e.clientY - rect.top;
+            const ratio = relY / rect.height;
+
+            let pos: "inside" | "before" | "after" = "inside";
+            if (ratio < 0.25) pos = "before";
+            else if (ratio > 0.75) pos = "after";
+            else pos = "inside";
+
+            setDropPosition(pos);
           }
         }}
-        onDragLeave={() => setIsDropOver(false)}
+        onDragLeave={() => {
+          setDropPosition(null);
+          if (autoExpandTimerRef.current) {
+            clearTimeout(autoExpandTimerRef.current);
+            autoExpandTimerRef.current = null;
+          }
+        }}
         onDrop={(e) => {
-          let kind =
-            draggedComponentKind ||
-            (typeof window !== "undefined"
-              ? (window as unknown as LandingDragWindow)
-                  ?.__draggedComponentKind
-              : null);
+          if (autoExpandTimerRef.current) {
+            clearTimeout(autoExpandTimerRef.current);
+            autoExpandTimerRef.current = null;
+          }
+          const pos = dropPosition || "inside";
+          setDropPosition(null);
+
+          const win = getDragWindow();
+          const currentLayer = draggedLayerItem || win?.__draggedLayerItem;
+
+          // 1. Drop dragged layer
+          if (currentLayer) {
+            e.preventDefault();
+            e.stopPropagation();
+            onDropLayerOnSubElement?.(block.id, node.selector, pos);
+            return;
+          }
+
+          // 2. Drop catalog component
+          let kind = draggedComponentKind || win?.__draggedComponentKind;
           if (!kind) {
             try {
               const plain = e.dataTransfer.getData("text/plain") || "";
@@ -642,24 +780,36 @@ function SubLayerTreeRow({
               // ignore
             }
           }
+
           if (kind) {
             e.preventDefault();
             e.stopPropagation();
-            setIsDropOver(false);
             onDropComponentOnSubElement?.(block.id, node.selector, kind);
+            return;
           }
         }}
         style={{ paddingLeft: `${4 + depth * 10}px` }}
-        className={`group flex items-center justify-between gap-1.5 py-1.5 pr-2 rounded-md cursor-pointer text-xs transition-colors border ${
-          isDropOver
-            ? "bg-blue-100/90 border-blue-400 text-blue-900 ring-2 ring-blue-300"
-            : isSelected
-              ? "bg-violet-100/90 border-violet-300 text-violet-900 font-semibold shadow-2xs"
-              : "border-transparent hover:bg-zinc-100/80 text-zinc-600 hover:text-zinc-900"
+        className={`group relative flex items-center justify-between gap-1.5 py-1.5 pr-2 rounded-md cursor-pointer text-xs transition-colors border select-none ${
+          isSelfDragging
+            ? "opacity-35 bg-zinc-100 border-dashed border-zinc-400"
+            : isDropInside
+              ? "bg-violet-100/90 border-violet-400 text-violet-950 font-semibold ring-2 ring-violet-300 shadow-2xs"
+              : isSelected
+                ? "bg-violet-100/90 border-violet-300 text-violet-900 font-semibold shadow-2xs"
+                : "border-transparent hover:bg-zinc-100/80 text-zinc-600 hover:text-zinc-900"
         }`}
-        title={`Seleccionar ${node.label}`}
+        title={`Seleccionar ${node.label} (Arrastrá para reordenar o anidar)`}
       >
+        {dropPosition === "before" && (
+          <div className="absolute -top-0.5 left-1 right-1 h-[2px] bg-blue-500 rounded-full z-20 pointer-events-none shadow-xs" />
+        )}
+        {dropPosition === "after" && (
+          <div className="absolute -bottom-0.5 left-1 right-1 h-[2px] bg-blue-500 rounded-full z-20 pointer-events-none shadow-xs" />
+        )}
+
         <div className="flex items-center gap-1.5 min-w-0">
+          <GripVertical className="h-3 w-3 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing shrink-0 transition-opacity" />
+
           {hasChildren ? (
             <button
               type="button"
@@ -690,6 +840,12 @@ function SubLayerTreeRow({
           <span className="truncate text-[11px] font-normal" title={node.label}>
             {node.label}
           </span>
+
+          {isDropInside && (
+            <span className="text-[9px] font-bold uppercase tracking-wider bg-violet-600 text-white px-1.5 py-0.5 rounded shadow-2xs animate-pulse shrink-0">
+              ↳ dentro
+            </span>
+          )}
         </div>
 
         <div
@@ -733,6 +889,10 @@ function SubLayerTreeRow({
               onDeleteSubElement={onDeleteSubElement}
               onDropComponentOnSubElement={onDropComponentOnSubElement}
               draggedComponentKind={draggedComponentKind}
+              draggedLayerItem={draggedLayerItem}
+              onDragStartLayer={onDragStartLayer}
+              onDragEndLayer={onDragEndLayer}
+              onDropLayerOnSubElement={onDropLayerOnSubElement}
             />
           ))}
         </div>
@@ -782,6 +942,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const [codeTab, setCodeTab] = useState<CodeTab>("html");
   const [componentSearch, setComponentSearch] = useState("");
   const [draggedLayerIndex, setDraggedLayerIndex] = useState<number | null>(null);
+  const [draggedLayerItem, setDraggedLayerItem] = useState<DraggedLayerItem | null>(null);
+  const [blockDropTarget, setBlockDropTarget] = useState<{
+    blockId: string;
+    position: "inside" | "before" | "after";
+  } | null>(null);
+  const autoExpandBlockTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isDraggingComponentOverCanvas, setIsDraggingComponentOverCanvas] = useState(false);
   const [draggedComponentKind, setDraggedComponentKind] =
     useState<InsertableInnerElementKind | null>(null);
@@ -1610,6 +1776,144 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       }
     },
     [updateDocument],
+  );
+
+  const handleMoveLayer = useCallback(
+    (
+      sourceItem: DraggedLayerItem,
+      target: { blockId: string; selector?: string | null },
+      position: "inside" | "before" | "after" = "inside",
+    ) => {
+      if (sourceItem.type === "sublayer") {
+        if (sourceItem.blockId === target.blockId && target.selector) {
+          let nextSel: string | null = null;
+          updateDocument((prev) => ({
+            ...prev,
+            blocks: prev.blocks.map((b) => {
+              if (b.id !== sourceItem.blockId) return b;
+              const res = reparentSubElementInBlock(
+                b,
+                sourceItem.selector,
+                target.selector!,
+                position,
+              );
+              if (res) {
+                nextSel = res.newSelector;
+                return res.block;
+              }
+              return b;
+            }),
+          }));
+
+          if (nextSel) {
+            selectSubElementOnStudio(target.blockId, nextSel);
+            setExpandedSubLayerIds((prev) => ({
+              ...prev,
+              [`${target.blockId}:${target.selector}`]: true,
+            }));
+            setFeedback({
+              type: "success",
+              message: `Capa "${sourceItem.label}" movida con éxito.`,
+            });
+          }
+          return;
+        }
+
+        // Cross-block sublayer move (or target.selector is null: drop on block)
+        let nextSel: string | null = null;
+        updateDocument((prev) => {
+          const sourceBlock = prev.blocks.find(
+            (b) => b.id === sourceItem.blockId,
+          );
+          const targetBlock = prev.blocks.find(
+            (b) => b.id === target.blockId,
+          );
+          if (!sourceBlock || !targetBlock) return prev;
+
+          const res = moveSubElementBetweenBlocks(
+            sourceBlock,
+            sourceItem.selector,
+            targetBlock,
+            target.selector ?? null,
+            position,
+          );
+          if (!res) return prev;
+
+          nextSel = res.newSelector;
+          return {
+            ...prev,
+            blocks: prev.blocks.map((b) => {
+              if (b.id === res.sourceBlock.id) return res.sourceBlock;
+              if (b.id === res.targetBlock.id) return res.targetBlock;
+              return b;
+            }),
+          };
+        });
+
+        if (nextSel) {
+          selectSubElementOnStudio(target.blockId, nextSel);
+          setExpandedBlockIds((prev) => ({ ...prev, [target.blockId]: true }));
+          setFeedback({
+            type: "success",
+            message: `Capa "${sourceItem.label}" movida a la sección destino.`,
+          });
+        }
+        return;
+      }
+
+      if (sourceItem.type === "block") {
+        if (position === "inside" && sourceItem.blockId !== target.blockId) {
+          let nextSel: string | null = null;
+          updateDocument((prev) => {
+            const sourceBlock = prev.blocks.find(
+              (b) => b.id === sourceItem.blockId,
+            );
+            const targetBlock = prev.blocks.find(
+              (b) => b.id === target.blockId,
+            );
+            if (!sourceBlock || !targetBlock) return prev;
+
+            const res = moveBlockIntoBlock(
+              sourceBlock,
+              targetBlock,
+              target.selector ?? null,
+            );
+            if (!res) return prev;
+            nextSel = res.newSelector;
+
+            return {
+              ...prev,
+              blocks: prev.blocks
+                .filter((b) => b.id !== sourceItem.blockId)
+                .map((b) => (b.id === res.targetBlock.id ? res.targetBlock : b)),
+            };
+          });
+
+          if (nextSel) {
+            selectSubElementOnStudio(target.blockId, nextSel);
+            setExpandedBlockIds((prev) => ({ ...prev, [target.blockId]: true }));
+            setFeedback({
+              type: "success",
+              message: `Sección "${sourceItem.label}" anidada como capa dentro del bloque.`,
+            });
+          }
+        } else {
+          const targetIdx = documentState.blocks.findIndex(
+            (b) => b.id === target.blockId,
+          );
+          if (sourceItem.blockIndex !== undefined && targetIdx >= 0) {
+            handleReorderBlocks(sourceItem.blockIndex, targetIdx);
+          }
+        }
+      }
+    },
+    [
+      documentState.blocks,
+      handleReorderBlocks,
+      selectSubElementOnStudio,
+      setFeedback,
+      updateDocument,
+    ],
   );
 
   const handleDeleteSubElement = useCallback(
@@ -2490,15 +2794,158 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   const hasSubLayers = subLayers.length > 0;
                   const isBlockExpanded = expandedBlockIds[block.id] !== false;
 
+                  const isThisBlockDrop = blockDropTarget?.blockId === block.id;
+                  const isThisBlockInside =
+                    isThisBlockDrop && blockDropTarget.position === "inside";
+                  const isThisBlockBefore =
+                    isThisBlockDrop && blockDropTarget.position === "before";
+                  const isThisBlockAfter =
+                    isThisBlockDrop && blockDropTarget.position === "after";
+                  const isSelfBlockDragging =
+                    draggedLayerItem?.type === "block" &&
+                    draggedLayerItem.blockId === block.id;
+
                   return (
                     <div key={block.id} className="flex flex-col">
                       <div
                         draggable
-                        onDragStart={() => setDraggedLayerIndex(idx)}
+                        onDragStart={(e) => {
+                          if ((e.target as HTMLElement).closest("button")) {
+                            e.preventDefault();
+                            return;
+                          }
+                          const item: DraggedLayerItem = {
+                            type: "block",
+                            blockId: block.id,
+                            blockIndex: idx,
+                            label: block.name,
+                          };
+                          setDraggedLayerItem(item);
+                          setDraggedLayerIndex(idx);
+                          const win = getDragWindow();
+                          if (win) win.__draggedLayerItem = item;
+                          try {
+                            e.dataTransfer.setData(
+                              "application/x-landing-layer",
+                              JSON.stringify(item),
+                            );
+                            e.dataTransfer.setData(
+                              "text/plain",
+                              `landing-block:${block.id}`,
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        onDragEnd={() => {
+                          if (autoExpandBlockTimerRef.current) {
+                            clearTimeout(autoExpandBlockTimerRef.current);
+                            autoExpandBlockTimerRef.current = null;
+                          }
+                          setDraggedLayerItem(null);
+                          setDraggedLayerIndex(null);
+                          setBlockDropTarget(null);
+                          const win = getDragWindow();
+                          if (win) win.__draggedLayerItem = null;
+                        }}
                         onDragOver={(e) => {
-                          e.preventDefault();
+                          const win = getDragWindow();
+                          const currentLayer =
+                            draggedLayerItem || win?.__draggedLayerItem;
+                          const compKind =
+                            draggedComponentKind || win?.__draggedComponentKind;
+
+                          if (
+                            currentLayer?.type === "block" &&
+                            currentLayer.blockId === block.id
+                          ) {
+                            return;
+                          }
+
+                          let isAcceptable = Boolean(compKind || currentLayer);
+                          if (!isAcceptable && e.dataTransfer) {
+                            try {
+                              const plain =
+                                e.dataTransfer.getData("text/plain") || "";
+                              if (
+                                plain.startsWith("landing-component:") ||
+                                plain.startsWith("landing-layer:") ||
+                                plain.startsWith("landing-block:") ||
+                                e.dataTransfer.types.includes(
+                                  "application/x-landing-component",
+                                ) ||
+                                e.dataTransfer.types.includes(
+                                  "application/x-landing-layer",
+                                )
+                              ) {
+                                isAcceptable = true;
+                              }
+                            } catch {
+                              // ignore
+                            }
+                          }
+
+                          if (isAcceptable) {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (hasSubLayers && !isBlockExpanded) {
+                              if (!autoExpandBlockTimerRef.current) {
+                                autoExpandBlockTimerRef.current = setTimeout(
+                                  () => {
+                                    setExpandedBlockIds((prev) => ({
+                                      ...prev,
+                                      [block.id]: true,
+                                    }));
+                                    autoExpandBlockTimerRef.current = null;
+                                  },
+                                  650,
+                                );
+                              }
+                            }
+
+                            const rect =
+                              e.currentTarget.getBoundingClientRect();
+                            const relY = e.clientY - rect.top;
+                            const ratio = relY / rect.height;
+
+                            let pos: "inside" | "before" | "after" = "inside";
+                            if (currentLayer?.type === "block") {
+                              if (ratio < 0.25) pos = "before";
+                              else if (ratio > 0.75) pos = "after";
+                              else pos = "inside";
+                            } else {
+                              pos = "inside";
+                            }
+
+                            setBlockDropTarget({
+                              blockId: block.id,
+                              position: pos,
+                            });
+                          }
+                        }}
+                        onDragLeave={() => {
+                          setBlockDropTarget((prev) =>
+                            prev?.blockId === block.id ? null : prev,
+                          );
+                          if (autoExpandBlockTimerRef.current) {
+                            clearTimeout(autoExpandBlockTimerRef.current);
+                            autoExpandBlockTimerRef.current = null;
+                          }
                         }}
                         onDrop={(e) => {
+                          if (autoExpandBlockTimerRef.current) {
+                            clearTimeout(autoExpandBlockTimerRef.current);
+                            autoExpandBlockTimerRef.current = null;
+                          }
+                          const pos = blockDropTarget?.position || "inside";
+                          setBlockDropTarget(null);
+
+                          const win = getDragWindow();
+                          const currentLayer =
+                            draggedLayerItem || win?.__draggedLayerItem;
+
                           if (draggedComponentKind) {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2510,20 +2957,46 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             setDraggedComponentKind(null);
                             return;
                           }
+
+                          if (currentLayer) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleMoveLayer(
+                              currentLayer,
+                              { blockId: block.id, selector: null },
+                              pos,
+                            );
+                            setDraggedLayerItem(null);
+                            setDraggedLayerIndex(null);
+                            if (win) win.__draggedLayerItem = null;
+                            return;
+                          }
+
                           if (draggedLayerIndex !== null) {
                             handleReorderBlocks(draggedLayerIndex, idx);
                             setDraggedLayerIndex(null);
                           }
                         }}
                         onClick={() => selectBlockOnStudio(block.id, true)}
-                        className={`group flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all border ${
-                          isSectionActive
-                            ? "bg-blue-50/80 border-blue-300 text-blue-900 shadow-2xs font-medium"
-                            : isBlockSelected
-                              ? "bg-zinc-100/70 border-zinc-200 text-zinc-800"
-                              : "bg-transparent border-transparent hover:bg-zinc-50 text-zinc-700"
+                        className={`group relative flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all border select-none ${
+                          isSelfBlockDragging
+                            ? "opacity-35 bg-zinc-100 border-dashed border-zinc-400"
+                            : isThisBlockInside
+                              ? "bg-blue-100/90 border-blue-400 text-blue-900 ring-2 ring-blue-300 font-semibold shadow-2xs"
+                              : isSectionActive
+                                ? "bg-blue-50/80 border-blue-300 text-blue-900 shadow-2xs font-medium"
+                                : isBlockSelected
+                                  ? "bg-zinc-100/70 border-zinc-200 text-zinc-800"
+                                  : "bg-transparent border-transparent hover:bg-zinc-50 text-zinc-700"
                         } ${!block.visible ? "opacity-45" : ""}`}
                       >
+                        {isThisBlockBefore && (
+                          <div className="absolute -top-0.5 left-1 right-1 h-[2px] bg-blue-500 rounded-full z-20 pointer-events-none shadow-xs" />
+                        )}
+                        {isThisBlockAfter && (
+                          <div className="absolute -bottom-0.5 left-1 right-1 h-[2px] bg-blue-500 rounded-full z-20 pointer-events-none shadow-xs" />
+                        )}
+
                         <div className="flex items-center gap-1.5 min-w-0">
                           {hasSubLayers ? (
                             <button
@@ -2546,7 +3019,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             <span className="w-3 shrink-0" />
                           )}
 
-                          <GripVertical className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
+                          <GripVertical className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing shrink-0" />
                           <span
                             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
                               isSectionActive
@@ -2559,6 +3032,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           <span className="text-xs font-medium truncate">
                             {block.name}
                           </span>
+
+                          {isThisBlockInside && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-2xs animate-pulse shrink-0">
+                              ↳ Soltar dentro
+                            </span>
+                          )}
                         </div>
 
                         <div
@@ -2567,7 +3046,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         >
                           <button
                             type="button"
-                            onClick={() => handleToggleBlockVisibility(block.id)}
+                            onClick={() =>
+                              handleToggleBlockVisibility(block.id)
+                            }
                             className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
                             title={block.visible ? "Ocultar" : "Mostrar"}
                           >
@@ -2606,7 +3087,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               node={subNode}
                               depth={1}
                               selectedBlockId={selectedBlockId}
-                              activeSubElementSelector={activeSubElement?.selector}
+                              activeSubElementSelector={
+                                activeSubElement?.selector
+                              }
                               expandedSubLayerIds={expandedSubLayerIds}
                               onSelectSubElement={selectSubElementOnStudio}
                               onHoverSubElement={handleHoverSubElement}
@@ -2622,6 +3105,39 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 setDraggedComponentKind(null);
                               }}
                               draggedComponentKind={draggedComponentKind}
+                              draggedLayerItem={draggedLayerItem}
+                              onDragStartLayer={(item) => {
+                                setDraggedLayerItem(item);
+                                const win = getDragWindow();
+                                if (win) win.__draggedLayerItem = item;
+                              }}
+                              onDragEndLayer={() => {
+                                setDraggedLayerItem(null);
+                                const win = getDragWindow();
+                                if (win) win.__draggedLayerItem = null;
+                              }}
+                              onDropLayerOnSubElement={(
+                                targetBlockId,
+                                targetSelector,
+                                position,
+                              ) => {
+                                const item =
+                                  draggedLayerItem ||
+                                  getDragWindow()?.__draggedLayerItem;
+                                if (item) {
+                                  handleMoveLayer(
+                                    item,
+                                    {
+                                      blockId: targetBlockId,
+                                      selector: targetSelector,
+                                    },
+                                    position,
+                                  );
+                                  setDraggedLayerItem(null);
+                                  const win = getDragWindow();
+                                  if (win) win.__draggedLayerItem = null;
+                                }
+                              }}
                             />
                           ))}
                         </div>
