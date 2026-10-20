@@ -180,6 +180,19 @@ type SelectedSubElementInfo = {
     marginLeft?: string;
     marginRight?: string;
     textAlign?: string;
+    display?: string;
+    flexDirection?: string;
+    flexWrap?: string;
+    justifyContent?: string;
+    alignItems?: string;
+    gap?: string;
+    gridTemplateColumns?: string;
+    width?: string;
+    maxWidth?: string;
+    height?: string;
+    minHeight?: string;
+    overflow?: string;
+    position?: string;
   };
 };
 
@@ -410,113 +423,252 @@ interface DraggableComponentItem {
 }
 
 const ATOMIC_COMPONENTS_CATALOG: DraggableComponentItem[] = [
-  // Layout & Contenedores
+  // Layout & Contenedores (HTML Tag Presets)
   {
     kind: "container",
-    name: "Contenedor",
+    name: "Contenedor (div)",
     category: "layout",
-    description: "Caja contenedora flexible con relleno",
+    description: "Etiqueta <div> contenedora flexible con relleno",
     icon: Box,
-    tag: "div.container",
-  },
-  {
-    kind: "columns-2",
-    name: "2 Columnas",
-    category: "layout",
-    description: "Grilla responsive de 2 columnas",
-    icon: Columns,
-    tag: "grid 2 cols",
-  },
-  {
-    kind: "columns-3",
-    name: "3 Columnas",
-    category: "layout",
-    description: "Grilla responsive de 3 columnas",
-    icon: Grid,
-    tag: "grid 3 cols",
+    tag: "<div>",
   },
   {
     kind: "flex-row",
-    name: "Fila Flexible",
+    name: "Fila Flex (Flex Row)",
     category: "layout",
-    description: "Alinea elementos horizontalmente con espacio",
+    description: "Contenedor display: flex en fila horizontal",
     icon: Rows,
-    tag: "flex row",
+    tag: "div.flex-row",
+  },
+  {
+    kind: "flex-col",
+    name: "Columna Flex (Flex Col)",
+    category: "layout",
+    description: "Contenedor display: flex en columna vertical",
+    icon: Columns,
+    tag: "div.flex-col",
+  },
+  {
+    kind: "columns-2",
+    name: "Grilla 2 Columnas",
+    category: "layout",
+    description: "Contenedor display: grid de 2 columnas responsive",
+    icon: Columns,
+    tag: "div.grid-2",
+  },
+  {
+    kind: "columns-3",
+    name: "Grilla 3 Columnas",
+    category: "layout",
+    description: "Contenedor display: grid de 3 columnas responsive",
+    icon: Grid,
+    tag: "div.grid-3",
+  },
+  {
+    kind: "columns-4",
+    name: "Grilla 4 Columnas",
+    category: "layout",
+    description: "Contenedor display: grid de 4 columnas responsive",
+    icon: Grid,
+    tag: "div.grid-4",
+  },
+  {
+    kind: "section",
+    name: "Sub-Sección (section)",
+    category: "layout",
+    description: "Etiqueta semántica <section> para agrupar bloques",
+    icon: LayoutTemplate,
+    tag: "<section>",
   },
   {
     kind: "card",
-    name: "Tarjeta (Card)",
+    name: "Tarjeta (article)",
     category: "layout",
-    description: "Caja de contenido con borde y sombra",
+    description: "Etiqueta <article> con ícono, título y texto",
     icon: Layers,
-    tag: "article.card",
+    tag: "<article>",
   },
-  // Textos y Títulos
+  {
+    kind: "header-box",
+    name: "Encabezado (header)",
+    category: "layout",
+    description: "Etiqueta semántica <header> para cabeceras",
+    icon: PanelBottom,
+    tag: "<header>",
+  },
+  {
+    kind: "footer-box",
+    name: "Pie de Sección (footer)",
+    category: "layout",
+    description: "Etiqueta semántica <footer> con fila flexible",
+    icon: PanelBottom,
+    tag: "<footer>",
+  },
+  {
+    kind: "nav-bar",
+    name: "Navegación (nav)",
+    category: "layout",
+    description: "Etiqueta <nav> con enlaces horizontales",
+    icon: Compass,
+    tag: "<nav>",
+  },
+
+  // Textos y Tipografía (HTML Tag Presets)
+  {
+    kind: "h1",
+    name: "Título Principal (H1)",
+    category: "text",
+    description: "Encabezado principal <h1> de alto impacto",
+    icon: Type,
+    tag: "<h1>",
+  },
+  {
+    kind: "h2",
+    name: "Título de Sección (H2)",
+    category: "text",
+    description: "Encabezado secundario <h2> para secciones",
+    icon: Type,
+    tag: "<h2>",
+  },
   {
     kind: "heading",
-    name: "Título / Subtítulo",
+    name: "Subtítulo (H3)",
     category: "text",
-    description: "Encabezado H3 destacado",
+    description: "Encabezado <h3> para tarjetas o bloques",
     icon: Type,
-    tag: "h3",
+    tag: "<h3>",
+  },
+  {
+    kind: "h4",
+    name: "Encabezado Menor (H4)",
+    category: "text",
+    description: "Encabezado compacto <h4>",
+    icon: Type,
+    tag: "<h4>",
   },
   {
     kind: "text",
-    name: "Párrafo de Texto",
+    name: "Párrafo (p)",
     category: "text",
-    description: "Texto descriptivo con variable",
+    description: "Etiqueta <p> para texto descriptivo",
     icon: Type,
-    tag: "p",
+    tag: "<p>",
   },
   {
     kind: "badge",
-    name: "Insignia (Badge)",
+    name: "Insignia / Pill (span)",
     category: "text",
-    description: "Etiqueta pill destacada",
+    description: "Etiqueta <span> tipo badge inline-flex",
     icon: Sparkles,
-    tag: "span.badge",
+    tag: "<span>",
   },
-  // Acciones y Enlaces
+  {
+    kind: "blockquote",
+    name: "Cita / Reseña (blockquote)",
+    category: "text",
+    description: "Etiqueta <blockquote> con borde lateral",
+    icon: MessageSquareQuote,
+    tag: "<blockquote>",
+  },
+  {
+    kind: "ul-list",
+    name: "Lista con Viñetas (ul)",
+    category: "text",
+    description: "Lista desordenada <ul> con 3 ítems <li>",
+    icon: Layers,
+    tag: "<ul>",
+  },
+  {
+    kind: "ol-list",
+    name: "Lista Numerada (ol)",
+    category: "text",
+    description: "Lista ordenada <ol> paso a paso",
+    icon: Layers,
+    tag: "<ol>",
+  },
+  {
+    kind: "li-item",
+    name: "Ítem de Lista (li)",
+    category: "text",
+    description: "Elemento individual <li> para listas",
+    icon: Minus,
+    tag: "<li>",
+  },
+
+  // Acciones e Interactivos (HTML Tag Presets)
   {
     kind: "button",
-    name: "Botón Principal (CTA)",
+    name: "Botón CTA Primario",
     category: "action",
-    description: "Llamado a la acción con estilo primario",
+    description: "Enlace <a> con estilo de botón principal",
     icon: MousePointerClick,
     tag: "a.btn-primary",
   },
   {
     kind: "button-secondary",
-    name: "Botón Secundario",
+    name: "Botón Secundario Outline",
     category: "action",
-    description: "Botón estilo outline o suave",
+    description: "Enlace <a> con borde sutil y fondo transparente",
     icon: MousePointerClick,
     tag: "a.btn-secondary",
   },
   {
-    kind: "link",
-    name: "Enlace de Texto",
+    kind: "html-button",
+    name: "Botón Nativo (button)",
     category: "action",
-    description: "Enlace de navegación subrayado",
-    icon: Link2,
-    tag: "a.link",
+    description: "Etiqueta <button> interactiva HTML",
+    icon: MousePointerClick,
+    tag: "<button>",
   },
-  // Medios y Separadores
+  {
+    kind: "link",
+    name: "Enlace de Texto (a)",
+    category: "action",
+    description: "Etiqueta <a> para navegación inline",
+    icon: Link2,
+    tag: "<a>",
+  },
+  {
+    kind: "accordion",
+    name: "Acordeón / FAQ (details)",
+    category: "action",
+    description: "Etiqueta <details> + <summary> desplegable",
+    icon: HelpCircle,
+    tag: "<details>",
+  },
+
+  // Medios y Separadores (HTML Tag Presets)
   {
     kind: "image",
-    name: "Imagen / Foto",
+    name: "Imagen (img)",
     category: "media",
-    description: "Foto responsive con selector multimedia",
+    description: "Etiqueta <img> responsive con galería",
     icon: ImageIcon,
-    tag: "img",
+    tag: "<img>",
+  },
+  {
+    kind: "figure",
+    name: "Figura con Epígrafe",
+    category: "media",
+    description: "Etiqueta <figure> con <img> y <figcaption>",
+    icon: ImageIcon,
+    tag: "<figure>",
   },
   {
     kind: "divider",
-    name: "Separador (Línea)",
+    name: "Separador (hr)",
     category: "media",
-    description: "Línea horizontal divisoria",
+    description: "Línea divisoria horizontal <hr>",
     icon: Minus,
-    tag: "hr",
+    tag: "<hr>",
+  },
+  {
+    kind: "spacer",
+    name: "Espaciador Vertical",
+    category: "media",
+    description: "Bloque vacío para dar aire vertical",
+    icon: Scan,
+    tag: "div.spacer",
   },
 ];
 
@@ -2662,6 +2814,728 @@ function StudioBordersAndCornersEditor({
           </select>
         </div>
       )}
+    </div>
+  );
+}
+
+interface StudioLayoutAndDisplayEditorProps {
+  style: SubElementStyleOverride;
+  computedStyles?: SelectedSubElementInfo["computedStyles"];
+  onUpdateStyle: (patch: Partial<SubElementStyleOverride>) => void;
+  showChildControls?: boolean;
+}
+
+function StudioLayoutAndDisplayEditor({
+  style,
+  computedStyles,
+  onUpdateStyle,
+  showChildControls = true,
+}: StudioLayoutAndDisplayEditorProps) {
+  const effectiveDisplay =
+    style.display ||
+    (computedStyles?.display === "flex" ||
+    computedStyles?.display === "inline-flex" ||
+    computedStyles?.display === "grid"
+      ? computedStyles.display
+      : "");
+
+  const isFlex =
+    effectiveDisplay === "flex" || effectiveDisplay === "inline-flex";
+  const isGrid = effectiveDisplay === "grid";
+
+  const activeFlexDir =
+    style.flexDirection || computedStyles?.flexDirection || "row";
+  const activeJustify =
+    style.justifyContent || computedStyles?.justifyContent || "flex-start";
+  const activeAlign =
+    style.alignItems || computedStyles?.alignItems || "stretch";
+  const activeWrap = style.flexWrap || computedStyles?.flexWrap || "nowrap";
+
+  return (
+    <div className="space-y-3">
+      {/* 1. DISPLAY SELECTOR */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-violet-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Modo de Display
+            </span>
+          </div>
+          {style.display && (
+            <button
+              type="button"
+              onClick={() => onUpdateStyle({ display: "" })}
+              className="text-[10px] text-zinc-400 hover:text-zinc-700"
+              title="Restablecer display por defecto"
+            >
+              Auto
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-1">
+          {[
+            { val: "block", label: "Block", hint: "Bloque vertical" },
+            { val: "flex", label: "Flex", hint: "Caja flexible (1D)" },
+            { val: "grid", label: "Grid", hint: "Grilla 2D" },
+            {
+              val: "inline-flex",
+              label: "Inline Flex",
+              hint: "Flex ajustado al contenido",
+            },
+            {
+              val: "inline-block",
+              label: "Inline Block",
+              hint: "En línea con dimensiones",
+            },
+            { val: "none", label: "Oculto", hint: "display: none" },
+          ].map((opt) => {
+            const isSelected = effectiveDisplay === opt.val;
+            return (
+              <button
+                key={opt.val}
+                type="button"
+                title={opt.hint}
+                onClick={() =>
+                  onUpdateStyle({
+                    display: style.display === opt.val ? "" : opt.val,
+                  })
+                }
+                className={`py-1.5 px-1.5 rounded-lg text-[10px] font-semibold border transition-all ${
+                  isSelected
+                    ? "bg-violet-600 text-white border-violet-600 shadow-2xs"
+                    : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200/80"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. FLEXBOX CONTROLS (Shown when Flex or Inline-Flex) */}
+      {isFlex && (
+        <div className="rounded-xl border border-violet-200/90 bg-violet-50/25 p-2.5 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-violet-800 flex items-center gap-1">
+              <Rows className="h-3 w-3 text-violet-600" />
+              Propiedades Flexbox
+            </span>
+            <span className="text-[10px] font-mono text-violet-600 bg-violet-100/80 px-1.5 py-0.5 rounded">
+              {effectiveDisplay}
+            </span>
+          </div>
+
+          {/* Dirección (flex-direction) */}
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Dirección del Eje (flex-direction)
+            </span>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { val: "row", label: "→ Fila" },
+                { val: "column", label: "↓ Col" },
+                { val: "row-reverse", label: "← Inv" },
+                { val: "column-reverse", label: "↑ Inv" },
+              ].map((dir) => {
+                const isSelected = activeFlexDir === dir.val;
+                return (
+                  <button
+                    key={dir.val}
+                    type="button"
+                    onClick={() =>
+                      onUpdateStyle({
+                        display: effectiveDisplay || "flex",
+                        flexDirection: dir.val,
+                      })
+                    }
+                    className={`py-1 px-1 rounded text-[10px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-violet-600 text-white border-violet-600 font-semibold"
+                        : "bg-white hover:bg-violet-50 text-zinc-700 border-zinc-200"
+                    }`}
+                  >
+                    {dir.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Justify Content (Eje Principal) */}
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Distribución Principal (justify-content)
+            </span>
+            <div className="grid grid-cols-3 gap-1">
+              {[
+                { val: "flex-start", label: "Inicio" },
+                { val: "center", label: "Centro" },
+                { val: "flex-end", label: "Fin" },
+                { val: "space-between", label: "Separar" },
+                { val: "space-around", label: "Alrededor" },
+                { val: "space-evenly", label: "Uniforme" },
+              ].map((jc) => {
+                const isSelected = activeJustify === jc.val;
+                return (
+                  <button
+                    key={jc.val}
+                    type="button"
+                    onClick={() =>
+                      onUpdateStyle({
+                        display: effectiveDisplay || "flex",
+                        justifyContent: jc.val,
+                      })
+                    }
+                    className={`py-1 px-1.5 rounded text-[10px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-violet-600 text-white border-violet-600 font-semibold"
+                        : "bg-white hover:bg-violet-50 text-zinc-700 border-zinc-200"
+                    }`}
+                  >
+                    {jc.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Align Items (Eje Cruzado) */}
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Alineación Cruzada (align-items)
+            </span>
+            <div className="grid grid-cols-5 gap-1">
+              {[
+                { val: "stretch", label: "Estirar" },
+                { val: "flex-start", label: "Inicio" },
+                { val: "center", label: "Centro" },
+                { val: "flex-end", label: "Fin" },
+                { val: "baseline", label: "Base" },
+              ].map((ai) => {
+                const isSelected = activeAlign === ai.val;
+                return (
+                  <button
+                    key={ai.val}
+                    type="button"
+                    onClick={() =>
+                      onUpdateStyle({
+                        display: effectiveDisplay || "flex",
+                        alignItems: ai.val,
+                      })
+                    }
+                    className={`py-1 px-1 rounded text-[10px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-violet-600 text-white border-violet-600 font-semibold"
+                        : "bg-white hover:bg-violet-50 text-zinc-700 border-zinc-200"
+                    }`}
+                  >
+                    {ai.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Flex Wrap */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-violet-200/60">
+            <span className="text-[10px] font-medium text-zinc-600">
+              Salto de línea (wrap)
+            </span>
+            <div className="flex items-center gap-1">
+              {[
+                { val: "nowrap", label: "No Wrap" },
+                { val: "wrap", label: "Wrap (Multilínea)" },
+              ].map((fw) => (
+                <button
+                  key={fw.val}
+                  type="button"
+                  onClick={() =>
+                    onUpdateStyle({
+                      display: effectiveDisplay || "flex",
+                      flexWrap: fw.val,
+                    })
+                  }
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                    activeWrap === fw.val
+                      ? "bg-violet-600 text-white border-violet-600 font-semibold"
+                      : "bg-white hover:bg-violet-50 text-zinc-700 border-zinc-200"
+                  }`}
+                >
+                  {fw.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. CSS GRID CONTROLS (Shown when Grid) */}
+      {isGrid && (
+        <div className="rounded-xl border border-indigo-200/90 bg-indigo-50/25 p-2.5 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1">
+              <Grid className="h-3 w-3 text-indigo-600" />
+              Propiedades CSS Grid
+            </span>
+            <span className="text-[10px] font-mono text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded">
+              grid
+            </span>
+          </div>
+
+          {/* Column Presets */}
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Estructura de Columnas (grid-template-columns)
+            </span>
+            <div className="grid grid-cols-3 gap-1 mb-1.5">
+              {[
+                { label: "1 Columna", val: "1fr" },
+                { label: "2 Columnas", val: "repeat(2, minmax(0, 1fr))" },
+                { label: "3 Columnas", val: "repeat(3, minmax(0, 1fr))" },
+                { label: "4 Columnas", val: "repeat(4, minmax(0, 1fr))" },
+                {
+                  label: "Auto-Fit Resp.",
+                  val: "repeat(auto-fit, minmax(240px, 1fr))",
+                },
+                { label: "1/3 + 2/3", val: "1fr 2fr" },
+              ].map((preset) => {
+                const isSelected = style.gridTemplateColumns === preset.val;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() =>
+                      onUpdateStyle({
+                        display: "grid",
+                        gridTemplateColumns: preset.val,
+                      })
+                    }
+                    className={`py-1 px-1.5 rounded text-[10px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 font-semibold"
+                        : "bg-white hover:bg-indigo-50 text-zinc-700 border-zinc-200"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="text"
+              value={style.gridTemplateColumns ?? ""}
+              placeholder={
+                computedStyles?.gridTemplateColumns ||
+                "repeat(auto-fit, minmax(240px, 1fr))"
+              }
+              onChange={(e) =>
+                onUpdateStyle({
+                  display: "grid",
+                  gridTemplateColumns: e.target.value,
+                })
+              }
+              className="w-full rounded-lg bg-white border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-800 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          {/* Grid Alignment */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+                Alinear Ítems (V)
+              </span>
+              <select
+                value={style.alignItems || ""}
+                onChange={(e) =>
+                  onUpdateStyle({ alignItems: e.target.value })
+                }
+                className="w-full rounded-lg bg-white border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+              >
+                <option value="">Estirar (stretch)</option>
+                <option value="start">Arriba (start)</option>
+                <option value="center">Centro (center)</option>
+                <option value="end">Abajo (end)</option>
+              </select>
+            </div>
+            <div>
+              <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+                Justificar Ítems (H)
+              </span>
+              <select
+                value={style.justifyItems || ""}
+                onChange={(e) =>
+                  onUpdateStyle({ justifyItems: e.target.value })
+                }
+                className="w-full rounded-lg bg-white border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+              >
+                <option value="">Estirar (stretch)</option>
+                <option value="start">Izquierda (start)</option>
+                <option value="center">Centro (center)</option>
+                <option value="end">Derecha (end)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. GAP (ESPACIO ENTRE ELEMENTOS HIJOS) */}
+      {(isFlex || isGrid || Boolean(style.gap || style.rowGap || style.columnGap)) && (
+        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-zinc-800">
+              Separación entre Hijos (Gap)
+            </span>
+            <div className="w-20">
+              <DirectionalInput
+                value={style.gap ?? ""}
+                placeholder={computedStyles?.gap || "0px"}
+                title="Espacio entre elementos hijos (gap)"
+                onChange={(val) => onUpdateStyle({ gap: val })}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1">
+            {["0px", "8px", "12px", "16px", "24px", "32px", "48px"].map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => onUpdateStyle({ gap: g, rowGap: "", columnGap: "" })}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  style.gap === g
+                    ? "bg-violet-600 text-white font-semibold"
+                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[10px] text-zinc-500">Gap Filas (Y)</span>
+              <DirectionalInput
+                value={style.rowGap ?? ""}
+                placeholder={style.gap || "Auto"}
+                title="Espacio vertical entre filas (row-gap)"
+                onChange={(val) => onUpdateStyle({ rowGap: val })}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[10px] text-zinc-500">Gap Cols (X)</span>
+              <DirectionalInput
+                value={style.columnGap ?? ""}
+                placeholder={style.gap || "Auto"}
+                title="Espacio horizontal entre columnas (column-gap)"
+                onChange={(val) => onUpdateStyle({ columnGap: val })}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. COMPORTAMIENTO COMO HIJO FLEX / GRID (Self Item Controls) */}
+      {showChildControls && (
+        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-zinc-700">
+              Comportamiento dentro del Padre
+            </span>
+            {Boolean(style.flexGrow || style.alignSelf || style.gridColumn) && (
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateStyle({
+                    flexGrow: "",
+                    flexShrink: "",
+                    alignSelf: "",
+                    gridColumn: "",
+                  })
+                }
+                className="text-[10px] text-zinc-400 hover:text-red-600"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            <div>
+              <span className="block text-[10px] text-zinc-500 mb-0.5">
+                Crecer (Flex)
+              </span>
+              <select
+                value={style.flexGrow || ""}
+                onChange={(e) => onUpdateStyle({ flexGrow: e.target.value })}
+                className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-1.5 py-1 text-[11px] text-zinc-800"
+              >
+                <option value="">Auto</option>
+                <option value="0">0 (No crecer)</option>
+                <option value="1">1 (Expandir)</option>
+              </select>
+            </div>
+            <div>
+              <span className="block text-[10px] text-zinc-500 mb-0.5">
+                Align Self
+              </span>
+              <select
+                value={style.alignSelf || ""}
+                onChange={(e) => onUpdateStyle({ alignSelf: e.target.value })}
+                className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-1.5 py-1 text-[11px] text-zinc-800"
+              >
+                <option value="">Heredar</option>
+                <option value="flex-start">Inicio</option>
+                <option value="center">Centro</option>
+                <option value="flex-end">Fin</option>
+                <option value="stretch">Estirar</option>
+              </select>
+            </div>
+            <div>
+              <span className="block text-[10px] text-zinc-500 mb-0.5">
+                Span Grilla
+              </span>
+              <select
+                value={style.gridColumn || ""}
+                onChange={(e) => onUpdateStyle({ gridColumn: e.target.value })}
+                className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-1.5 py-1 text-[11px] text-zinc-800"
+              >
+                <option value="">1 Col</option>
+                <option value="span 2">2 Columnas</option>
+                <option value="span 3">3 Columnas</option>
+                <option value="1 / -1">Fila Completa</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface StudioDimensionsAndPositionEditorProps {
+  style: SubElementStyleOverride;
+  computedStyles?: SelectedSubElementInfo["computedStyles"];
+  onUpdateStyle: (patch: Partial<SubElementStyleOverride>) => void;
+}
+
+function StudioDimensionsAndPositionEditor({
+  style,
+  computedStyles,
+  onUpdateStyle,
+}: StudioDimensionsAndPositionEditorProps) {
+  return (
+    <div className="space-y-3">
+      {/* 1. ANCHO (WIDTH, MIN-WIDTH, MAX-WIDTH) */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-blue-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Ancho (Width)
+            </span>
+          </div>
+          <div className="w-22">
+            <DirectionalInput
+              value={style.width ?? ""}
+              placeholder={computedStyles?.width || "auto"}
+              title="Ancho del elemento (px, %, vw, fit-content)"
+              onChange={(val) => onUpdateStyle({ width: val })}
+              className="w-full h-6 text-center text-[11px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Presets de Ancho */}
+        <div className="flex flex-wrap items-center gap-1">
+          {[
+            { label: "Auto", val: "auto" },
+            { label: "100%", val: "100%" },
+            { label: "Fit Text", val: "fit-content" },
+            { label: "50%", val: "50%" },
+            { label: "320px", val: "320px" },
+            { label: "640px", val: "640px" },
+          ].map((w) => (
+            <button
+              key={w.val}
+              type="button"
+              onClick={() =>
+                onUpdateStyle({ width: style.width === w.val ? "" : w.val })
+              }
+              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                style.width === w.val
+                  ? "bg-blue-600 text-white font-semibold"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-zinc-100">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-zinc-500">Mín</span>
+            <DirectionalInput
+              value={style.minWidth ?? ""}
+              placeholder="0px"
+              title="Ancho mínimo (min-width)"
+              onChange={(val) => onUpdateStyle({ minWidth: val })}
+              className="w-16 h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-zinc-500">Máx</span>
+            <DirectionalInput
+              value={style.maxWidth ?? ""}
+              placeholder="none"
+              title="Ancho máximo (max-width)"
+              onChange={(val) => onUpdateStyle({ maxWidth: val })}
+              className="w-16 h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 2. ALTO (HEIGHT, MIN-HEIGHT, MAX-HEIGHT) */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-teal-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Alto (Height)
+            </span>
+          </div>
+          <div className="w-22">
+            <DirectionalInput
+              value={style.height ?? ""}
+              placeholder={computedStyles?.height || "auto"}
+              title="Alto del elemento (px, %, dvh, auto)"
+              onChange={(val) => onUpdateStyle({ height: val })}
+              className="w-full h-6 text-center text-[11px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Presets de Min-Height / Height */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[9px] text-zinc-400 mr-0.5">Alto mín:</span>
+          {[
+            { label: "Auto", val: "" },
+            { label: "120px", val: "120px" },
+            { label: "260px", val: "260px" },
+            { label: "420px", val: "420px" },
+            { label: "100dvh", val: "100dvh" },
+          ].map((h) => (
+            <button
+              key={h.label}
+              type="button"
+              onClick={() => onUpdateStyle({ minHeight: h.val })}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                (style.minHeight || "") === h.val
+                  ? "bg-teal-600 text-white font-semibold"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+              }`}
+            >
+              {h.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-zinc-100">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-zinc-500">Mín</span>
+            <DirectionalInput
+              value={style.minHeight ?? ""}
+              placeholder="auto"
+              title="Alto mínimo (min-height)"
+              onChange={(val) => onUpdateStyle({ minHeight: val })}
+              className="w-16 h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-zinc-500">Máx</span>
+            <DirectionalInput
+              value={style.maxHeight ?? ""}
+              placeholder="none"
+              title="Alto máximo (max-height)"
+              onChange={(val) => onUpdateStyle({ maxHeight: val })}
+              className="w-16 h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. PROPORCIÓN, RECORTE Y POSICIÓN */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Proporción (Aspect Ratio)
+            </span>
+            <select
+              value={style.aspectRatio || ""}
+              onChange={(e) => onUpdateStyle({ aspectRatio: e.target.value })}
+              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+            >
+              <option value="">Libre (auto)</option>
+              <option value="1 / 1">1:1 (Cuadrado)</option>
+              <option value="16 / 9">16:9 (Video / Hero)</option>
+              <option value="4 / 3">4:3 (Clásico)</option>
+              <option value="3 / 4">3:4 (Retrato)</option>
+              <option value="21 / 9">21:9 (Panorámico)</option>
+            </select>
+          </div>
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Desborde (Overflow)
+            </span>
+            <select
+              value={style.overflow || ""}
+              onChange={(e) => onUpdateStyle({ overflow: e.target.value })}
+              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+            >
+              <option value="">Visible</option>
+              <option value="hidden">Recortar (hidden)</option>
+              <option value="clip">Clip exacto</option>
+              <option value="auto">Scroll (auto)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-zinc-100">
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Posición (Position)
+            </span>
+            <select
+              value={style.position || ""}
+              onChange={(e) => onUpdateStyle({ position: e.target.value })}
+              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+            >
+              <option value="">Normal (static)</option>
+              <option value="relative">Relativa (relative)</option>
+              <option value="sticky">Fija al Scroll (sticky)</option>
+              <option value="absolute">Absoluta (absolute)</option>
+            </select>
+          </div>
+          <div>
+            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+              Capa Z (z-index)
+            </span>
+            <input
+              type="text"
+              value={style.zIndex ?? ""}
+              placeholder="auto"
+              onChange={(e) => onUpdateStyle({ zIndex: e.target.value })}
+              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:bg-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -6249,16 +7123,108 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           </StudioInspectorSection>
                         )}
 
+                        {/* Disposición (Display, Flexbox y CSS Grid) */}
+                        <StudioInspectorSection
+                          title="Disposición (Display, Flex y Grid)"
+                          description="Modo de caja, alineación de hijos, columnas y gap"
+                          icon={<Rows className="h-3.5 w-3.5" />}
+                          badge={
+                            Boolean(
+                              curStyle.display ||
+                                curStyle.flexDirection ||
+                                curStyle.justifyContent ||
+                                curStyle.alignItems ||
+                                curStyle.flexWrap ||
+                                curStyle.gridTemplateColumns ||
+                                curStyle.gap ||
+                                curStyle.rowGap ||
+                                curStyle.columnGap ||
+                                curStyle.flexGrow ||
+                                curStyle.alignSelf ||
+                                curStyle.gridColumn,
+                            ) ? (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-violet-500"
+                                title="Disposición Flex/Grid personalizada"
+                              />
+                            ) : undefined
+                          }
+                          action={
+                            Boolean(
+                              curStyle.display ||
+                                curStyle.flexDirection ||
+                                curStyle.justifyContent ||
+                                curStyle.alignItems ||
+                                curStyle.flexWrap ||
+                                curStyle.gridTemplateColumns ||
+                                curStyle.gap ||
+                                curStyle.rowGap ||
+                                curStyle.columnGap ||
+                                curStyle.flexGrow ||
+                                curStyle.alignSelf ||
+                                curStyle.gridColumn,
+                            ) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      display: "",
+                                      flexDirection: "",
+                                      flexWrap: "",
+                                      justifyContent: "",
+                                      alignItems: "",
+                                      justifyItems: "",
+                                      gridTemplateColumns: "",
+                                      gap: "",
+                                      rowGap: "",
+                                      columnGap: "",
+                                      flexGrow: "",
+                                      flexShrink: "",
+                                      alignSelf: "",
+                                      gridColumn: "",
+                                    },
+                                  )
+                                }
+                                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                title="Restablecer disposición"
+                              >
+                                Reset
+                              </button>
+                            ) : undefined
+                          }
+                        >
+                          <StudioLayoutAndDisplayEditor
+                            style={curStyle}
+                            computedStyles={activeSubElement.computedStyles}
+                            onUpdateStyle={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                          />
+                        </StudioInspectorSection>
+
                         {/* Granular CSS Style Overrides for Sub-Element */}
                         {!activeSubElement.isImage && (
                           <StudioInspectorSection
                             title="Tipografía y Alineación"
-                            description="Tamaño, grosor, color y alineación"
+                            description="Fuente, tamaño, grosor, interlineado, color y estilo"
                             icon={<Type className="h-3.5 w-3.5" />}
                             badge={
                               Boolean(
-                                curStyle.fontSize ||
+                                curStyle.fontFamily ||
+                                  curStyle.fontSize ||
                                   curStyle.fontWeight ||
+                                  curStyle.fontStyle ||
+                                  curStyle.lineHeight ||
+                                  curStyle.letterSpacing ||
+                                  curStyle.textTransform ||
+                                  curStyle.textDecoration ||
                                   curStyle.color ||
                                   curStyle.textAlign,
                               ) ? (
@@ -6270,8 +7236,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             }
                             action={
                               Boolean(
-                                curStyle.fontSize ||
+                                curStyle.fontFamily ||
+                                  curStyle.fontSize ||
                                   curStyle.fontWeight ||
+                                  curStyle.fontStyle ||
+                                  curStyle.lineHeight ||
+                                  curStyle.letterSpacing ||
+                                  curStyle.textTransform ||
+                                  curStyle.textDecoration ||
                                   curStyle.color ||
                                   curStyle.textAlign,
                               ) ? (
@@ -6282,8 +7254,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       selectedBlock.id,
                                       activeSubElement.selector,
                                       {
+                                        fontFamily: "",
                                         fontSize: "",
                                         fontWeight: "",
+                                        fontStyle: "",
+                                        lineHeight: "",
+                                        letterSpacing: "",
+                                        textTransform: "",
+                                        textDecoration: "",
                                         color: "",
                                         textAlign: "",
                                       },
@@ -6297,34 +7275,90 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               ) : undefined
                             }
                           >
+                            {/* Font Family */}
+                            <div>
+                              <span className="block text-[11px] text-zinc-600 mb-1">
+                                Familia Tipográfica
+                              </span>
+                              <select
+                                value={curStyle.fontFamily || ""}
+                                onChange={(e) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { fontFamily: e.target.value },
+                                  )
+                                }
+                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                              >
+                                <option value="">Heredar del tema</option>
+                                <option value="var(--font-heading)">
+                                  Fuente de Títulos (Tema)
+                                </option>
+                                <option value="var(--font-body)">
+                                  Fuente de Cuerpo (Tema)
+                                </option>
+                                <option value="'Playfair Display', Georgia, serif">
+                                  Playfair Display (Serif)
+                                </option>
+                                <option value="'Plus Jakarta Sans', system-ui, sans-serif">
+                                  Plus Jakarta Sans
+                                </option>
+                                <option value="'Inter', system-ui, sans-serif">
+                                  Inter (Sans-Serif)
+                                </option>
+                                <option value="ui-monospace, SFMono-Regular, monospace">
+                                  Monospace (Código / Precio)
+                                </option>
+                              </select>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <span className="block text-[11px] text-zinc-600 mb-1">
                                   Tamaño de Letra
                                 </span>
-                                <select
-                                  value={curStyle.fontSize || ""}
-                                  onChange={(e) =>
-                                    handleUpdateSubElementStyle(
-                                      selectedBlock.id,
-                                      activeSubElement.selector,
-                                      { fontSize: e.target.value },
-                                    )
-                                  }
-                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                                >
-                                  <option value="">Por defecto</option>
-                                  <option value="12px">12px (XS)</option>
-                                  <option value="14px">14px (SM)</option>
-                                  <option value="16px">16px (Base)</option>
-                                  <option value="18px">18px (MD)</option>
-                                  <option value="20px">20px (LG)</option>
-                                  <option value="24px">24px (XL)</option>
-                                  <option value="32px">32px (2XL)</option>
-                                  <option value="40px">40px (3XL)</option>
-                                  <option value="48px">48px (4XL)</option>
-                                  <option value="56px">56px (Hero)</option>
-                                </select>
+                                <div className="flex items-center gap-1">
+                                  <select
+                                    value={curStyle.fontSize || ""}
+                                    onChange={(e) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { fontSize: e.target.value },
+                                      )
+                                    }
+                                    className="flex-1 min-w-0 rounded-lg bg-zinc-50 border border-zinc-200 px-1.5 py-1.5 text-xs text-zinc-800"
+                                  >
+                                    <option value="">Auto</option>
+                                    <option value="12px">12px</option>
+                                    <option value="14px">14px</option>
+                                    <option value="16px">16px</option>
+                                    <option value="18px">18px</option>
+                                    <option value="20px">20px</option>
+                                    <option value="24px">24px</option>
+                                    <option value="32px">32px</option>
+                                    <option value="40px">40px</option>
+                                    <option value="48px">48px</option>
+                                    <option value="56px">56px</option>
+                                    <option value="64px">64px</option>
+                                  </select>
+                                  <DirectionalInput
+                                    value={curStyle.fontSize}
+                                    placeholder={
+                                      activeSubElement.computedStyles?.fontSize ||
+                                      "16px"
+                                    }
+                                    title="Tamaño exacto (px, rem, clamp)"
+                                    onChange={(val) =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        { fontSize: val },
+                                      )
+                                    }
+                                  />
+                                </div>
                               </div>
                               <div>
                                 <span className="block text-[11px] text-zinc-600 mb-1">
@@ -6342,6 +7376,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
                                 >
                                   <option value="">Por defecto</option>
+                                  <option value="300">300 Light</option>
                                   <option value="400">400 Normal</option>
                                   <option value="500">500 Medium</option>
                                   <option value="600">600 Semibold</option>
@@ -6351,75 +7386,189 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </div>
                             </div>
 
-                            {/* Text Color */}
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs text-zinc-600">
-                                Color de Texto
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <label
-                                  className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
-                                  style={{
-                                    backgroundColor:
-                                      curStyle.color?.startsWith("#")
-                                        ? curStyle.color
-                                        : documentState.theme.textColor,
-                                  }}
-                                  title="Elegir color de texto"
-                                >
-                                  <input
-                                    type="color"
-                                    value={
-                                      curStyle.color?.startsWith("#")
-                                        ? curStyle.color
-                                        : documentState.theme.textColor
-                                    }
-                                    onChange={(e) =>
-                                      handleUpdateSubElementStyle(
-                                        selectedBlock.id,
-                                        activeSubElement.selector,
-                                        { color: e.target.value },
-                                      )
-                                    }
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                  />
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="Auto"
-                                  value={curStyle.color ?? ""}
+                            {/* Line Height & Letter Spacing */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Interlineado (Line Height)
+                                </span>
+                                <select
+                                  value={curStyle.lineHeight || ""}
                                   onChange={(e) =>
                                     handleUpdateSubElementStyle(
                                       selectedBlock.id,
                                       activeSubElement.selector,
-                                      { color: e.target.value },
+                                      { lineHeight: e.target.value },
                                     )
                                   }
-                                  className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                                />
-                                {curStyle.color && (
+                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+                                >
+                                  <option value="">Auto</option>
+                                  <option value="1">1.0 (Compacto)</option>
+                                  <option value="1.15">1.15 (Titular)</option>
+                                  <option value="1.3">1.3 (Subtítulo)</option>
+                                  <option value="1.5">1.5 (Normal)</option>
+                                  <option value="1.7">1.7 (Lectura amplia)</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Espaciado Letras (Tracking)
+                                </span>
+                                <select
+                                  value={curStyle.letterSpacing || ""}
+                                  onChange={(e) =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { letterSpacing: e.target.value },
+                                    )
+                                  }
+                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
+                                >
+                                  <option value="">Normal</option>
+                                  <option value="-0.03em">-0.03em (Ajustado)</option>
+                                  <option value="-0.015em">-0.015em (Suave)</option>
+                                  <option value="0.04em">+0.04em (Abierto)</option>
+                                  <option value="0.1em">+0.10em (Etiqueta)</option>
+                                  <option value="0.18em">+0.18em (Kicker)</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Transform, Decoration & Style */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Transformación
+                                </span>
+                                <div className="grid grid-cols-4 gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                                  {[
+                                    { val: "", label: "Aa" },
+                                    { val: "uppercase", label: "AA" },
+                                    { val: "capitalize", label: "Ab" },
+                                    { val: "lowercase", label: "aa" },
+                                  ].map((tt) => (
+                                    <button
+                                      key={tt.label}
+                                      type="button"
+                                      onClick={() =>
+                                        handleUpdateSubElementStyle(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          { textTransform: tt.val },
+                                        )
+                                      }
+                                      className={`py-1 rounded text-[10px] font-semibold transition-colors ${
+                                        (curStyle.textTransform || "") === tt.val
+                                          ? "bg-white text-zinc-900 shadow-2xs"
+                                          : "text-zinc-500 hover:text-zinc-800"
+                                      }`}
+                                    >
+                                      {tt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Estilo y Subrayado
+                                </span>
+                                <div className="grid grid-cols-3 gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
                                   <button
                                     type="button"
                                     onClick={() =>
                                       handleUpdateSubElementStyle(
                                         selectedBlock.id,
                                         activeSubElement.selector,
-                                        { color: "" },
+                                        {
+                                          fontStyle:
+                                            curStyle.fontStyle === "italic"
+                                              ? ""
+                                              : "italic",
+                                        },
                                       )
                                     }
-                                    className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
-                                    title="Quitar color personalizado"
+                                    className={`py-1 rounded text-[10px] italic font-serif font-semibold transition-colors ${
+                                      curStyle.fontStyle === "italic"
+                                        ? "bg-white text-zinc-900 shadow-2xs"
+                                        : "text-zinc-500 hover:text-zinc-800"
+                                    }`}
+                                    title="Cursiva (Italic)"
                                   >
-                                    <X className="h-3 w-3" />
+                                    I
                                   </button>
-                                )}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        {
+                                          textDecoration:
+                                            curStyle.textDecoration ===
+                                            "underline"
+                                              ? ""
+                                              : "underline",
+                                        },
+                                      )
+                                    }
+                                    className={`py-1 rounded text-[10px] underline font-semibold transition-colors ${
+                                      curStyle.textDecoration === "underline"
+                                        ? "bg-white text-zinc-900 shadow-2xs"
+                                        : "text-zinc-500 hover:text-zinc-800"
+                                    }`}
+                                    title="Subrayado (Underline)"
+                                  >
+                                    U
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        {
+                                          textDecoration:
+                                            curStyle.textDecoration === "none"
+                                              ? ""
+                                              : "none",
+                                        },
+                                      )
+                                    }
+                                    className={`py-1 rounded text-[10px] font-semibold transition-colors ${
+                                      curStyle.textDecoration === "none"
+                                        ? "bg-white text-zinc-900 shadow-2xs"
+                                        : "text-zinc-500 hover:text-zinc-800"
+                                    }`}
+                                    title="Sin subrayado (text-decoration: none)"
+                                  >
+                                    Sin U
+                                  </button>
+                                </div>
                               </div>
                             </div>
 
+                            {/* Text Color with Alpha */}
+                            <div className="pt-1 border-t border-zinc-100">
+                              <StudioAlphaColorField
+                                label="Color de Texto"
+                                value={curStyle.color ?? ""}
+                                defaultColor={documentState.theme.textColor}
+                                onChange={(val) =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    { color: val },
+                                  )
+                                }
+                              />
+                            </div>
+
                             {/* Text Align */}
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                               <span className="text-xs text-zinc-600">
-                                Alineación
+                                Alineación de Texto
                               </span>
                               <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
                                 {[
@@ -6459,12 +7608,13 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         {/* Background Color, Transparency & Opacity */}
                         <StudioInspectorSection
                           title="Fondo y Transparencia"
-                          description="Color de relleno, transparencia y opacidad de capa"
+                          description="Color de relleno, desenfoque y opacidad de capa"
                           icon={<Paintbrush className="h-3.5 w-3.5" />}
                           badge={
                             Boolean(
                               curStyle.backgroundColor ||
                                 curStyle.backgroundImage ||
+                                curStyle.backdropFilter ||
                                 (curStyle.opacity && curStyle.opacity !== "1"),
                             ) ? (
                               <span
@@ -6477,6 +7627,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             Boolean(
                               curStyle.backgroundColor ||
                                 curStyle.backgroundImage ||
+                                curStyle.backdropFilter ||
                                 (curStyle.opacity && curStyle.opacity !== "1"),
                             ) ? (
                               <button
@@ -6488,6 +7639,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     {
                                       backgroundColor: "",
                                       backgroundImage: "",
+                                      backdropFilter: "",
                                       opacity: "",
                                     },
                                   )
@@ -6559,6 +7711,40 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </div>
                             </div>
                           )}
+
+                          {/* Backdrop Blur (Glassmorphism) */}
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-zinc-100">
+                            <span className="text-xs text-zinc-600">
+                              Efecto Cristal (Blur)
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {[
+                                { label: "No", val: "" },
+                                { label: "Suave", val: "blur(6px)" },
+                                { label: "Medio", val: "blur(12px)" },
+                                { label: "Fuerte", val: "blur(20px)" },
+                              ].map((bf) => (
+                                <button
+                                  key={bf.label}
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { backdropFilter: bf.val },
+                                    )
+                                  }
+                                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                    (curStyle.backdropFilter || "") === bf.val
+                                      ? "bg-blue-600 text-white font-semibold"
+                                      : "bg-zinc-100 hover:bg-zinc-200 text-zinc-600"
+                                  }`}
+                                >
+                                  {bf.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
 
                           {/* Whole Element Opacity / Layer Transparency */}
                           <div className="pt-2 border-t border-zinc-100">
@@ -6663,21 +7849,43 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           />
                         </StudioInspectorSection>
 
-                        {/* Dimensions (Width & Max Width) */}
+                        {/* Dimensiones y Posición */}
                         <StudioInspectorSection
-                          title="Dimensiones y Tamaño"
-                          description="Ancho y ancho máximo"
+                          title="Dimensiones y Posición"
+                          description="Ancho, alto, proporción, overflow y posición"
                           icon={<Columns className="h-3.5 w-3.5" />}
                           badge={
-                            Boolean(curStyle.width || curStyle.maxWidth) ? (
+                            Boolean(
+                              curStyle.width ||
+                                curStyle.minWidth ||
+                                curStyle.maxWidth ||
+                                curStyle.height ||
+                                curStyle.minHeight ||
+                                curStyle.maxHeight ||
+                                curStyle.aspectRatio ||
+                                curStyle.overflow ||
+                                curStyle.position ||
+                                curStyle.zIndex,
+                            ) ? (
                               <span
                                 className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                title="Dimensiones personalizadas"
+                                title="Dimensiones o posición personalizada"
                               />
                             ) : undefined
                           }
                           action={
-                            Boolean(curStyle.width || curStyle.maxWidth) ? (
+                            Boolean(
+                              curStyle.width ||
+                                curStyle.minWidth ||
+                                curStyle.maxWidth ||
+                                curStyle.height ||
+                                curStyle.minHeight ||
+                                curStyle.maxHeight ||
+                                curStyle.aspectRatio ||
+                                curStyle.overflow ||
+                                curStyle.position ||
+                                curStyle.zIndex,
+                            ) ? (
                               <button
                                 type="button"
                                 onClick={() =>
@@ -6686,70 +7894,37 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     activeSubElement.selector,
                                     {
                                       width: "",
+                                      minWidth: "",
                                       maxWidth: "",
+                                      height: "",
+                                      minHeight: "",
+                                      maxHeight: "",
+                                      aspectRatio: "",
+                                      overflow: "",
+                                      position: "",
+                                      zIndex: "",
                                     },
                                   )
                                 }
                                 className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                                title="Restablecer dimensiones"
+                                title="Restablecer dimensiones y posición"
                               >
                                 Reset
                               </button>
                             ) : undefined
                           }
                         >
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Ancho (Width)
-                              </span>
-                              <select
-                                value={curStyle.width || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { width: e.target.value },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Auto</option>
-                                <option value="100%">100% (Ancho total)</option>
-                                <option value="fit-content">Ajustado al texto</option>
-                                <option value="200px">200px</option>
-                                <option value="240px">240px</option>
-                                <option value="320px">320px</option>
-                                <option value="480px">480px</option>
-                                <option value="640px">640px</option>
-                              </select>
-                            </div>
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Ancho Máx. (Max Width)
-                              </span>
-                              <select
-                                value={curStyle.maxWidth || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { maxWidth: e.target.value },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Sin límite</option>
-                                <option value="100%">100%</option>
-                                <option value="320px">320px (XS)</option>
-                                <option value="480px">480px (SM)</option>
-                                <option value="640px">640px (MD)</option>
-                                <option value="768px">768px (LG)</option>
-                                <option value="1024px">1024px (XL)</option>
-                                <option value="1280px">1280px (2XL)</option>
-                              </select>
-                            </div>
-                          </div>
+                          <StudioDimensionsAndPositionEditor
+                            style={curStyle}
+                            computedStyles={activeSubElement.computedStyles}
+                            onUpdateStyle={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                          />
                         </StudioInspectorSection>
 
                         {/* Border & Corner Radius */}
@@ -7238,7 +8413,157 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       </div>
                     </StudioInspectorSection>
 
-                    {/* Dropdown 2: Section Spacing */}
+                    {/* Dropdown 2: Section Layout & Display */}
+                    <StudioInspectorSection
+                      title="Disposición y Tamaño de la Sección"
+                      description="Display Flex/Grid, alineación, gap y alto mínimo"
+                      icon={<Rows className="h-3.5 w-3.5" />}
+                      badge={
+                        Boolean(
+                          selectedBlock.values.__display ||
+                            selectedBlock.values.__flexDirection ||
+                            selectedBlock.values.__justifyContent ||
+                            selectedBlock.values.__alignItems ||
+                            selectedBlock.values.__gridTemplateColumns ||
+                            selectedBlock.values.__gap ||
+                            selectedBlock.values.__minHeight ||
+                            selectedBlock.values.__overflow,
+                        ) ? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-violet-500"
+                            title="Disposición o tamaño de sección personalizado"
+                          />
+                        ) : undefined
+                      }
+                      action={
+                        Boolean(
+                          selectedBlock.values.__display ||
+                            selectedBlock.values.__flexDirection ||
+                            selectedBlock.values.__justifyContent ||
+                            selectedBlock.values.__alignItems ||
+                            selectedBlock.values.__gridTemplateColumns ||
+                            selectedBlock.values.__gap ||
+                            selectedBlock.values.__minHeight ||
+                            selectedBlock.values.__overflow,
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateBlockValues(selectedBlock.id, {
+                                __display: "",
+                                __flexDirection: "",
+                                __flexWrap: "",
+                                __justifyContent: "",
+                                __alignItems: "",
+                                __gridTemplateColumns: "",
+                                __gap: "",
+                                __minHeight: "",
+                                __overflow: "",
+                              })
+                            }
+                            className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                            title="Restablecer disposición de sección"
+                          >
+                            Reset
+                          </button>
+                        ) : undefined
+                      }
+                    >
+                      <StudioLayoutAndDisplayEditor
+                        style={{
+                          display: selectedBlock.values.__display || "",
+                          flexDirection:
+                            selectedBlock.values.__flexDirection || "",
+                          flexWrap: selectedBlock.values.__flexWrap || "",
+                          justifyContent:
+                            selectedBlock.values.__justifyContent || "",
+                          alignItems: selectedBlock.values.__alignItems || "",
+                          gridTemplateColumns:
+                            selectedBlock.values.__gridTemplateColumns || "",
+                          gap: selectedBlock.values.__gap || "",
+                        }}
+                        showChildControls={false}
+                        onUpdateStyle={(patch) =>
+                          handleUpdateBlockValues(selectedBlock.id, {
+                            ...(patch.display !== undefined && {
+                              __display: patch.display,
+                            }),
+                            ...(patch.flexDirection !== undefined && {
+                              __flexDirection: patch.flexDirection,
+                            }),
+                            ...(patch.flexWrap !== undefined && {
+                              __flexWrap: patch.flexWrap,
+                            }),
+                            ...(patch.justifyContent !== undefined && {
+                              __justifyContent: patch.justifyContent,
+                            }),
+                            ...(patch.alignItems !== undefined && {
+                              __alignItems: patch.alignItems,
+                            }),
+                            ...(patch.gridTemplateColumns !== undefined && {
+                              __gridTemplateColumns: patch.gridTemplateColumns,
+                            }),
+                            ...(patch.gap !== undefined && {
+                              __gap: patch.gap,
+                            }),
+                          })
+                        }
+                      />
+
+                      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-zinc-800">
+                            Alto Mínimo de Sección (min-height)
+                          </span>
+                          <div className="w-22">
+                            <DirectionalInput
+                              value={selectedBlock.values.__minHeight ?? ""}
+                              placeholder="auto"
+                              title="Alto mínimo de la sección (px, dvh)"
+                              onChange={(val) =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__minHeight",
+                                  val,
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {[
+                            { label: "Auto", val: "" },
+                            { label: "320px", val: "320px" },
+                            { label: "480px", val: "480px" },
+                            { label: "640px", val: "640px" },
+                            { label: "80dvh", val: "80dvh" },
+                            { label: "100dvh", val: "100dvh" },
+                          ].map((mh) => (
+                            <button
+                              key={mh.label}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__minHeight",
+                                  mh.val,
+                                )
+                              }
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                (selectedBlock.values.__minHeight || "") ===
+                                mh.val
+                                  ? "bg-teal-600 text-white font-semibold"
+                                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                              }`}
+                            >
+                              {mh.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </StudioInspectorSection>
+
+                    {/* Dropdown 3: Section Spacing */}
                     <StudioInspectorSection
                       title="Espaciado de la Sección"
                       description="Padding interno y margen exterior"

@@ -625,8 +625,114 @@ describe("landing-compiler", () => {
       expect(compiled.cssContent).toContain("border-top-left-radius: 8px !important");
       expect(compiled.cssContent).toContain("border-bottom-right-radius: 8px !important");
     });
+
+    it("compiles display, flexbox, grid, dimensions, position, and typography properties for blocks and sub-elements", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const heroBlock = createBlockFromBuiltinModule(heroMod);
+      heroBlock.values.__display = "flex";
+      heroBlock.values.__flexDirection = "column";
+      heroBlock.values.__justifyContent = "center";
+      heroBlock.values.__alignItems = "center";
+      heroBlock.values.__gap = "24px";
+      heroBlock.values.__minHeight = "600px";
+      heroBlock.values.__overflow = "hidden";
+      heroBlock.values.__subStyles = JSON.stringify({
+        ".hero-actions": {
+          display: "flex",
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "16px",
+          rowGap: "12px",
+          columnGap: "20px",
+        },
+        ".grid-cards": {
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          justifyItems: "stretch",
+          alignSelf: "stretch",
+          flexGrow: "1",
+          gridColumn: "1 / -1",
+          minWidth: "280px",
+          maxHeight: "480px",
+          aspectRatio: "16/9",
+          overflow: "clip",
+          position: "relative",
+          zIndex: "10",
+          backdropFilter: "blur(12px)",
+          fontFamily: "Georgia, serif",
+          textTransform: "uppercase",
+          textDecoration: "underline",
+          fontStyle: "italic",
+        },
+      });
+
+      const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
+      doc.blocks = [heroBlock];
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Casa Brasa",
+        restaurantSlug: "casa-brasa",
+      });
+
+      // Block root layout overrides
+      expect(compiled.htmlContent).toContain("display: flex !important");
+      expect(compiled.htmlContent).toContain("flex-direction: column !important");
+      expect(compiled.htmlContent).toContain("justify-content: center !important");
+      expect(compiled.htmlContent).toContain("align-items: center !important");
+      expect(compiled.htmlContent).toContain("gap: 24px !important");
+      expect(compiled.htmlContent).toContain("min-height: 600px !important");
+      expect(compiled.htmlContent).toContain("overflow: hidden !important");
+
+      // Sub-element Flexbox & Grid overrides
+      expect(compiled.cssContent).toContain("display: flex !important");
+      expect(compiled.cssContent).toContain("flex-direction: row !important");
+      expect(compiled.cssContent).toContain("flex-wrap: wrap !important");
+      expect(compiled.cssContent).toContain("justify-content: space-between !important");
+      expect(compiled.cssContent).toContain("row-gap: 12px !important");
+      expect(compiled.cssContent).toContain("column-gap: 20px !important");
+      expect(compiled.cssContent).toContain("display: grid !important");
+      expect(compiled.cssContent).toContain("grid-template-columns: repeat(3, minmax(0, 1fr)) !important");
+      expect(compiled.cssContent).toContain("grid-column: 1 / -1 !important");
+      expect(compiled.cssContent).toContain("aspect-ratio: 16/9 !important");
+      expect(compiled.cssContent).toContain("backdrop-filter: blur(12px) !important");
+      expect(compiled.cssContent).toContain("text-transform: uppercase !important");
+      expect(compiled.cssContent).toContain("font-style: italic !important");
+    });
+
+    it("inserts semantic HTML tag presets into blocks and standalone containers", () => {
+      let block = createBlankContainerBlock("flex-col");
+      expect(block.htmlTemplate).toContain('class="flex-col"');
+
+      block = insertInnerElementInBlock(block, null, "h1");
+      expect(block.htmlTemplate).toContain("<h1");
+
+      block = insertInnerElementInBlock(block, null, "blockquote");
+      expect(block.htmlTemplate).toContain("<blockquote");
+
+      block = insertInnerElementInBlock(block, null, "ul-list");
+      expect(block.htmlTemplate).toContain("<ul");
+      expect(block.htmlTemplate).toContain("<li");
+
+      block = insertInnerElementInBlock(block, null, "html-button");
+      expect(block.htmlTemplate).toContain("<button");
+
+      block = insertInnerElementInBlock(block, null, "accordion");
+      expect(block.htmlTemplate).toContain("<details");
+      expect(block.htmlTemplate).toContain("<summary");
+
+      block = insertInnerElementInBlock(block, null, "figure");
+      expect(block.htmlTemplate).toContain("<figure");
+      expect(block.htmlTemplate).toContain("<figcaption");
+
+      block = insertInnerElementInBlock(block, null, "columns-4");
+      expect(block.htmlTemplate).toContain("grid-columns-4");
+      expect(block.htmlTemplate).toContain("Columna 4");
+    });
   });
 });
+
 
 
 

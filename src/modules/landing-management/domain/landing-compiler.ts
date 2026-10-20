@@ -496,6 +496,33 @@ function buildBlockWrapperStyle(values: Record<string, string>): string {
   if (values.__textAlign?.trim()) {
     styles.push(`text-align: ${values.__textAlign.trim()}`);
   }
+  if (values.__display?.trim()) {
+    styles.push(`display: ${values.__display.trim()} !important`);
+  }
+  if (values.__flexDirection?.trim()) {
+    styles.push(`flex-direction: ${values.__flexDirection.trim()} !important`);
+  }
+  if (values.__flexWrap?.trim()) {
+    styles.push(`flex-wrap: ${values.__flexWrap.trim()} !important`);
+  }
+  if (values.__justifyContent?.trim()) {
+    styles.push(`justify-content: ${values.__justifyContent.trim()} !important`);
+  }
+  if (values.__alignItems?.trim()) {
+    styles.push(`align-items: ${values.__alignItems.trim()} !important`);
+  }
+  if (values.__gridTemplateColumns?.trim()) {
+    styles.push(`grid-template-columns: ${values.__gridTemplateColumns.trim()} !important`);
+  }
+  if (values.__gap?.trim()) {
+    styles.push(`gap: ${values.__gap.trim()} !important`);
+  }
+  if (values.__minHeight?.trim()) {
+    styles.push(`min-height: ${values.__minHeight.trim()} !important`);
+  }
+  if (values.__overflow?.trim()) {
+    styles.push(`overflow: ${values.__overflow.trim()} !important`);
+  }
   // Border in 4 directions or unified
   const hasIndividualBlockBorders = Boolean(
     values.__borderTopWidth?.trim() ||
@@ -589,12 +616,16 @@ export function buildSubElementScopedCss(
     if (!SAFE_RELATIVE_SELECTOR_REGEX.test(selector)) continue;
     const decls: string[] = [];
 
+    if (st.fontFamily?.trim()) decls.push(`font-family: ${st.fontFamily.trim()} !important`);
     if (st.fontSize?.trim()) decls.push(`font-size: ${st.fontSize.trim()} !important`);
     if (st.fontWeight?.trim()) decls.push(`font-weight: ${st.fontWeight.trim()} !important`);
+    if (st.fontStyle?.trim()) decls.push(`font-style: ${st.fontStyle.trim()} !important`);
     if (st.color?.trim()) decls.push(`color: ${st.color.trim()} !important`);
     if (st.textAlign?.trim()) decls.push(`text-align: ${st.textAlign.trim()} !important`);
     if (st.lineHeight?.trim()) decls.push(`line-height: ${st.lineHeight.trim()} !important`);
     if (st.letterSpacing?.trim()) decls.push(`letter-spacing: ${st.letterSpacing.trim()} !important`);
+    if (st.textTransform?.trim()) decls.push(`text-transform: ${st.textTransform.trim()} !important`);
+    if (st.textDecoration?.trim()) decls.push(`text-decoration: ${st.textDecoration.trim()} !important`);
 
     if (st.backgroundColor?.trim()) {
       decls.push(`background-color: ${st.backgroundColor.trim()} !important`);
@@ -607,6 +638,31 @@ export function buildSubElementScopedCss(
       decls.push(`background-repeat: no-repeat !important`);
     }
     if (st.opacity?.trim()) decls.push(`opacity: ${st.opacity.trim()} !important`);
+    if (st.backdropFilter?.trim()) {
+      decls.push(`-webkit-backdrop-filter: ${st.backdropFilter.trim()} !important`);
+      decls.push(`backdrop-filter: ${st.backdropFilter.trim()} !important`);
+    }
+
+    // Display, Flexbox & CSS Grid
+    if (st.display?.trim()) decls.push(`display: ${st.display.trim()} !important`);
+    if (st.flexDirection?.trim()) decls.push(`flex-direction: ${st.flexDirection.trim()} !important`);
+    if (st.flexWrap?.trim()) decls.push(`flex-wrap: ${st.flexWrap.trim()} !important`);
+    if (st.justifyContent?.trim()) decls.push(`justify-content: ${st.justifyContent.trim()} !important`);
+    if (st.alignItems?.trim()) decls.push(`align-items: ${st.alignItems.trim()} !important`);
+    if (st.alignContent?.trim()) decls.push(`align-content: ${st.alignContent.trim()} !important`);
+    if (st.alignSelf?.trim()) decls.push(`align-self: ${st.alignSelf.trim()} !important`);
+    if (st.flexGrow?.trim()) decls.push(`flex-grow: ${st.flexGrow.trim()} !important`);
+    if (st.flexShrink?.trim()) decls.push(`flex-shrink: ${st.flexShrink.trim()} !important`);
+    if (st.flexBasis?.trim()) decls.push(`flex-basis: ${st.flexBasis.trim()} !important`);
+    if (st.gridTemplateColumns?.trim()) {
+      decls.push(`grid-template-columns: ${st.gridTemplateColumns.trim()} !important`);
+    }
+    if (st.gridTemplateRows?.trim()) {
+      decls.push(`grid-template-rows: ${st.gridTemplateRows.trim()} !important`);
+    }
+    if (st.gridColumn?.trim()) decls.push(`grid-column: ${st.gridColumn.trim()} !important`);
+    if (st.gridRow?.trim()) decls.push(`grid-row: ${st.gridRow.trim()} !important`);
+    if (st.justifyItems?.trim()) decls.push(`justify-items: ${st.justifyItems.trim()} !important`);
 
     if (st.paddingTop?.trim()) decls.push(`padding-top: ${st.paddingTop.trim()} !important`);
     if (st.paddingBottom?.trim()) decls.push(`padding-bottom: ${st.paddingBottom.trim()} !important`);
@@ -619,9 +675,21 @@ export function buildSubElementScopedCss(
 
     if (st.width?.trim()) decls.push(`width: ${st.width.trim()} !important`);
     if (st.maxWidth?.trim()) decls.push(`max-width: ${st.maxWidth.trim()} !important`);
+    if (st.minWidth?.trim()) decls.push(`min-width: ${st.minWidth.trim()} !important`);
     if (st.minHeight?.trim()) decls.push(`min-height: ${st.minHeight.trim()} !important`);
+    if (st.maxHeight?.trim()) decls.push(`max-height: ${st.maxHeight.trim()} !important`);
     if (st.height?.trim()) decls.push(`height: ${st.height.trim()} !important`);
+    if (st.aspectRatio?.trim()) decls.push(`aspect-ratio: ${st.aspectRatio.trim()} !important`);
+    if (st.overflow?.trim()) decls.push(`overflow: ${st.overflow.trim()} !important`);
+    if (st.position?.trim()) decls.push(`position: ${st.position.trim()} !important`);
+    if (st.top?.trim()) decls.push(`top: ${st.top.trim()} !important`);
+    if (st.right?.trim()) decls.push(`right: ${st.right.trim()} !important`);
+    if (st.bottom?.trim()) decls.push(`bottom: ${st.bottom.trim()} !important`);
+    if (st.left?.trim()) decls.push(`left: ${st.left.trim()} !important`);
+    if (st.zIndex?.trim()) decls.push(`z-index: ${st.zIndex.trim()} !important`);
     if (st.gap?.trim()) decls.push(`gap: ${st.gap.trim()} !important`);
+    if (st.rowGap?.trim()) decls.push(`row-gap: ${st.rowGap.trim()} !important`);
+    if (st.columnGap?.trim()) decls.push(`column-gap: ${st.columnGap.trim()} !important`);
 
     // Border widths (unified or individual sides)
     const hasIndividualBorders = Boolean(
@@ -865,30 +933,43 @@ a[data-original-href] {
     if (!el || el.nodeType !== 1) return 'Elemento';
     var tag = el.tagName.toLowerCase();
     var cls = el.className && typeof el.className === 'string' ? el.className : '';
-    if (tag === 'img') return 'Imagen';
-    if (tag === 'a' && /\\bbtn\\b/.test(cls)) return 'Botón';
-    if (tag === 'button') return 'Botón';
-    if (tag === 'a') return 'Enlace';
+    if (tag === 'img') return 'Imagen (<img>)';
+    if (tag === 'a' && /\\bbtn\\b/.test(cls)) return 'Botón CTA (<a>)';
+    if (tag === 'button') return 'Botón (<button>)';
+    if (tag === 'a') return 'Enlace (<a>)';
     if (/^h[1-6]$/.test(tag)) return 'Título (' + tag.toUpperCase() + ')';
-    if (tag === 'p') return 'Párrafo';
+    if (tag === 'p') return 'Párrafo (<p>)';
+    if (tag === 'blockquote') return 'Cita (<blockquote>)';
+    if (tag === 'figcaption') return 'Epígrafe (<figcaption>)';
+    if (tag === 'ul') return 'Lista (<ul>)';
+    if (tag === 'ol') return 'Lista (<ol>)';
+    if (tag === 'li') return 'Ítem (<li>)';
+    if (tag === 'nav') return 'Navegación (<nav>)';
+    if (tag === 'aside') return 'Lateral (<aside>)';
     if (/\\bgrid-columns-2\\b/.test(cls)) return 'Grilla (2 Col)';
     if (/\\bgrid-columns-3\\b/.test(cls)) return 'Grilla (3 Col)';
-    if (/\\bflex-row\\b/.test(cls)) return 'Fila Flexible';
-    if (/\\bcontent-container\\b/.test(cls)) return 'Contenedor';
-    if (/\\bgrid-column\\b/.test(cls) || (el.parentElement && /\\b(grid-columns-2|grid-columns-3)\\b/.test(el.parentElement.className || ''))) {
+    if (/\\bgrid-columns-4\\b/.test(cls)) return 'Grilla (4 Col)';
+    if (/\\bflex-row\\b/.test(cls)) return 'Fila Flex (div.flex-row)';
+    if (/\\bflex-col\\b/.test(cls)) return 'Columna Flex (div.flex-col)';
+    if (/\\bspacer\\b/.test(cls)) return 'Espaciador (div.spacer)';
+    if (/\\bsection-box\\b/.test(cls)) return 'Sub-Sección (<section>)';
+    if (/\\bheader-box\\b/.test(cls)) return 'Encabezado (<header>)';
+    if (/\\bfooter-box\\b/.test(cls)) return 'Pie (<footer>)';
+    if (/\\bcontent-container\\b/.test(cls)) return 'Contenedor (<div>)';
+    if (/\\bgrid-column\\b/.test(cls) || (el.parentElement && /\\b(grid-columns-2|grid-columns-3|grid-columns-4)\\b/.test(el.parentElement.className || ''))) {
       var colIdx = Array.prototype.indexOf.call(el.parentElement ? el.parentElement.children : [], el) + 1;
       return 'Columna ' + (colIdx || 1);
     }
-    if (tag === 'article' || /\\b(card|info-card|stat-card|spotlight-card|review-card)\\b/.test(cls)) return 'Tarjeta';
-    if (tag === 'figure' || /\\bgallery-item\\b/.test(cls)) return 'Foto de Galería';
-    if (tag === 'details' || /\\bfaq-item\\b/.test(cls)) return 'Pregunta FAQ';
-    if (tag === 'summary') return 'Pregunta';
+    if (tag === 'article' || /\\b(card|info-card|stat-card|spotlight-card|review-card)\\b/.test(cls)) return 'Tarjeta (<article>)';
+    if (tag === 'figure' || /\\bgallery-item\\b/.test(cls)) return 'Figura (<figure>)';
+    if (tag === 'details' || /\\bfaq-item\\b/.test(cls)) return 'Acordeón (<details>)';
+    if (tag === 'summary') return 'Título Acordeón (<summary>)';
     if (/\\bfeature-item\\b/.test(cls)) return 'Ítem de Lista';
-    if (/\\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\\b/.test(cls)) return 'Insignia';
+    if (/\\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\\b/.test(cls)) return 'Insignia (<span>)';
     if (/\\b(cards-grid|info-grid|gallery-mosaic|stats-strip-grid)\\b/.test(cls)) return 'Grilla';
     if (/\\b(hero-actions|section-cta-wrap|footer-links)\\b/.test(cls)) return 'Grupo de Botones';
-    if (tag === 'hr') return 'Separador';
-    return 'Elemento (' + tag + ')';
+    if (tag === 'hr') return 'Separador (<hr>)';
+    return 'Elemento (<' + tag + '>)';
   }
 
   function computeRelativeSelector(blockEl, targetEl) {
@@ -927,13 +1008,17 @@ a[data-original-href] {
 
   function isEditableContainer(el) {
     if (!el || el.nodeType !== 1) return false;
+    var tag = el.tagName.toLowerCase();
     var cls = el.className && typeof el.className === 'string' ? el.className : '';
-    if (/\\b(content-container|content-box|grid-columns-2|grid-columns-3|grid-column|flex-row)\\b/.test(cls)) {
+    if (tag === 'nav' || tag === 'aside' || tag === 'ul' || tag === 'ol' || tag === 'blockquote') {
+      return true;
+    }
+    if (/\\b(content-container|content-box|section-box|header-box|footer-box|nav-bar|aside-box|grid-columns-2|grid-columns-3|grid-columns-4|grid-column|flex-row|flex-col|spacer)\\b/.test(cls)) {
       return true;
     }
     if (el.parentElement) {
       var pCls = el.parentElement.className && typeof el.parentElement.className === 'string' ? el.parentElement.className : '';
-      if (/\\b(grid-columns-2|grid-columns-3|flex-row)\\b/.test(pCls)) {
+      if (/\\b(grid-columns-2|grid-columns-3|grid-columns-4|flex-row|flex-col)\\b/.test(pCls)) {
         return true;
       }
     }
@@ -942,9 +1027,9 @@ a[data-original-href] {
 
   function isLayoutWrapper(el, blockEl) {
     if (!el || el === blockEl) return true;
+    if (isEditableContainer(el)) return false;
     var tag = el.tagName.toLowerCase();
     if (tag === 'section' || tag === 'header' || tag === 'footer' || tag === 'main') return true;
-    if (isEditableContainer(el)) return false;
     if (el.parentElement === blockEl) return true;
     var cls = el.className && typeof el.className === 'string' ? el.className.toLowerCase() : '';
     if (/^container$|\\b(nav-container|hero-content|hero-inner|section-header|wrapper|content-wrapper)\\b/.test(cls)) {
@@ -968,7 +1053,7 @@ a[data-original-href] {
       return interactiveParent;
     }
 
-    var contentEl = closestEl(el, 'img, h1, h2, h3, h4, h5, h6, p, summary, li, time');
+    var contentEl = closestEl(el, 'img, h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, summary, li, time');
     if (contentEl && blockEl.contains(contentEl)) {
       return contentEl;
     }
@@ -982,7 +1067,7 @@ a[data-original-href] {
       return el;
     }
 
-    var editableAncestor = closestEl(el, '.content-container, .grid-columns-2, .grid-columns-3, .grid-column, .flex-row');
+    var editableAncestor = closestEl(el, '.content-container, .section-box, .header-box, .footer-box, .nav-bar, .aside-box, .grid-columns-2, .grid-columns-3, .grid-columns-4, .grid-column, .flex-row, .flex-col, .spacer, nav, aside, ul, ol');
     if (editableAncestor && blockEl.contains(editableAncestor) && editableAncestor !== blockEl) {
       return editableAncestor;
     }
@@ -1012,7 +1097,7 @@ a[data-original-href] {
     if (subEl.hasAttribute('data-landing-field')) {
       boundFieldEl = subEl;
     } else {
-      var isTextTag = /^(h[1-6]|p|a|button|span|strong|em|small|time|li|summary|label|b|i)$/.test(tag);
+      var isTextTag = /^(h[1-6]|p|blockquote|figcaption|a|button|span|strong|em|small|time|li|summary|label|b|i)$/.test(tag);
       if (isTextTag) {
         for (var ci = 0; ci < subEl.children.length; ci++) {
           var ch = subEl.children[ci];
@@ -1085,7 +1170,20 @@ a[data-original-href] {
         marginBottom: cs.marginBottom || '',
         marginLeft: cs.marginLeft || '',
         marginRight: cs.marginRight || '',
-        textAlign: cs.textAlign || ''
+        textAlign: cs.textAlign || '',
+        display: cs.display || '',
+        flexDirection: cs.flexDirection || '',
+        flexWrap: cs.flexWrap || '',
+        justifyContent: cs.justifyContent || '',
+        alignItems: cs.alignItems || '',
+        gap: cs.gap || '',
+        gridTemplateColumns: cs.gridTemplateColumns || '',
+        width: cs.width || '',
+        maxWidth: cs.maxWidth || '',
+        height: cs.height || '',
+        minHeight: cs.minHeight || '',
+        overflow: cs.overflow || '',
+        position: cs.position || ''
       }
     };
   }
@@ -2199,7 +2297,7 @@ export function findSelectorForAstNode(
 export function isPlaceholderParagraph(n: HtmlAstNode, html: string): boolean {
   if (n.tagName.toLowerCase() !== "p") return false;
   const inner = html.slice(n.innerStartOffset, n.innerEndOffset);
-  return /Arrastr[áa]|Contenedor Libre|Columna \d|Fila Flexible|Solt[áa] o agreg[áa]/i.test(
+  return /Arrastr[áa]|Contenedor Libre|Columna \d|Fila Flexible|Columna Flexible|Sub-secci[óo]n|Encabezado|Pie de p[áa]gina|Solt[áa] o agreg[áa]/i.test(
     inner,
   );
 }
@@ -2625,19 +2723,36 @@ export function deleteSubElementInBlock(
 }
 
 export type InsertableInnerElementKind =
-  | "button"
-  | "button-secondary"
-  | "link"
-  | "image"
-  | "heading"
-  | "text"
-  | "badge"
-  | "divider"
-  | "card"
+  | "section"
   | "container"
+  | "flex-row"
+  | "flex-col"
   | "columns-2"
   | "columns-3"
-  | "flex-row";
+  | "columns-4"
+  | "card"
+  | "nav-bar"
+  | "header-box"
+  | "footer-box"
+  | "h1"
+  | "h2"
+  | "heading"
+  | "h4"
+  | "text"
+  | "badge"
+  | "blockquote"
+  | "ul-list"
+  | "ol-list"
+  | "li-item"
+  | "button"
+  | "button-secondary"
+  | "html-button"
+  | "link"
+  | "accordion"
+  | "image"
+  | "figure"
+  | "divider"
+  | "spacer";
 
 export function insertInnerElementInBlock(
   block: LandingBlock,
@@ -2663,7 +2778,47 @@ export function insertInnerElementInBlock(
     );
     nextValues[textKey] = "Nuevo Botón";
     nextValues[urlKey] = "{{menuUrl}}";
-    snippet = `<a href="{{${urlKey}}}" class="btn btn-primary" style="margin-top: 10px;">{{${textKey}}}</a>`;
+    snippet = `<a href="{{${urlKey}}}" class="btn btn-primary" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px;">{{${textKey}}}</a>`;
+  } else if (kind === "button-secondary") {
+    const textKey = generateUniqueFieldKey("btnSecText", usedKeys);
+    const urlKey = generateUniqueFieldKey("btnSecUrl", usedKeys);
+    nextFields.push(
+      { key: textKey, label: "Texto botón secundario", type: "text", defaultValue: "Más Información" },
+      { key: urlKey, label: "URL botón secundario", type: "url", defaultValue: "#" },
+    );
+    nextValues[textKey] = "Más Información";
+    nextValues[urlKey] = "#";
+    snippet = `<a href="{{${urlKey}}}" class="btn btn-secondary" style="margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; border-radius: var(--radius-md, 10px); font-weight: 600; text-decoration: none; border: 1px solid var(--color-border, #cbd5e1); color: inherit; background: transparent;">{{${textKey}}}</a>`;
+  } else if (kind === "html-button") {
+    const textKey = generateUniqueFieldKey("buttonLabel", usedKeys);
+    nextFields.push({
+      key: textKey,
+      label: "Texto de botón (<button>)",
+      type: "text",
+      defaultValue: "Acción Interactiva",
+    });
+    nextValues[textKey] = "Acción Interactiva";
+    snippet = `<button type="button" class="btn btn-primary" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 22px; border-radius: var(--radius-md, 10px); font-weight: 600; cursor: pointer; border: none; margin-top: 10px;">{{${textKey}}}</button>`;
+  } else if (kind === "link") {
+    const textKey = generateUniqueFieldKey("linkText", usedKeys);
+    const urlKey = generateUniqueFieldKey("linkUrl", usedKeys);
+    nextFields.push(
+      { key: textKey, label: "Texto del enlace", type: "text", defaultValue: "Ver más detalles →" },
+      { key: urlKey, label: "URL del enlace", type: "url", defaultValue: "#" },
+    );
+    nextValues[textKey] = "Ver más detalles →";
+    nextValues[urlKey] = "#";
+    snippet = `<a href="{{${urlKey}}}" class="text-link" style="display: inline-flex; align-items: center; gap: 6px; color: var(--color-primary, #2563eb); text-decoration: underline; font-weight: 500; font-size: 14px;">{{${textKey}}}</a>`;
+  } else if (kind === "accordion") {
+    const qKey = generateUniqueFieldKey("faqQuestion", usedKeys);
+    const aKey = generateUniqueFieldKey("faqAnswer", usedKeys);
+    nextFields.push(
+      { key: qKey, label: "Pregunta desplegable (<summary>)", type: "text", defaultValue: "¿Tienen opciones vegetarianas y sin TACC?" },
+      { key: aKey, label: "Respuesta desplegable", type: "textarea", defaultValue: "Sí, contamos con platos elaborados especialmente y cocina diferenciada." },
+    );
+    nextValues[qKey] = "¿Tienen opciones vegetarianas y sin TACC?";
+    nextValues[aKey] = "Sí, contamos con platos elaborados especialmente y cocina diferenciada.";
+    snippet = `<details class="faq-item" style="padding: 16px 20px; border: 1px solid var(--color-border, rgba(0,0,0,0.12)); border-radius: var(--radius-md, 12px); margin: 10px 0; background: var(--color-card-bg, #ffffff);">\n  <summary style="font-weight: 600; cursor: pointer;">{{${qKey}}}</summary>\n  <p style="margin: 10px 0 0; opacity: 0.85;">{{${aKey}}}</p>\n</details>`;
   } else if (kind === "image") {
     const srcKey = generateUniqueFieldKey("imageUrl", usedKeys);
     const altKey = generateUniqueFieldKey("imageAlt", usedKeys);
@@ -2674,16 +2829,56 @@ export function insertInnerElementInBlock(
     nextValues[srcKey] = DEFAULT_PLACEHOLDER_IMAGE;
     nextValues[altKey] = "Foto destacada";
     snippet = `<img src="{{${srcKey}}}" alt="{{${altKey}}}" loading="lazy" style="width: 100%; max-width: 560px; height: auto; border-radius: var(--radius-md); display: block; margin: 16px 0; object-fit: cover;" />`;
+  } else if (kind === "figure") {
+    const srcKey = generateUniqueFieldKey("figImage", usedKeys);
+    const capKey = generateUniqueFieldKey("figCaption", usedKeys);
+    nextFields.push(
+      { key: srcKey, label: "Imagen de figura", type: "image", defaultValue: DEFAULT_PLACEHOLDER_IMAGE },
+      { key: capKey, label: "Epígrafe (<figcaption>)", type: "text", defaultValue: "Plato de autor preparado al momento." },
+    );
+    nextValues[srcKey] = DEFAULT_PLACEHOLDER_IMAGE;
+    nextValues[capKey] = "Plato de autor preparado al momento.";
+    snippet = `<figure class="gallery-item" style="margin: 16px 0; border-radius: var(--radius-md, 12px); overflow: hidden; border: 1px solid rgba(0,0,0,0.08); background: var(--color-card-bg, #ffffff);">\n  <img src="{{${srcKey}}}" alt="{{${capKey}}}" loading="lazy" style="width: 100%; height: 260px; object-fit: cover; display: block;" />\n  <figcaption style="padding: 10px 14px; font-size: 13px; opacity: 0.8;">{{${capKey}}}</figcaption>\n</figure>`;
+  } else if (kind === "h1") {
+    const headKey = generateUniqueFieldKey("h1Title", usedKeys);
+    nextFields.push({
+      key: headKey,
+      label: "Título Principal (H1)",
+      type: "text",
+      defaultValue: "Título Principal de Impacto",
+    });
+    nextValues[headKey] = "Título Principal de Impacto";
+    snippet = `<h1 style="font-size: 44px; font-weight: 800; line-height: 1.12; margin: 16px 0 10px;">{{${headKey}}}</h1>`;
+  } else if (kind === "h2") {
+    const headKey = generateUniqueFieldKey("h2Title", usedKeys);
+    nextFields.push({
+      key: headKey,
+      label: "Título de Sección (H2)",
+      type: "text",
+      defaultValue: "Título de Sección",
+    });
+    nextValues[headKey] = "Título de Sección";
+    snippet = `<h2 style="font-size: 32px; font-weight: 700; line-height: 1.2; margin: 14px 0 8px;">{{${headKey}}}</h2>`;
   } else if (kind === "heading") {
     const headKey = generateUniqueFieldKey("heading", usedKeys);
     nextFields.push({
       key: headKey,
-      label: "Subtítulo",
+      label: "Subtítulo (H3)",
       type: "text",
       defaultValue: "Nuevo Título Destacado",
     });
     nextValues[headKey] = "Nuevo Título Destacado";
     snippet = `<h3 style="margin: 14px 0 8px;">{{${headKey}}}</h3>`;
+  } else if (kind === "h4") {
+    const headKey = generateUniqueFieldKey("h4Title", usedKeys);
+    nextFields.push({
+      key: headKey,
+      label: "Encabezado Menor (H4)",
+      type: "text",
+      defaultValue: "Subtítulo o Encabezado H4",
+    });
+    nextValues[headKey] = "Subtítulo o Encabezado H4";
+    snippet = `<h4 style="font-size: 18px; font-weight: 600; line-height: 1.35; margin: 10px 0 6px;">{{${headKey}}}</h4>`;
   } else if (kind === "text") {
     const textKey = generateUniqueFieldKey("paragraph", usedKeys);
     nextFields.push({
@@ -2703,7 +2898,53 @@ export function insertInnerElementInBlock(
       defaultValue: "Destacado",
     });
     nextValues[badgeKey] = "Destacado";
-    snippet = `<span class="hero-badge" style="margin: 8px 0;">{{${badgeKey}}}</span>`;
+    snippet = `<span class="hero-badge" style="display: inline-flex; align-items: center; gap: 6px; margin: 8px 0;">{{${badgeKey}}}</span>`;
+  } else if (kind === "blockquote") {
+    const quoteKey = generateUniqueFieldKey("quoteText", usedKeys);
+    nextFields.push({
+      key: quoteKey,
+      label: "Cita Destacada (<blockquote>)",
+      type: "textarea",
+      defaultValue: "“Una experiencia gastronómica pensada en cada detalle y sabor auténtico.”",
+    });
+    nextValues[quoteKey] = "“Una experiencia gastronómica pensada en cada detalle y sabor auténtico.”";
+    snippet = `<blockquote style="margin: 16px 0; padding: 16px 20px; border-left: 4px solid var(--color-accent, #c49a45); background: rgba(0,0,0,0.03); border-radius: 0 12px 12px 0; font-style: italic;">{{${quoteKey}}}</blockquote>`;
+  } else if (kind === "ul-list") {
+    const item1 = generateUniqueFieldKey("listItem1", usedKeys);
+    const item2 = generateUniqueFieldKey("listItem2", usedKeys);
+    const item3 = generateUniqueFieldKey("listItem3", usedKeys);
+    nextFields.push(
+      { key: item1, label: "Ítem de lista 1", type: "text", defaultValue: "Ingredientes frescos de estación" },
+      { key: item2, label: "Ítem de lista 2", type: "text", defaultValue: "Elaboración artesanal diaria" },
+      { key: item3, label: "Ítem de lista 3", type: "text", defaultValue: "Atención cálida y personalizada" },
+    );
+    nextValues[item1] = "Ingredientes frescos de estación";
+    nextValues[item2] = "Elaboración artesanal diaria";
+    nextValues[item3] = "Atención cálida y personalizada";
+    snippet = `<ul style="margin: 12px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">\n  <li>{{${item1}}}</li>\n  <li>{{${item2}}}</li>\n  <li>{{${item3}}}</li>\n</ul>`;
+  } else if (kind === "ol-list") {
+    const step1 = generateUniqueFieldKey("stepItem1", usedKeys);
+    const step2 = generateUniqueFieldKey("stepItem2", usedKeys);
+    const step3 = generateUniqueFieldKey("stepItem3", usedKeys);
+    nextFields.push(
+      { key: step1, label: "Paso 1", type: "text", defaultValue: "Elegí tus platos favoritos de la carta" },
+      { key: step2, label: "Paso 2", type: "text", defaultValue: "Confirmá tu pedido o reserva online" },
+      { key: step3, label: "Paso 3", type: "text", defaultValue: "Disfrutá sin demoras en mesa o takeaway" },
+    );
+    nextValues[step1] = "Elegí tus platos favoritos de la carta";
+    nextValues[step2] = "Confirmá tu pedido o reserva online";
+    nextValues[step3] = "Disfrutá sin demoras en mesa o takeaway";
+    snippet = `<ol style="margin: 12px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">\n  <li>{{${step1}}}</li>\n  <li>{{${step2}}}</li>\n  <li>{{${step3}}}</li>\n</ol>`;
+  } else if (kind === "li-item") {
+    const itemKey = generateUniqueFieldKey("listItem", usedKeys);
+    nextFields.push({
+      key: itemKey,
+      label: "Ítem de lista (<li>)",
+      type: "text",
+      defaultValue: "Nuevo ítem de la lista",
+    });
+    nextValues[itemKey] = "Nuevo ítem de la lista";
+    snippet = `<li style="margin: 4px 0;">{{${itemKey}}}</li>`;
   } else if (kind === "card") {
     const iconKey = generateUniqueFieldKey("cardIcon", usedKeys);
     const titleKey = generateUniqueFieldKey("cardTitle", usedKeys);
@@ -2716,37 +2957,39 @@ export function insertInnerElementInBlock(
     nextValues[iconKey] = "✨";
     nextValues[titleKey] = "Nueva Especialidad";
     nextValues[textKey] = "Descripción breve del plato, promoción o experiencia destacada.";
-    snippet = `<article class="card">\n  <div class="card-icon">{{${iconKey}}}</div>\n  <h3 class="card-title">{{${titleKey}}}</h3>\n  <p class="card-text">{{${textKey}}}</p>\n</article>`;
-  } else if (kind === "button-secondary") {
-    const textKey = generateUniqueFieldKey("btnSecText", usedKeys);
-    const urlKey = generateUniqueFieldKey("btnSecUrl", usedKeys);
-    nextFields.push(
-      { key: textKey, label: "Texto botón secundario", type: "text", defaultValue: "Más Información" },
-      { key: urlKey, label: "URL botón secundario", type: "url", defaultValue: "#" },
-    );
-    nextValues[textKey] = "Más Información";
-    nextValues[urlKey] = "#";
-    snippet = `<a href="{{${urlKey}}}" class="btn btn-secondary" style="margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; border-radius: var(--radius-md, 10px); font-weight: 600; text-decoration: none; border: 1px solid var(--color-border, #cbd5e1); color: inherit; background: transparent;">{{${textKey}}}</a>`;
-  } else if (kind === "link") {
-    const textKey = generateUniqueFieldKey("linkText", usedKeys);
-    const urlKey = generateUniqueFieldKey("linkUrl", usedKeys);
-    nextFields.push(
-      { key: textKey, label: "Texto del enlace", type: "text", defaultValue: "Ver más detalles →" },
-      { key: urlKey, label: "URL del enlace", type: "url", defaultValue: "#" },
-    );
-    nextValues[textKey] = "Ver más detalles →";
-    nextValues[urlKey] = "#";
-    snippet = `<a href="{{${urlKey}}}" class="text-link" style="color: var(--color-primary, #2563eb); text-decoration: underline; font-weight: 500; font-size: 14px;">{{${textKey}}}</a>`;
+    snippet = `<article class="card" style="display: flex; flex-direction: column; gap: 10px;">\n  <div class="card-icon">{{${iconKey}}}</div>\n  <h3 class="card-title">{{${titleKey}}}</h3>\n  <p class="card-text">{{${textKey}}}</p>\n</article>`;
   } else if (kind === "divider") {
     snippet = `<hr style="border: 0; border-top: 1px solid rgba(0,0,0,0.1); margin: 24px 0; width: 100%;" />`;
+  } else if (kind === "spacer") {
+    snippet = `<div class="spacer" style="height: 36px; width: 100%;" aria-hidden="true"></div>`;
+  } else if (kind === "section") {
+    snippet = `<section class="content-container section-box" style="padding: 32px 24px; border: 1px dashed rgba(0,0,0,0.14); border-radius: var(--radius-md, 14px); margin: 20px 0; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Sub-sección (&lt;section&gt;) — Soltá o agregá elementos acá</p>\n</section>`;
   } else if (kind === "container") {
-    snippet = `<div class="content-container" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.15); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0 0 10px; font-weight: 500;">Contenedor (Soltá o agregá elementos acá)</p>\n</div>`;
-  } else if (kind === "columns-2") {
-    snippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>\n  </div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>\n  </div>\n</div>`;
-  } else if (kind === "columns-3") {
-    snippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+    snippet = `<div class="content-container" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.15); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Contenedor (&lt;div&gt;) — Soltá o agregá elementos acá</p>\n</div>`;
   } else if (kind === "flex-row") {
-    snippet = `<div class="flex-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
+    snippet = `<div class="flex-row" style="display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible (display: flex)</p>\n</div>`;
+  } else if (kind === "flex-col") {
+    snippet = `<div class="flex-col" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Columna Flexible (flex-direction: column)</p>\n</div>`;
+  } else if (kind === "columns-2") {
+    snippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>\n  </div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>\n  </div>\n</div>`;
+  } else if (kind === "columns-3") {
+    snippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+  } else if (kind === "columns-4") {
+    snippet = `<div class="grid-columns-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 14px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p></div>\n  <div class="grid-column" style="padding: 14px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p></div>\n  <div class="grid-column" style="padding: 14px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p></div>\n  <div class="grid-column" style="padding: 14px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 4</p></div>\n</div>`;
+  } else if (kind === "nav-bar") {
+    const link1 = generateUniqueFieldKey("navItem1", usedKeys);
+    const link2 = generateUniqueFieldKey("navItem2", usedKeys);
+    nextFields.push(
+      { key: link1, label: "Enlace Nav 1", type: "text", defaultValue: "Menú" },
+      { key: link2, label: "Enlace Nav 2", type: "text", defaultValue: "Reservas" },
+    );
+    nextValues[link1] = "Menú";
+    nextValues[link2] = "Reservas";
+    snippet = `<nav class="nav-bar flex-row" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 14px 20px; border-radius: var(--radius-md, 12px); background: var(--color-card-bg, #ffffff); border: 1px solid rgba(0,0,0,0.08); margin: 14px 0;">\n  <a href="#destacados" class="text-link" style="text-decoration: none; font-weight: 600; color: inherit;">{{${link1}}}</a>\n  <a href="{{menuUrl}}" class="text-link" style="text-decoration: none; font-weight: 600; color: inherit;">{{${link2}}}</a>\n</nav>`;
+  } else if (kind === "header-box") {
+    snippet = `<header class="content-container header-box" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Encabezado (&lt;header&gt;) — Soltá títulos o insignias acá</p>\n</header>`;
+  } else if (kind === "footer-box") {
+    snippet = `<footer class="content-container footer-box" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px; border-top: 1px solid rgba(0,0,0,0.1); margin: 20px 0 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Pie de sección (&lt;footer&gt;) — Soltá enlaces o botones acá</p>\n</footer>`;
   }
 
   const ast = parseHtmlTemplateAst(block.htmlTemplate);
@@ -2778,8 +3021,12 @@ export function insertInnerElementInBlock(
             "header",
             "footer",
             "nav",
+            "aside",
             "figure",
             "details",
+            "ul",
+            "ol",
+            "blockquote",
           ]);
           if (
             !found.node.selfClosing &&
@@ -2849,16 +3096,20 @@ export function createBlankContainerBlock(
   let innerSnippet = `<div class="content-container" style="padding: 32px; border: 2px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Contenedor Libre — Arrastrá componentes o hacé clic para insertar</p>\n</div>`;
 
   if (initialKind === "columns-2") {
-    innerSnippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n</div>`;
+    innerSnippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n</div>`;
   } else if (initialKind === "columns-3") {
-    innerSnippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+    innerSnippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+  } else if (initialKind === "columns-4") {
+    innerSnippet = `<div class="grid-columns-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 4</p></div>\n</div>`;
   } else if (initialKind === "flex-row") {
-    innerSnippet = `<div class="flex-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
+    innerSnippet = `<div class="flex-row" style="display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
+  } else if (initialKind === "flex-col") {
+    innerSnippet = `<div class="flex-col" style="display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Columna Flexible</p>\n</div>`;
   }
 
   const htmlTemplate = `<!-- Sección Contenedor -->\n<section class="section" style="padding: 48px 0;">\n  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">\n    ${innerSnippet}\n  </div>\n</section>`;
 
-  return {
+  const baseBlock: LandingBlock = {
     id: blockId,
     moduleKey: "blank-container",
     name:
@@ -2866,7 +3117,9 @@ export function createBlankContainerBlock(
         ? "Sección 2 Columnas"
         : initialKind === "columns-3"
           ? "Sección 3 Columnas"
-          : "Sección Contenedor",
+          : initialKind === "columns-4"
+            ? "Sección 4 Columnas"
+            : "Sección Contenedor",
     visible: true,
     fields: [],
     values: {},
@@ -2874,6 +3127,20 @@ export function createBlankContainerBlock(
     cssTemplate: "",
     jsTemplate: "",
   };
+
+  if (
+    initialKind &&
+    initialKind !== "container" &&
+    initialKind !== "columns-2" &&
+    initialKind !== "columns-3" &&
+    initialKind !== "columns-4" &&
+    initialKind !== "flex-row" &&
+    initialKind !== "flex-col"
+  ) {
+    return insertInnerElementInBlock(baseBlock, null, initialKind);
+  }
+
+  return baseBlock;
 }
 
 export function updateSubElementAttributeInBlock(
@@ -3168,6 +3435,21 @@ function mapAstNodeToSubLayer(
     label = textPreview
       ? `Párrafo ("${truncateString(textPreview, 24)}")`
       : "Párrafo";
+  } else if (tag === "blockquote") {
+    iconType = "text";
+    forceLeaf = true;
+    label = textPreview
+      ? `Cita ("${truncateString(textPreview, 22)}")`
+      : "Cita (blockquote)";
+  } else if (tag === "figcaption") {
+    iconType = "text";
+    forceLeaf = true;
+    label = textPreview
+      ? `Epígrafe ("${truncateString(textPreview, 22)}")`
+      : "Epígrafe (figcaption)";
+  } else if (tag === "figure") {
+    iconType = "card";
+    label = "Figura (figure)";
   } else if (
     /\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\b/.test(
       attrs.className,
@@ -3191,15 +3473,19 @@ function mapAstNodeToSubLayer(
       : "Tarjeta";
   } else if (tag === "nav") {
     iconType = "container";
-    label = "Menú (nav)";
+    label = "Menú de Navegación (<nav>)";
+  } else if (tag === "aside") {
+    iconType = "container";
+    label = "Lateral (<aside>)";
   } else if (tag === "ul" || tag === "ol") {
     iconType = "container";
-    label = tag === "ol" ? "Lista ordenada" : "Lista";
+    label = tag === "ol" ? "Lista numerada (<ol>)" : "Lista con viñetas (<ul>)";
   } else if (tag === "li") {
-    iconType = "container";
+    iconType = "text";
+    forceLeaf = node.children.length === 0;
     label = textPreview
       ? `Ítem ("${truncateString(textPreview, 20)}")`
-      : "Ítem de lista";
+      : "Ítem de lista (<li>)";
   } else if (tag === "details") {
     iconType = "card";
     const summaryChild = node.children.find(
@@ -3209,39 +3495,56 @@ function mapAstNodeToSubLayer(
       ? extractNodeTextPreview(block.htmlTemplate, summaryChild, block.values)
       : "";
     label = sumText
-      ? `Pregunta ("${truncateString(sumText, 20)}")`
-      : "Pregunta FAQ";
+      ? `Acordeón ("${truncateString(sumText, 20)}")`
+      : "Acordeón (<details>)";
   } else if (tag === "summary") {
     iconType = "text";
     forceLeaf = true;
     label = textPreview
       ? `Pregunta ("${truncateString(textPreview, 22)}")`
-      : "Pregunta";
+      : "Pregunta (<summary>)";
   } else if (
     tag === "span" ||
     tag === "strong" ||
     tag === "em" ||
     tag === "small"
   ) {
+    iconType = "text";
+    label = textPreview
+      ? `${tag} ("${truncateString(textPreview, 18)}")`
+      : tag;
   } else if (tag === "hr") {
     iconType = "container";
     forceLeaf = true;
-    label = "Separador (Línea)";
+    label = "Separador (<hr>)";
   } else {
     iconType = "container";
     if (/\bgrid-columns-2\b/.test(attrs.className)) {
       label = "Grilla (2 Columnas)";
     } else if (/\bgrid-columns-3\b/.test(attrs.className)) {
       label = "Grilla (3 Columnas)";
+    } else if (/\bgrid-columns-4\b/.test(attrs.className)) {
+      label = "Grilla (4 Columnas)";
     } else if (/\bflex-row\b/.test(attrs.className)) {
-      label = "Fila Flexible";
+      label = "Fila Flex (div.flex-row)";
+    } else if (/\bflex-col\b/.test(attrs.className)) {
+      label = "Columna Flex (div.flex-col)";
+    } else if (/\bspacer\b/.test(attrs.className)) {
+      label = "Espaciador (div.spacer)";
+      forceLeaf = true;
+    } else if (/\bsection-box\b/.test(attrs.className)) {
+      label = "Sub-sección (<section>)";
+    } else if (/\bheader-box\b/.test(attrs.className)) {
+      label = "Encabezado (<header>)";
+    } else if (/\bfooter-box\b/.test(attrs.className)) {
+      label = "Pie (<footer>)";
     } else if (/\bcontent-container|content-box\b/.test(attrs.className)) {
-      label = "Contenedor";
+      label = "Contenedor (<div>)";
     } else if (/\bgrid-column\b/.test(attrs.className)) {
       label = columnPosition ? `Columna ${columnPosition}` : "Columna";
     } else if (parentNode) {
       const parentAttrs = extractNodeAttributes(block.htmlTemplate, parentNode);
-      if (/\bgrid-columns-2|grid-columns-3\b/.test(parentAttrs.className)) {
+      if (/\bgrid-columns-2|grid-columns-3|grid-columns-4\b/.test(parentAttrs.className)) {
         label = columnPosition ? `Columna ${columnPosition}` : "Columna";
       } else if (/\bcards-grid|grid|mosaic|gallery-mosaic\b/.test(attrs.className)) {
         label = "Grilla";
