@@ -584,6 +584,47 @@ describe("landing-compiler", () => {
       expect(compiled.cssContent).toContain("opacity: 0.9 !important");
       expect(compiled.cssContent).toContain("background-color: transparent !important");
     });
+
+    it("compiles individual borders and corner radius for blocks and sub-elements", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const heroBlock = createBlockFromBuiltinModule(heroMod);
+      heroBlock.values.__borderBottomWidth = "3px";
+      heroBlock.values.__borderTopWidth = "0px";
+      heroBlock.values.__borderColor = "#e2e8f0";
+      heroBlock.values.__borderTopLeftRadius = "16px";
+      heroBlock.values.__borderTopRightRadius = "16px";
+      heroBlock.values.__subStyles = JSON.stringify({
+        ".badge": {
+          borderBottomWidth: "2px",
+          borderTopWidth: "1px",
+          borderColor: "#3b82f6",
+          borderTopLeftRadius: "8px",
+          borderBottomRightRadius: "8px",
+        },
+      });
+
+      const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
+      doc.blocks = [heroBlock];
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Casa Brasa",
+        restaurantSlug: "casa-brasa",
+      });
+
+      // Section block individual borders & corners
+      expect(compiled.htmlContent).toContain("border-bottom-width: 3px !important");
+      expect(compiled.htmlContent).toContain("border-top-width: 0px !important");
+      expect(compiled.htmlContent).toContain("border-color: #e2e8f0 !important");
+      expect(compiled.htmlContent).toContain("border-top-left-radius: 16px");
+      expect(compiled.htmlContent).toContain("border-top-right-radius: 16px");
+
+      // Sub-element individual borders & corners
+      expect(compiled.cssContent).toContain("border-bottom-width: 2px !important");
+      expect(compiled.cssContent).toContain("border-top-width: 1px !important");
+      expect(compiled.cssContent).toContain("border-color: #3b82f6 !important");
+      expect(compiled.cssContent).toContain("border-top-left-radius: 8px !important");
+      expect(compiled.cssContent).toContain("border-bottom-right-radius: 8px !important");
+    });
   });
 });
 

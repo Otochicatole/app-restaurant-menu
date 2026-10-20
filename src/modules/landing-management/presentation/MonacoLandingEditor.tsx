@@ -73,6 +73,10 @@ import {
   Rows,
   Scan,
   Square,
+  CornerUpLeft,
+  CornerUpRight,
+  CornerDownLeft,
+  CornerDownRight,
 } from "lucide-react";
 import type {
   LandingBlock,
@@ -1895,6 +1899,769 @@ function StudioElementOpacityField({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function parsePxNumber(val?: string, fallback = 0): number {
+  if (!val) return fallback;
+  const num = parseFloat(val.replace("px", "").trim());
+  return Number.isNaN(num) ? fallback : num;
+}
+
+interface StudioBordersAndCornersEditorProps {
+  borderWidth?: string;
+  borderTopWidth?: string;
+  borderRightWidth?: string;
+  borderBottomWidth?: string;
+  borderLeftWidth?: string;
+  borderColor?: string;
+  borderStyle?: string;
+  defaultBorderColor?: string;
+
+  borderRadius?: string;
+  borderTopLeftRadius?: string;
+  borderTopRightRadius?: string;
+  borderBottomRightRadius?: string;
+  borderBottomLeftRadius?: string;
+
+  boxShadow?: string;
+  showShadow?: boolean;
+
+  onUpdateBorders: (patch: {
+    borderWidth?: string;
+    borderTopWidth?: string;
+    borderRightWidth?: string;
+    borderBottomWidth?: string;
+    borderLeftWidth?: string;
+    borderColor?: string;
+    borderStyle?: string;
+  }) => void;
+
+  onUpdateRadius: (patch: {
+    borderRadius?: string;
+    borderTopLeftRadius?: string;
+    borderTopRightRadius?: string;
+    borderBottomRightRadius?: string;
+    borderBottomLeftRadius?: string;
+  }) => void;
+
+  onUpdateShadow?: (shadow: string) => void;
+}
+
+function StudioBordersAndCornersEditor({
+  borderWidth = "",
+  borderTopWidth = "",
+  borderRightWidth = "",
+  borderBottomWidth = "",
+  borderLeftWidth = "",
+  borderColor = "",
+  borderStyle = "solid",
+  defaultBorderColor = "#e2e8f0",
+  borderRadius = "",
+  borderTopLeftRadius = "",
+  borderTopRightRadius = "",
+  borderBottomRightRadius = "",
+  borderBottomLeftRadius = "",
+  boxShadow = "",
+  showShadow = false,
+  onUpdateBorders,
+  onUpdateRadius,
+  onUpdateShadow,
+}: StudioBordersAndCornersEditorProps) {
+  const hasIndividualBorders = Boolean(
+    borderTopWidth || borderRightWidth || borderBottomWidth || borderLeftWidth,
+  );
+  const [isBordersLinked, setIsBordersLinked] = useState<boolean>(() => {
+    if (!hasIndividualBorders) return true;
+    return (
+      borderTopWidth === borderRightWidth &&
+      borderRightWidth === borderBottomWidth &&
+      borderBottomWidth === borderLeftWidth
+    );
+  });
+
+  const hasIndividualRadius = Boolean(
+    borderTopLeftRadius ||
+      borderTopRightRadius ||
+      borderBottomRightRadius ||
+      borderBottomLeftRadius,
+  );
+  const [isRadiusLinked, setIsRadiusLinked] = useState<boolean>(() => {
+    if (!hasIndividualRadius) return true;
+    return (
+      borderTopLeftRadius === borderTopRightRadius &&
+      borderTopRightRadius === borderBottomRightRadius &&
+      borderBottomRightRadius === borderBottomLeftRadius
+    );
+  });
+
+  // Active border presence
+  const hasAnyBorder = Boolean(
+    (borderWidth && borderWidth !== "0px" && borderWidth !== "0") ||
+      (borderTopWidth && borderTopWidth !== "0px" && borderTopWidth !== "0") ||
+      (borderRightWidth &&
+        borderRightWidth !== "0px" &&
+        borderRightWidth !== "0") ||
+      (borderBottomWidth &&
+        borderBottomWidth !== "0px" &&
+        borderBottomWidth !== "0") ||
+      (borderLeftWidth && borderLeftWidth !== "0px" && borderLeftWidth !== "0"),
+  );
+
+  const unifiedBorderWidth =
+    borderWidth ||
+    borderTopWidth ||
+    borderRightWidth ||
+    borderBottomWidth ||
+    borderLeftWidth ||
+    "";
+
+  const unifiedRadius =
+    borderRadius ||
+    borderTopLeftRadius ||
+    borderTopRightRadius ||
+    borderBottomRightRadius ||
+    borderBottomLeftRadius ||
+    "";
+
+  const radiusNumber = useMemo(
+    () => parsePxNumber(unifiedRadius, 0),
+    [unifiedRadius],
+  );
+
+  const handleSetUnifiedBorder = (width: string) => {
+    onUpdateBorders({
+      borderWidth: width,
+      borderTopWidth: "",
+      borderRightWidth: "",
+      borderBottomWidth: "",
+      borderLeftWidth: "",
+    });
+  };
+
+  const handleSetUnifiedRadius = (radius: string) => {
+    onUpdateRadius({
+      borderRadius: radius,
+      borderTopLeftRadius: "",
+      borderTopRightRadius: "",
+      borderBottomRightRadius: "",
+      borderBottomLeftRadius: "",
+    });
+  };
+
+  return (
+    <div className="space-y-3.5">
+      {/* 1. SECCIÓN: BORDES */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-indigo-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Grosor y Lados del Borde
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isBordersLinked) {
+                const current = unifiedBorderWidth || "1px";
+                onUpdateBorders({
+                  borderWidth: "",
+                  borderTopWidth: current,
+                  borderRightWidth: current,
+                  borderBottomWidth: current,
+                  borderLeftWidth: current,
+                });
+                setIsBordersLinked(false);
+              } else {
+                const current =
+                  borderTopWidth ||
+                  borderBottomWidth ||
+                  borderLeftWidth ||
+                  borderRightWidth ||
+                  "1px";
+                onUpdateBorders({
+                  borderWidth: current,
+                  borderTopWidth: "",
+                  borderRightWidth: "",
+                  borderBottomWidth: "",
+                  borderLeftWidth: "",
+                });
+                setIsBordersLinked(true);
+              }
+            }}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all ${
+              isBordersLinked
+                ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+            }`}
+            title={
+              isBordersLinked
+                ? "Cambiar a lados independientes (arriba, abajo, izq, der)"
+                : "Vincular todos los lados"
+            }
+          >
+            {isBordersLinked ? (
+              <>
+                <Link2 className="h-3 w-3 text-zinc-500" />
+                <span>Todos los lados</span>
+              </>
+            ) : (
+              <>
+                <Unlink className="h-3 w-3 text-indigo-600" />
+                <span>Lados separados</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* BORDES VINCULADOS (TODOS LOS LADOS) */}
+        {isBordersLinked ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <select
+                value={unifiedBorderWidth || "0px"}
+                onChange={(e) => handleSetUnifiedBorder(e.target.value)}
+                className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="0px">Sin borde (0px)</option>
+                <option value="1px">1px (Estándar)</option>
+                <option value="2px">2px (Medio)</option>
+                <option value="3px">3px (Grueso)</option>
+                <option value="4px">4px (Fuerte)</option>
+              </select>
+
+              <div className="w-20">
+                <DirectionalInput
+                  value={unifiedBorderWidth}
+                  placeholder="0px"
+                  title="Grosor personalizado de todos los lados"
+                  onChange={handleSetUnifiedBorder}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {[
+                { label: "0px", val: "0px" },
+                { label: "1px", val: "1px" },
+                { label: "2px", val: "2px" },
+                { label: "3px", val: "3px" },
+                { label: "4px", val: "4px" },
+              ].map((chip) => {
+                const isSelected = (unifiedBorderWidth || "0px") === chip.val;
+                return (
+                  <button
+                    key={chip.val}
+                    type="button"
+                    onClick={() => handleSetUnifiedBorder(chip.val)}
+                    className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
+                      isSelected
+                        ? "bg-indigo-600 text-white font-semibold shadow-2xs"
+                        : "bg-zinc-50 hover:bg-zinc-100 text-zinc-600 border border-zinc-200/80"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* BORDES DESVINCULADOS (INDIVIDUALES: TOP, RIGHT, BOTTOM, LEFT) */
+          <div className="space-y-2.5">
+            {/* Presets rápidos para combinaciones comunes */}
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                {
+                  label: "Solo Abajo",
+                  patch: {
+                    borderTopWidth: "0px",
+                    borderRightWidth: "0px",
+                    borderBottomWidth: "2px",
+                    borderLeftWidth: "0px",
+                    borderWidth: "",
+                  },
+                },
+                {
+                  label: "Solo Arriba",
+                  patch: {
+                    borderTopWidth: "2px",
+                    borderRightWidth: "0px",
+                    borderBottomWidth: "0px",
+                    borderLeftWidth: "0px",
+                    borderWidth: "",
+                  },
+                },
+                {
+                  label: "Arriba/Abajo",
+                  patch: {
+                    borderTopWidth: "1px",
+                    borderRightWidth: "0px",
+                    borderBottomWidth: "1px",
+                    borderLeftWidth: "0px",
+                    borderWidth: "",
+                  },
+                },
+                {
+                  label: "Solo Izq",
+                  patch: {
+                    borderTopWidth: "0px",
+                    borderRightWidth: "0px",
+                    borderBottomWidth: "0px",
+                    borderLeftWidth: "3px",
+                    borderWidth: "",
+                  },
+                },
+                {
+                  label: "Todos 1px",
+                  patch: {
+                    borderTopWidth: "1px",
+                    borderRightWidth: "1px",
+                    borderBottomWidth: "1px",
+                    borderLeftWidth: "1px",
+                    borderWidth: "",
+                  },
+                },
+                {
+                  label: "Ninguno",
+                  patch: {
+                    borderTopWidth: "0px",
+                    borderRightWidth: "0px",
+                    borderBottomWidth: "0px",
+                    borderLeftWidth: "0px",
+                    borderWidth: "",
+                  },
+                },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => onUpdateBorders(preset.patch)}
+                  className="rounded bg-zinc-100 hover:bg-indigo-50 hover:text-indigo-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 border border-zinc-200/80 transition-colors"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Cuadrícula de 4 lados */}
+            <div className="grid grid-cols-2 gap-2 bg-zinc-50/70 p-2 rounded-lg border border-zinc-200/80">
+              {/* Arriba / Top */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <span className="text-[11px] font-medium text-zinc-700">
+                  ↑ Arriba
+                </span>
+                <DirectionalInput
+                  value={borderTopWidth}
+                  placeholder="0px"
+                  title="Borde superior"
+                  onChange={(val) =>
+                    onUpdateBorders({ borderTopWidth: val, borderWidth: "" })
+                  }
+                />
+              </div>
+
+              {/* Abajo / Bottom */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <span className="text-[11px] font-medium text-zinc-700">
+                  ↓ Abajo
+                </span>
+                <DirectionalInput
+                  value={borderBottomWidth}
+                  placeholder="0px"
+                  title="Borde inferior"
+                  onChange={(val) =>
+                    onUpdateBorders({ borderBottomWidth: val, borderWidth: "" })
+                  }
+                />
+              </div>
+
+              {/* Izquierda / Left */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <span className="text-[11px] font-medium text-zinc-700">
+                  ← Izq
+                </span>
+                <DirectionalInput
+                  value={borderLeftWidth}
+                  placeholder="0px"
+                  title="Borde izquierdo"
+                  onChange={(val) =>
+                    onUpdateBorders({ borderLeftWidth: val, borderWidth: "" })
+                  }
+                />
+              </div>
+
+              {/* Derecha / Right */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <span className="text-[11px] font-medium text-zinc-700">
+                  → Der
+                </span>
+                <DirectionalInput
+                  value={borderRightWidth}
+                  placeholder="0px"
+                  title="Borde derecho"
+                  onChange={(val) =>
+                    onUpdateBorders({ borderRightWidth: val, borderWidth: "" })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Color de Borde y Estilo (si hay grosor o color personalizado) */}
+        {(hasAnyBorder || borderColor) && (
+          <div className="space-y-2 pt-2 border-t border-zinc-100">
+            <StudioAlphaColorField
+              label="Color de Borde"
+              value={borderColor}
+              defaultColor={defaultBorderColor}
+              onChange={(val) => onUpdateBorders({ borderColor: val })}
+            />
+
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100/80">
+              <span className="text-xs text-zinc-600">Estilo de Borde</span>
+              <div className="flex items-center gap-1">
+                {[
+                  { label: "Sólido", val: "solid" },
+                  { label: "Discontinuo", val: "dashed" },
+                  { label: "Punteado", val: "dotted" },
+                ].map((st) => (
+                  <button
+                    key={st.val}
+                    type="button"
+                    onClick={() => onUpdateBorders({ borderStyle: st.val })}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      (borderStyle || "solid") === st.val
+                        ? "bg-zinc-800 text-white font-semibold"
+                        : "bg-zinc-100 hover:bg-zinc-200 text-zinc-600"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 2. SECCIÓN: ESQUINAS REDONDEADAS (RADIUS) */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Esquinas (Border Radius)
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isRadiusLinked) {
+                const current = unifiedRadius || "8px";
+                onUpdateRadius({
+                  borderRadius: "",
+                  borderTopLeftRadius: current,
+                  borderTopRightRadius: current,
+                  borderBottomRightRadius: current,
+                  borderBottomLeftRadius: current,
+                });
+                setIsRadiusLinked(false);
+              } else {
+                const current =
+                  borderTopLeftRadius ||
+                  borderTopRightRadius ||
+                  borderBottomRightRadius ||
+                  borderBottomLeftRadius ||
+                  "8px";
+                onUpdateRadius({
+                  borderRadius: current,
+                  borderTopLeftRadius: "",
+                  borderTopRightRadius: "",
+                  borderBottomRightRadius: "",
+                  borderBottomLeftRadius: "",
+                });
+                setIsRadiusLinked(true);
+              }
+            }}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all ${
+              isRadiusLinked
+                ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            }`}
+            title={
+              isRadiusLinked
+                ? "Cambiar a esquinas independientes (arriba-izq, arriba-der, etc.)"
+                : "Vincular todas las esquinas"
+            }
+          >
+            {isRadiusLinked ? (
+              <>
+                <Link2 className="h-3 w-3 text-zinc-500" />
+                <span>Todas iguales</span>
+              </>
+            ) : (
+              <>
+                <Unlink className="h-3 w-3 text-emerald-600" />
+                <span>Esquinas separadas</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* ESQUINAS VINCULADAS (TODAS IGUALES) */}
+        {isRadiusLinked ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="48"
+                step="1"
+                value={Math.min(48, radiusNumber)}
+                onChange={(e) => handleSetUnifiedRadius(`${e.target.value}px`)}
+                className="flex-1 accent-emerald-600 cursor-pointer h-1.5 bg-zinc-200 rounded-lg appearance-none"
+              />
+              <div className="w-20">
+                <DirectionalInput
+                  value={unifiedRadius}
+                  placeholder="0px"
+                  title="Radio de todas las esquinas"
+                  onChange={handleSetUnifiedRadius}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {[
+                { label: "0px", val: "0px" },
+                { label: "8px", val: "8px" },
+                { label: "14px", val: "14px" },
+                { label: "24px", val: "24px" },
+                { label: "Píldora", val: "9999px" },
+              ].map((chip) => {
+                const isSelected = (unifiedRadius || "0px") === chip.val;
+                return (
+                  <button
+                    key={chip.val}
+                    type="button"
+                    onClick={() => handleSetUnifiedRadius(chip.val)}
+                    className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
+                      isSelected
+                        ? "bg-emerald-600 text-white font-semibold shadow-2xs"
+                        : "bg-zinc-50 hover:bg-zinc-100 text-zinc-600 border border-zinc-200/80"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* ESQUINAS DESVINCULADAS (4 ESQUINAS INDIVIDUALES EN GRID 2X2) */
+          <div className="space-y-2.5">
+            {/* Presets rápidos para esquinas comunes */}
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                {
+                  label: "Solo Arriba",
+                  patch: {
+                    borderTopLeftRadius: "16px",
+                    borderTopRightRadius: "16px",
+                    borderBottomRightRadius: "0px",
+                    borderBottomLeftRadius: "0px",
+                    borderRadius: "",
+                  },
+                },
+                {
+                  label: "Solo Abajo",
+                  patch: {
+                    borderTopLeftRadius: "0px",
+                    borderTopRightRadius: "0px",
+                    borderBottomRightRadius: "16px",
+                    borderBottomLeftRadius: "16px",
+                    borderRadius: "",
+                  },
+                },
+                {
+                  label: "Solo Izq",
+                  patch: {
+                    borderTopLeftRadius: "16px",
+                    borderTopRightRadius: "0px",
+                    borderBottomRightRadius: "0px",
+                    borderBottomLeftRadius: "16px",
+                    borderRadius: "",
+                  },
+                },
+                {
+                  label: "Cruzadas",
+                  patch: {
+                    borderTopLeftRadius: "24px",
+                    borderTopRightRadius: "0px",
+                    borderBottomRightRadius: "24px",
+                    borderBottomLeftRadius: "0px",
+                    borderRadius: "",
+                  },
+                },
+                {
+                  label: "Todas 12px",
+                  patch: {
+                    borderTopLeftRadius: "12px",
+                    borderTopRightRadius: "12px",
+                    borderBottomRightRadius: "12px",
+                    borderBottomLeftRadius: "12px",
+                    borderRadius: "",
+                  },
+                },
+                {
+                  label: "Rectas (0px)",
+                  patch: {
+                    borderTopLeftRadius: "0px",
+                    borderTopRightRadius: "0px",
+                    borderBottomRightRadius: "0px",
+                    borderBottomLeftRadius: "0px",
+                    borderRadius: "",
+                  },
+                },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => onUpdateRadius(preset.patch)}
+                  className="rounded bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 border border-zinc-200/80 transition-colors"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Matriz 2x2 física de las 4 esquinas */}
+            <div className="grid grid-cols-2 gap-2 bg-zinc-50/70 p-2 rounded-lg border border-zinc-200/80">
+              {/* Arriba-Izquierda (Top-Left) */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <div className="flex items-center gap-1 text-zinc-700">
+                  <CornerUpLeft className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[11px] font-medium">Sup. Izq</span>
+                </div>
+                <DirectionalInput
+                  value={borderTopLeftRadius}
+                  placeholder="0px"
+                  title="Esquina superior izquierda"
+                  onChange={(val) =>
+                    onUpdateRadius({
+                      borderTopLeftRadius: val,
+                      borderRadius: "",
+                    })
+                  }
+                />
+              </div>
+
+              {/* Arriba-Derecha (Top-Right) */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <div className="flex items-center gap-1 text-zinc-700">
+                  <CornerUpRight className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[11px] font-medium">Sup. Der</span>
+                </div>
+                <DirectionalInput
+                  value={borderTopRightRadius}
+                  placeholder="0px"
+                  title="Esquina superior derecha"
+                  onChange={(val) =>
+                    onUpdateRadius({
+                      borderTopRightRadius: val,
+                      borderRadius: "",
+                    })
+                  }
+                />
+              </div>
+
+              {/* Abajo-Izquierda (Bottom-Left) */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <div className="flex items-center gap-1 text-zinc-700">
+                  <CornerDownLeft className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[11px] font-medium">Inf. Izq</span>
+                </div>
+                <DirectionalInput
+                  value={borderBottomLeftRadius}
+                  placeholder="0px"
+                  title="Esquina inferior izquierda"
+                  onChange={(val) =>
+                    onUpdateRadius({
+                      borderBottomLeftRadius: val,
+                      borderRadius: "",
+                    })
+                  }
+                />
+              </div>
+
+              {/* Abajo-Derecha (Bottom-Right) */}
+              <div className="flex items-center justify-between gap-1.5 bg-white px-2 py-1.5 rounded-md border border-zinc-200/90 shadow-2xs">
+                <div className="flex items-center gap-1 text-zinc-700">
+                  <CornerDownRight className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[11px] font-medium">Inf. Der</span>
+                </div>
+                <DirectionalInput
+                  value={borderBottomRightRadius}
+                  placeholder="0px"
+                  title="Esquina inferior derecha"
+                  onChange={(val) =>
+                    onUpdateRadius({
+                      borderBottomRightRadius: val,
+                      borderRadius: "",
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. SECCIÓN: SOMBRA (OPCIONAL) */}
+      {showShadow && onUpdateShadow && (
+        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-zinc-800">
+              Sombra (Box Shadow)
+            </span>
+            {boxShadow && boxShadow !== "none" && (
+              <button
+                type="button"
+                onClick={() => onUpdateShadow("")}
+                className="text-[10px] text-zinc-400 hover:text-zinc-700"
+              >
+                Quitar
+              </button>
+            )}
+          </div>
+          <select
+            value={boxShadow || ""}
+            onChange={(e) => onUpdateShadow(e.target.value)}
+            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="">Por defecto</option>
+            <option value="none">Sin sombra</option>
+            <option value="0 2px 8px rgba(0,0,0,0.06)">
+              Sombra suave (2px)
+            </option>
+            <option value="0 8px 20px -4px rgba(0,0,0,0.12)">
+              Sombra media (Card)
+            </option>
+            <option value="0 16px 36px -8px rgba(0,0,0,0.20)">
+              Sombra pronunciada (Elevada)
+            </option>
+            <option value="inset 0 2px 4px rgba(0,0,0,0.08)">
+              Sombra interior (Hundido)
+            </option>
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -6074,27 +6841,44 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           </div>
                         </StudioInspectorSection>
 
-                        {/* Border & Radius */}
+                        {/* Border & Corner Radius */}
                         <StudioInspectorSection
-                          title="Bordes y Sombras"
-                          description="Grosor, esquinas redondeadas y elevación"
+                          title="Bordes y Esquinas"
+                          description="Grosor por lado, esquinas redondeadas y elevación"
                           icon={<Square className="h-3.5 w-3.5" />}
                           badge={
                             Boolean(
                               curStyle.borderWidth ||
+                                curStyle.borderTopWidth ||
+                                curStyle.borderRightWidth ||
+                                curStyle.borderBottomWidth ||
+                                curStyle.borderLeftWidth ||
                                 curStyle.borderRadius ||
+                                curStyle.borderTopLeftRadius ||
+                                curStyle.borderTopRightRadius ||
+                                curStyle.borderBottomRightRadius ||
+                                curStyle.borderBottomLeftRadius ||
+                                curStyle.borderColor ||
                                 curStyle.boxShadow,
                             ) ? (
                               <span
                                 className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                title="Bordes o sombra personalizados"
+                                title="Bordes o esquinas personalizadas"
                               />
                             ) : undefined
                           }
                           action={
                             Boolean(
                               curStyle.borderWidth ||
+                                curStyle.borderTopWidth ||
+                                curStyle.borderRightWidth ||
+                                curStyle.borderBottomWidth ||
+                                curStyle.borderLeftWidth ||
                                 curStyle.borderRadius ||
+                                curStyle.borderTopLeftRadius ||
+                                curStyle.borderTopRightRadius ||
+                                curStyle.borderBottomRightRadius ||
+                                curStyle.borderBottomLeftRadius ||
                                 curStyle.borderColor ||
                                 curStyle.boxShadow,
                             ) ? (
@@ -6106,146 +6890,67 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     activeSubElement.selector,
                                     {
                                       borderWidth: "",
+                                      borderTopWidth: "",
+                                      borderRightWidth: "",
+                                      borderBottomWidth: "",
+                                      borderLeftWidth: "",
+                                      borderStyle: "",
                                       borderRadius: "",
+                                      borderTopLeftRadius: "",
+                                      borderTopRightRadius: "",
+                                      borderBottomRightRadius: "",
+                                      borderBottomLeftRadius: "",
                                       borderColor: "",
                                       boxShadow: "",
                                     },
                                   )
                                 }
                                 className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                                title="Restablecer bordes"
+                                title="Restablecer bordes y esquinas"
                               >
                                 Reset
                               </button>
                             ) : undefined
                           }
                         >
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Borde
-                              </span>
-                              <select
-                                value={curStyle.borderWidth || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { borderWidth: e.target.value },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Por defecto</option>
-                                <option value="0px">Sin borde (0px)</option>
-                                <option value="1px">1px</option>
-                                <option value="2px">2px</option>
-                                <option value="3px">3px</option>
-                              </select>
-                            </div>
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Esquinas (Radius)
-                              </span>
-                              <select
-                                value={curStyle.borderRadius || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { borderRadius: e.target.value },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Por defecto</option>
-                                <option value="0px">Recto (0px)</option>
-                                <option value="8px">Suave (8px)</option>
-                                <option value="14px">Medio (14px)</option>
-                                <option value="24px">Redondeado (24px)</option>
-                                <option value="9999px">Píldora (Full)</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          {curStyle.borderWidth &&
-                            curStyle.borderWidth !== "0px" && (
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs text-zinc-600">
-                                  Color de Borde
-                                </span>
-                                <div className="flex items-center gap-1.5">
-                                  <label
-                                    className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
-                                    style={{
-                                      backgroundColor:
-                                        curStyle.borderColor?.startsWith("#")
-                                          ? curStyle.borderColor
-                                          : documentState.theme.borderColor,
-                                    }}
-                                    title="Elegir color de borde"
-                                  >
-                                    <input
-                                      type="color"
-                                      value={
-                                        curStyle.borderColor?.startsWith("#")
-                                          ? curStyle.borderColor
-                                          : documentState.theme.borderColor
-                                      }
-                                      onChange={(e) =>
-                                        handleUpdateSubElementStyle(
-                                          selectedBlock.id,
-                                          activeSubElement.selector,
-                                          { borderColor: e.target.value },
-                                        )
-                                      }
-                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                    />
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={curStyle.borderColor ?? ""}
-                                    onChange={(e) =>
-                                      handleUpdateSubElementStyle(
-                                        selectedBlock.id,
-                                        activeSubElement.selector,
-                                        { borderColor: e.target.value },
-                                      )
-                                    }
-                                    className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                          <div>
-                            <span className="block text-[11px] text-zinc-600 mb-1">
-                              Sombra (Shadow)
-                            </span>
-                            <select
-                              value={curStyle.boxShadow || ""}
-                              onChange={(e) =>
-                                handleUpdateSubElementStyle(
-                                  selectedBlock.id,
-                                  activeSubElement.selector,
-                                  { boxShadow: e.target.value },
-                                )
-                              }
-                              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                            >
-                              <option value="">Por defecto</option>
-                              <option value="none">Sin sombra</option>
-                              <option value="0 4px 12px rgba(0,0,0,0.06)">
-                                Sombra sutil
-                              </option>
-                              <option value="0 12px 28px -6px rgba(0,0,0,0.14)">
-                                Sombra media
-                              </option>
-                              <option value="0 20px 44px -10px rgba(0,0,0,0.24)">
-                                Sombra pronunciada
-                              </option>
-                            </select>
-                          </div>
+                          <StudioBordersAndCornersEditor
+                            borderWidth={curStyle.borderWidth}
+                            borderTopWidth={curStyle.borderTopWidth}
+                            borderRightWidth={curStyle.borderRightWidth}
+                            borderBottomWidth={curStyle.borderBottomWidth}
+                            borderLeftWidth={curStyle.borderLeftWidth}
+                            borderColor={curStyle.borderColor}
+                            borderStyle={curStyle.borderStyle}
+                            defaultBorderColor={documentState.theme.borderColor}
+                            borderRadius={curStyle.borderRadius}
+                            borderTopLeftRadius={curStyle.borderTopLeftRadius}
+                            borderTopRightRadius={curStyle.borderTopRightRadius}
+                            borderBottomRightRadius={curStyle.borderBottomRightRadius}
+                            borderBottomLeftRadius={curStyle.borderBottomLeftRadius}
+                            boxShadow={curStyle.boxShadow}
+                            showShadow={true}
+                            onUpdateBorders={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                            onUpdateRadius={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                            onUpdateShadow={(shadow) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                { boxShadow: shadow },
+                              )
+                            }
+                          />
                         </StudioInspectorSection>
                       </div>
                 ) : (
@@ -6728,14 +7433,21 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     {/* Dropdown 3: Border & Corner Radius */}
                     <StudioInspectorSection
                       title="Bordes y Esquinas"
-                      description="Grosor de borde y redondeo perimetral"
+                      description="Grosor por lado y redondeo de esquinas"
                       icon={<Square className="h-3.5 w-3.5" />}
                       badge={
                         Boolean(
-                          (selectedBlock.values.__borderWidth &&
-                            selectedBlock.values.__borderWidth !== "0px") ||
-                            (selectedBlock.values.__borderRadius &&
-                              selectedBlock.values.__borderRadius !== "0px"),
+                          selectedBlock.values.__borderWidth ||
+                            selectedBlock.values.__borderTopWidth ||
+                            selectedBlock.values.__borderRightWidth ||
+                            selectedBlock.values.__borderBottomWidth ||
+                            selectedBlock.values.__borderLeftWidth ||
+                            selectedBlock.values.__borderRadius ||
+                            selectedBlock.values.__borderTopLeftRadius ||
+                            selectedBlock.values.__borderTopRightRadius ||
+                            selectedBlock.values.__borderBottomRightRadius ||
+                            selectedBlock.values.__borderBottomLeftRadius ||
+                            selectedBlock.values.__borderColor,
                         ) ? (
                           <span
                             className="h-1.5 w-1.5 rounded-full bg-blue-500"
@@ -6746,7 +7458,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       action={
                         Boolean(
                           selectedBlock.values.__borderWidth ||
+                            selectedBlock.values.__borderTopWidth ||
+                            selectedBlock.values.__borderRightWidth ||
+                            selectedBlock.values.__borderBottomWidth ||
+                            selectedBlock.values.__borderLeftWidth ||
                             selectedBlock.values.__borderRadius ||
+                            selectedBlock.values.__borderTopLeftRadius ||
+                            selectedBlock.values.__borderTopRightRadius ||
+                            selectedBlock.values.__borderBottomRightRadius ||
+                            selectedBlock.values.__borderBottomLeftRadius ||
                             selectedBlock.values.__borderColor,
                         ) ? (
                           <button
@@ -6754,111 +7474,147 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             onClick={() =>
                               handleUpdateBlockValues(selectedBlock.id, {
                                 __borderWidth: "",
+                                __borderTopWidth: "",
+                                __borderRightWidth: "",
+                                __borderBottomWidth: "",
+                                __borderLeftWidth: "",
+                                __borderStyle: "",
                                 __borderRadius: "",
+                                __borderTopLeftRadius: "",
+                                __borderTopRightRadius: "",
+                                __borderBottomRightRadius: "",
+                                __borderBottomLeftRadius: "",
                                 __borderColor: "",
                               })
                             }
                             className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                            title="Restablecer bordes"
+                            title="Restablecer bordes y esquinas"
                           >
                             Reset
                           </button>
                         ) : undefined
                       }
                     >
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="block text-[11px] text-zinc-600 mb-1">
-                            Grosor de Borde
-                          </span>
-                          <select
-                            value={selectedBlock.values.__borderWidth || "0px"}
-                            onChange={(e) =>
-                              handleUpdateBlockValue(
-                                selectedBlock.id,
-                                "__borderWidth",
-                                e.target.value === "0px" ? "" : e.target.value,
-                              )
-                            }
-                            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
-                          >
-                            <option value="0px">0px (Sin borde)</option>
-                            <option value="1px">1px</option>
-                            <option value="2px">2px</option>
-                            <option value="4px">4px</option>
-                          </select>
-                        </div>
-                        <div>
-                          <span className="block text-[11px] text-zinc-600 mb-1">
-                            Redondeo de Esquinas
-                          </span>
-                          <select
-                            value={selectedBlock.values.__borderRadius || "0px"}
-                            onChange={(e) =>
-                              handleUpdateBlockValue(
-                                selectedBlock.id,
-                                "__borderRadius",
-                                e.target.value === "0px" ? "" : e.target.value,
-                              )
-                            }
-                            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800 focus:bg-white"
-                          >
-                            <option value="0px">0px</option>
-                            <option value="12px">12px</option>
-                            <option value="20px">20px</option>
-                            <option value="32px">32px</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {selectedBlock.values.__borderWidth &&
-                        selectedBlock.values.__borderWidth !== "0px" && (
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <span className="text-xs text-zinc-600">
-                              Color de Borde
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <label
-                                className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
-                                style={{
-                                  backgroundColor:
-                                    selectedBlock.values.__borderColor ||
-                                    documentState.theme.borderColor,
-                                }}
-                                title="Elegir color de borde de la sección"
-                              >
-                                <input
-                                  type="color"
-                                  value={
-                                    selectedBlock.values.__borderColor ||
-                                    documentState.theme.borderColor
-                                  }
-                                  onChange={(e) =>
-                                    handleUpdateBlockValue(
-                                      selectedBlock.id,
-                                      "__borderColor",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                />
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Por defecto"
-                                value={selectedBlock.values.__borderColor ?? ""}
-                                onChange={(e) =>
-                                  handleUpdateBlockValue(
-                                    selectedBlock.id,
-                                    "__borderColor",
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                              />
-                            </div>
-                          </div>
-                        )}
+                      <StudioBordersAndCornersEditor
+                        borderWidth={
+                          typeof selectedBlock.values.__borderWidth === "string"
+                            ? selectedBlock.values.__borderWidth
+                            : ""
+                        }
+                        borderTopWidth={
+                          typeof selectedBlock.values.__borderTopWidth ===
+                          "string"
+                            ? selectedBlock.values.__borderTopWidth
+                            : ""
+                        }
+                        borderRightWidth={
+                          typeof selectedBlock.values.__borderRightWidth ===
+                          "string"
+                            ? selectedBlock.values.__borderRightWidth
+                            : ""
+                        }
+                        borderBottomWidth={
+                          typeof selectedBlock.values.__borderBottomWidth ===
+                          "string"
+                            ? selectedBlock.values.__borderBottomWidth
+                            : ""
+                        }
+                        borderLeftWidth={
+                          typeof selectedBlock.values.__borderLeftWidth ===
+                          "string"
+                            ? selectedBlock.values.__borderLeftWidth
+                            : ""
+                        }
+                        borderColor={
+                          typeof selectedBlock.values.__borderColor === "string"
+                            ? selectedBlock.values.__borderColor
+                            : ""
+                        }
+                        borderStyle={
+                          typeof selectedBlock.values.__borderStyle === "string"
+                            ? selectedBlock.values.__borderStyle
+                            : ""
+                        }
+                        defaultBorderColor={documentState.theme.borderColor}
+                        borderRadius={
+                          typeof selectedBlock.values.__borderRadius ===
+                          "string"
+                            ? selectedBlock.values.__borderRadius
+                            : ""
+                        }
+                        borderTopLeftRadius={
+                          typeof selectedBlock.values.__borderTopLeftRadius ===
+                          "string"
+                            ? selectedBlock.values.__borderTopLeftRadius
+                            : ""
+                        }
+                        borderTopRightRadius={
+                          typeof selectedBlock.values.__borderTopRightRadius ===
+                          "string"
+                            ? selectedBlock.values.__borderTopRightRadius
+                            : ""
+                        }
+                        borderBottomRightRadius={
+                          typeof selectedBlock.values
+                            .__borderBottomRightRadius === "string"
+                            ? selectedBlock.values.__borderBottomRightRadius
+                            : ""
+                        }
+                        borderBottomLeftRadius={
+                          typeof selectedBlock.values
+                            .__borderBottomLeftRadius === "string"
+                            ? selectedBlock.values.__borderBottomLeftRadius
+                            : ""
+                        }
+                        showShadow={false}
+                        onUpdateBorders={(patch) =>
+                          handleUpdateBlockValues(selectedBlock.id, {
+                            ...(patch.borderWidth !== undefined && {
+                              __borderWidth: patch.borderWidth,
+                            }),
+                            ...(patch.borderTopWidth !== undefined && {
+                              __borderTopWidth: patch.borderTopWidth,
+                            }),
+                            ...(patch.borderRightWidth !== undefined && {
+                              __borderRightWidth: patch.borderRightWidth,
+                            }),
+                            ...(patch.borderBottomWidth !== undefined && {
+                              __borderBottomWidth: patch.borderBottomWidth,
+                            }),
+                            ...(patch.borderLeftWidth !== undefined && {
+                              __borderLeftWidth: patch.borderLeftWidth,
+                            }),
+                            ...(patch.borderColor !== undefined && {
+                              __borderColor: patch.borderColor,
+                            }),
+                            ...(patch.borderStyle !== undefined && {
+                              __borderStyle: patch.borderStyle,
+                            }),
+                          })
+                        }
+                        onUpdateRadius={(patch) =>
+                          handleUpdateBlockValues(selectedBlock.id, {
+                            ...(patch.borderRadius !== undefined && {
+                              __borderRadius: patch.borderRadius,
+                            }),
+                            ...(patch.borderTopLeftRadius !== undefined && {
+                              __borderTopLeftRadius: patch.borderTopLeftRadius,
+                            }),
+                            ...(patch.borderTopRightRadius !== undefined && {
+                              __borderTopRightRadius:
+                                patch.borderTopRightRadius,
+                            }),
+                            ...(patch.borderBottomRightRadius !== undefined && {
+                              __borderBottomRightRadius:
+                                patch.borderBottomRightRadius,
+                            }),
+                            ...(patch.borderBottomLeftRadius !== undefined && {
+                              __borderBottomLeftRadius:
+                                patch.borderBottomLeftRadius,
+                            }),
+                          })
+                        }
+                      />
                     </StudioInspectorSection>
 
                     {/* Dropdown 4: Block Variables (Raw template fields) */}

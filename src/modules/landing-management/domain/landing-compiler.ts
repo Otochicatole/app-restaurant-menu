@@ -496,12 +496,47 @@ function buildBlockWrapperStyle(values: Record<string, string>): string {
   if (values.__textAlign?.trim()) {
     styles.push(`text-align: ${values.__textAlign.trim()}`);
   }
-  if (values.__borderWidth?.trim() && values.__borderWidth.trim() !== "0px") {
+  // Border in 4 directions or unified
+  const hasIndividualBlockBorders = Boolean(
+    values.__borderTopWidth?.trim() ||
+    values.__borderRightWidth?.trim() ||
+    values.__borderBottomWidth?.trim() ||
+    values.__borderLeftWidth?.trim(),
+  );
+
+  if (hasIndividualBlockBorders) {
+    const borderColor = values.__borderColor?.trim() || "rgba(0,0,0,0.12)";
+    const borderStyle = values.__borderStyle?.trim() || "solid";
+    const baseW = values.__borderWidth?.trim() || "0px";
+    styles.push(`border-style: ${borderStyle} !important`);
+    styles.push(`border-color: ${borderColor} !important`);
+    styles.push(`border-top-width: ${values.__borderTopWidth?.trim() || baseW} !important`);
+    styles.push(`border-right-width: ${values.__borderRightWidth?.trim() || baseW} !important`);
+    styles.push(`border-bottom-width: ${values.__borderBottomWidth?.trim() || baseW} !important`);
+    styles.push(`border-left-width: ${values.__borderLeftWidth?.trim() || baseW} !important`);
+  } else if (values.__borderWidth?.trim() && values.__borderWidth.trim() !== "0px") {
+    const borderStyle = values.__borderStyle?.trim() || "solid";
     styles.push(
-      `border: ${values.__borderWidth.trim()} solid ${values.__borderColor?.trim() || "rgba(0,0,0,0.12)"}`,
+      `border: ${values.__borderWidth.trim()} ${borderStyle} ${values.__borderColor?.trim() || "rgba(0,0,0,0.12)"}`,
     );
   }
-  if (values.__borderRadius?.trim() && values.__borderRadius.trim() !== "0px") {
+
+  // Border radius in 4 corners or unified
+  const hasIndividualBlockCorners = Boolean(
+    values.__borderTopLeftRadius?.trim() ||
+    values.__borderTopRightRadius?.trim() ||
+    values.__borderBottomRightRadius?.trim() ||
+    values.__borderBottomLeftRadius?.trim(),
+  );
+
+  if (hasIndividualBlockCorners) {
+    const baseR = values.__borderRadius?.trim() || "0px";
+    styles.push(`border-top-left-radius: ${values.__borderTopLeftRadius?.trim() || baseR}`);
+    styles.push(`border-top-right-radius: ${values.__borderTopRightRadius?.trim() || baseR}`);
+    styles.push(`border-bottom-right-radius: ${values.__borderBottomRightRadius?.trim() || baseR}`);
+    styles.push(`border-bottom-left-radius: ${values.__borderBottomLeftRadius?.trim() || baseR}`);
+    styles.push(`overflow: hidden`);
+  } else if (values.__borderRadius?.trim() && values.__borderRadius.trim() !== "0px") {
     styles.push(`border-radius: ${values.__borderRadius.trim()}; overflow: hidden`);
   }
   return styles.join("; ");
@@ -588,19 +623,53 @@ export function buildSubElementScopedCss(
     if (st.height?.trim()) decls.push(`height: ${st.height.trim()} !important`);
     if (st.gap?.trim()) decls.push(`gap: ${st.gap.trim()} !important`);
 
-    if (st.borderWidth?.trim()) {
+    // Border widths (unified or individual sides)
+    const hasIndividualBorders = Boolean(
+      st.borderTopWidth?.trim() ||
+      st.borderRightWidth?.trim() ||
+      st.borderBottomWidth?.trim() ||
+      st.borderLeftWidth?.trim(),
+    );
+
+    if (hasIndividualBorders) {
+      const borderStyle = st.borderStyle?.trim() || "solid";
+      const borderColor = st.borderColor?.trim() || "currentColor";
+      const baseW = st.borderWidth?.trim() || "0px";
+      decls.push(`border-style: ${borderStyle} !important`);
+      decls.push(`border-color: ${borderColor} !important`);
+      decls.push(`border-top-width: ${st.borderTopWidth?.trim() || baseW} !important`);
+      decls.push(`border-right-width: ${st.borderRightWidth?.trim() || baseW} !important`);
+      decls.push(`border-bottom-width: ${st.borderBottomWidth?.trim() || baseW} !important`);
+      decls.push(`border-left-width: ${st.borderLeftWidth?.trim() || baseW} !important`);
+    } else if (st.borderWidth?.trim()) {
       if (st.borderWidth.trim() === "0px") {
         decls.push(`border-width: 0px !important`);
       } else {
         decls.push(`border-width: ${st.borderWidth.trim()} !important`);
-        decls.push(`border-style: solid !important`);
+        decls.push(`border-style: ${st.borderStyle?.trim() || "solid"} !important`);
         decls.push(`border-color: ${st.borderColor?.trim() || "currentColor"} !important`);
       }
     } else if (st.borderColor?.trim()) {
       decls.push(`border-color: ${st.borderColor.trim()} !important`);
     }
 
-    if (st.borderRadius?.trim()) decls.push(`border-radius: ${st.borderRadius.trim()} !important`);
+    // Border radius (unified or individual corners)
+    const hasIndividualCorners = Boolean(
+      st.borderTopLeftRadius?.trim() ||
+      st.borderTopRightRadius?.trim() ||
+      st.borderBottomRightRadius?.trim() ||
+      st.borderBottomLeftRadius?.trim(),
+    );
+
+    if (hasIndividualCorners) {
+      const baseR = st.borderRadius?.trim() || "0px";
+      decls.push(`border-top-left-radius: ${st.borderTopLeftRadius?.trim() || baseR} !important`);
+      decls.push(`border-top-right-radius: ${st.borderTopRightRadius?.trim() || baseR} !important`);
+      decls.push(`border-bottom-right-radius: ${st.borderBottomRightRadius?.trim() || baseR} !important`);
+      decls.push(`border-bottom-left-radius: ${st.borderBottomLeftRadius?.trim() || baseR} !important`);
+    } else if (st.borderRadius?.trim()) {
+      decls.push(`border-radius: ${st.borderRadius.trim()} !important`);
+    }
     if (st.boxShadow?.trim()) decls.push(`box-shadow: ${st.boxShadow.trim()} !important`);
     if (st.objectFit?.trim()) decls.push(`object-fit: ${st.objectFit.trim()} !important`);
 
