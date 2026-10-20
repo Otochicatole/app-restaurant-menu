@@ -472,11 +472,24 @@ function buildBlockWrapperStyle(values: Record<string, string>): string {
   if (values.__textColor?.trim()) {
     styles.push(`color: ${values.__textColor.trim()} !important`);
   }
-  if (values.__paddingY?.trim()) {
-    styles.push(
-      `padding-top: ${values.__paddingY.trim()} !important; padding-bottom: ${values.__paddingY.trim()} !important`,
-    );
-  }
+
+  // Padding in all 4 directions (supports individual sides with fallback to __paddingY and __paddingX)
+  const padTop = values.__paddingTop?.trim() || values.__paddingY?.trim();
+  const padBottom = values.__paddingBottom?.trim() || values.__paddingY?.trim();
+  const padLeft = values.__paddingLeft?.trim() || values.__paddingX?.trim();
+  const padRight = values.__paddingRight?.trim() || values.__paddingX?.trim();
+
+  if (padTop) styles.push(`padding-top: ${padTop} !important`);
+  if (padBottom) styles.push(`padding-bottom: ${padBottom} !important`);
+  if (padLeft) styles.push(`padding-left: ${padLeft} !important`);
+  if (padRight) styles.push(`padding-right: ${padRight} !important`);
+
+  // Margin in all 4 directions
+  if (values.__marginTop?.trim()) styles.push(`margin-top: ${values.__marginTop.trim()} !important`);
+  if (values.__marginBottom?.trim()) styles.push(`margin-bottom: ${values.__marginBottom.trim()} !important`);
+  if (values.__marginLeft?.trim()) styles.push(`margin-left: ${values.__marginLeft.trim()} !important`);
+  if (values.__marginRight?.trim()) styles.push(`margin-right: ${values.__marginRight.trim()} !important`);
+
   if (values.__textAlign?.trim()) {
     styles.push(`text-align: ${values.__textAlign.trim()}`);
   }
@@ -563,6 +576,8 @@ export function buildSubElementScopedCss(
     if (st.paddingRight?.trim()) decls.push(`padding-right: ${st.paddingRight.trim()} !important`);
     if (st.marginTop?.trim()) decls.push(`margin-top: ${st.marginTop.trim()} !important`);
     if (st.marginBottom?.trim()) decls.push(`margin-bottom: ${st.marginBottom.trim()} !important`);
+    if (st.marginLeft?.trim()) decls.push(`margin-left: ${st.marginLeft.trim()} !important`);
+    if (st.marginRight?.trim()) decls.push(`margin-right: ${st.marginRight.trim()} !important`);
 
     if (st.width?.trim()) decls.push(`width: ${st.width.trim()} !important`);
     if (st.maxWidth?.trim()) decls.push(`max-width: ${st.maxWidth.trim()} !important`);
@@ -983,6 +998,10 @@ a[data-original-href] {
         paddingBottom: cs.paddingBottom || '',
         paddingLeft: cs.paddingLeft || '',
         paddingRight: cs.paddingRight || '',
+        marginTop: cs.marginTop || '',
+        marginBottom: cs.marginBottom || '',
+        marginLeft: cs.marginLeft || '',
+        marginRight: cs.marginRight || '',
         textAlign: cs.textAlign || ''
       }
     };

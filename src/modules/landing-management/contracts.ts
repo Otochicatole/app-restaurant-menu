@@ -28,6 +28,8 @@ export const subElementStyleOverrideSchema = z.object({
   paddingRight: z.string().max(40).optional(),
   marginTop: z.string().max(40).optional(),
   marginBottom: z.string().max(40).optional(),
+  marginLeft: z.string().max(40).optional(),
+  marginRight: z.string().max(40).optional(),
   width: z.string().max(60).optional(),
   maxWidth: z.string().max(60).optional(),
   minHeight: z.string().max(60).optional(),

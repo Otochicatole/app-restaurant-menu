@@ -145,6 +145,34 @@ describe("landing-compiler", () => {
     expect(css).toContain("text-align: center !important;");
   });
 
+  it("compiles 4-direction padding and margin overrides into scoped CSS", () => {
+    const stylesMap = {
+      "div.card-container": {
+        paddingTop: "15px",
+        paddingRight: "25px",
+        paddingBottom: "35px",
+        paddingLeft: "45px",
+        marginTop: "10px",
+        marginRight: "auto",
+        marginBottom: "20px",
+        marginLeft: "auto",
+      },
+    };
+    const serialized = serializeSubElementStyles(stylesMap);
+    const css = buildSubElementScopedCss("blk-card-1", {
+      __subStyles: serialized,
+    });
+
+    expect(css).toContain("padding-top: 15px !important;");
+    expect(css).toContain("padding-right: 25px !important;");
+    expect(css).toContain("padding-bottom: 35px !important;");
+    expect(css).toContain("padding-left: 45px !important;");
+    expect(css).toContain("margin-top: 10px !important;");
+    expect(css).toContain("margin-right: auto !important;");
+    expect(css).toContain("margin-bottom: 20px !important;");
+    expect(css).toContain("margin-left: auto !important;");
+  });
+
   it("duplicates, moves, and deletes sub-elements in a block AST with independent {{variables}}", () => {
     const specialtiesMod = BUILTIN_LANDING_MODULES.find(
       (m) => m.moduleKey === "specialties-grid",

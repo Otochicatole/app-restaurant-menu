@@ -63,6 +63,7 @@ import {
   ArrowRight,
   CornerLeftUp,
   Link2,
+  Unlink,
   MousePointerClick,
   Columns,
   Grid,
@@ -166,6 +167,10 @@ type SelectedSubElementInfo = {
     paddingBottom?: string;
     paddingLeft?: string;
     paddingRight?: string;
+    marginTop?: string;
+    marginBottom?: string;
+    marginLeft?: string;
+    marginRight?: string;
     textAlign?: string;
   };
 };
@@ -897,6 +902,731 @@ function SubLayerTreeRow({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function normalizeDimensionValue(val: string): string {
+  const trimmed = val.trim();
+  if (!trimmed) return "";
+  if (
+    trimmed === "auto" ||
+    trimmed === "inherit" ||
+    trimmed === "initial" ||
+    trimmed === "unset"
+  ) {
+    return trimmed;
+  }
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return `${trimmed}px`;
+  }
+  return trimmed;
+}
+
+interface DirectionalInputProps {
+  value?: string;
+  placeholder?: string;
+  title: string;
+  onChange: (val: string) => void;
+  variant?: "neutral" | "margin" | "padding";
+  className?: string;
+}
+
+function DirectionalInput({
+  value,
+  placeholder,
+  title,
+  onChange,
+  variant = "neutral",
+  className,
+}: DirectionalInputProps) {
+  const [prevValue, setPrevValue] = useState(value ?? "");
+  const [localVal, setLocalVal] = useState(value ?? "");
+
+  if (prevValue !== (value ?? "")) {
+    setPrevValue(value ?? "");
+    setLocalVal(value ?? "");
+  }
+
+  const commit = () => {
+    const norm = normalizeDimensionValue(localVal);
+    if (norm !== (value ?? "")) {
+      onChange(norm);
+    }
+  };
+
+  const hasValue = Boolean(
+    value && value.trim() && value !== "0" && value !== "0px",
+  );
+
+  let variantClasses =
+    "border-zinc-200/90 bg-white text-zinc-700 placeholder:text-zinc-400";
+  if (hasValue) {
+    if (variant === "margin") {
+      variantClasses =
+        "border-amber-400 bg-amber-50 text-amber-950 font-semibold shadow-2xs";
+    } else if (variant === "padding") {
+      variantClasses =
+        "border-blue-400 bg-blue-50 text-blue-950 font-semibold shadow-2xs";
+    } else {
+      variantClasses =
+        "border-zinc-400 bg-zinc-50 text-zinc-900 font-semibold shadow-2xs";
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      value={localVal}
+      placeholder={placeholder || "-"}
+      title={title}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit();
+          e.currentTarget.blur();
+        }
+      }}
+      className={
+        className ||
+        `w-12 h-6 text-center text-[11px] font-mono rounded-md border hover:border-zinc-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:bg-white focus:outline-none transition-all ${variantClasses}`
+      }
+    />
+  );
+}
+
+interface BoxModelSpacingEditorProps {
+  paddingTop?: string;
+  paddingRight?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  marginTop?: string;
+  marginRight?: string;
+  marginBottom?: string;
+  marginLeft?: string;
+  computedStyles?: {
+    paddingTop?: string;
+    paddingRight?: string;
+    paddingBottom?: string;
+    paddingLeft?: string;
+    marginTop?: string;
+    marginRight?: string;
+    marginBottom?: string;
+    marginLeft?: string;
+  };
+  elementTag?: string;
+  elementLabel?: string;
+  onUpdatePadding: (patch: {
+    paddingTop?: string;
+    paddingRight?: string;
+    paddingBottom?: string;
+    paddingLeft?: string;
+  }) => void;
+  onUpdateMargin: (patch: {
+    marginTop?: string;
+    marginRight?: string;
+    marginBottom?: string;
+    marginLeft?: string;
+  }) => void;
+}
+
+function BoxModelSpacingEditor({
+  paddingTop,
+  paddingRight,
+  paddingBottom,
+  paddingLeft,
+  marginTop,
+  marginRight,
+  marginBottom,
+  marginLeft,
+  computedStyles,
+  elementTag,
+  elementLabel,
+  onUpdatePadding,
+  onUpdateMargin,
+}: BoxModelSpacingEditorProps) {
+  const [isPaddingLinked, setIsPaddingLinked] = useState<boolean>(() => {
+    const hasAny = Boolean(paddingTop || paddingRight || paddingBottom || paddingLeft);
+    if (!hasAny) return true;
+    return (
+      paddingTop === paddingRight &&
+      paddingRight === paddingBottom &&
+      paddingBottom === paddingLeft
+    );
+  });
+
+  const [isMarginLinked, setIsMarginLinked] = useState<boolean>(() => {
+    const hasAny = Boolean(marginTop || marginRight || marginBottom || marginLeft);
+    if (!hasAny) return false;
+    return (
+      marginTop === marginRight &&
+      marginRight === marginBottom &&
+      marginBottom === marginLeft
+    );
+  });
+
+  const hasCustomPadding = Boolean(
+    paddingTop || paddingRight || paddingBottom || paddingLeft,
+  );
+  const hasCustomMargin = Boolean(
+    marginTop || marginRight || marginBottom || marginLeft,
+  );
+  const isHorizontallyCentered =
+    marginLeft === "auto" && marginRight === "auto";
+
+  const paddingPresets = ["0px", "4px", "8px", "12px", "16px", "24px", "32px", "48px"];
+  const marginPresets = ["0px", "4px", "8px", "12px", "16px", "24px", "32px", "auto"];
+
+  const handleDirectionChange = (
+    type: "padding" | "margin",
+    dir: "top" | "right" | "bottom" | "left",
+    val: string,
+  ) => {
+    const normalized = normalizeDimensionValue(val);
+    if (type === "padding") {
+      if (isPaddingLinked) {
+        onUpdatePadding({
+          paddingTop: normalized,
+          paddingRight: normalized,
+          paddingBottom: normalized,
+          paddingLeft: normalized,
+        });
+      } else {
+        if (dir === "top") onUpdatePadding({ paddingTop: normalized });
+        else if (dir === "right") onUpdatePadding({ paddingRight: normalized });
+        else if (dir === "bottom") onUpdatePadding({ paddingBottom: normalized });
+        else if (dir === "left") onUpdatePadding({ paddingLeft: normalized });
+      }
+    } else {
+      if (isMarginLinked) {
+        onUpdateMargin({
+          marginTop: normalized,
+          marginRight: normalized,
+          marginBottom: normalized,
+          marginLeft: normalized,
+        });
+      } else {
+        if (dir === "top") onUpdateMargin({ marginTop: normalized });
+        else if (dir === "right") onUpdateMargin({ marginRight: normalized });
+        else if (dir === "bottom") onUpdateMargin({ marginBottom: normalized });
+        else if (dir === "left") onUpdateMargin({ marginLeft: normalized });
+      }
+    }
+  };
+
+  const handleToggleCenter = () => {
+    if (isHorizontallyCentered) {
+      onUpdateMargin({ marginLeft: "", marginRight: "" });
+    } else {
+      onUpdateMargin({ marginLeft: "auto", marginRight: "auto" });
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Visual Box Model Diagram */}
+      <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/70 p-2 select-none shadow-2xs">
+        {/* Outer Box: MARGIN */}
+        <div className="relative rounded-lg border border-amber-200/90 bg-amber-50/50 p-2 transition-all">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/90 flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Margen
+            </span>
+            {isMarginLinked && (
+              <span className="text-[9px] font-medium text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                <Link2 className="h-2.5 w-2.5" /> Vinculado
+              </span>
+            )}
+          </div>
+
+          {/* Top Margin Input */}
+          <div className="flex justify-center mb-1">
+            <DirectionalInput
+              value={marginTop}
+              placeholder={computedStyles?.marginTop || "0"}
+              title="Margen Superior (Top)"
+              variant="margin"
+              onChange={(val) => handleDirectionChange("margin", "top", val)}
+            />
+          </div>
+
+          {/* Middle Row: Left Margin, Padding Box, Right Margin */}
+          <div className="flex items-center justify-between gap-1.5">
+            <DirectionalInput
+              value={marginLeft}
+              placeholder={computedStyles?.marginLeft || "0"}
+              title="Margen Izquierdo (Left)"
+              variant="margin"
+              onChange={(val) => handleDirectionChange("margin", "left", val)}
+            />
+
+            {/* Inner Box: PADDING */}
+            <div className="flex-1 rounded-md border border-blue-200/90 bg-blue-50/60 p-1.5 transition-all">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800/90 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                  Relleno
+                </span>
+                {isPaddingLinked && (
+                  <span className="text-[9px] font-medium text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                    <Link2 className="h-2.5 w-2.5" /> Vinculado
+                  </span>
+                )}
+              </div>
+
+              {/* Top Padding Input */}
+              <div className="flex justify-center mb-1">
+                <DirectionalInput
+                  value={paddingTop}
+                  placeholder={computedStyles?.paddingTop || "0"}
+                  title="Padding Superior (Top)"
+                  variant="padding"
+                  onChange={(val) => handleDirectionChange("padding", "top", val)}
+                />
+              </div>
+
+              {/* Middle Row: Left Padding, Center Tag, Right Padding */}
+              <div className="flex items-center justify-between gap-1">
+                <DirectionalInput
+                  value={paddingLeft}
+                  placeholder={computedStyles?.paddingLeft || "0"}
+                  title="Padding Izquierdo (Left)"
+                  variant="padding"
+                  onChange={(val) => handleDirectionChange("padding", "left", val)}
+                />
+
+                <div
+                  className="flex-1 min-w-[50px] max-w-[85px] py-1 px-1 rounded bg-white border border-zinc-200 text-center shadow-3xs"
+                  title={elementLabel || elementTag || "Elemento"}
+                >
+                  <span className="block text-[10px] font-mono text-zinc-700 font-semibold truncate">
+                    {elementTag ? `<${elementTag}>` : elementLabel || "Elemento"}
+                  </span>
+                </div>
+
+                <DirectionalInput
+                  value={paddingRight}
+                  placeholder={computedStyles?.paddingRight || "0"}
+                  title="Padding Derecho (Right)"
+                  variant="padding"
+                  onChange={(val) => handleDirectionChange("padding", "right", val)}
+                />
+              </div>
+
+              {/* Bottom Padding Input */}
+              <div className="flex justify-center mt-1">
+                <DirectionalInput
+                  value={paddingBottom}
+                  placeholder={computedStyles?.paddingBottom || "0"}
+                  title="Padding Inferior (Bottom)"
+                  variant="padding"
+                  onChange={(val) => handleDirectionChange("padding", "bottom", val)}
+                />
+              </div>
+            </div>
+
+            <DirectionalInput
+              value={marginRight}
+              placeholder={computedStyles?.marginRight || "0"}
+              title="Margen Derecho (Right)"
+              variant="margin"
+              onChange={(val) => handleDirectionChange("margin", "right", val)}
+            />
+          </div>
+
+          {/* Bottom Margin Input */}
+          <div className="flex justify-center mt-1">
+            <DirectionalInput
+              value={marginBottom}
+              placeholder={computedStyles?.marginBottom || "0"}
+              title="Margen Inferior (Bottom)"
+              variant="margin"
+              onChange={(val) => handleDirectionChange("margin", "bottom", val)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Spacing Controls Strip */}
+      <div className="space-y-2">
+        {/* Padding Panel */}
+        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              <span className="text-xs font-semibold text-zinc-800">
+                Padding (Relleno)
+              </span>
+              {hasCustomPadding && (
+                <span className="text-[10px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                  Personalizado
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsPaddingLinked(!isPaddingLinked)}
+                className={`p-1 rounded-md border text-xs transition-colors ${
+                  isPaddingLinked
+                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                    : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800"
+                }`}
+                title={
+                  isPaddingLinked
+                    ? "Lados vinculados (click para editar lados por separado)"
+                    : "Lados independientes (click para unificar todos los lados)"
+                }
+              >
+                {isPaddingLinked ? (
+                  <Link2 className="h-3 w-3" />
+                ) : (
+                  <Unlink className="h-3 w-3" />
+                )}
+              </button>
+              {hasCustomPadding && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdatePadding({
+                      paddingTop: "",
+                      paddingRight: "",
+                      paddingBottom: "",
+                      paddingLeft: "",
+                    })
+                  }
+                  className="p-1 rounded-md text-zinc-400 hover:text-red-600"
+                  title="Restablecer padding"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* If Linked: Single Unified Input; If Unlinked: 4-col Grid */}
+          {isPaddingLinked ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-zinc-500 shrink-0">
+                Unificado:
+              </span>
+              <DirectionalInput
+                value={paddingTop || paddingBottom || paddingLeft || paddingRight || ""}
+                placeholder={computedStyles?.paddingTop || "0px"}
+                title="Padding para todos los lados"
+                variant="padding"
+                onChange={(val) => {
+                  const norm = normalizeDimensionValue(val);
+                  onUpdatePadding({
+                    paddingTop: norm,
+                    paddingRight: norm,
+                    paddingBottom: norm,
+                    paddingLeft: norm,
+                  });
+                }}
+                className="flex-1 h-6 text-xs font-mono font-medium rounded-md bg-zinc-50/80 border border-zinc-200 px-2 text-zinc-800 focus:bg-white focus:border-blue-500 focus:outline-none text-center"
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-1.5">
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Top
+                </span>
+                <DirectionalInput
+                  value={paddingTop}
+                  placeholder={computedStyles?.paddingTop || "0px"}
+                  title="Padding Superior (Top)"
+                  variant="padding"
+                  onChange={(val) =>
+                    onUpdatePadding({ paddingTop: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-blue-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Der
+                </span>
+                <DirectionalInput
+                  value={paddingRight}
+                  placeholder={computedStyles?.paddingRight || "0px"}
+                  title="Padding Derecho (Right)"
+                  variant="padding"
+                  onChange={(val) =>
+                    onUpdatePadding({ paddingRight: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-blue-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Abajo
+                </span>
+                <DirectionalInput
+                  value={paddingBottom}
+                  placeholder={computedStyles?.paddingBottom || "0px"}
+                  title="Padding Inferior (Bottom)"
+                  variant="padding"
+                  onChange={(val) =>
+                    onUpdatePadding({ paddingBottom: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-blue-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Izq
+                </span>
+                <DirectionalInput
+                  value={paddingLeft}
+                  placeholder={computedStyles?.paddingLeft || "0px"}
+                  title="Padding Izquierdo (Left)"
+                  variant="padding"
+                  onChange={(val) =>
+                    onUpdatePadding({ paddingLeft: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-blue-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Quick Presets for Padding (No scrollbars, clean wrap) */}
+          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+            <span className="text-[9px] text-zinc-400 font-medium mr-0.5">
+              Presets:
+            </span>
+            {paddingPresets.map((p) => {
+              const isSelected =
+                paddingTop === p &&
+                paddingBottom === p &&
+                paddingLeft === p &&
+                paddingRight === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() =>
+                    onUpdatePadding({
+                      paddingTop: p,
+                      paddingRight: p,
+                      paddingBottom: p,
+                      paddingLeft: p,
+                    })
+                  }
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                    isSelected
+                      ? "bg-blue-600 text-white font-semibold shadow-2xs"
+                      : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Margin Panel */}
+        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              <span className="text-xs font-semibold text-zinc-800">
+                Margen Exterior
+              </span>
+              {hasCustomMargin && (
+                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                  Personalizado
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {/* Center Button */}
+              <button
+                type="button"
+                onClick={handleToggleCenter}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-colors ${
+                  isHorizontallyCentered
+                    ? "bg-amber-100 border-amber-300 text-amber-800 font-semibold shadow-2xs"
+                    : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                }`}
+                title="Centrar horizontalmente (auto a izquierda y derecha)"
+              >
+                <AlignCenter className="h-3 w-3" />
+                <span>Centrar</span>
+              </button>
+
+              {/* Link/Unlink Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsMarginLinked(!isMarginLinked)}
+                className={`p-1 rounded-md border text-xs transition-colors ${
+                  isMarginLinked
+                    ? "bg-amber-50 border-amber-200 text-amber-700"
+                    : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800"
+                }`}
+                title={
+                  isMarginLinked
+                    ? "Lados vinculados (click para editar lados por separado)"
+                    : "Lados independientes (click para unificar todos los lados)"
+                }
+              >
+                {isMarginLinked ? (
+                  <Link2 className="h-3 w-3" />
+                ) : (
+                  <Unlink className="h-3 w-3" />
+                )}
+              </button>
+
+              {/* Reset */}
+              {hasCustomMargin && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateMargin({
+                      marginTop: "",
+                      marginRight: "",
+                      marginBottom: "",
+                      marginLeft: "",
+                    })
+                  }
+                  className="p-1 rounded-md text-zinc-400 hover:text-red-600"
+                  title="Restablecer margen"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* If Linked: Single Unified Input; If Unlinked: 4-col Grid */}
+          {isMarginLinked ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-zinc-500 shrink-0">
+                Unificado:
+              </span>
+              <DirectionalInput
+                value={marginTop || marginBottom || marginLeft || marginRight || ""}
+                placeholder={computedStyles?.marginTop || "0px"}
+                title="Margen para todos los lados"
+                variant="margin"
+                onChange={(val) => {
+                  const norm = normalizeDimensionValue(val);
+                  onUpdateMargin({
+                    marginTop: norm,
+                    marginRight: norm,
+                    marginBottom: norm,
+                    marginLeft: norm,
+                  });
+                }}
+                className="flex-1 h-6 text-xs font-mono font-medium rounded-md bg-zinc-50/80 border border-zinc-200 px-2 text-zinc-800 focus:bg-white focus:border-amber-500 focus:outline-none text-center"
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-1.5">
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Top
+                </span>
+                <DirectionalInput
+                  value={marginTop}
+                  placeholder={computedStyles?.marginTop || "0px"}
+                  title="Margen Superior (Top)"
+                  variant="margin"
+                  onChange={(val) =>
+                    onUpdateMargin({ marginTop: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-amber-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Der
+                </span>
+                <DirectionalInput
+                  value={marginRight}
+                  placeholder={computedStyles?.marginRight || "0px"}
+                  title="Margen Derecho (Right)"
+                  variant="margin"
+                  onChange={(val) =>
+                    onUpdateMargin({ marginRight: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-amber-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Abajo
+                </span>
+                <DirectionalInput
+                  value={marginBottom}
+                  placeholder={computedStyles?.marginBottom || "0px"}
+                  title="Margen Inferior (Bottom)"
+                  variant="margin"
+                  onChange={(val) =>
+                    onUpdateMargin({ marginBottom: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-amber-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+              <div>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                  Izq
+                </span>
+                <DirectionalInput
+                  value={marginLeft}
+                  placeholder={computedStyles?.marginLeft || "0px"}
+                  title="Margen Izquierdo (Left)"
+                  variant="margin"
+                  onChange={(val) =>
+                    onUpdateMargin({ marginLeft: normalizeDimensionValue(val) })
+                  }
+                  className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-amber-500 focus:outline-none text-zinc-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Quick Presets for Margin (No scrollbars, clean wrap) */}
+          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+            <span className="text-[9px] text-zinc-400 font-medium mr-0.5">
+              Presets:
+            </span>
+            {marginPresets.map((m) => {
+              const isSelected =
+                marginTop === m &&
+                marginBottom === m &&
+                marginLeft === m &&
+                marginRight === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() =>
+                    onUpdateMargin({
+                      marginTop: m,
+                      marginRight: m,
+                      marginBottom: m,
+                      marginLeft: m,
+                    })
+                  }
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                    isSelected
+                      ? "bg-amber-600 text-white font-semibold shadow-2xs"
+                      : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                  }`}
+                >
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4826,66 +5556,75 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             </div>
                           )}
 
-                          {/* Padding & Margin */}
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Padding Vertical
+                          {/* Box Model & Spacing Studio */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                Espaciado y Box Model
                               </span>
-                              <select
-                                value={curStyle.paddingTop || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    {
-                                      paddingTop: e.target.value,
-                                      paddingBottom: e.target.value,
-                                    },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Por defecto</option>
-                                <option value="0px">0px</option>
-                                <option value="8px">8px</option>
-                                <option value="12px">12px</option>
-                                <option value="16px">16px</option>
-                                <option value="24px">24px</option>
-                                <option value="32px">32px</option>
-                                <option value="48px">48px</option>
-                              </select>
+                              {(curStyle.paddingTop ||
+                                curStyle.paddingRight ||
+                                curStyle.paddingBottom ||
+                                curStyle.paddingLeft ||
+                                curStyle.marginTop ||
+                                curStyle.marginRight ||
+                                curStyle.marginBottom ||
+                                curStyle.marginLeft) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      {
+                                        paddingTop: "",
+                                        paddingRight: "",
+                                        paddingBottom: "",
+                                        paddingLeft: "",
+                                        marginTop: "",
+                                        marginRight: "",
+                                        marginBottom: "",
+                                        marginLeft: "",
+                                      },
+                                    );
+                                  }}
+                                  className="text-[10px] text-zinc-400 hover:text-red-600 font-medium"
+                                >
+                                  Limpiar espaciado
+                                </button>
+                              )}
                             </div>
-                            <div>
-                              <span className="block text-[11px] text-zinc-600 mb-1">
-                                Padding Horizontal
-                              </span>
-                              <select
-                                value={curStyle.paddingLeft || ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    {
-                                      paddingLeft: e.target.value,
-                                      paddingRight: e.target.value,
-                                    },
-                                  )
-                                }
-                                className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                              >
-                                <option value="">Por defecto</option>
-                                <option value="0px">0px</option>
-                                <option value="12px">12px</option>
-                                <option value="16px">16px</option>
-                                <option value="24px">24px</option>
-                                <option value="32px">32px</option>
-                                <option value="44px">44px</option>
-                              </select>
-                            </div>
+
+                            <BoxModelSpacingEditor
+                              paddingTop={curStyle.paddingTop}
+                              paddingRight={curStyle.paddingRight}
+                              paddingBottom={curStyle.paddingBottom}
+                              paddingLeft={curStyle.paddingLeft}
+                              marginTop={curStyle.marginTop}
+                              marginRight={curStyle.marginRight}
+                              marginBottom={curStyle.marginBottom}
+                              marginLeft={curStyle.marginLeft}
+                              computedStyles={activeSubElement.computedStyles}
+                              elementTag={activeSubElement.tagName}
+                              elementLabel={activeSubElement.label}
+                              onUpdatePadding={(patch) =>
+                                handleUpdateSubElementStyle(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  patch,
+                                )
+                              }
+                              onUpdateMargin={(patch) =>
+                                handleUpdateSubElementStyle(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  patch,
+                                )
+                              }
+                            />
                           </div>
 
-                          {/* Dimensions & Spacing */}
+                          {/* Dimensions (Width & Max Width) */}
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <span className="block text-[11px] text-zinc-600 mb-1">
@@ -4905,32 +5644,36 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 <option value="">Auto</option>
                                 <option value="100%">100% (Ancho total)</option>
                                 <option value="fit-content">Ajustado al texto</option>
+                                <option value="200px">200px</option>
                                 <option value="240px">240px</option>
                                 <option value="320px">320px</option>
                                 <option value="480px">480px</option>
+                                <option value="640px">640px</option>
                               </select>
                             </div>
                             <div>
                               <span className="block text-[11px] text-zinc-600 mb-1">
-                                Margen Inferior
+                                Ancho Máx. (Max Width)
                               </span>
                               <select
-                                value={curStyle.marginBottom || ""}
+                                value={curStyle.maxWidth || ""}
                                 onChange={(e) =>
                                   handleUpdateSubElementStyle(
                                     selectedBlock.id,
                                     activeSubElement.selector,
-                                    { marginBottom: e.target.value },
+                                    { maxWidth: e.target.value },
                                   )
                                 }
                                 className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
                               >
-                                <option value="">Por defecto</option>
-                                <option value="0px">0px</option>
-                                <option value="8px">8px</option>
-                                <option value="16px">16px</option>
-                                <option value="24px">24px</option>
-                                <option value="36px">36px</option>
+                                <option value="">Sin límite</option>
+                                <option value="100%">100%</option>
+                                <option value="320px">320px (XS)</option>
+                                <option value="480px">480px (SM)</option>
+                                <option value="640px">640px (MD)</option>
+                                <option value="768px">768px (LG)</option>
+                                <option value="1024px">1024px (XL)</option>
+                                <option value="1280px">1280px (2XL)</option>
                               </select>
                             </div>
                           </div>
@@ -5214,6 +5957,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           selectedBlock.values.__bgImage ||
                           selectedBlock.values.__textColor ||
                           selectedBlock.values.__paddingY ||
+                          selectedBlock.values.__paddingTop ||
+                          selectedBlock.values.__paddingBottom ||
+                          selectedBlock.values.__paddingLeft ||
+                          selectedBlock.values.__paddingRight ||
+                          selectedBlock.values.__marginTop ||
+                          selectedBlock.values.__marginBottom ||
+                          selectedBlock.values.__marginLeft ||
+                          selectedBlock.values.__marginRight ||
                           selectedBlock.values.__textAlign ||
                           (selectedBlock.values.__borderWidth &&
                             selectedBlock.values.__borderWidth !== "0px") ||
@@ -5228,6 +5979,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 __bgImage: "",
                                 __textColor: "",
                                 __paddingY: "",
+                                __paddingTop: "",
+                                __paddingBottom: "",
+                                __paddingLeft: "",
+                                __paddingRight: "",
+                                __marginTop: "",
+                                __marginBottom: "",
+                                __marginLeft: "",
+                                __marginRight: "",
                                 __textAlign: "",
                                 __borderWidth: "",
                                 __borderColor: "",
@@ -5421,40 +6180,53 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         </div>
                       </div>
 
-                      {/* Vertical Padding */}
-                      <div>
-                        <span className="block text-xs text-zinc-600 mb-1.5">
-                          Vertical Spacing
+                      {/* Section Spacing (Box Model) */}
+                      <div className="space-y-2">
+                        <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
+                          Espaciado de la Sección (Box Model)
                         </span>
-                        <div className="grid grid-cols-4 gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200">
-                          {[
-                            { label: "S", val: "24px" },
-                            { label: "M", val: "48px" },
-                            { label: "L", val: "80px" },
-                            { label: "XL", val: "112px" },
-                          ].map((opt) => (
-                            <button
-                              key={opt.val}
-                              type="button"
-                              onClick={() =>
-                                handleUpdateBlockValue(
-                                  selectedBlock.id,
-                                  "__paddingY",
-                                  selectedBlock.values.__paddingY === opt.val
-                                    ? ""
-                                    : opt.val,
-                                )
-                              }
-                              className={`py-1 rounded text-[11px] font-semibold transition-colors ${
-                                selectedBlock.values.__paddingY === opt.val
-                                  ? "bg-white text-zinc-900 shadow-2xs"
-                                  : "text-zinc-500 hover:text-zinc-800"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
+                        <BoxModelSpacingEditor
+                          paddingTop={
+                            selectedBlock.values.__paddingTop ||
+                            selectedBlock.values.__paddingY
+                          }
+                          paddingRight={
+                            selectedBlock.values.__paddingRight ||
+                            selectedBlock.values.__paddingX
+                          }
+                          paddingBottom={
+                            selectedBlock.values.__paddingBottom ||
+                            selectedBlock.values.__paddingY
+                          }
+                          paddingLeft={
+                            selectedBlock.values.__paddingLeft ||
+                            selectedBlock.values.__paddingX
+                          }
+                          marginTop={selectedBlock.values.__marginTop}
+                          marginRight={selectedBlock.values.__marginRight}
+                          marginBottom={selectedBlock.values.__marginBottom}
+                          marginLeft={selectedBlock.values.__marginLeft}
+                          elementTag="section"
+                          elementLabel={selectedBlock.name}
+                          onUpdatePadding={(patch) =>
+                            handleUpdateBlockValues(selectedBlock.id, {
+                              __paddingTop: patch.paddingTop ?? "",
+                              __paddingRight: patch.paddingRight ?? "",
+                              __paddingBottom: patch.paddingBottom ?? "",
+                              __paddingLeft: patch.paddingLeft ?? "",
+                              __paddingY: "",
+                              __paddingX: "",
+                            })
+                          }
+                          onUpdateMargin={(patch) =>
+                            handleUpdateBlockValues(selectedBlock.id, {
+                              __marginTop: patch.marginTop ?? "",
+                              __marginRight: patch.marginRight ?? "",
+                              __marginBottom: patch.marginBottom ?? "",
+                              __marginLeft: patch.marginLeft ?? "",
+                            })
+                          }
+                        />
                       </div>
 
                       {/* Stroke & Corner Radius */}
