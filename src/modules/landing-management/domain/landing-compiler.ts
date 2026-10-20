@@ -469,6 +469,9 @@ function buildBlockWrapperStyle(values: Record<string, string>): string {
       `background-image: url("${safeUrl}") !important; background-size: ${values.__bgSize?.trim() || "cover"} !important; background-position: ${values.__bgPosition?.trim() || "center"} !important; background-repeat: no-repeat !important`,
     );
   }
+  if (values.__opacity?.trim()) {
+    styles.push(`opacity: ${values.__opacity.trim()} !important`);
+  }
   if (values.__textColor?.trim()) {
     styles.push(`color: ${values.__textColor.trim()} !important`);
   }

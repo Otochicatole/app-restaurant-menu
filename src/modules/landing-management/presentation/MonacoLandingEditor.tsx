@@ -1546,6 +1546,359 @@ function StudioInspectorSection({
   );
 }
 
+function parseColorWithAlpha(color?: string, fallback = "#ffffff"): {
+  baseHex: string;
+  alpha: number;
+  isTransparent: boolean;
+} {
+  const val = (color ?? "").trim().toLowerCase();
+  if (!val) {
+    return { baseHex: fallback, alpha: 1, isTransparent: false };
+  }
+  if (val === "transparent") {
+    return { baseHex: fallback, alpha: 0, isTransparent: true };
+  }
+
+  const hex8Match = /^#([0-9a-f]{6})([0-9a-f]{2})$/i.exec(val);
+  if (hex8Match) {
+    const base = `#${hex8Match[1]}`;
+    const a = parseInt(hex8Match[2], 16) / 255;
+    return {
+      baseHex: base,
+      alpha: Math.round(a * 100) / 100,
+      isTransparent: a === 0,
+    };
+  }
+
+  const hex6Match = /^#([0-9a-f]{6})$/i.exec(val);
+  if (hex6Match) {
+    return { baseHex: val, alpha: 1, isTransparent: false };
+  }
+
+  const hex3Match = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(val);
+  if (hex3Match) {
+    const full = `#${hex3Match[1]}${hex3Match[1]}${hex3Match[2]}${hex3Match[2]}${hex3Match[3]}${hex3Match[3]}`;
+    return { baseHex: full, alpha: 1, isTransparent: false };
+  }
+
+  const rgbaMatch =
+    /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i.exec(val);
+  if (rgbaMatch) {
+    const r = Math.min(255, parseInt(rgbaMatch[1], 10))
+      .toString(16)
+      .padStart(2, "0");
+    const g = Math.min(255, parseInt(rgbaMatch[2], 10))
+      .toString(16)
+      .padStart(2, "0");
+    const b = Math.min(255, parseInt(rgbaMatch[3], 10))
+      .toString(16)
+      .padStart(2, "0");
+    const a = Math.max(0, Math.min(1, parseFloat(rgbaMatch[4])));
+    return { baseHex: `#${r}${g}${b}`, alpha: a, isTransparent: a === 0 };
+  }
+
+  const rgbMatch = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.exec(val);
+  if (rgbMatch) {
+    const r = Math.min(255, parseInt(rgbMatch[1], 10))
+      .toString(16)
+      .padStart(2, "0");
+    const g = Math.min(255, parseInt(rgbMatch[2], 10))
+      .toString(16)
+      .padStart(2, "0");
+    const b = Math.min(255, parseInt(rgbMatch[3], 10))
+      .toString(16)
+      .padStart(2, "0");
+    return { baseHex: `#${r}${g}${b}`, alpha: 1, isTransparent: false };
+  }
+
+  return { baseHex: fallback, alpha: 1, isTransparent: false };
+}
+
+function formatColorWithAlpha(baseHex: string, alpha: number): string {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
+  const normalizedBase = baseHex.startsWith("#")
+    ? baseHex.slice(0, 7)
+    : `#${baseHex}`.slice(0, 7);
+  const base = normalizedBase.length === 7 ? normalizedBase : "#ffffff";
+  if (clamped <= 0.005) return "transparent";
+  if (clamped >= 0.995) return base;
+  const alphaHex = Math.round(clamped * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${base}${alphaHex}`;
+}
+
+function parseElementOpacity(opacity?: string): number {
+  if (!opacity || !opacity.trim()) return 100;
+  const cleaned = opacity.trim().replace("%", "");
+  const num = parseFloat(cleaned);
+  if (Number.isNaN(num)) return 100;
+  if (num <= 1 && (opacity.includes(".") || num > 0)) {
+    return Math.round(num * 100);
+  }
+  return Math.max(0, Math.min(100, Math.round(num)));
+}
+
+function formatElementOpacity(percent: number): string {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  if (clamped >= 100) return "";
+  return (clamped / 100).toString();
+}
+
+interface StudioAlphaColorFieldProps {
+  label: string;
+  value?: string;
+  defaultColor?: string;
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+function StudioAlphaColorField({
+  label,
+  value = "",
+  defaultColor = "#ffffff",
+  onChange,
+  className = "",
+}: StudioAlphaColorFieldProps) {
+  const { baseHex, alpha, isTransparent } = useMemo(
+    () => parseColorWithAlpha(value, defaultColor),
+    [value, defaultColor],
+  );
+
+  const percent = Math.round(alpha * 100);
+
+  const handleColorChange = (newHex: string) => {
+    const effectiveAlpha = isTransparent ? 1 : alpha;
+    onChange(formatColorWithAlpha(newHex, effectiveAlpha));
+  };
+
+  const handleAlphaChange = (newPercent: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(newPercent)));
+    onChange(formatColorWithAlpha(baseHex, clamped / 100));
+  };
+
+  const handleReset = () => {
+    onChange("");
+  };
+
+  const handleSetTransparent = () => {
+    onChange("transparent");
+  };
+
+  const hasCustomValue = Boolean(value && value.trim());
+
+  return (
+    <div className={`space-y-2 ${className}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-zinc-600">{label}</span>
+        <div className="flex items-center gap-1.5">
+          <label
+            className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+            style={{
+              backgroundImage:
+                "conic-gradient(#e4e4e7 25%, #ffffff 25% 50%, #e4e4e7 50% 75%, #ffffff 75% 100%)",
+              backgroundSize: "8px 8px",
+            }}
+            title="Elegir color base"
+          >
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundColor: isTransparent
+                  ? "transparent"
+                  : value || defaultColor,
+              }}
+            />
+            <input
+              type="color"
+              value={baseHex}
+              onChange={(e) => handleColorChange(e.target.value)}
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            />
+          </label>
+
+          <input
+            type="text"
+            placeholder={defaultColor}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+          />
+
+          {hasCustomValue && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="p-1 text-zinc-400 hover:text-zinc-700 rounded transition-colors"
+              title="Restablecer color por defecto"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-zinc-50/70 border border-zinc-200/80 p-2 space-y-1.5">
+        <div className="flex items-center justify-between text-[11px] text-zinc-500">
+          <span>Opacidad del fondo</span>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={isTransparent ? 0 : percent}
+              onChange={(e) => handleAlphaChange(Number(e.target.value))}
+              className="w-12 rounded bg-white border border-zinc-200 px-1.5 py-0.5 text-right font-mono text-xs font-semibold text-zinc-800 focus:outline-none focus:border-blue-500"
+            />
+            <span className="font-mono text-[10px] text-zinc-400">%</span>
+          </div>
+        </div>
+
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value={isTransparent ? 0 : percent}
+          onChange={(e) => handleAlphaChange(Number(e.target.value))}
+          className="w-full accent-blue-600 cursor-pointer h-1.5 bg-zinc-200 rounded-lg appearance-none"
+        />
+
+        <div className="flex items-center gap-1 pt-0.5">
+          {[
+            { label: "100%", val: 100 },
+            { label: "80%", val: 80 },
+            { label: "50%", val: 50 },
+            { label: "20%", val: 20 },
+            { label: "Transp.", val: 0 },
+          ].map((preset) => {
+            const isSelected =
+              preset.val === 0
+                ? isTransparent || (hasCustomValue && percent === 0)
+                : !isTransparent && percent === preset.val;
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => {
+                  if (preset.val === 0) {
+                    handleSetTransparent();
+                  } else {
+                    handleAlphaChange(preset.val);
+                  }
+                }}
+                className={`flex-1 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  isSelected
+                    ? "bg-blue-600 text-white font-semibold shadow-2xs"
+                    : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface StudioElementOpacityFieldProps {
+  label?: string;
+  description?: string;
+  value?: string;
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+function StudioElementOpacityField({
+  label = "Opacidad del Elemento",
+  description = "Transparencia de toda la capa y su contenido",
+  value = "",
+  onChange,
+  className = "",
+}: StudioElementOpacityFieldProps) {
+  const percent = useMemo(() => parseElementOpacity(value), [value]);
+
+  const handlePercentChange = (newPercent: number) => {
+    onChange(formatElementOpacity(newPercent));
+  };
+
+  const hasCustomValue = Boolean(value && value.trim() && percent < 100);
+
+  return (
+    <div className={`space-y-1.5 ${className}`}>
+      <div className="flex items-center justify-between text-xs text-zinc-600">
+        <div>
+          <span className="font-medium text-zinc-700">{label}</span>
+          {description && (
+            <span className="block text-[10px] text-zinc-400 font-normal leading-tight">
+              {description}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value={percent}
+            onChange={(e) => handlePercentChange(Number(e.target.value))}
+            className="w-13 rounded-md bg-zinc-50 border border-zinc-200 px-1.5 py-1 text-right font-mono text-xs font-semibold text-zinc-800 focus:bg-white focus:outline-none focus:border-blue-500"
+          />
+          <span className="font-mono text-xs text-zinc-400">%</span>
+          {hasCustomValue && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="p-1 text-zinc-400 hover:text-zinc-700 rounded transition-colors"
+              title="Restablecer opacidad al 100%"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={percent}
+        onChange={(e) => handlePercentChange(Number(e.target.value))}
+        className="w-full accent-blue-600 cursor-pointer h-1.5 bg-zinc-200 rounded-lg appearance-none"
+      />
+
+      <div className="flex items-center gap-1 pt-0.5">
+        {[
+          { label: "100%", val: 100 },
+          { label: "75%", val: 75 },
+          { label: "50%", val: 50 },
+          { label: "25%", val: 25 },
+        ].map((preset) => {
+          const isSelected = percent === preset.val;
+          return (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => handlePercentChange(preset.val)}
+              className={`flex-1 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                isSelected
+                  ? "bg-blue-600 text-white font-semibold shadow-2xs"
+                  : "bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600"
+              }`}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const { tenant } = initialData;
 
@@ -4645,7 +4998,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   /* ========================================================= */
                   /* GRANULAR SUB-ELEMENT INSPECTOR                            */
                   /* ========================================================= */
-                  <>
+                  <div key={activeSubElement.selector} className="divide-y divide-zinc-200">
                     {/* Sub-Element Header & Structural Actions */}
                     <div className="p-3.5 space-y-3 bg-violet-50/35 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
@@ -4798,7 +5151,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             title="Contenido del Elemento"
                             description="Textos, enlaces e imágenes vinculadas"
                             icon={<Type className="h-3.5 w-3.5" />}
-                            defaultOpen={true}
                           >
 
                             {activeSubElement.boundTextField && (
@@ -5225,7 +5577,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             title="Tipografía y Alineación"
                             description="Tamaño, grosor, color y alineación"
                             icon={<Type className="h-3.5 w-3.5" />}
-                            defaultOpen={true}
                             badge={
                               Boolean(
                                 curStyle.fontSize ||
@@ -5427,27 +5778,28 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           </StudioInspectorSection>
                         )}
 
-                        {/* Background Color & Image */}
+                        {/* Background Color, Transparency & Opacity */}
                         <StudioInspectorSection
-                          title="Fondo y Superficie"
-                          description="Color de relleno e imagen"
+                          title="Fondo y Transparencia"
+                          description="Color de relleno, transparencia y opacidad de capa"
                           icon={<Paintbrush className="h-3.5 w-3.5" />}
-                          defaultOpen={Boolean(
-                            curStyle.backgroundColor || curStyle.backgroundImage,
-                          )}
                           badge={
                             Boolean(
-                              curStyle.backgroundColor || curStyle.backgroundImage,
+                              curStyle.backgroundColor ||
+                                curStyle.backgroundImage ||
+                                (curStyle.opacity && curStyle.opacity !== "1"),
                             ) ? (
                               <span
                                 className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                title="Fondo personalizado"
+                                title="Fondo u opacidad personalizada"
                               />
                             ) : undefined
                           }
                           action={
                             Boolean(
-                              curStyle.backgroundColor || curStyle.backgroundImage,
+                              curStyle.backgroundColor ||
+                                curStyle.backgroundImage ||
+                                (curStyle.opacity && curStyle.opacity !== "1"),
                             ) ? (
                               <button
                                 type="button"
@@ -5458,85 +5810,35 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     {
                                       backgroundColor: "",
                                       backgroundImage: "",
+                                      opacity: "",
                                     },
                                   )
                                 }
                                 className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                                title="Restablecer fondo"
+                                title="Restablecer fondo y opacidad"
                               >
                                 Reset
                               </button>
                             ) : undefined
                           }
                         >
-                          {/* Background Color */}
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-zinc-600">
-                              Color de Fondo
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <label
-                                className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
-                                style={{
-                                  backgroundColor:
-                                    curStyle.backgroundColor?.startsWith("#")
-                                      ? curStyle.backgroundColor
-                                      : documentState.theme.cardBgColor,
-                                }}
-                                title="Elegir color de fondo"
-                              >
-                                <input
-                                  type="color"
-                                  value={
-                                    curStyle.backgroundColor?.startsWith("#")
-                                      ? curStyle.backgroundColor
-                                      : documentState.theme.cardBgColor
-                                  }
-                                  onChange={(e) =>
-                                    handleUpdateSubElementStyle(
-                                      selectedBlock.id,
-                                      activeSubElement.selector,
-                                      { backgroundColor: e.target.value },
-                                    )
-                                  }
-                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                />
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Auto"
-                                value={curStyle.backgroundColor ?? ""}
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { backgroundColor: e.target.value },
-                                  )
-                                }
-                                className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                              />
-                              {curStyle.backgroundColor && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleUpdateSubElementStyle(
-                                      selectedBlock.id,
-                                      activeSubElement.selector,
-                                      { backgroundColor: "" },
-                                    )
-                                  }
-                                  className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
-                                  title="Quitar color de fondo"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                          {/* Background Color with Alpha & Transparency Controls */}
+                          <StudioAlphaColorField
+                            label="Color de Fondo"
+                            value={curStyle.backgroundColor ?? ""}
+                            defaultColor={documentState.theme.cardBgColor}
+                            onChange={(val) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                { backgroundColor: val },
+                              )
+                            }
+                          />
 
                           {/* Background Image for Container / Card */}
                           {!activeSubElement.isImage && (
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                               <span className="text-xs text-zinc-600">
                                 Imagen de Fondo
                               </span>
@@ -5579,6 +5881,22 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </div>
                             </div>
                           )}
+
+                          {/* Whole Element Opacity / Layer Transparency */}
+                          <div className="pt-2 border-t border-zinc-100">
+                            <StudioElementOpacityField
+                              label="Opacidad del Elemento"
+                              description="Transparencia de toda la capa y su contenido"
+                              value={curStyle.opacity ?? ""}
+                              onChange={(val) =>
+                                handleUpdateSubElementStyle(
+                                  selectedBlock.id,
+                                  activeSubElement.selector,
+                                  { opacity: val },
+                                )
+                              }
+                            />
+                          </div>
                         </StudioInspectorSection>
 
                         {/* Espaciado del Elemento */}
@@ -5586,7 +5904,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           title="Espaciado (Padding y Margen)"
                           description="Espacio interno y separación externa"
                           icon={<Scan className="h-3.5 w-3.5" />}
-                          defaultOpen={true}
                           badge={
                             Boolean(
                               curStyle.paddingTop ||
@@ -5673,7 +5990,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           title="Dimensiones y Tamaño"
                           description="Ancho y ancho máximo"
                           icon={<Columns className="h-3.5 w-3.5" />}
-                          defaultOpen={Boolean(curStyle.width || curStyle.maxWidth)}
                           badge={
                             Boolean(curStyle.width || curStyle.maxWidth) ? (
                               <span
@@ -5763,11 +6079,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           title="Bordes y Sombras"
                           description="Grosor, esquinas redondeadas y elevación"
                           icon={<Square className="h-3.5 w-3.5" />}
-                          defaultOpen={Boolean(
-                            curStyle.borderWidth ||
-                              curStyle.borderRadius ||
-                              curStyle.boxShadow,
-                          )}
                           badge={
                             Boolean(
                               curStyle.borderWidth ||
@@ -5936,12 +6247,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             </select>
                           </div>
                         </StudioInspectorSection>
-                      </>
+                      </div>
                 ) : (
                   /* ========================================================= */
                   /* BLOCK ROOT INSPECTOR                                      */
                   /* ========================================================= */
-                  <>
+                  <div key={selectedBlock.id} className="divide-y divide-zinc-200">
                     {/* Block Header & Module Actions */}
                     <div className="p-3.5 space-y-3 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
@@ -6088,19 +6399,20 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     {/* Dropdown 1: Section Appearance & Colors */}
                     <StudioInspectorSection
                       title="Apariencia y Colores"
-                      description="Fondo, imagen y color del texto"
+                      description="Fondo, opacidad, imagen y color del texto"
                       icon={<Paintbrush className="h-3.5 w-3.5" />}
-                      defaultOpen={true}
                       badge={
                         Boolean(
                           selectedBlock.values.__bgColor ||
                             selectedBlock.values.__bgImage ||
                             selectedBlock.values.__textColor ||
-                            selectedBlock.values.__textAlign,
+                            selectedBlock.values.__textAlign ||
+                            (selectedBlock.values.__opacity &&
+                              selectedBlock.values.__opacity !== "1"),
                         ) ? (
                           <span
                             className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                            title="Apariencia personalizada"
+                            title="Apariencia u opacidad personalizada"
                           />
                         ) : undefined
                       }
@@ -6109,7 +6421,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           selectedBlock.values.__bgColor ||
                             selectedBlock.values.__bgImage ||
                             selectedBlock.values.__textColor ||
-                            selectedBlock.values.__textAlign,
+                            selectedBlock.values.__textAlign ||
+                            (selectedBlock.values.__opacity &&
+                              selectedBlock.values.__opacity !== "1"),
                         ) ? (
                           <button
                             type="button"
@@ -6119,79 +6433,37 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 __bgImage: "",
                                 __textColor: "",
                                 __textAlign: "",
+                                __opacity: "",
                               })
                             }
                             className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                            title="Restablecer apariencia"
+                            title="Restablecer apariencia y opacidad"
                           >
                             Reset
                           </button>
                         ) : undefined
                       }
                     >
-                      {/* Fill Color */}
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-zinc-600">Color de Fondo</span>
-                        <div className="flex items-center gap-1.5">
-                          <label
-                            className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
-                            style={{
-                              backgroundColor:
-                                selectedBlock.values.__bgColor ||
-                                documentState.theme.bgColor,
-                            }}
-                            title="Elegir color de fondo de la sección"
-                          >
-                            <input
-                              type="color"
-                              value={
-                                selectedBlock.values.__bgColor ||
-                                documentState.theme.bgColor
-                              }
-                              onChange={(e) =>
-                                handleUpdateBlockValue(
-                                  selectedBlock.id,
-                                  "__bgColor",
-                                  e.target.value,
-                                )
-                              }
-                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            />
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Por defecto"
-                            value={selectedBlock.values.__bgColor ?? ""}
-                            onChange={(e) =>
-                              handleUpdateBlockValue(
-                                selectedBlock.id,
-                                "__bgColor",
-                                e.target.value,
-                              )
-                            }
-                            className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                          />
-                          {selectedBlock.values.__bgColor && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateBlockValue(
-                                  selectedBlock.id,
-                                  "__bgColor",
-                                  "",
-                                )
-                              }
-                              className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
-                              title="Quitar color personalizado"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      {/* Background Color with Alpha & Transparency Controls */}
+                      <StudioAlphaColorField
+                        label="Color de Fondo"
+                        value={
+                          typeof selectedBlock.values.__bgColor === "string"
+                            ? selectedBlock.values.__bgColor
+                            : ""
+                        }
+                        defaultColor={documentState.theme.bgColor}
+                        onChange={(val) =>
+                          handleUpdateBlockValue(
+                            selectedBlock.id,
+                            "__bgColor",
+                            val,
+                          )
+                        }
+                      />
 
                       {/* Background Image */}
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                         <span className="text-xs text-zinc-600">
                           Imagen de Fondo
                         </span>
@@ -6234,7 +6506,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       </div>
 
                       {/* Text Color */}
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                         <span className="text-xs text-zinc-600">Color de Texto</span>
                         <div className="flex items-center gap-1.5">
                           <label
@@ -6295,7 +6567,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       </div>
 
                       {/* Text Alignment */}
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                         <span className="text-xs text-zinc-600">
                           Alineación de Texto
                         </span>
@@ -6328,6 +6600,26 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           ))}
                         </div>
                       </div>
+
+                      {/* Whole Section Opacity / Layer Transparency */}
+                      <div className="pt-2 border-t border-zinc-100">
+                        <StudioElementOpacityField
+                          label="Opacidad de la Sección"
+                          description="Transparencia de todo el bloque y sus elementos"
+                          value={
+                            typeof selectedBlock.values.__opacity === "string"
+                              ? selectedBlock.values.__opacity
+                              : ""
+                          }
+                          onChange={(val) =>
+                            handleUpdateBlockValue(
+                              selectedBlock.id,
+                              "__opacity",
+                              val,
+                            )
+                          }
+                        />
+                      </div>
                     </StudioInspectorSection>
 
                     {/* Dropdown 2: Section Spacing */}
@@ -6335,7 +6627,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       title="Espaciado de la Sección"
                       description="Padding interno y margen exterior"
                       icon={<Scan className="h-3.5 w-3.5" />}
-                      defaultOpen={true}
                       badge={
                         Boolean(
                           selectedBlock.values.__paddingTop ||
@@ -6439,12 +6730,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       title="Bordes y Esquinas"
                       description="Grosor de borde y redondeo perimetral"
                       icon={<Square className="h-3.5 w-3.5" />}
-                      defaultOpen={Boolean(
-                        (selectedBlock.values.__borderWidth &&
-                          selectedBlock.values.__borderWidth !== "0px") ||
-                          (selectedBlock.values.__borderRadius &&
-                            selectedBlock.values.__borderRadius !== "0px"),
-                      )}
                       badge={
                         Boolean(
                           (selectedBlock.values.__borderWidth &&
@@ -6585,10 +6870,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 text-[10px] font-mono text-zinc-600 font-semibold border border-zinc-200">
                           {selectedBlock.fields.length}
                         </span>
-                      }
-                      defaultOpen={
-                        selectedBlock.fields.length > 0 &&
-                        selectedBlock.fields.length <= 4
                       }
                     >
                       <p className="text-[11px] text-zinc-500">
@@ -6800,7 +7081,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         </div>
                       )}
                     </StudioInspectorSection>
-                  </>
+                  </div>
                 )}
               </div>
             ) : (

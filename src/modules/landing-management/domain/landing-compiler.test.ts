@@ -561,6 +561,29 @@ describe("landing-compiler", () => {
       expect(res).not.toBeNull();
       expect(res!.targetBlock.htmlTemplate).toContain("nested-block-hero");
     });
+
+    it("compiles section opacity and sub-element opacity overrides", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const heroBlock = createBlockFromBuiltinModule(heroMod);
+      heroBlock.values.__opacity = "0.85";
+      heroBlock.values.__bgColor = "#00000080";
+      heroBlock.values.__subStyles = JSON.stringify({
+        h1: { opacity: "0.9", backgroundColor: "transparent" },
+      });
+
+      const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
+      doc.blocks = [heroBlock];
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Casa Brasa",
+        restaurantSlug: "casa-brasa",
+      });
+
+      expect(compiled.htmlContent).toContain("opacity: 0.85 !important");
+      expect(compiled.htmlContent).toContain("background-color: #00000080 !important");
+      expect(compiled.cssContent).toContain("opacity: 0.9 !important");
+      expect(compiled.cssContent).toContain("background-color: transparent !important");
+    });
   });
 });
 
