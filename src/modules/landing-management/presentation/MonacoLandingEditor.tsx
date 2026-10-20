@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useRef,
   useCallback,
+  useId,
 } from "react";
 import Editor, { loader } from "@monaco-editor/react";
 import {
@@ -20,6 +21,7 @@ import {
   Smartphone,
   Monitor,
   Tablet,
+  Check,
   CheckCircle2,
   AlertCircle,
   Sparkles,
@@ -69,6 +71,8 @@ import {
   Grid,
   Minus,
   Rows,
+  Scan,
+  Square,
 } from "lucide-react";
 import type {
   LandingBlock,
@@ -1015,8 +1019,6 @@ interface BoxModelSpacingEditorProps {
     marginBottom?: string;
     marginLeft?: string;
   };
-  elementTag?: string;
-  elementLabel?: string;
   onUpdatePadding: (patch: {
     paddingTop?: string;
     paddingRight?: string;
@@ -1041,8 +1043,6 @@ function BoxModelSpacingEditor({
   marginBottom,
   marginLeft,
   computedStyles,
-  elementTag,
-  elementLabel,
   onUpdatePadding,
   onUpdateMargin,
 }: BoxModelSpacingEditorProps) {
@@ -1078,43 +1078,6 @@ function BoxModelSpacingEditor({
   const paddingPresets = ["0px", "4px", "8px", "12px", "16px", "24px", "32px", "48px"];
   const marginPresets = ["0px", "4px", "8px", "12px", "16px", "24px", "32px", "auto"];
 
-  const handleDirectionChange = (
-    type: "padding" | "margin",
-    dir: "top" | "right" | "bottom" | "left",
-    val: string,
-  ) => {
-    const normalized = normalizeDimensionValue(val);
-    if (type === "padding") {
-      if (isPaddingLinked) {
-        onUpdatePadding({
-          paddingTop: normalized,
-          paddingRight: normalized,
-          paddingBottom: normalized,
-          paddingLeft: normalized,
-        });
-      } else {
-        if (dir === "top") onUpdatePadding({ paddingTop: normalized });
-        else if (dir === "right") onUpdatePadding({ paddingRight: normalized });
-        else if (dir === "bottom") onUpdatePadding({ paddingBottom: normalized });
-        else if (dir === "left") onUpdatePadding({ paddingLeft: normalized });
-      }
-    } else {
-      if (isMarginLinked) {
-        onUpdateMargin({
-          marginTop: normalized,
-          marginRight: normalized,
-          marginBottom: normalized,
-          marginLeft: normalized,
-        });
-      } else {
-        if (dir === "top") onUpdateMargin({ marginTop: normalized });
-        else if (dir === "right") onUpdateMargin({ marginRight: normalized });
-        else if (dir === "bottom") onUpdateMargin({ marginBottom: normalized });
-        else if (dir === "left") onUpdateMargin({ marginLeft: normalized });
-      }
-    }
-  };
-
   const handleToggleCenter = () => {
     if (isHorizontallyCentered) {
       onUpdateMargin({ marginLeft: "", marginRight: "" });
@@ -1125,188 +1088,62 @@ function BoxModelSpacingEditor({
 
   return (
     <div className="space-y-2">
-      {/* Visual Box Model Diagram */}
-      <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/70 p-2 select-none shadow-2xs">
-        {/* Outer Box: MARGIN */}
-        <div className="relative rounded-lg border border-amber-200/90 bg-amber-50/50 p-2 transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/90 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              Margen
+      {/* Padding Panel */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-blue-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Padding (Relleno)
             </span>
-            {isMarginLinked && (
-              <span className="text-[9px] font-medium text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                <Link2 className="h-2.5 w-2.5" /> Vinculado
+            {hasCustomPadding && (
+              <span className="text-[10px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                Personalizado
               </span>
             )}
           </div>
-
-          {/* Top Margin Input */}
-          <div className="flex justify-center mb-1">
-            <DirectionalInput
-              value={marginTop}
-              placeholder={computedStyles?.marginTop || "0"}
-              title="Margen Superior (Top)"
-              variant="margin"
-              onChange={(val) => handleDirectionChange("margin", "top", val)}
-            />
-          </div>
-
-          {/* Middle Row: Left Margin, Padding Box, Right Margin */}
-          <div className="flex items-center justify-between gap-1.5">
-            <DirectionalInput
-              value={marginLeft}
-              placeholder={computedStyles?.marginLeft || "0"}
-              title="Margen Izquierdo (Left)"
-              variant="margin"
-              onChange={(val) => handleDirectionChange("margin", "left", val)}
-            />
-
-            {/* Inner Box: PADDING */}
-            <div className="flex-1 rounded-md border border-blue-200/90 bg-blue-50/60 p-1.5 transition-all">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800/90 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  Relleno
-                </span>
-                {isPaddingLinked && (
-                  <span className="text-[9px] font-medium text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                    <Link2 className="h-2.5 w-2.5" /> Vinculado
-                  </span>
-                )}
-              </div>
-
-              {/* Top Padding Input */}
-              <div className="flex justify-center mb-1">
-                <DirectionalInput
-                  value={paddingTop}
-                  placeholder={computedStyles?.paddingTop || "0"}
-                  title="Padding Superior (Top)"
-                  variant="padding"
-                  onChange={(val) => handleDirectionChange("padding", "top", val)}
-                />
-              </div>
-
-              {/* Middle Row: Left Padding, Center Tag, Right Padding */}
-              <div className="flex items-center justify-between gap-1">
-                <DirectionalInput
-                  value={paddingLeft}
-                  placeholder={computedStyles?.paddingLeft || "0"}
-                  title="Padding Izquierdo (Left)"
-                  variant="padding"
-                  onChange={(val) => handleDirectionChange("padding", "left", val)}
-                />
-
-                <div
-                  className="flex-1 min-w-[50px] max-w-[85px] py-1 px-1 rounded bg-white border border-zinc-200 text-center shadow-3xs"
-                  title={elementLabel || elementTag || "Elemento"}
-                >
-                  <span className="block text-[10px] font-mono text-zinc-700 font-semibold truncate">
-                    {elementTag ? `<${elementTag}>` : elementLabel || "Elemento"}
-                  </span>
-                </div>
-
-                <DirectionalInput
-                  value={paddingRight}
-                  placeholder={computedStyles?.paddingRight || "0"}
-                  title="Padding Derecho (Right)"
-                  variant="padding"
-                  onChange={(val) => handleDirectionChange("padding", "right", val)}
-                />
-              </div>
-
-              {/* Bottom Padding Input */}
-              <div className="flex justify-center mt-1">
-                <DirectionalInput
-                  value={paddingBottom}
-                  placeholder={computedStyles?.paddingBottom || "0"}
-                  title="Padding Inferior (Bottom)"
-                  variant="padding"
-                  onChange={(val) => handleDirectionChange("padding", "bottom", val)}
-                />
-              </div>
-            </div>
-
-            <DirectionalInput
-              value={marginRight}
-              placeholder={computedStyles?.marginRight || "0"}
-              title="Margen Derecho (Right)"
-              variant="margin"
-              onChange={(val) => handleDirectionChange("margin", "right", val)}
-            />
-          </div>
-
-          {/* Bottom Margin Input */}
-          <div className="flex justify-center mt-1">
-            <DirectionalInput
-              value={marginBottom}
-              placeholder={computedStyles?.marginBottom || "0"}
-              title="Margen Inferior (Bottom)"
-              variant="margin"
-              onChange={(val) => handleDirectionChange("margin", "bottom", val)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Spacing Controls Strip */}
-      <div className="space-y-2">
-        {/* Padding Panel */}
-        <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              <span className="text-xs font-semibold text-zinc-800">
-                Padding (Relleno)
-              </span>
-              {hasCustomPadding && (
-                <span className="text-[10px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
-                  Personalizado
-                </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsPaddingLinked(!isPaddingLinked)}
+              className={`p-1 rounded-md border text-xs transition-colors ${
+                isPaddingLinked
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                  : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800"
+              }`}
+              title={
+                isPaddingLinked
+                  ? "Lados vinculados (click para editar lados por separado)"
+                  : "Lados independientes (click para unificar todos los lados)"
+              }
+            >
+              {isPaddingLinked ? (
+                <Link2 className="h-3 w-3" />
+              ) : (
+                <Unlink className="h-3 w-3" />
               )}
-            </div>
-            <div className="flex items-center gap-1">
+            </button>
+            {hasCustomPadding && (
               <button
                 type="button"
-                onClick={() => setIsPaddingLinked(!isPaddingLinked)}
-                className={`p-1 rounded-md border text-xs transition-colors ${
-                  isPaddingLinked
-                    ? "bg-blue-50 border-blue-200 text-blue-700"
-                    : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800"
-                }`}
-                title={
-                  isPaddingLinked
-                    ? "Lados vinculados (click para editar lados por separado)"
-                    : "Lados independientes (click para unificar todos los lados)"
+                onClick={() =>
+                  onUpdatePadding({
+                    paddingTop: "",
+                    paddingRight: "",
+                    paddingBottom: "",
+                    paddingLeft: "",
+                  })
                 }
+                className="p-1 rounded-md text-zinc-400 hover:text-red-600"
+                title="Restablecer padding"
               >
-                {isPaddingLinked ? (
-                  <Link2 className="h-3 w-3" />
-                ) : (
-                  <Unlink className="h-3 w-3" />
-                )}
+                <X className="h-3 w-3" />
               </button>
-              {hasCustomPadding && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdatePadding({
-                      paddingTop: "",
-                      paddingRight: "",
-                      paddingBottom: "",
-                      paddingLeft: "",
-                    })
-                  }
-                  className="p-1 rounded-md text-zinc-400 hover:text-red-600"
-                  title="Restablecer padding"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* If Linked: Single Unified Input; If Unlinked: 4-col Grid */}
+        {/* If Linked: Single Unified Input; If Unlinked: 4-col Grid */}
           {isPaddingLinked ? (
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-medium text-zinc-500 shrink-0">
@@ -1627,7 +1464,85 @@ function BoxModelSpacingEditor({
           </div>
         </div>
       </div>
-    </div>
+  );
+}
+
+interface StudioInspectorSectionProps {
+  title: string;
+  description?: string;
+  icon: React.ReactNode;
+  defaultOpen?: boolean;
+  badge?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function StudioInspectorSection({
+  title,
+  description,
+  icon,
+  defaultOpen = false,
+  badge,
+  action,
+  children,
+  className = "",
+}: StudioInspectorSectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const id = useId();
+
+  return (
+    <section
+      className={`border-b border-zinc-200 last:border-b-0 ${className}`}
+      aria-labelledby={`${id}-title`}
+    >
+      <div className="flex items-center justify-between px-3.5 py-2.5 hover:bg-zinc-50/80 transition-colors group">
+        <button
+          id={`${id}-title`}
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-controls={`${id}-content`}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none cursor-pointer select-none py-0.5"
+        >
+          <span
+            className="shrink-0 text-zinc-400 group-hover:text-zinc-600 transition-colors"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-zinc-800">
+                {title}
+              </span>
+              {badge}
+            </span>
+            {description && (
+              <span className="block text-[10px] text-zinc-400 font-normal leading-tight mt-0.5">
+                {description}
+              </span>
+            )}
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-200 mr-1 ${
+              open ? "rotate-180" : ""
+            }`}
+            aria-hidden="true"
+          />
+        </button>
+
+        {action && <div className="shrink-0 ml-1">{action}</div>}
+      </div>
+
+      <div
+        id={`${id}-content`}
+        hidden={!open}
+        className="px-3.5 pb-3.5 pt-1 space-y-3"
+      >
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -3508,7 +3423,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             <>
               <div className="flex items-center justify-between px-3.5 py-2.5">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-                  LAYERS
+                  Estructura de Capas
                 </span>
                 <span className="text-[11px] font-semibold text-zinc-400">
                   {documentState.blocks.length}
@@ -4652,7 +4567,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* RIGHT SIDEBAR: Properties & Design (OpenPage / Framely style)   */}
         {/* --------------------------------------------------------------- */}
         <aside className="w-80 bg-white border-l border-zinc-200 flex flex-col shrink-0 min-h-0">
-          {/* Top Tabs: Properties | Design (Identical to OpenPage!) */}
+          {/* Top Tabs: Propiedades | Diseño Global */}
           <div className="grid grid-cols-2 border-b border-zinc-200 bg-white">
             <button
               type="button"
@@ -4664,7 +4579,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               }`}
             >
               <Sliders className="h-3.5 w-3.5" />
-              Properties
+              Propiedades
             </button>
             <button
               type="button"
@@ -4676,7 +4591,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               }`}
             >
               <Palette className="h-3.5 w-3.5" />
-              Design
+              Diseño Global
             </button>
           </div>
 
@@ -4732,7 +4647,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   /* ========================================================= */
                   <>
                     {/* Sub-Element Header & Structural Actions */}
-                    <div className="p-3.5 space-y-3 bg-violet-50/35">
+                    <div className="p-3.5 space-y-3 bg-violet-50/35 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200">
@@ -4743,17 +4658,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </code>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                selectSubElementOnStudio(selectedBlock.id, null)
-                              }
-                              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
-                              title="Volver a las propiedades del bloque"
-                            >
-                              <CornerLeftUp className="h-3 w-3" />
-                              Bloque
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {hasSubStyleOverrides && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleResetSubElementStyles(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                    )
+                                  }
+                                  className="text-[10px] text-violet-700 hover:text-red-600 font-semibold px-2 py-0.5 rounded border border-violet-200 bg-white hover:bg-red-50 transition-colors"
+                                  title="Restablecer todos los estilos personalizados de este elemento"
+                                >
+                                  Reset estilos
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  selectSubElementOnStudio(selectedBlock.id, null)
+                                }
+                                className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                                title="Volver a las propiedades del bloque"
+                              >
+                                <CornerLeftUp className="h-3 w-3" />
+                                Bloque
+                              </button>
+                            </div>
                           </div>
 
                           {/* Structural Actions: Move, Duplicate, Delete */}
@@ -4862,10 +4794,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             activeSubElement.childFieldKeys.length > 0) ||
                           activeSubElement.isImage ||
                           activeSubElement.isLink) && (
-                          <div className="p-3.5 space-y-3">
-                            <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                              Contenido del Elemento
-                            </span>
+                          <StudioInspectorSection
+                            title="Contenido del Elemento"
+                            description="Textos, enlaces e imágenes vinculadas"
+                            icon={<Type className="h-3.5 w-3.5" />}
+                            defaultOpen={true}
+                          >
 
                             {activeSubElement.boundTextField && (
                               <div>
@@ -5282,94 +5216,128 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 </div>
                               </div>
                             )}
-                          </div>
+                          </StudioInspectorSection>
                         )}
 
                         {/* Granular CSS Style Overrides for Sub-Element */}
-                        <div className="p-3.5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                              Estilo del Elemento
-                            </span>
-                            {hasSubStyleOverrides && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleResetSubElementStyles(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                  )
-                                }
-                                className="text-[10px] text-violet-600 hover:text-violet-800 underline font-medium"
-                              >
-                                Reset estilos
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Typography: Font Size & Weight */}
-                          {!activeSubElement.isImage && (
-                            <>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="block text-[11px] text-zinc-600 mb-1">
-                                    Tamaño de Letra
-                                  </span>
-                                  <select
-                                    value={curStyle.fontSize || ""}
-                                    onChange={(e) =>
-                                      handleUpdateSubElementStyle(
-                                        selectedBlock.id,
-                                        activeSubElement.selector,
-                                        { fontSize: e.target.value },
-                                      )
-                                    }
-                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                                  >
-                                    <option value="">Por defecto</option>
-                                    <option value="12px">12px (XS)</option>
-                                    <option value="14px">14px (SM)</option>
-                                    <option value="16px">16px (Base)</option>
-                                    <option value="18px">18px (MD)</option>
-                                    <option value="20px">20px (LG)</option>
-                                    <option value="24px">24px (XL)</option>
-                                    <option value="32px">32px (2XL)</option>
-                                    <option value="40px">40px (3XL)</option>
-                                    <option value="48px">48px (4XL)</option>
-                                    <option value="56px">56px (Hero)</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <span className="block text-[11px] text-zinc-600 mb-1">
-                                    Peso (Grosor)
-                                  </span>
-                                  <select
-                                    value={curStyle.fontWeight || ""}
-                                    onChange={(e) =>
-                                      handleUpdateSubElementStyle(
-                                        selectedBlock.id,
-                                        activeSubElement.selector,
-                                        { fontWeight: e.target.value },
-                                      )
-                                    }
-                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
-                                  >
-                                    <option value="">Por defecto</option>
-                                    <option value="400">400 Normal</option>
-                                    <option value="500">500 Medium</option>
-                                    <option value="600">600 Semibold</option>
-                                    <option value="700">700 Bold</option>
-                                    <option value="800">800 ExtraBold</option>
-                                  </select>
-                                </div>
-                              </div>
-
-                              {/* Text Color */}
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs text-zinc-600">
-                                  Color de Texto
+                        {!activeSubElement.isImage && (
+                          <StudioInspectorSection
+                            title="Tipografía y Alineación"
+                            description="Tamaño, grosor, color y alineación"
+                            icon={<Type className="h-3.5 w-3.5" />}
+                            defaultOpen={true}
+                            badge={
+                              Boolean(
+                                curStyle.fontSize ||
+                                  curStyle.fontWeight ||
+                                  curStyle.color ||
+                                  curStyle.textAlign,
+                              ) ? (
+                                <span
+                                  className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                  title="Estilos tipográficos personalizados"
+                                />
+                              ) : undefined
+                            }
+                            action={
+                              Boolean(
+                                curStyle.fontSize ||
+                                  curStyle.fontWeight ||
+                                  curStyle.color ||
+                                  curStyle.textAlign,
+                              ) ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      {
+                                        fontSize: "",
+                                        fontWeight: "",
+                                        color: "",
+                                        textAlign: "",
+                                      },
+                                    )
+                                  }
+                                  className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                  title="Restablecer tipografía"
+                                >
+                                  Reset
+                                </button>
+                              ) : undefined
+                            }
+                          >
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Tamaño de Letra
                                 </span>
-                                <div className="flex items-center gap-1.5">
+                                <select
+                                  value={curStyle.fontSize || ""}
+                                  onChange={(e) =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { fontSize: e.target.value },
+                                    )
+                                  }
+                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                >
+                                  <option value="">Por defecto</option>
+                                  <option value="12px">12px (XS)</option>
+                                  <option value="14px">14px (SM)</option>
+                                  <option value="16px">16px (Base)</option>
+                                  <option value="18px">18px (MD)</option>
+                                  <option value="20px">20px (LG)</option>
+                                  <option value="24px">24px (XL)</option>
+                                  <option value="32px">32px (2XL)</option>
+                                  <option value="40px">40px (3XL)</option>
+                                  <option value="48px">48px (4XL)</option>
+                                  <option value="56px">56px (Hero)</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] text-zinc-600 mb-1">
+                                  Peso (Grosor)
+                                </span>
+                                <select
+                                  value={curStyle.fontWeight || ""}
+                                  onChange={(e) =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { fontWeight: e.target.value },
+                                    )
+                                  }
+                                  className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1.5 text-xs text-zinc-800"
+                                >
+                                  <option value="">Por defecto</option>
+                                  <option value="400">400 Normal</option>
+                                  <option value="500">500 Medium</option>
+                                  <option value="600">600 Semibold</option>
+                                  <option value="700">700 Bold</option>
+                                  <option value="800">800 ExtraBold</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Text Color */}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs text-zinc-600">
+                                Color de Texto
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <label
+                                  className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                                  style={{
+                                    backgroundColor:
+                                      curStyle.color?.startsWith("#")
+                                        ? curStyle.color
+                                        : documentState.theme.textColor,
+                                  }}
+                                  title="Elegir color de texto"
+                                >
                                   <input
                                     type="color"
                                     value={
@@ -5384,101 +5352,156 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                         { color: e.target.value },
                                       )
                                     }
-                                    className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
-                                  <input
-                                    type="text"
-                                    placeholder="Auto"
-                                    value={curStyle.color ?? ""}
-                                    onChange={(e) =>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Auto"
+                                  value={curStyle.color ?? ""}
+                                  onChange={(e) =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { color: e.target.value },
+                                    )
+                                  }
+                                  className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                                />
+                                {curStyle.color && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
                                       handleUpdateSubElementStyle(
                                         selectedBlock.id,
                                         activeSubElement.selector,
-                                        { color: e.target.value },
+                                        { color: "" },
                                       )
                                     }
-                                    className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
-                                  />
-                                  {curStyle.color && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleUpdateSubElementStyle(
-                                          selectedBlock.id,
-                                          activeSubElement.selector,
-                                          { color: "" },
-                                        )
-                                      }
-                                      className="p-0.5 text-zinc-400 hover:text-zinc-700"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </div>
+                                    className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
+                                    title="Quitar color personalizado"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
                               </div>
+                            </div>
 
-                              {/* Text Align */}
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs text-zinc-600">
-                                  Alineación
-                                </span>
-                                <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                                  {[
-                                    { val: "left", icon: AlignLeft },
-                                    { val: "center", icon: AlignCenter },
-                                    { val: "right", icon: AlignRight },
-                                  ].map(({ val, icon: AlignIcon }) => (
-                                    <button
-                                      key={val}
-                                      type="button"
-                                      onClick={() =>
-                                        handleUpdateSubElementStyle(
-                                          selectedBlock.id,
-                                          activeSubElement.selector,
-                                          {
-                                            textAlign:
-                                              curStyle.textAlign === val
-                                                ? ""
-                                                : val,
-                                          },
-                                        )
-                                      }
-                                      className={`p-1.5 rounded-md transition-colors ${
-                                        curStyle.textAlign === val
-                                          ? "bg-white text-zinc-900 shadow-2xs"
-                                          : "text-zinc-500 hover:text-zinc-800"
-                                      }`}
-                                    >
-                                      <AlignIcon className="h-3.5 w-3.5" />
-                                    </button>
-                                  ))}
-                                </div>
+                            {/* Text Align */}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs text-zinc-600">
+                                Alineación
+                              </span>
+                              <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                                {[
+                                  { val: "left", icon: AlignLeft },
+                                  { val: "center", icon: AlignCenter },
+                                  { val: "right", icon: AlignRight },
+                                ].map(({ val, icon: AlignIcon }) => (
+                                  <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateSubElementStyle(
+                                        selectedBlock.id,
+                                        activeSubElement.selector,
+                                        {
+                                          textAlign:
+                                            curStyle.textAlign === val
+                                              ? ""
+                                              : val,
+                                        },
+                                      )
+                                    }
+                                    className={`p-1.5 rounded-md transition-colors ${
+                                      curStyle.textAlign === val
+                                        ? "bg-white text-zinc-900 shadow-2xs"
+                                        : "text-zinc-500 hover:text-zinc-800"
+                                    }`}
+                                  >
+                                    <AlignIcon className="h-3.5 w-3.5" />
+                                  </button>
+                                ))}
                               </div>
-                            </>
+                            </div>
+                          </StudioInspectorSection>
+                        )}
+
+                        {/* Background Color & Image */}
+                        <StudioInspectorSection
+                          title="Fondo y Superficie"
+                          description="Color de relleno e imagen"
+                          icon={<Paintbrush className="h-3.5 w-3.5" />}
+                          defaultOpen={Boolean(
+                            curStyle.backgroundColor || curStyle.backgroundImage,
                           )}
-
+                          badge={
+                            Boolean(
+                              curStyle.backgroundColor || curStyle.backgroundImage,
+                            ) ? (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                title="Fondo personalizado"
+                              />
+                            ) : undefined
+                          }
+                          action={
+                            Boolean(
+                              curStyle.backgroundColor || curStyle.backgroundImage,
+                            ) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      backgroundColor: "",
+                                      backgroundImage: "",
+                                    },
+                                  )
+                                }
+                                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                title="Restablecer fondo"
+                              >
+                                Reset
+                              </button>
+                            ) : undefined
+                          }
+                        >
                           {/* Background Color */}
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs text-zinc-600">
                               Color de Fondo
                             </span>
                             <div className="flex items-center gap-1.5">
-                              <input
-                                type="color"
-                                value={
-                                  curStyle.backgroundColor?.startsWith("#")
-                                    ? curStyle.backgroundColor
-                                    : documentState.theme.cardBgColor
-                                }
-                                onChange={(e) =>
-                                  handleUpdateSubElementStyle(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    { backgroundColor: e.target.value },
-                                  )
-                                }
-                                className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                              />
+                              <label
+                                className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                                style={{
+                                  backgroundColor:
+                                    curStyle.backgroundColor?.startsWith("#")
+                                      ? curStyle.backgroundColor
+                                      : documentState.theme.cardBgColor,
+                                }}
+                                title="Elegir color de fondo"
+                              >
+                                <input
+                                  type="color"
+                                  value={
+                                    curStyle.backgroundColor?.startsWith("#")
+                                      ? curStyle.backgroundColor
+                                      : documentState.theme.cardBgColor
+                                  }
+                                  onChange={(e) =>
+                                    handleUpdateSubElementStyle(
+                                      selectedBlock.id,
+                                      activeSubElement.selector,
+                                      { backgroundColor: e.target.value },
+                                    )
+                                  }
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </label>
                               <input
                                 type="text"
                                 placeholder="Auto"
@@ -5490,7 +5513,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     { backgroundColor: e.target.value },
                                   )
                                 }
-                                className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
+                                className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                               />
                               {curStyle.backgroundColor && (
                                 <button
@@ -5502,7 +5525,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       { backgroundColor: "" },
                                     )
                                   }
-                                  className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                                  className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
+                                  title="Quitar color de fondo"
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -5555,76 +5579,131 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </div>
                             </div>
                           )}
+                        </StudioInspectorSection>
 
-                          {/* Box Model & Spacing Studio */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                Espaciado y Box Model
-                              </span>
-                              {(curStyle.paddingTop ||
+                        {/* Espaciado del Elemento */}
+                        <StudioInspectorSection
+                          title="Espaciado (Padding y Margen)"
+                          description="Espacio interno y separación externa"
+                          icon={<Scan className="h-3.5 w-3.5" />}
+                          defaultOpen={true}
+                          badge={
+                            Boolean(
+                              curStyle.paddingTop ||
                                 curStyle.paddingRight ||
                                 curStyle.paddingBottom ||
                                 curStyle.paddingLeft ||
                                 curStyle.marginTop ||
                                 curStyle.marginRight ||
                                 curStyle.marginBottom ||
-                                curStyle.marginLeft) && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleUpdateSubElementStyle(
-                                      selectedBlock.id,
-                                      activeSubElement.selector,
-                                      {
-                                        paddingTop: "",
-                                        paddingRight: "",
-                                        paddingBottom: "",
-                                        paddingLeft: "",
-                                        marginTop: "",
-                                        marginRight: "",
-                                        marginBottom: "",
-                                        marginLeft: "",
-                                      },
-                                    );
-                                  }}
-                                  className="text-[10px] text-zinc-400 hover:text-red-600 font-medium"
-                                >
-                                  Limpiar espaciado
-                                </button>
-                              )}
-                            </div>
+                                curStyle.marginLeft,
+                            ) ? (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                title="Espaciado personalizado"
+                              />
+                            ) : undefined
+                          }
+                          action={
+                            Boolean(
+                              curStyle.paddingTop ||
+                                curStyle.paddingRight ||
+                                curStyle.paddingBottom ||
+                                curStyle.paddingLeft ||
+                                curStyle.marginTop ||
+                                curStyle.marginRight ||
+                                curStyle.marginBottom ||
+                                curStyle.marginLeft,
+                            ) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      paddingTop: "",
+                                      paddingRight: "",
+                                      paddingBottom: "",
+                                      paddingLeft: "",
+                                      marginTop: "",
+                                      marginRight: "",
+                                      marginBottom: "",
+                                      marginLeft: "",
+                                    },
+                                  )
+                                }
+                                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                title="Limpiar espaciado"
+                              >
+                                Reset
+                              </button>
+                            ) : undefined
+                          }
+                        >
+                          <BoxModelSpacingEditor
+                            paddingTop={curStyle.paddingTop}
+                            paddingRight={curStyle.paddingRight}
+                            paddingBottom={curStyle.paddingBottom}
+                            paddingLeft={curStyle.paddingLeft}
+                            marginTop={curStyle.marginTop}
+                            marginRight={curStyle.marginRight}
+                            marginBottom={curStyle.marginBottom}
+                            marginLeft={curStyle.marginLeft}
+                            computedStyles={activeSubElement.computedStyles}
+                            onUpdatePadding={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                            onUpdateMargin={(patch) =>
+                              handleUpdateSubElementStyle(
+                                selectedBlock.id,
+                                activeSubElement.selector,
+                                patch,
+                              )
+                            }
+                          />
+                        </StudioInspectorSection>
 
-                            <BoxModelSpacingEditor
-                              paddingTop={curStyle.paddingTop}
-                              paddingRight={curStyle.paddingRight}
-                              paddingBottom={curStyle.paddingBottom}
-                              paddingLeft={curStyle.paddingLeft}
-                              marginTop={curStyle.marginTop}
-                              marginRight={curStyle.marginRight}
-                              marginBottom={curStyle.marginBottom}
-                              marginLeft={curStyle.marginLeft}
-                              computedStyles={activeSubElement.computedStyles}
-                              elementTag={activeSubElement.tagName}
-                              elementLabel={activeSubElement.label}
-                              onUpdatePadding={(patch) =>
-                                handleUpdateSubElementStyle(
-                                  selectedBlock.id,
-                                  activeSubElement.selector,
-                                  patch,
-                                )
-                              }
-                              onUpdateMargin={(patch) =>
-                                handleUpdateSubElementStyle(
-                                  selectedBlock.id,
-                                  activeSubElement.selector,
-                                  patch,
-                                )
-                              }
-                            />
-                          </div>
-
-                          {/* Dimensions (Width & Max Width) */}
+                        {/* Dimensions (Width & Max Width) */}
+                        <StudioInspectorSection
+                          title="Dimensiones y Tamaño"
+                          description="Ancho y ancho máximo"
+                          icon={<Columns className="h-3.5 w-3.5" />}
+                          defaultOpen={Boolean(curStyle.width || curStyle.maxWidth)}
+                          badge={
+                            Boolean(curStyle.width || curStyle.maxWidth) ? (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                title="Dimensiones personalizadas"
+                              />
+                            ) : undefined
+                          }
+                          action={
+                            Boolean(curStyle.width || curStyle.maxWidth) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      width: "",
+                                      maxWidth: "",
+                                    },
+                                  )
+                                }
+                                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                title="Restablecer dimensiones"
+                              >
+                                Reset
+                              </button>
+                            ) : undefined
+                          }
+                        >
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <span className="block text-[11px] text-zinc-600 mb-1">
@@ -5677,8 +5756,59 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </select>
                             </div>
                           </div>
+                        </StudioInspectorSection>
 
-                          {/* Border & Radius */}
+                        {/* Border & Radius */}
+                        <StudioInspectorSection
+                          title="Bordes y Sombras"
+                          description="Grosor, esquinas redondeadas y elevación"
+                          icon={<Square className="h-3.5 w-3.5" />}
+                          defaultOpen={Boolean(
+                            curStyle.borderWidth ||
+                              curStyle.borderRadius ||
+                              curStyle.boxShadow,
+                          )}
+                          badge={
+                            Boolean(
+                              curStyle.borderWidth ||
+                                curStyle.borderRadius ||
+                                curStyle.boxShadow,
+                            ) ? (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                title="Bordes o sombra personalizados"
+                              />
+                            ) : undefined
+                          }
+                          action={
+                            Boolean(
+                              curStyle.borderWidth ||
+                                curStyle.borderRadius ||
+                                curStyle.borderColor ||
+                                curStyle.boxShadow,
+                            ) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSubElementStyle(
+                                    selectedBlock.id,
+                                    activeSubElement.selector,
+                                    {
+                                      borderWidth: "",
+                                      borderRadius: "",
+                                      borderColor: "",
+                                      boxShadow: "",
+                                    },
+                                  )
+                                }
+                                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                                title="Restablecer bordes"
+                              >
+                                Reset
+                              </button>
+                            ) : undefined
+                          }
+                        >
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <span className="block text-[11px] text-zinc-600 mb-1">
@@ -5734,22 +5864,33 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   Color de Borde
                                 </span>
                                 <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="color"
-                                    value={
-                                      curStyle.borderColor?.startsWith("#")
-                                        ? curStyle.borderColor
-                                        : documentState.theme.borderColor
-                                    }
-                                    onChange={(e) =>
-                                      handleUpdateSubElementStyle(
-                                        selectedBlock.id,
-                                        activeSubElement.selector,
-                                        { borderColor: e.target.value },
-                                      )
-                                    }
-                                    className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                                  />
+                                  <label
+                                    className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                                    style={{
+                                      backgroundColor:
+                                        curStyle.borderColor?.startsWith("#")
+                                          ? curStyle.borderColor
+                                          : documentState.theme.borderColor,
+                                    }}
+                                    title="Elegir color de borde"
+                                  >
+                                    <input
+                                      type="color"
+                                      value={
+                                        curStyle.borderColor?.startsWith("#")
+                                          ? curStyle.borderColor
+                                          : documentState.theme.borderColor
+                                      }
+                                      onChange={(e) =>
+                                        handleUpdateSubElementStyle(
+                                          selectedBlock.id,
+                                          activeSubElement.selector,
+                                          { borderColor: e.target.value },
+                                        )
+                                      }
+                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    />
+                                  </label>
                                   <input
                                     type="text"
                                     value={curStyle.borderColor ?? ""}
@@ -5760,13 +5901,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                         { borderColor: e.target.value },
                                       )
                                     }
-                                    className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800"
+                                    className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                                   />
                                 </div>
                               </div>
                             )}
 
-                          {/* Shadow */}
                           <div>
                             <span className="block text-[11px] text-zinc-600 mb-1">
                               Sombra (Shadow)
@@ -5795,9 +5935,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               </option>
                             </select>
                           </div>
-                        </div>
-
-
+                        </StudioInspectorSection>
                       </>
                 ) : (
                   /* ========================================================= */
@@ -5805,7 +5943,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   /* ========================================================= */
                   <>
                     {/* Block Header & Module Actions */}
-                    <div className="p-3.5 space-y-3">
+                    <div className="p-3.5 space-y-3 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                           {selectedBlock.moduleKey}
@@ -5947,30 +6085,32 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       </div>
                     </div>
 
-                    {/* Section Appearance & Layout Overrides */}
-                    <div className="p-3.5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                          Apariencia de la Sección
-                        </span>
-                        {(selectedBlock.values.__bgColor ||
-                          selectedBlock.values.__bgImage ||
-                          selectedBlock.values.__textColor ||
-                          selectedBlock.values.__paddingY ||
-                          selectedBlock.values.__paddingTop ||
-                          selectedBlock.values.__paddingBottom ||
-                          selectedBlock.values.__paddingLeft ||
-                          selectedBlock.values.__paddingRight ||
-                          selectedBlock.values.__marginTop ||
-                          selectedBlock.values.__marginBottom ||
-                          selectedBlock.values.__marginLeft ||
-                          selectedBlock.values.__marginRight ||
-                          selectedBlock.values.__textAlign ||
-                          (selectedBlock.values.__borderWidth &&
-                            selectedBlock.values.__borderWidth !== "0px") ||
-                          selectedBlock.values.__borderColor ||
-                          (selectedBlock.values.__borderRadius &&
-                            selectedBlock.values.__borderRadius !== "0px")) && (
+                    {/* Dropdown 1: Section Appearance & Colors */}
+                    <StudioInspectorSection
+                      title="Apariencia y Colores"
+                      description="Fondo, imagen y color del texto"
+                      icon={<Paintbrush className="h-3.5 w-3.5" />}
+                      defaultOpen={true}
+                      badge={
+                        Boolean(
+                          selectedBlock.values.__bgColor ||
+                            selectedBlock.values.__bgImage ||
+                            selectedBlock.values.__textColor ||
+                            selectedBlock.values.__textAlign,
+                        ) ? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                            title="Apariencia personalizada"
+                          />
+                        ) : undefined
+                      }
+                      action={
+                        Boolean(
+                          selectedBlock.values.__bgColor ||
+                            selectedBlock.values.__bgImage ||
+                            selectedBlock.values.__textColor ||
+                            selectedBlock.values.__textAlign,
+                        ) ? (
                           <button
                             type="button"
                             onClick={() =>
@@ -5978,47 +6118,46 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 __bgColor: "",
                                 __bgImage: "",
                                 __textColor: "",
-                                __paddingY: "",
-                                __paddingTop: "",
-                                __paddingBottom: "",
-                                __paddingLeft: "",
-                                __paddingRight: "",
-                                __marginTop: "",
-                                __marginBottom: "",
-                                __marginLeft: "",
-                                __marginRight: "",
                                 __textAlign: "",
-                                __borderWidth: "",
-                                __borderColor: "",
-                                __borderRadius: "",
                               })
                             }
-                            className="text-[10px] text-zinc-500 hover:text-zinc-800 underline"
+                            className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                            title="Restablecer apariencia"
                           >
                             Reset
                           </button>
-                        )}
-                      </div>
-
+                        ) : undefined
+                      }
+                    >
                       {/* Fill Color */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-zinc-600">Fill Color</span>
+                        <span className="text-xs text-zinc-600">Color de Fondo</span>
                         <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            value={
-                              selectedBlock.values.__bgColor ||
-                              documentState.theme.bgColor
-                            }
-                            onChange={(e) =>
-                              handleUpdateBlockValue(
-                                selectedBlock.id,
-                                "__bgColor",
-                                e.target.value,
-                              )
-                            }
-                            className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                          />
+                          <label
+                            className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                            style={{
+                              backgroundColor:
+                                selectedBlock.values.__bgColor ||
+                                documentState.theme.bgColor,
+                            }}
+                            title="Elegir color de fondo de la sección"
+                          >
+                            <input
+                              type="color"
+                              value={
+                                selectedBlock.values.__bgColor ||
+                                documentState.theme.bgColor
+                              }
+                              onChange={(e) =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__bgColor",
+                                  e.target.value,
+                                )
+                              }
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            />
+                          </label>
                           <input
                             type="text"
                             placeholder="Por defecto"
@@ -6030,7 +6169,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 e.target.value,
                               )
                             }
-                            className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
+                            className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                           />
                           {selectedBlock.values.__bgColor && (
                             <button
@@ -6042,7 +6181,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   "",
                                 )
                               }
-                              className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                              className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
                               title="Quitar color personalizado"
                             >
                               <X className="h-3 w-3" />
@@ -6054,7 +6193,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       {/* Background Image */}
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-zinc-600">
-                          Background Image
+                          Imagen de Fondo
                         </span>
                         <div className="flex items-center gap-1.5">
                           <button
@@ -6096,23 +6235,33 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
                       {/* Text Color */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-zinc-600">Text Color</span>
+                        <span className="text-xs text-zinc-600">Color de Texto</span>
                         <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            value={
-                              selectedBlock.values.__textColor ||
-                              documentState.theme.textColor
-                            }
-                            onChange={(e) =>
-                              handleUpdateBlockValue(
-                                selectedBlock.id,
-                                "__textColor",
-                                e.target.value,
-                              )
-                            }
-                            className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                          />
+                          <label
+                            className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                            style={{
+                              backgroundColor:
+                                selectedBlock.values.__textColor ||
+                                documentState.theme.textColor,
+                            }}
+                            title="Elegir color de texto de la sección"
+                          >
+                            <input
+                              type="color"
+                              value={
+                                selectedBlock.values.__textColor ||
+                                documentState.theme.textColor
+                              }
+                              onChange={(e) =>
+                                handleUpdateBlockValue(
+                                  selectedBlock.id,
+                                  "__textColor",
+                                  e.target.value,
+                                )
+                              }
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            />
+                          </label>
                           <input
                             type="text"
                             placeholder="Por defecto"
@@ -6124,7 +6273,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 e.target.value,
                               )
                             }
-                            className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
+                            className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                           />
                           {selectedBlock.values.__textColor && (
                             <button
@@ -6136,7 +6285,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   "",
                                 )
                               }
-                              className="p-0.5 text-zinc-400 hover:text-zinc-700"
+                              className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
                               title="Quitar color personalizado"
                             >
                               <X className="h-3 w-3" />
@@ -6148,7 +6297,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       {/* Text Alignment */}
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-zinc-600">
-                          Text Alignment
+                          Alineación de Texto
                         </span>
                         <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
                           {[
@@ -6179,61 +6328,163 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           ))}
                         </div>
                       </div>
+                    </StudioInspectorSection>
 
-                      {/* Section Spacing (Box Model) */}
-                      <div className="space-y-2">
-                        <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500">
-                          Espaciado de la Sección (Box Model)
-                        </span>
-                        <BoxModelSpacingEditor
-                          paddingTop={
-                            selectedBlock.values.__paddingTop ||
-                            selectedBlock.values.__paddingY
-                          }
-                          paddingRight={
-                            selectedBlock.values.__paddingRight ||
-                            selectedBlock.values.__paddingX
-                          }
-                          paddingBottom={
+                    {/* Dropdown 2: Section Spacing */}
+                    <StudioInspectorSection
+                      title="Espaciado de la Sección"
+                      description="Padding interno y margen exterior"
+                      icon={<Scan className="h-3.5 w-3.5" />}
+                      defaultOpen={true}
+                      badge={
+                        Boolean(
+                          selectedBlock.values.__paddingTop ||
                             selectedBlock.values.__paddingBottom ||
-                            selectedBlock.values.__paddingY
-                          }
-                          paddingLeft={
                             selectedBlock.values.__paddingLeft ||
-                            selectedBlock.values.__paddingX
-                          }
-                          marginTop={selectedBlock.values.__marginTop}
-                          marginRight={selectedBlock.values.__marginRight}
-                          marginBottom={selectedBlock.values.__marginBottom}
-                          marginLeft={selectedBlock.values.__marginLeft}
-                          elementTag="section"
-                          elementLabel={selectedBlock.name}
-                          onUpdatePadding={(patch) =>
-                            handleUpdateBlockValues(selectedBlock.id, {
-                              __paddingTop: patch.paddingTop ?? "",
-                              __paddingRight: patch.paddingRight ?? "",
-                              __paddingBottom: patch.paddingBottom ?? "",
-                              __paddingLeft: patch.paddingLeft ?? "",
-                              __paddingY: "",
-                              __paddingX: "",
-                            })
-                          }
-                          onUpdateMargin={(patch) =>
-                            handleUpdateBlockValues(selectedBlock.id, {
-                              __marginTop: patch.marginTop ?? "",
-                              __marginRight: patch.marginRight ?? "",
-                              __marginBottom: patch.marginBottom ?? "",
-                              __marginLeft: patch.marginLeft ?? "",
-                            })
-                          }
-                        />
-                      </div>
+                            selectedBlock.values.__paddingRight ||
+                            selectedBlock.values.__paddingY ||
+                            selectedBlock.values.__paddingX ||
+                            selectedBlock.values.__marginTop ||
+                            selectedBlock.values.__marginBottom ||
+                            selectedBlock.values.__marginLeft ||
+                            selectedBlock.values.__marginRight,
+                        ) ? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                            title="Espaciado personalizado"
+                          />
+                        ) : undefined
+                      }
+                      action={
+                        Boolean(
+                          selectedBlock.values.__paddingTop ||
+                            selectedBlock.values.__paddingBottom ||
+                            selectedBlock.values.__paddingLeft ||
+                            selectedBlock.values.__paddingRight ||
+                            selectedBlock.values.__paddingY ||
+                            selectedBlock.values.__paddingX ||
+                            selectedBlock.values.__marginTop ||
+                            selectedBlock.values.__marginBottom ||
+                            selectedBlock.values.__marginLeft ||
+                            selectedBlock.values.__marginRight,
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateBlockValues(selectedBlock.id, {
+                                __paddingTop: "",
+                                __paddingBottom: "",
+                                __paddingLeft: "",
+                                __paddingRight: "",
+                                __paddingY: "",
+                                __paddingX: "",
+                                __marginTop: "",
+                                __marginBottom: "",
+                                __marginLeft: "",
+                                __marginRight: "",
+                              })
+                            }
+                            className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                            title="Restablecer espaciado"
+                          >
+                            Reset
+                          </button>
+                        ) : undefined
+                      }
+                    >
+                      <BoxModelSpacingEditor
+                        paddingTop={
+                          selectedBlock.values.__paddingTop ||
+                          selectedBlock.values.__paddingY
+                        }
+                        paddingRight={
+                          selectedBlock.values.__paddingRight ||
+                          selectedBlock.values.__paddingX
+                        }
+                        paddingBottom={
+                          selectedBlock.values.__paddingBottom ||
+                          selectedBlock.values.__paddingY
+                        }
+                        paddingLeft={
+                          selectedBlock.values.__paddingLeft ||
+                          selectedBlock.values.__paddingX
+                        }
+                        marginTop={selectedBlock.values.__marginTop}
+                        marginRight={selectedBlock.values.__marginRight}
+                        marginBottom={selectedBlock.values.__marginBottom}
+                        marginLeft={selectedBlock.values.__marginLeft}
+                        onUpdatePadding={(patch) =>
+                          handleUpdateBlockValues(selectedBlock.id, {
+                            __paddingTop: patch.paddingTop ?? "",
+                            __paddingRight: patch.paddingRight ?? "",
+                            __paddingBottom: patch.paddingBottom ?? "",
+                            __paddingLeft: patch.paddingLeft ?? "",
+                            __paddingY: "",
+                            __paddingX: "",
+                          })
+                        }
+                        onUpdateMargin={(patch) =>
+                          handleUpdateBlockValues(selectedBlock.id, {
+                            __marginTop: patch.marginTop ?? "",
+                            __marginRight: patch.marginRight ?? "",
+                            __marginBottom: patch.marginBottom ?? "",
+                            __marginLeft: patch.marginLeft ?? "",
+                          })
+                        }
+                      />
+                    </StudioInspectorSection>
 
-                      {/* Stroke & Corner Radius */}
+                    {/* Dropdown 3: Border & Corner Radius */}
+                    <StudioInspectorSection
+                      title="Bordes y Esquinas"
+                      description="Grosor de borde y redondeo perimetral"
+                      icon={<Square className="h-3.5 w-3.5" />}
+                      defaultOpen={Boolean(
+                        (selectedBlock.values.__borderWidth &&
+                          selectedBlock.values.__borderWidth !== "0px") ||
+                          (selectedBlock.values.__borderRadius &&
+                            selectedBlock.values.__borderRadius !== "0px"),
+                      )}
+                      badge={
+                        Boolean(
+                          (selectedBlock.values.__borderWidth &&
+                            selectedBlock.values.__borderWidth !== "0px") ||
+                            (selectedBlock.values.__borderRadius &&
+                              selectedBlock.values.__borderRadius !== "0px"),
+                        ) ? (
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                            title="Bordes o esquinas personalizadas"
+                          />
+                        ) : undefined
+                      }
+                      action={
+                        Boolean(
+                          selectedBlock.values.__borderWidth ||
+                            selectedBlock.values.__borderRadius ||
+                            selectedBlock.values.__borderColor,
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateBlockValues(selectedBlock.id, {
+                                __borderWidth: "",
+                                __borderRadius: "",
+                                __borderColor: "",
+                              })
+                            }
+                            className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                            title="Restablecer bordes"
+                          >
+                            Reset
+                          </button>
+                        ) : undefined
+                      }
+                    >
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <span className="block text-[11px] text-zinc-600 mb-1">
-                            Border Width
+                            Grosor de Borde
                           </span>
                           <select
                             value={selectedBlock.values.__borderWidth || "0px"}
@@ -6254,7 +6505,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         </div>
                         <div>
                           <span className="block text-[11px] text-zinc-600 mb-1">
-                            Border Radius
+                            Redondeo de Esquinas
                           </span>
                           <select
                             value={selectedBlock.values.__borderRadius || "0px"}
@@ -6279,24 +6530,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         selectedBlock.values.__borderWidth !== "0px" && (
                           <div className="flex items-center justify-between gap-2 pt-1">
                             <span className="text-xs text-zinc-600">
-                              Border Color
+                              Color de Borde
                             </span>
                             <div className="flex items-center gap-1.5">
-                              <input
-                                type="color"
-                                value={
-                                  selectedBlock.values.__borderColor ||
-                                  documentState.theme.borderColor
-                                }
-                                onChange={(e) =>
-                                  handleUpdateBlockValue(
-                                    selectedBlock.id,
-                                    "__borderColor",
-                                    e.target.value,
-                                  )
-                                }
-                                className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                              />
+                              <label
+                                className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                                style={{
+                                  backgroundColor:
+                                    selectedBlock.values.__borderColor ||
+                                    documentState.theme.borderColor,
+                                }}
+                                title="Elegir color de borde de la sección"
+                              >
+                                <input
+                                  type="color"
+                                  value={
+                                    selectedBlock.values.__borderColor ||
+                                    documentState.theme.borderColor
+                                  }
+                                  onChange={(e) =>
+                                    handleUpdateBlockValue(
+                                      selectedBlock.id,
+                                      "__borderColor",
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </label>
                               <input
                                 type="text"
                                 placeholder="Por defecto"
@@ -6308,30 +6569,32 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     e.target.value,
                                   )
                                 }
-                                className="w-24 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:bg-white"
+                                className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                               />
                             </div>
                           </div>
                         )}
-                    </div>
+                    </StudioInspectorSection>
 
-
-
-                    {/* Collapsible Block Variables (Advanced / Raw template fields) */}
-                    <details className="border-t border-zinc-200 group">
-                      <summary className="p-3.5 flex items-center justify-between cursor-pointer select-none text-[11px] font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-800 transition-colors">
-                        <span className="flex items-center gap-1.5">
-                          <Type className="h-3.5 w-3.5 text-zinc-400" />
-                          Variables del Bloque ({selectedBlock.fields.length})
+                    {/* Dropdown 4: Block Variables (Raw template fields) */}
+                    <StudioInspectorSection
+                      title="Variables del Bloque"
+                      description="Valores dinámicos del módulo"
+                      icon={<Type className="h-3.5 w-3.5" />}
+                      badge={
+                        <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 text-[10px] font-mono text-zinc-600 font-semibold border border-zinc-200">
+                          {selectedBlock.fields.length}
                         </span>
-                        <ChevronRight className="h-3.5 w-3.5 text-zinc-400 transition-transform group-open:rotate-90" />
-                      </summary>
-
-                      <div className="px-3.5 pb-4 space-y-3">
-                        <p className="text-[11px] text-zinc-500">
-                          Valores crudos de plantilla. Para editar visualmente cualquier elemento (título, tarjeta, botón), haz clic sobre él en el lienzo.
-                        </p>
-                        {selectedBlock.fields.length === 0 ? (
+                      }
+                      defaultOpen={
+                        selectedBlock.fields.length > 0 &&
+                        selectedBlock.fields.length <= 4
+                      }
+                    >
+                      <p className="text-[11px] text-zinc-500">
+                        Valores crudos de plantilla. Para editar visualmente cualquier elemento (título, tarjeta, botón), haz clic sobre él en el lienzo.
+                      </p>
+                      {selectedBlock.fields.length === 0 ? (
                         <p className="text-xs text-zinc-500">
                           Este módulo no tiene variables{" "}
                           <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
@@ -6536,8 +6799,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           })}
                         </div>
                       )}
-                      </div>
-                    </details>
+                    </StudioInspectorSection>
                   </>
                 )}
               </div>
@@ -6555,14 +6817,19 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             )
           ) : (
             /* ============================================================= */
-            /* DESIGN TAB (Identical to OpenPage's Presets & Backgrounds!)   */
+            /* DESIGN TAB (Global Theme Presets & System Tokens)            */
             /* ============================================================= */
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-5">
-              {/* PRESETS 2-Column Visual Grid with Color Dots */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* PRESETS DE TEMA */}
               <div>
-                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 mb-2.5">
-                  PRESETS
-                </span>
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                    Presets de Tema
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">
+                    {STUDIO_THEME_PRESETS.length} paletas
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {STUDIO_THEME_PRESETS.map((preset) => {
                     const isCurrent =
@@ -6575,22 +6842,31 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         key={preset.id}
                         type="button"
                         onClick={() => handleUpdateTheme(preset.theme)}
-                        className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                        className={`group relative flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
                           isCurrent
-                            ? "bg-emerald-50 border-emerald-500 shadow-2xs"
-                            : "bg-zinc-50 border-zinc-200 hover:border-zinc-300"
+                            ? "bg-blue-50/50 border-blue-500 ring-2 ring-blue-500/20 shadow-2xs"
+                            : "bg-white hover:bg-zinc-50 border-zinc-200 hover:border-zinc-300"
                         }`}
                       >
+                        {isCurrent && (
+                          <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xs">
+                            <Check className="h-2.5 w-2.5" />
+                          </span>
+                        )}
                         <div className="flex items-center gap-1 mb-2">
                           {preset.dots.map((dot, i) => (
                             <span
                               key={i}
-                              className="h-3 w-3 rounded-full border border-black/10"
+                              className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-2xs"
                               style={{ backgroundColor: dot }}
                             />
                           ))}
                         </div>
-                        <span className="text-xs font-semibold text-zinc-800">
+                        <span
+                          className={`text-xs font-semibold leading-tight truncate w-full ${
+                            isCurrent ? "text-blue-900" : "text-zinc-800"
+                          }`}
+                        >
                           {preset.name}
                         </span>
                       </button>
@@ -6599,11 +6875,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 </div>
               </div>
 
-              {/* Backgrounds & Surfaces Card (OpenPage style) */}
-              <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-zinc-800">
-                    Backgrounds & Surfaces
+              {/* SUPERFICIES Y FONDOS */}
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 flex items-center gap-1.5">
+                    <Layers className="h-3 w-3 text-zinc-400" />
+                    Superficies y Fondos
                   </span>
                   <div className="flex items-center gap-1">
                     <span
@@ -6625,152 +6902,251 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   </div>
                 </div>
 
-                {(
-                  [
-                    { key: "bgColor", label: "Base" },
-                    { key: "cardBgColor", label: "Surface 1 (Cards)" },
-                    { key: "borderColor", label: "Border / Divider" },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="text-[11px] text-zinc-600">{label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="color"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="w-22 rounded-md bg-white border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:outline-none focus:border-blue-500"
-                      />
+                <div className="space-y-2">
+                  {(
+                    [
+                      { key: "bgColor", label: "Fondo de Página (Base)" },
+                      { key: "cardBgColor", label: "Tarjetas y Contenedores" },
+                      { key: "borderColor", label: "Bordes y Divisores" },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs text-zinc-600">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                          style={{ backgroundColor: documentState.theme[key] }}
+                          title={`Elegir color para ${label}`}
+                        >
+                          <input
+                            type="color"
+                            value={documentState.theme[key]}
+                            onChange={(e) =>
+                              handleUpdateTheme({ [key]: e.target.value })
+                            }
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          value={documentState.theme[key]}
+                          onChange={(e) =>
+                            handleUpdateTheme({ [key]: e.target.value })
+                          }
+                          className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Brand & Accents Card */}
-              <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
-                <span className="block text-xs font-semibold text-zinc-800 mb-1">
-                  Brand & Accents
-                </span>
-                {(
-                  [
-                    { key: "primaryColor", label: "Primary" },
-                    { key: "primaryLightColor", label: "Primary Hover" },
-                    { key: "accentColor", label: "Accent" },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="text-[11px] text-zinc-600">{label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="color"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="w-22 rounded-md bg-white border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Text Colors Card */}
-              <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
-                <span className="block text-xs font-semibold text-zinc-800 mb-1">
-                  Text
-                </span>
-                {(
-                  [
-                    { key: "textColor", label: "Primary Text" },
-                    { key: "mutedTextColor", label: "Muted Text" },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="text-[11px] text-zinc-600">{label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="color"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="h-6 w-6 rounded border border-zinc-300 bg-transparent cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={documentState.theme[key]}
-                        onChange={(e) =>
-                          handleUpdateTheme({ [key]: e.target.value })
-                        }
-                        className="w-22 rounded-md bg-white border border-zinc-200 px-2 py-1 text-[11px] font-mono text-zinc-800 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Typography & Radius */}
-              <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-3 space-y-2.5">
-                <span className="block text-xs font-semibold text-zinc-800 mb-1">
-                  Typography & Radius
-                </span>
-                <div>
-                  <label className="block text-[11px] text-zinc-600 mb-1">
-                    Heading Font
-                  </label>
-                  <input
-                    type="text"
-                    value={documentState.theme.fontHeading}
-                    onChange={(e) =>
-                      handleUpdateTheme({ fontHeading: e.target.value })
-                    }
-                    className="w-full rounded-md bg-white border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none focus:border-blue-500"
-                  />
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-[11px] text-zinc-600 mb-1">
-                    Body Font
-                  </label>
-                  <input
-                    type="text"
-                    value={documentState.theme.fontBody}
-                    onChange={(e) =>
-                      handleUpdateTheme({ fontBody: e.target.value })
-                    }
-                    className="w-full rounded-md bg-white border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none focus:border-blue-500"
-                  />
+              </div>
+
+              {/* COLORES DE MARCA */}
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-amber-500" />
+                  Colores de Marca
+                </span>
+                <div className="space-y-2">
+                  {(
+                    [
+                      { key: "primaryColor", label: "Color Primario (Botones)" },
+                      { key: "primaryLightColor", label: "Hover Primario" },
+                      { key: "accentColor", label: "Color de Acento" },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs text-zinc-600">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                          style={{ backgroundColor: documentState.theme[key] }}
+                          title={`Elegir color para ${label}`}
+                        >
+                          <input
+                            type="color"
+                            value={documentState.theme[key]}
+                            onChange={(e) =>
+                              handleUpdateTheme({ [key]: e.target.value })
+                            }
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          value={documentState.theme[key]}
+                          onChange={(e) =>
+                            handleUpdateTheme({ [key]: e.target.value })
+                          }
+                          className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+              </div>
+
+              {/* COLORES DE TEXTO */}
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 flex items-center gap-1.5">
+                  <Type className="h-3 w-3 text-zinc-400" />
+                  Colores de Texto
+                </span>
+                <div className="space-y-2">
+                  {(
+                    [
+                      { key: "textColor", label: "Texto Principal" },
+                      { key: "mutedTextColor", label: "Texto Secundario" },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs text-zinc-600">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          className="relative flex items-center justify-center h-6 w-6 rounded-md border border-zinc-300 shadow-2xs cursor-pointer overflow-hidden transition-transform hover:scale-105 shrink-0"
+                          style={{ backgroundColor: documentState.theme[key] }}
+                          title={`Elegir color para ${label}`}
+                        >
+                          <input
+                            type="color"
+                            value={documentState.theme[key]}
+                            onChange={(e) =>
+                              handleUpdateTheme({ [key]: e.target.value })
+                            }
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          value={documentState.theme[key]}
+                          onChange={(e) =>
+                            handleUpdateTheme({ [key]: e.target.value })
+                          }
+                          className="w-22 rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono font-medium text-zinc-800 uppercase focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* TIPOGRAFÍA GLOBAL */}
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 flex items-center gap-1.5">
+                  <Type className="h-3 w-3 text-zinc-400" />
+                  Tipografía Global
+                </span>
+
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] text-zinc-600 mb-1">
-                      Radius MD
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                      Fuente de Títulos
+                    </label>
+                    <input
+                      type="text"
+                      value={documentState.theme.fontHeading}
+                      onChange={(e) =>
+                        handleUpdateTheme({ fontHeading: e.target.value })
+                      }
+                      className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {[
+                        {
+                          label: "Playfair (Serif)",
+                          val: "'Playfair Display', Georgia, serif",
+                        },
+                        {
+                          label: "Jakarta (Sans)",
+                          val: "'Plus Jakarta Sans', system-ui, sans-serif",
+                        },
+                        {
+                          label: "Inter",
+                          val: "'Inter', system-ui, sans-serif",
+                        },
+                        { label: "Outfit", val: "'Outfit', sans-serif" },
+                      ].map((f) => (
+                        <button
+                          key={f.label}
+                          type="button"
+                          onClick={() =>
+                            handleUpdateTheme({ fontHeading: f.val })
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
+                            documentState.theme.fontHeading === f.val
+                              ? "bg-blue-100 text-blue-800 font-semibold border border-blue-200"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 border border-zinc-200"
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                      Fuente de Párrafos
+                    </label>
+                    <input
+                      type="text"
+                      value={documentState.theme.fontBody}
+                      onChange={(e) =>
+                        handleUpdateTheme({ fontBody: e.target.value })
+                      }
+                      className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {[
+                        {
+                          label: "Plus Jakarta",
+                          val: "'Plus Jakarta Sans', system-ui, sans-serif",
+                        },
+                        {
+                          label: "Inter",
+                          val: "'Inter', system-ui, sans-serif",
+                        },
+                        { label: "Roboto", val: "'Roboto', sans-serif" },
+                      ].map((f) => (
+                        <button
+                          key={f.label}
+                          type="button"
+                          onClick={() =>
+                            handleUpdateTheme({ fontBody: f.val })
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
+                            documentState.theme.fontBody === f.val
+                              ? "bg-blue-100 text-blue-800 font-semibold border border-blue-200"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 border border-zinc-200"
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* REDONDEO DE ESQUINAS */}
+              <div className="pt-4 border-t border-zinc-200/80 space-y-3">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 flex items-center gap-1.5">
+                  <Box className="h-3 w-3 text-zinc-400" />
+                  Redondeo de Esquinas
+                </span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                      Tarjetas (Radius MD)
                     </label>
                     <input
                       type="text"
@@ -6778,12 +7154,13 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       onChange={(e) =>
                         handleUpdateTheme({ radiusMd: e.target.value })
                       }
-                      className="w-full rounded-md bg-white border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:outline-none focus:border-blue-500"
+                      placeholder="12px"
+                      className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:outline-none focus:border-blue-500 focus:bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-zinc-600 mb-1">
-                      Radius LG
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                      Botones (Radius LG)
                     </label>
                     <input
                       type="text"
@@ -6791,9 +7168,29 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       onChange={(e) =>
                         handleUpdateTheme({ radiusLg: e.target.value })
                       }
-                      className="w-full rounded-md bg-white border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:outline-none focus:border-blue-500"
+                      placeholder="20px"
+                      className="w-full rounded-md bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:outline-none focus:border-blue-500 focus:bg-white"
                     />
                   </div>
+                </div>
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {[
+                    { label: "Recto (0px)", md: "0px", lg: "0px" },
+                    { label: "Suave (8px)", md: "8px", lg: "14px" },
+                    { label: "Moderno (14px)", md: "14px", lg: "24px" },
+                    { label: "Píldora", md: "16px", lg: "9999px" },
+                  ].map((r) => (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() =>
+                        handleUpdateTheme({ radiusMd: r.md, radiusLg: r.lg })
+                      }
+                      className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 transition"
+                    >
+                      {r.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
