@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildBlockSubLayerTree,
   buildSubElementScopedCss,
   compileLandingDocument,
   compileLandingFromDocument,
+  createBlankContainerBlock,
   createDefaultLandingDocument,
   createDefaultLandingTemplate,
   deleteSubElementInBlock,
@@ -234,7 +236,196 @@ describe("landing-compiler", () => {
     expect(decoded.name).toBe("Plantilla Bistro");
     expect(decoded.document.blocks.length).toBe(doc.blocks.length);
   });
+
+  describe("buildBlockSubLayerTree (Figma-style nested layers)", () => {
+    it("builds a nested tree for header module with nav and links", () => {
+      const headerMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "header")!;
+      const block = createBlockFromBuiltinModule(headerMod);
+
+      const tree = buildBlockSubLayerTree(block);
+      expect(tree.length).toBeGreaterThan(0);
+
+      // Root node
+      const rootNode = tree[0];
+      expect(rootNode.tag).toBe("header");
+      expect(rootNode.children.length).toBeGreaterThan(0);
+
+      // Find nav node among descendants
+      const containerNode = rootNode.children[0];
+      const navNode = containerNode.children.find((c) => c.tag === "nav");
+      expect(navNode).toBeDefined();
+      expect(navNode?.label).toContain("Menú");
+
+      // navNode should have its children links nested inside it
+      expect(navNode?.children.length).toBeGreaterThanOrEqual(3);
+      expect(navNode?.children[0].iconType).toBe("link");
+      expect(navNode?.children[0].label).toContain("Inicio");
+    });
+
+    it("builds a nested tree for specialties-grid with cards and inner elements", () => {
+      const specMod = BUILTIN_LANDING_MODULES.find(
+        (m) => m.moduleKey === "specialties-grid",
+      )!;
+      const block = createBlockFromBuiltinModule(specMod);
+
+      const tree = buildBlockSubLayerTree(block);
+      expect(tree.length).toBeGreaterThan(0);
+
+      const root = tree[0];
+      expect(root.tag).toBe("section");
+
+      // Container -> cards grid -> card articles
+      const container = root.children[0];
+      const cardsGrid = container.children.find((c) =>
+        c.label.includes("Grilla"),
+      );
+      expect(cardsGrid).toBeDefined();
+      expect(cardsGrid?.children.length).toBeGreaterThanOrEqual(3);
+
+      const firstCard = cardsGrid?.children[0];
+      expect(firstCard?.tag).toBe("article");
+      expect(firstCard?.iconType).toBe("card");
+
+      // Inside the card, children are nested (div/img, h3, p)
+      expect(firstCard?.children.length).toBeGreaterThanOrEqual(3);
+      const cardTitle = firstCard?.children.find((c) => c.tag === "h3");
+      expect(cardTitle).toBeDefined();
+      expect(cardTitle?.iconType).toBe("text");
+    });
+
+    it("computes selectors that match the block root relative path", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const block = createBlockFromBuiltinModule(heroMod);
+
+      const tree = buildBlockSubLayerTree(block);
+      const root = tree[0];
+
+      expect(root.selector).toBe("section:nth-of-type(1)");
+      if (root.children.length > 0) {
+        expect(root.children[0].selector).toContain("section:nth-of-type(1) >");
+      }
+    });
+  });
+
+  describe("createBlankContainerBlock and nested container insertion", () => {
+    it("creates an empty blank container block", () => {
+      const containerBlock = createBlankContainerBlock();
+      expect(containerBlock.id).toContain("container-");
+      expect(containerBlock.moduleKey).toBe("blank-container");
+      expect(containerBlock.htmlTemplate).toContain("content-container");
+      expect(containerBlock.htmlTemplate).toContain("Arrastrá componentes");
+
+      const tree = buildBlockSubLayerTree(containerBlock);
+      expect(tree.length).toBeGreaterThan(0);
+      const innerContainer = tree[0].children[0]?.children[0];
+      expect(innerContainer?.label).toContain("Contenedor");
+    });
+
+    it("creates a container block pre-populated with 2 columns", () => {
+      const colBlock = createBlankContainerBlock("columns-2");
+      expect(colBlock.htmlTemplate).toContain("grid-columns-2");
+      expect(colBlock.htmlTemplate).toContain("repeat(auto-fit, minmax(280px, 1fr))");
+
+      const tree = buildBlockSubLayerTree(colBlock);
+      expect(tree.length).toBeGreaterThan(0);
+      const root = tree[0];
+      const grid = root.children[0]?.children.find((c) =>
+        c.label.includes("Grilla"),
+      );
+      expect(grid).toBeDefined();
+    });
+
+    it("inserts layout elements (columns-3, flex-row, card, divider, link, button-secondary) into a block", () => {
+      let block = createBlankContainerBlock();
+
+      // Insert columns-3
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1)",
+        "columns-3",
+      );
+      expect(block.htmlTemplate).toContain("grid-columns-3");
+      expect(block.htmlTemplate).toContain("repeat(auto-fit, minmax(220px, 1fr))");
+
+      // Insert flex-row
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1)",
+        "flex-row",
+      );
+      expect(block.htmlTemplate).toContain("display: flex");
+
+      // Insert button-secondary
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1)",
+        "button-secondary",
+      );
+      expect(block.htmlTemplate).toContain("btn-secondary");
+
+      // Insert link
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1)",
+        "link",
+      );
+      expect(block.htmlTemplate).toContain("text-decoration: underline");
+
+      // Insert divider
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1)",
+        "divider",
+      );
+      expect(block.htmlTemplate).toContain("<hr");
+    });
+
+    it("cleanly replaces placeholder paragraph when inserting into a blank container", () => {
+      let block = createBlankContainerBlock();
+      expect(block.htmlTemplate).toContain("Contenedor Libre — Arrastrá componentes");
+
+      // Insert heading into the content container
+      block = insertInnerElementInBlock(
+        block,
+        "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)",
+        "heading",
+      );
+
+      expect(block.htmlTemplate).not.toContain("Contenedor Libre — Arrastrá componentes");
+      expect(block.htmlTemplate).toContain("<h3");
+      const headingKey = Object.keys(block.values).find((k) => k.startsWith("heading"));
+      expect(headingKey).toBeDefined();
+      expect(block.values[headingKey!]).toBe("Nuevo Título Destacado");
+    });
+
+    it("cleanly replaces placeholder paragraph when inserting into a grid column and labels columns", () => {
+      let block = createBlankContainerBlock("columns-2");
+      const tree = buildBlockSubLayerTree(block);
+      const root = tree[0];
+      const grid = root.children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(grid).toBeDefined();
+      expect(grid?.children.length).toBe(2);
+      expect(grid?.children[0].label).toBe("Columna 1");
+      expect(grid?.children[1].label).toBe("Columna 2");
+
+      // Insert image into Columna 1
+      const col1Selector = grid!.children[0].selector;
+      block = insertInnerElementInBlock(block, col1Selector, "image");
+
+      expect(block.htmlTemplate).not.toContain("Columna 1 — Arrastrá componentes aquí");
+      expect(block.htmlTemplate).toContain("Columna 2 — Arrastrá componentes aquí");
+      expect(block.htmlTemplate).toContain("<img");
+
+      // Insert button into Columna 2
+      const col2Selector = grid!.children[1].selector;
+      block = insertInnerElementInBlock(block, col2Selector, "button");
+
+      expect(block.htmlTemplate).not.toContain("Columna 2 — Arrastrá componentes aquí");
+      expect(block.htmlTemplate).toContain("btn-primary");
+    });
+  });
 });
+
 
 
 

@@ -678,6 +678,12 @@ html[data-preview-mode="true"] [data-landing-field] {
 html[data-preview-mode="true"] #__landing-editor-toolbar {
   display: none !important;
 }
+html:not([data-preview-mode="true"]) .landing-drag-target {
+  outline: 2px dashed #2563eb !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12) !important;
+  position: relative !important;
+}
 a[data-original-href] {
   -webkit-user-drag: none;
   user-select: text;
@@ -778,6 +784,14 @@ a[data-original-href] {
     if (tag === 'a') return 'Enlace';
     if (/^h[1-6]$/.test(tag)) return 'Título (' + tag.toUpperCase() + ')';
     if (tag === 'p') return 'Párrafo';
+    if (/\\bgrid-columns-2\\b/.test(cls)) return 'Grilla (2 Col)';
+    if (/\\bgrid-columns-3\\b/.test(cls)) return 'Grilla (3 Col)';
+    if (/\\bflex-row\\b/.test(cls)) return 'Fila Flexible';
+    if (/\\bcontent-container\\b/.test(cls)) return 'Contenedor';
+    if (/\\bgrid-column\\b/.test(cls) || (el.parentElement && /\\b(grid-columns-2|grid-columns-3)\\b/.test(el.parentElement.className || ''))) {
+      var colIdx = Array.prototype.indexOf.call(el.parentElement ? el.parentElement.children : [], el) + 1;
+      return 'Columna ' + (colIdx || 1);
+    }
     if (tag === 'article' || /\\b(card|info-card|stat-card|spotlight-card|review-card)\\b/.test(cls)) return 'Tarjeta';
     if (tag === 'figure' || /\\bgallery-item\\b/.test(cls)) return 'Foto de Galería';
     if (tag === 'details' || /\\bfaq-item\\b/.test(cls)) return 'Pregunta FAQ';
@@ -786,6 +800,7 @@ a[data-original-href] {
     if (/\\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\\b/.test(cls)) return 'Insignia';
     if (/\\b(cards-grid|info-grid|gallery-mosaic|stats-strip-grid)\\b/.test(cls)) return 'Grilla';
     if (/\\b(hero-actions|section-cta-wrap|footer-links)\\b/.test(cls)) return 'Grupo de Botones';
+    if (tag === 'hr') return 'Separador';
     return 'Elemento (' + tag + ')';
   }
 
@@ -823,6 +838,34 @@ a[data-original-href] {
     }
   }
 
+  function isEditableContainer(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var cls = el.className && typeof el.className === 'string' ? el.className : '';
+    if (/\\b(content-container|content-box|grid-columns-2|grid-columns-3|grid-column|flex-row)\\b/.test(cls)) {
+      return true;
+    }
+    if (el.parentElement) {
+      var pCls = el.parentElement.className && typeof el.parentElement.className === 'string' ? el.parentElement.className : '';
+      if (/\\b(grid-columns-2|grid-columns-3|flex-row)\\b/.test(pCls)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isLayoutWrapper(el, blockEl) {
+    if (!el || el === blockEl) return true;
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'section' || tag === 'header' || tag === 'footer' || tag === 'main') return true;
+    if (isEditableContainer(el)) return false;
+    if (el.parentElement === blockEl) return true;
+    var cls = el.className && typeof el.className === 'string' ? el.className.toLowerCase() : '';
+    if (/^container$|\\b(nav-container|hero-content|hero-inner|section-header|wrapper|content-wrapper)\\b/.test(cls)) {
+      return true;
+    }
+    return false;
+  }
+
   function resolveSelectableSubElement(target, blockEl) {
     if (!target || !blockEl || target === blockEl) return null;
     var el = target.nodeType === 1 ? target : target.parentElement;
@@ -830,20 +873,46 @@ a[data-original-href] {
 
     var fieldWrapper = closestEl(el, '[data-landing-field]');
     if (fieldWrapper && fieldWrapper.parentElement && blockEl.contains(fieldWrapper.parentElement)) {
-      el = fieldWrapper.parentElement;
+      return fieldWrapper.parentElement;
     }
 
     var interactiveParent = closestEl(el, 'a, button');
     if (interactiveParent && blockEl.contains(interactiveParent)) {
-      el = interactiveParent;
+      return interactiveParent;
     }
 
-    if (el === blockEl) return null;
-    if (el.parentElement === blockEl) return null;
-    var cls = el.className && typeof el.className === 'string' ? el.className : '';
-    if (/\\bcontainer\\b/.test(cls) && el.parentElement && el.parentElement.parentElement === blockEl) {
+    var contentEl = closestEl(el, 'img, h1, h2, h3, h4, h5, h6, p, summary, li, time');
+    if (contentEl && blockEl.contains(contentEl)) {
+      return contentEl;
+    }
+
+    var cardEl = closestEl(el, 'article, figure, details, .card, .info-card, .stat-card, .gallery-item, .faq-item, .feature-item, .spotlight-card, .review-card, .hero-badge, .card-badge, .promo-tag, .section-kicker');
+    if (cardEl && blockEl.contains(cardEl) && cardEl !== blockEl) {
+      return cardEl;
+    }
+
+    if (isEditableContainer(el)) {
+      return el;
+    }
+
+    var editableAncestor = closestEl(el, '.content-container, .grid-columns-2, .grid-columns-3, .grid-column, .flex-row');
+    if (editableAncestor && blockEl.contains(editableAncestor) && editableAncestor !== blockEl) {
+      return editableAncestor;
+    }
+
+    if (isLayoutWrapper(el, blockEl)) {
       return null;
     }
+
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'span' || tag === 'strong' || tag === 'em' || tag === 'small' || tag === 'b' || tag === 'i' || tag === 'hr') {
+      return el;
+    }
+
+    if (el.children && el.children.length > 1) {
+      return null;
+    }
+
     return el;
   }
 
@@ -859,6 +928,14 @@ a[data-original-href] {
     var boundSrcField = subEl.getAttribute('data-bound-src') || null;
     var boundHrefField = subEl.getAttribute('data-bound-href') || null;
     var boundAltField = subEl.getAttribute('data-bound-alt') || null;
+
+    var childFieldKeys = [];
+    if (boundTextField) childFieldKeys.push(boundTextField);
+    var innerFields = subEl.querySelectorAll('[data-landing-field]');
+    innerFields.forEach(function(f) {
+      var k = f.getAttribute('data-landing-field');
+      if (k && childFieldKeys.indexOf(k) === -1) childFieldKeys.push(k);
+    });
 
     var ancestors = [];
     var cur = subEl.parentElement;
@@ -891,6 +968,7 @@ a[data-original-href] {
       boundSrcField: boundSrcField,
       boundHrefField: boundHrefField,
       boundAltField: boundAltField,
+      childFieldKeys: childFieldKeys,
       currentSrc: tag === 'img' ? (subEl.getAttribute('src') || '') : '',
       currentAlt: tag === 'img' ? (subEl.getAttribute('alt') || '') : '',
       currentHref: subEl.getAttribute('data-original-href') || subEl.getAttribute('href') || '',
@@ -1121,6 +1199,93 @@ a[data-original-href] {
     }
   }, true);
 
+  var currentDragTargetEl = null;
+
+  document.addEventListener('dragenter', function(e) {
+    if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
+    e.preventDefault();
+  }, false);
+
+  document.addEventListener('dragover', function(e) {
+    if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    var blockEl = closestEl(e.target, '[data-landing-block]');
+    var subEl = blockEl ? resolveSelectableSubElement(e.target, blockEl) : null;
+    var targetEl = subEl || blockEl;
+    if (targetEl !== currentDragTargetEl) {
+      if (currentDragTargetEl) currentDragTargetEl.classList.remove('landing-drag-target');
+      currentDragTargetEl = targetEl;
+      if (currentDragTargetEl) currentDragTargetEl.classList.add('landing-drag-target');
+    }
+  }, false);
+
+  document.addEventListener('dragleave', function(e) {
+    if (!e.relatedTarget && currentDragTargetEl) {
+      currentDragTargetEl.classList.remove('landing-drag-target');
+      currentDragTargetEl = null;
+    }
+  }, false);
+
+  document.addEventListener('drop', function(e) {
+    if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
+    e.preventDefault();
+    if (currentDragTargetEl) {
+      currentDragTargetEl.classList.remove('landing-drag-target');
+      currentDragTargetEl = null;
+    }
+    var blockEl = closestEl(e.target, '[data-landing-block]');
+    var blockId = blockEl ? blockEl.getAttribute('data-landing-block') : null;
+    var subEl = blockEl ? resolveSelectableSubElement(e.target, blockEl) : null;
+    var subSelector = (blockEl && subEl) ? computeRelativeSelector(blockEl, subEl) : null;
+
+    var componentKind = '';
+    var builtinKey = '';
+    var customId = '';
+    try {
+      if (e.dataTransfer) {
+        componentKind = e.dataTransfer.getData('application/x-landing-component') || '';
+        builtinKey = e.dataTransfer.getData('application/x-landing-builtin') || '';
+        customId = e.dataTransfer.getData('application/x-landing-custom') || '';
+        var plainText = e.dataTransfer.getData('text/plain') || '';
+        if (!componentKind && plainText.indexOf('landing-component:') === 0) {
+          componentKind = plainText.substring('landing-component:'.length);
+        }
+        if (!builtinKey && plainText.indexOf('landing-builtin:') === 0) {
+          builtinKey = plainText.substring('landing-builtin:'.length);
+        }
+        if (!customId && plainText.indexOf('landing-custom:') === 0) {
+          customId = plainText.substring('landing-custom:'.length);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      if (!componentKind && window.parent && window.parent.__draggedComponentKind) {
+        componentKind = window.parent.__draggedComponentKind;
+      }
+      if (!builtinKey && window.parent && window.parent.__draggedBuiltinKey) {
+        builtinKey = window.parent.__draggedBuiltinKey;
+      }
+      if (!customId && window.parent && window.parent.__draggedCustomId) {
+        customId = window.parent.__draggedCustomId;
+      }
+    } catch (_) {}
+
+    try {
+      window.parent.postMessage({
+        type: 'LANDING_CANVAS_DROP',
+        blockId: blockId,
+        subSelector: subSelector,
+        componentKind: componentKind,
+        builtinKey: builtinKey,
+        customId: customId
+      }, '*');
+    } catch (_) {}
+  }, false);
+
   function scrollToAnchorTarget(rawHash) {
     if (!rawHash || typeof rawHash !== 'string') return false;
     var cleanId = rawHash.replace(/^#+/, '').trim();
@@ -1294,6 +1459,21 @@ a[data-original-href] {
 
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'LANDING_HOVER_SUBELEMENT') {
+      if (currentHoverEl) {
+        currentHoverEl.removeAttribute('data-sub-hover');
+        currentHoverEl = null;
+      }
+      if (e.data.blockId && e.data.subSelector) {
+        var bEl = document.querySelector('[data-landing-block="' + e.data.blockId + '"]');
+        var targetSub = bEl ? findSubElementBySelector(bEl, e.data.subSelector) : null;
+        if (targetSub) {
+          targetSub.setAttribute('data-sub-hover', 'true');
+          currentHoverEl = targetSub;
+        }
+      }
+      return;
+    }
     if (e.data.type === 'LANDING_SCROLL_TO_ANCHOR' && typeof e.data.anchor === 'string') {
       scrollToAnchorTarget(e.data.anchor);
       return;
@@ -1888,11 +2068,18 @@ export function deleteSubElementInBlock(
 
 export type InsertableInnerElementKind =
   | "button"
+  | "button-secondary"
+  | "link"
   | "image"
   | "heading"
   | "text"
   | "badge"
-  | "card";
+  | "divider"
+  | "card"
+  | "container"
+  | "columns-2"
+  | "columns-3"
+  | "flex-row";
 
 export function insertInnerElementInBlock(
   block: LandingBlock,
@@ -1972,38 +2159,124 @@ export function insertInnerElementInBlock(
     nextValues[titleKey] = "Nueva Especialidad";
     nextValues[textKey] = "Descripción breve del plato, promoción o experiencia destacada.";
     snippet = `<article class="card">\n  <div class="card-icon">{{${iconKey}}}</div>\n  <h3 class="card-title">{{${titleKey}}}</h3>\n  <p class="card-text">{{${textKey}}}</p>\n</article>`;
+  } else if (kind === "button-secondary") {
+    const textKey = generateUniqueFieldKey("btnSecText", usedKeys);
+    const urlKey = generateUniqueFieldKey("btnSecUrl", usedKeys);
+    nextFields.push(
+      { key: textKey, label: "Texto botón secundario", type: "text", defaultValue: "Más Información" },
+      { key: urlKey, label: "URL botón secundario", type: "url", defaultValue: "#" },
+    );
+    nextValues[textKey] = "Más Información";
+    nextValues[urlKey] = "#";
+    snippet = `<a href="{{${urlKey}}}" class="btn btn-secondary" style="margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; border-radius: var(--radius-md, 10px); font-weight: 600; text-decoration: none; border: 1px solid var(--color-border, #cbd5e1); color: inherit; background: transparent;">{{${textKey}}}</a>`;
+  } else if (kind === "link") {
+    const textKey = generateUniqueFieldKey("linkText", usedKeys);
+    const urlKey = generateUniqueFieldKey("linkUrl", usedKeys);
+    nextFields.push(
+      { key: textKey, label: "Texto del enlace", type: "text", defaultValue: "Ver más detalles →" },
+      { key: urlKey, label: "URL del enlace", type: "url", defaultValue: "#" },
+    );
+    nextValues[textKey] = "Ver más detalles →";
+    nextValues[urlKey] = "#";
+    snippet = `<a href="{{${urlKey}}}" class="text-link" style="color: var(--color-primary, #2563eb); text-decoration: underline; font-weight: 500; font-size: 14px;">{{${textKey}}}</a>`;
+  } else if (kind === "divider") {
+    snippet = `<hr style="border: 0; border-top: 1px solid rgba(0,0,0,0.1); margin: 24px 0; width: 100%;" />`;
+  } else if (kind === "container") {
+    snippet = `<div class="content-container" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.15); border-radius: var(--radius-md, 12px); margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0 0 10px; font-weight: 500;">Contenedor (Soltá o agregá elementos acá)</p>\n</div>`;
+  } else if (kind === "columns-2") {
+    snippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>\n  </div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">\n    <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>\n  </div>\n</div>`;
+  } else if (kind === "columns-3") {
+    snippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 20px 0; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+  } else if (kind === "flex-row") {
+    snippet = `<div class="flex-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
+  }
+
+  function isPlaceholderParagraph(n: HtmlAstNode, html: string): boolean {
+    if (n.tagName.toLowerCase() !== "p") return false;
+    const inner = html.slice(n.innerStartOffset, n.innerEndOffset);
+    return /Arrastr[áa]|Contenedor Libre|Columna \d|Fila Flexible|Solt[áa] o agreg[áa]/i.test(
+      inner,
+    );
   }
 
   const ast = parseHtmlTemplateAst(block.htmlTemplate);
+  let replaceRange: { start: number; end: number } | null = null;
   let insertOffset = block.htmlTemplate.length;
 
   if (targetSelector) {
     const found = findAstNodeByRelativeSelector(ast, targetSelector);
     if (found) {
-      const containerTags = new Set(["div", "section", "article", "header", "footer", "nav", "figure", "details"]);
-      if (
-        !found.node.selfClosing &&
-        containerTags.has(found.node.tagName) &&
-        !(kind === "card" && found.node.tagName === "article")
-      ) {
-        insertOffset = found.node.innerEndOffset;
+      if (isPlaceholderParagraph(found.node, block.htmlTemplate)) {
+        replaceRange = {
+          start: found.node.startOffset,
+          end: found.node.endOffset,
+        };
       } else {
-        insertOffset = found.node.endOffset;
+        const placeholderChild = found.node.children.find((c) =>
+          isPlaceholderParagraph(c, block.htmlTemplate),
+        );
+        if (placeholderChild) {
+          replaceRange = {
+            start: placeholderChild.startOffset,
+            end: placeholderChild.endOffset,
+          };
+        } else {
+          const containerTags = new Set([
+            "div",
+            "section",
+            "article",
+            "header",
+            "footer",
+            "nav",
+            "figure",
+            "details",
+          ]);
+          if (
+            !found.node.selfClosing &&
+            containerTags.has(found.node.tagName) &&
+            !(kind === "card" && found.node.tagName === "article")
+          ) {
+            insertOffset = found.node.innerEndOffset;
+          } else {
+            insertOffset = found.node.endOffset;
+          }
+        }
       }
     }
   } else if (ast.length > 0) {
     const rootNode = ast[0]!;
-    const firstContainer =
-      rootNode.children.find((c) => c.tagName === "div") ?? rootNode;
-    insertOffset = firstContainer.innerEndOffset;
+    let foundPlaceholder: HtmlAstNode | null = null;
+    const walk = (n: HtmlAstNode) => {
+      if (foundPlaceholder) return;
+      if (isPlaceholderParagraph(n, block.htmlTemplate)) {
+        foundPlaceholder = n;
+        return;
+      }
+      for (const child of n.children) walk(child);
+    };
+    walk(rootNode);
+
+    if (foundPlaceholder) {
+      replaceRange = {
+        start: (foundPlaceholder as HtmlAstNode).startOffset,
+        end: (foundPlaceholder as HtmlAstNode).endOffset,
+      };
+    } else {
+      const firstContainer =
+        rootNode.children.find((c) => c.tagName === "div") ?? rootNode;
+      insertOffset = firstContainer.innerEndOffset;
+    }
   }
 
-  const nextHtmlTemplate =
-    block.htmlTemplate.slice(0, insertOffset) +
-    "\n" +
-    snippet +
-    "\n" +
-    block.htmlTemplate.slice(insertOffset);
+  const nextHtmlTemplate = replaceRange
+    ? block.htmlTemplate.slice(0, replaceRange.start) +
+      snippet +
+      block.htmlTemplate.slice(replaceRange.end)
+    : block.htmlTemplate.slice(0, insertOffset) +
+      "\n" +
+      snippet +
+      "\n" +
+      block.htmlTemplate.slice(insertOffset);
 
   const synced = syncFieldsWithHtmlTemplate(
     nextFields,
@@ -2016,6 +2289,40 @@ export function insertInnerElementInBlock(
     htmlTemplate: nextHtmlTemplate,
     fields: synced.fields,
     values: synced.values,
+  };
+}
+
+export function createBlankContainerBlock(
+  initialKind?: InsertableInnerElementKind,
+): LandingBlock {
+  const blockId = `block-container-${Math.random().toString(36).slice(2, 8)}`;
+  let innerSnippet = `<div class="content-container" style="padding: 32px; border: 2px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Contenedor Libre — Arrastrá componentes o hacé clic para insertar</p>\n</div>`;
+
+  if (initialKind === "columns-2") {
+    innerSnippet = `<div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n</div>`;
+  } else if (initialKind === "columns-3") {
+    innerSnippet = `<div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box;">\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p></div>\n  <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;"><p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3 — Arrastrá componentes aquí</p></div>\n</div>`;
+  } else if (initialKind === "flex-row") {
+    innerSnippet = `<div class="flex-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; width: 100%; box-sizing: border-box;">\n  <p style="color: #94a3b8; font-size: 12px; margin: 0;">Fila Flexible</p>\n</div>`;
+  }
+
+  const htmlTemplate = `<!-- Sección Contenedor -->\n<section class="section" style="padding: 48px 0;">\n  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">\n    ${innerSnippet}\n  </div>\n</section>`;
+
+  return {
+    id: blockId,
+    moduleKey: "blank-container",
+    name:
+      initialKind === "columns-2"
+        ? "Sección 2 Columnas"
+        : initialKind === "columns-3"
+          ? "Sección 3 Columnas"
+          : "Sección Contenedor",
+    visible: true,
+    fields: [],
+    values: {},
+    htmlTemplate,
+    cssTemplate: "",
+    jsTemplate: "",
   };
 }
 
@@ -2149,4 +2456,336 @@ export function createDefaultLandingTemplate(
     css: compiled.cssContent,
     js: compiled.jsContent,
   };
+}
+
+// ============================================================================
+// Figma-style Sub-Layer Tree Construction
+// ============================================================================
+
+export type LandingSubLayerIconType =
+  | "container"
+  | "text"
+  | "image"
+  | "button"
+  | "link"
+  | "card"
+  | "badge";
+
+export interface LandingSubLayerNode {
+  id: string;
+  selector: string;
+  tag: string;
+  label: string;
+  iconType: LandingSubLayerIconType;
+  childFieldKeys: string[];
+  children: LandingSubLayerNode[];
+}
+
+function extractNodeAttributes(
+  html: string,
+  node: HtmlAstNode,
+): {
+  id: string;
+  className: string;
+  alt: string;
+  src: string;
+  href: string;
+  ariaLabel: string;
+} {
+  const openTag = html.slice(node.startOffset, node.openTagEndOffset);
+  const id = /\bid\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  const className = /\bclass\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  const alt = /\balt\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  const ariaLabel =
+    /\baria-label\s*=\s*["']([^"']+)["']/i.exec(openTag)?.[1] || "";
+  return { id, className, alt, src, href, ariaLabel };
+}
+
+function extractNodeTextPreview(
+  html: string,
+  node: HtmlAstNode,
+  values: Record<string, string>,
+): string {
+  const innerHtml = html.slice(node.innerStartOffset, node.innerEndOffset);
+  return innerHtml
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => values[key] ?? key)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncateString(str: string, maxLen: number): string {
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 1) + "…";
+}
+
+function findCardTitleText(
+  node: HtmlAstNode,
+  html: string,
+  values: Record<string, string>,
+): string | null {
+  for (const child of node.children) {
+    if (/^h[1-6]$/i.test(child.tagName)) {
+      const text = extractNodeTextPreview(html, child, values);
+      if (text) return text;
+    }
+    const attrs = extractNodeAttributes(html, child);
+    if (/title|name|heading/i.test(attrs.className)) {
+      const text = extractNodeTextPreview(html, child, values);
+      if (text) return text;
+    }
+  }
+  return null;
+}
+
+function isDecorativeEmptyNode(node: HtmlAstNode, html: string): boolean {
+  const tag = node.tagName.toLowerCase();
+  if (tag !== "span" && tag !== "i" && tag !== "b" && tag !== "em") {
+    return false;
+  }
+  if (node.children.length > 0) return false;
+  const inner = html.slice(node.innerStartOffset, node.innerEndOffset).trim();
+  if (inner.length > 0) return false;
+  const attrs = extractNodeAttributes(html, node);
+  if (attrs.ariaLabel) return false;
+  return true;
+}
+
+function mapAstNodeToSubLayer(
+  block: LandingBlock,
+  node: HtmlAstNode,
+  selector: string,
+  parentNode?: HtmlAstNode,
+  columnPosition?: number,
+): LandingSubLayerNode | null {
+  if (isDecorativeEmptyNode(node, block.htmlTemplate)) {
+    return null;
+  }
+
+  const tag = node.tagName.toLowerCase();
+  const attrs = extractNodeAttributes(block.htmlTemplate, node);
+  const textPreview = extractNodeTextPreview(
+    block.htmlTemplate,
+    node,
+    block.values,
+  );
+  const subtreeHtml = block.htmlTemplate.slice(node.startOffset, node.endOffset);
+  const childFieldKeys = extractTemplateVariables(subtreeHtml);
+
+  let iconType: LandingSubLayerIconType = "container";
+  let label = tag;
+  let forceLeaf = false;
+
+  if (tag === "img") {
+    iconType = "image";
+    forceLeaf = true;
+    if (attrs.alt) {
+      label = `Imagen ("${truncateString(attrs.alt, 20)}")`;
+    } else {
+      const boundVar = childFieldKeys[0];
+      label = boundVar ? `Imagen (${boundVar})` : "Imagen";
+    }
+  } else if (tag === "button") {
+    iconType = "button";
+    forceLeaf = true;
+    const btnText = textPreview || attrs.ariaLabel;
+    label = btnText ? `Botón ("${truncateString(btnText, 22)}")` : "Botón";
+  } else if (tag === "a") {
+    const isBtn = /\bbtn\b/.test(attrs.className);
+    iconType = isBtn ? "button" : "link";
+    forceLeaf = true;
+    const aText = textPreview || attrs.ariaLabel;
+    if (aText) {
+      label = isBtn
+        ? `Botón ("${truncateString(aText, 22)}")`
+        : `Enlace ("${truncateString(aText, 22)}")`;
+    } else if (attrs.href && attrs.href !== "#") {
+      label = `Enlace (${truncateString(attrs.href, 20)})`;
+    } else {
+      label = isBtn ? "Botón" : "Enlace";
+    }
+  } else if (/^h[1-6]$/.test(tag)) {
+    iconType = "text";
+    forceLeaf = true;
+    label = textPreview
+      ? `${tag.toUpperCase()} ("${truncateString(textPreview, 24)}")`
+      : `Título (${tag.toUpperCase()})`;
+  } else if (tag === "p") {
+    iconType = "text";
+    forceLeaf = true;
+    label = textPreview
+      ? `Párrafo ("${truncateString(textPreview, 24)}")`
+      : "Párrafo";
+  } else if (
+    /\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\b/.test(
+      attrs.className,
+    )
+  ) {
+    iconType = "badge";
+    forceLeaf = true;
+    label = textPreview
+      ? `Insignia ("${truncateString(textPreview, 20)}")`
+      : "Insignia";
+  } else if (
+    tag === "article" ||
+    /\b(card|info-card|stat-card|gallery-item|faq-item|feature-item|spotlight-card|review-card)\b/.test(
+      attrs.className,
+    )
+  ) {
+    iconType = "card";
+    const cardTitle = findCardTitleText(node, block.htmlTemplate, block.values);
+    label = cardTitle
+      ? `Tarjeta ("${truncateString(cardTitle, 20)}")`
+      : "Tarjeta";
+  } else if (tag === "nav") {
+    iconType = "container";
+    label = "Menú (nav)";
+  } else if (tag === "ul" || tag === "ol") {
+    iconType = "container";
+    label = tag === "ol" ? "Lista ordenada" : "Lista";
+  } else if (tag === "li") {
+    iconType = "container";
+    label = textPreview
+      ? `Ítem ("${truncateString(textPreview, 20)}")`
+      : "Ítem de lista";
+  } else if (tag === "details") {
+    iconType = "card";
+    const summaryChild = node.children.find(
+      (c) => c.tagName.toLowerCase() === "summary",
+    );
+    const sumText = summaryChild
+      ? extractNodeTextPreview(block.htmlTemplate, summaryChild, block.values)
+      : "";
+    label = sumText
+      ? `Pregunta ("${truncateString(sumText, 20)}")`
+      : "Pregunta FAQ";
+  } else if (tag === "summary") {
+    iconType = "text";
+    forceLeaf = true;
+    label = textPreview
+      ? `Pregunta ("${truncateString(textPreview, 22)}")`
+      : "Pregunta";
+  } else if (
+    tag === "span" ||
+    tag === "strong" ||
+    tag === "em" ||
+    tag === "small"
+  ) {
+  } else if (tag === "hr") {
+    iconType = "container";
+    forceLeaf = true;
+    label = "Separador (Línea)";
+  } else {
+    iconType = "container";
+    if (/\bgrid-columns-2\b/.test(attrs.className)) {
+      label = "Grilla (2 Columnas)";
+    } else if (/\bgrid-columns-3\b/.test(attrs.className)) {
+      label = "Grilla (3 Columnas)";
+    } else if (/\bflex-row\b/.test(attrs.className)) {
+      label = "Fila Flexible";
+    } else if (/\bcontent-container|content-box\b/.test(attrs.className)) {
+      label = "Contenedor";
+    } else if (/\bgrid-column\b/.test(attrs.className)) {
+      label = columnPosition ? `Columna ${columnPosition}` : "Columna";
+    } else if (parentNode) {
+      const parentAttrs = extractNodeAttributes(block.htmlTemplate, parentNode);
+      if (/\bgrid-columns-2|grid-columns-3\b/.test(parentAttrs.className)) {
+        label = columnPosition ? `Columna ${columnPosition}` : "Columna";
+      } else if (/\bcards-grid|grid|mosaic|gallery-mosaic\b/.test(attrs.className)) {
+        label = "Grilla";
+      } else if (
+        /\b(hero-actions|cta-wrap|btn-group|buttons)\b/.test(attrs.className)
+      ) {
+        label = "Grupo de Botones";
+      } else if (/\bsection-header\b/.test(attrs.className)) {
+        label = "Encabezado de Sección";
+      } else if (/\b(container|nav-container)\b/.test(attrs.className)) {
+        label = "Contenedor (.container)";
+      } else if (tag === "header") {
+        label = "Encabezado (header)";
+      } else if (tag === "footer") {
+        label = "Pie de página (footer)";
+      } else if (attrs.className) {
+        const firstCls = attrs.className.trim().split(/\s+/)[0];
+        label = `${tag}.${firstCls}`;
+      } else {
+        label = tag;
+      }
+    } else if (/\bcards-grid|grid|mosaic|gallery-mosaic\b/.test(attrs.className)) {
+      label = "Grilla";
+    } else if (
+      /\b(hero-actions|cta-wrap|btn-group|buttons)\b/.test(attrs.className)
+    ) {
+      label = "Grupo de Botones";
+    } else if (/\bsection-header\b/.test(attrs.className)) {
+      label = "Encabezado de Sección";
+    } else if (/\b(container|nav-container)\b/.test(attrs.className)) {
+      label = "Contenedor (.container)";
+    } else if (tag === "header") {
+      label = "Encabezado (header)";
+    } else if (tag === "footer") {
+      label = "Pie de página (footer)";
+    } else if (attrs.className) {
+      const firstCls = attrs.className.trim().split(/\s+/)[0];
+      label = `${tag}.${firstCls}`;
+    } else {
+      label = tag;
+    }
+  }
+
+  const children: LandingSubLayerNode[] = [];
+  if (!forceLeaf && node.children.length > 0) {
+    const childTagCounts = new Map<string, number>();
+    for (const child of node.children) {
+      const childTag = child.tagName.toLowerCase();
+      const count = (childTagCounts.get(childTag) || 0) + 1;
+      childTagCounts.set(childTag, count);
+      const childSelector = `${selector} > ${childTag}:nth-of-type(${count})`;
+      const childSubLayer = mapAstNodeToSubLayer(
+        block,
+        child,
+        childSelector,
+        node,
+        count,
+      );
+      if (childSubLayer) {
+        children.push(childSubLayer);
+      }
+    }
+  }
+
+  return {
+    id: `${block.id}:${selector}`,
+    selector,
+    tag,
+    label,
+    iconType,
+    childFieldKeys,
+    children,
+  };
+}
+
+export function buildBlockSubLayerTree(
+  block: LandingBlock,
+): LandingSubLayerNode[] {
+  const ast = parseHtmlTemplateAst(block.htmlTemplate);
+  if (!ast || ast.length === 0) return [];
+
+  const tagCounts = new Map<string, number>();
+  const result: LandingSubLayerNode[] = [];
+
+  for (const rootNode of ast) {
+    const tag = rootNode.tagName.toLowerCase();
+    const count = (tagCounts.get(tag) || 0) + 1;
+    tagCounts.set(tag, count);
+    const selector = `${tag}:nth-of-type(${count})`;
+    const node = mapAstNodeToSubLayer(block, rootNode, selector);
+    if (node) {
+      result.push(node);
+    }
+  }
+
+  return result;
 }

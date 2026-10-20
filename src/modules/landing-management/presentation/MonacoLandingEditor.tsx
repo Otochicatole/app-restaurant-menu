@@ -32,6 +32,7 @@ import {
   Copy,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Palette,
   LayoutTemplate,
   Download,
@@ -63,6 +64,10 @@ import {
   CornerLeftUp,
   Link2,
   MousePointerClick,
+  Columns,
+  Grid,
+  Minus,
+  Rows,
 } from "lucide-react";
 import type {
   LandingBlock,
@@ -80,8 +85,10 @@ import {
   type BuiltinLandingModuleDefinition,
 } from "./../domain/landing-module-catalog";
 import {
+  buildBlockSubLayerTree,
   compileLandingDocument,
   compileLandingFromDocument,
+  createBlankContainerBlock,
   createDefaultLandingDocument,
   createDefaultLandingTemplate,
   deleteSubElementInBlock,
@@ -95,6 +102,8 @@ import {
   syncFieldsWithHtmlTemplate,
   updateSubElementAttributeInBlock,
   type InsertableInnerElementKind,
+  type LandingSubLayerIconType,
+  type LandingSubLayerNode,
 } from "../domain/landing-compiler";
 import {
   saveLandingDraftAction,
@@ -115,7 +124,7 @@ loader.config({
 });
 
 type ViewportMode = "desktop" | "tablet" | "mobile";
-type LeftSidebarTab = "layers" | "components";
+type LeftSidebarTab = "layers" | "components" | "modules";
 type RightSidebarTab = "properties" | "design";
 type CodeDrawerMode = "closed" | "block" | "global";
 type CodeTab = "html" | "css" | "js" | "json";
@@ -139,6 +148,7 @@ type SelectedSubElementInfo = {
   boundSrcField: string | null;
   boundHrefField: string | null;
   boundAltField: string | null;
+  childFieldKeys?: string[];
   currentSrc: string;
   currentAlt: string;
   currentHref: string;
@@ -356,6 +366,8 @@ const STUDIO_THEME_PRESETS: ThemePresetItem[] = [
 ];
 
 function getModuleIcon(moduleKey: string) {
+  if (moduleKey === "blank-container") return Box;
+  if (moduleKey === "columns-container") return Columns;
   if (moduleKey === "header") return Compass;
   if (moduleKey === "hero") return Sparkles;
   if (moduleKey === "custom-card" || moduleKey === "card") return Box;
@@ -370,6 +382,363 @@ function getModuleIcon(moduleKey: string) {
   if (moduleKey === "faq-accordion") return HelpCircle;
   if (moduleKey.startsWith("custom:")) return Wrench;
   return Code2;
+}
+
+interface DraggableComponentItem {
+  kind: InsertableInnerElementKind;
+  name: string;
+  category: "layout" | "text" | "action" | "media";
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tag: string;
+}
+
+const ATOMIC_COMPONENTS_CATALOG: DraggableComponentItem[] = [
+  // Layout & Contenedores
+  {
+    kind: "container",
+    name: "Contenedor",
+    category: "layout",
+    description: "Caja contenedora flexible con relleno",
+    icon: Box,
+    tag: "div.container",
+  },
+  {
+    kind: "columns-2",
+    name: "2 Columnas",
+    category: "layout",
+    description: "Grilla responsive de 2 columnas",
+    icon: Columns,
+    tag: "grid 2 cols",
+  },
+  {
+    kind: "columns-3",
+    name: "3 Columnas",
+    category: "layout",
+    description: "Grilla responsive de 3 columnas",
+    icon: Grid,
+    tag: "grid 3 cols",
+  },
+  {
+    kind: "flex-row",
+    name: "Fila Flexible",
+    category: "layout",
+    description: "Alinea elementos horizontalmente con espacio",
+    icon: Rows,
+    tag: "flex row",
+  },
+  {
+    kind: "card",
+    name: "Tarjeta (Card)",
+    category: "layout",
+    description: "Caja de contenido con borde y sombra",
+    icon: Layers,
+    tag: "article.card",
+  },
+  // Textos y Títulos
+  {
+    kind: "heading",
+    name: "Título / Subtítulo",
+    category: "text",
+    description: "Encabezado H3 destacado",
+    icon: Type,
+    tag: "h3",
+  },
+  {
+    kind: "text",
+    name: "Párrafo de Texto",
+    category: "text",
+    description: "Texto descriptivo con variable",
+    icon: Type,
+    tag: "p",
+  },
+  {
+    kind: "badge",
+    name: "Insignia (Badge)",
+    category: "text",
+    description: "Etiqueta pill destacada",
+    icon: Sparkles,
+    tag: "span.badge",
+  },
+  // Acciones y Enlaces
+  {
+    kind: "button",
+    name: "Botón Principal (CTA)",
+    category: "action",
+    description: "Llamado a la acción con estilo primario",
+    icon: MousePointerClick,
+    tag: "a.btn-primary",
+  },
+  {
+    kind: "button-secondary",
+    name: "Botón Secundario",
+    category: "action",
+    description: "Botón estilo outline o suave",
+    icon: MousePointerClick,
+    tag: "a.btn-secondary",
+  },
+  {
+    kind: "link",
+    name: "Enlace de Texto",
+    category: "action",
+    description: "Enlace de navegación subrayado",
+    icon: Link2,
+    tag: "a.link",
+  },
+  // Medios y Separadores
+  {
+    kind: "image",
+    name: "Imagen / Foto",
+    category: "media",
+    description: "Foto responsive con selector multimedia",
+    icon: ImageIcon,
+    tag: "img",
+  },
+  {
+    kind: "divider",
+    name: "Separador (Línea)",
+    category: "media",
+    description: "Línea horizontal divisoria",
+    icon: Minus,
+    tag: "hr",
+  },
+];
+
+function SubLayerIcon({
+  iconType,
+  className,
+}: {
+  iconType: LandingSubLayerIconType;
+  className?: string;
+}) {
+  switch (iconType) {
+    case "image":
+      return <ImageIcon className={className} />;
+    case "button":
+      return <MousePointerClick className={className} />;
+    case "link":
+      return <Link2 className={className} />;
+    case "text":
+      return <Type className={className} />;
+    case "card":
+      return <Layers className={className} />;
+    case "badge":
+      return <Sparkles className={className} />;
+    case "container":
+    default:
+      return <Box className={className} />;
+  }
+}
+
+interface SubLayerTreeRowProps {
+  block: LandingBlock;
+  node: LandingSubLayerNode;
+  depth: number;
+  selectedBlockId: string | null;
+  activeSubElementSelector?: string | null;
+  expandedSubLayerIds: Record<string, boolean>;
+  onSelectSubElement: (blockId: string, selector: string) => void;
+  onHoverSubElement: (blockId: string | null, selector: string | null) => void;
+  onToggleExpand: (nodeId: string, e: React.MouseEvent) => void;
+  onDuplicateSubElement: (blockId: string, selector: string) => void;
+  onDeleteSubElement: (blockId: string, selector: string) => void;
+  onDropComponentOnSubElement?: (
+    blockId: string,
+    selector: string,
+    kind: InsertableInnerElementKind,
+  ) => void;
+  draggedComponentKind?: InsertableInnerElementKind | null;
+}
+
+interface LandingDragWindow extends Window {
+  __draggedComponentKind?: InsertableInnerElementKind | null;
+  __draggedBuiltinKey?: string | null;
+  __draggedCustomId?: string | null;
+}
+
+function getDragWindow(): LandingDragWindow | null {
+  if (typeof window === "undefined") return null;
+  return window as unknown as LandingDragWindow;
+}
+
+function SubLayerTreeRow({
+  block,
+  node,
+  depth,
+  selectedBlockId,
+  activeSubElementSelector,
+  expandedSubLayerIds,
+  onSelectSubElement,
+  onHoverSubElement,
+  onToggleExpand,
+  onDuplicateSubElement,
+  onDeleteSubElement,
+  onDropComponentOnSubElement,
+  draggedComponentKind,
+}: SubLayerTreeRowProps) {
+  const [isDropOver, setIsDropOver] = useState(false);
+  const isSelected =
+    selectedBlockId === block.id &&
+    activeSubElementSelector === node.selector;
+  const hasChildren = node.children.length > 0;
+  const isExpanded = expandedSubLayerIds[node.id] !== false; // default expanded
+
+  return (
+    <div className="flex flex-col">
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectSubElement(block.id, node.selector);
+        }}
+        onMouseEnter={() => onHoverSubElement(block.id, node.selector)}
+        onMouseLeave={() => onHoverSubElement(null, null)}
+        onDragOver={(e) => {
+          let hasComponent = Boolean(
+            draggedComponentKind ||
+              (typeof window !== "undefined" &&
+                (window as unknown as LandingDragWindow)
+                  ?.__draggedComponentKind),
+          );
+          if (!hasComponent && e.dataTransfer) {
+            try {
+              const plain = e.dataTransfer.getData("text/plain") || "";
+              if (
+                plain.startsWith("landing-component:") ||
+                e.dataTransfer.types.includes("application/x-landing-component")
+              ) {
+                hasComponent = true;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (hasComponent) {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDropOver(true);
+          }
+        }}
+        onDragLeave={() => setIsDropOver(false)}
+        onDrop={(e) => {
+          let kind =
+            draggedComponentKind ||
+            (typeof window !== "undefined"
+              ? (window as unknown as LandingDragWindow)
+                  ?.__draggedComponentKind
+              : null);
+          if (!kind) {
+            try {
+              const plain = e.dataTransfer.getData("text/plain") || "";
+              if (plain.startsWith("landing-component:")) {
+                kind = plain.slice(
+                  "landing-component:".length,
+                ) as InsertableInnerElementKind;
+              } else {
+                kind = (e.dataTransfer.getData(
+                  "application/x-landing-component",
+                ) || null) as InsertableInnerElementKind | null;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (kind) {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDropOver(false);
+            onDropComponentOnSubElement?.(block.id, node.selector, kind);
+          }
+        }}
+        style={{ paddingLeft: `${4 + depth * 10}px` }}
+        className={`group flex items-center justify-between gap-1.5 py-1.5 pr-2 rounded-md cursor-pointer text-xs transition-colors border ${
+          isDropOver
+            ? "bg-blue-100/90 border-blue-400 text-blue-900 ring-2 ring-blue-300"
+            : isSelected
+              ? "bg-violet-100/90 border-violet-300 text-violet-900 font-semibold shadow-2xs"
+              : "border-transparent hover:bg-zinc-100/80 text-zinc-600 hover:text-zinc-900"
+        }`}
+        title={`Seleccionar ${node.label}`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={(e) => onToggleExpand(node.id, e)}
+              className="p-0.5 -ml-1 text-zinc-400 hover:text-zinc-700 rounded hover:bg-zinc-200/60"
+              title={isExpanded ? "Colapsar capa" : "Expandir capa"}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3 w-3 shrink-0" />
+              )}
+            </button>
+          ) : (
+            <span className="w-3 shrink-0" />
+          )}
+
+          <span
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded ${
+              isSelected
+                ? "text-violet-700"
+                : "text-zinc-400 group-hover:text-zinc-600"
+            }`}
+          >
+            <SubLayerIcon iconType={node.iconType} className="h-3 w-3" />
+          </span>
+
+          <span className="truncate text-[11px] font-normal" title={node.label}>
+            {node.label}
+          </span>
+        </div>
+
+        <div
+          className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => onDuplicateSubElement(block.id, node.selector)}
+            className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
+            title="Duplicar este elemento"
+          >
+            <Copy className="h-2.5 w-2.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDeleteSubElement(block.id, node.selector)}
+            className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded"
+            title="Eliminar este elemento"
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div className="flex flex-col">
+          {node.children.map((child) => (
+            <SubLayerTreeRow
+              key={child.id}
+              block={block}
+              node={child}
+              depth={depth + 1}
+              selectedBlockId={selectedBlockId}
+              activeSubElementSelector={activeSubElementSelector}
+              expandedSubLayerIds={expandedSubLayerIds}
+              onSelectSubElement={onSelectSubElement}
+              onHoverSubElement={onHoverSubElement}
+              onToggleExpand={onToggleExpand}
+              onDuplicateSubElement={onDuplicateSubElement}
+              onDeleteSubElement={onDeleteSubElement}
+              onDropComponentOnSubElement={onDropComponentOnSubElement}
+              draggedComponentKind={draggedComponentKind}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
@@ -414,6 +783,63 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const [componentSearch, setComponentSearch] = useState("");
   const [draggedLayerIndex, setDraggedLayerIndex] = useState<number | null>(null);
   const [isDraggingComponentOverCanvas, setIsDraggingComponentOverCanvas] = useState(false);
+  const [draggedComponentKind, setDraggedComponentKind] =
+    useState<InsertableInnerElementKind | null>(null);
+  const [draggedBuiltinKey, setDraggedBuiltinKey] = useState<string | null>(null);
+  const [draggedCustomId, setDraggedCustomId] = useState<string | null>(null);
+  const [selectedComponentCategory, setSelectedComponentCategory] = useState<
+    "all" | "layout" | "text" | "action" | "media"
+  >("all");
+
+  // Nested Figma-style Layers state
+  const [expandedBlockIds, setExpandedBlockIds] = useState<
+    Record<string, boolean>
+  >(() => {
+    const initial: Record<string, boolean> = {};
+    if (initialDoc.blocks[0]) {
+      initial[initialDoc.blocks[0].id] = true;
+    }
+    return initial;
+  });
+  const [expandedSubLayerIds, setExpandedSubLayerIds] = useState<
+    Record<string, boolean>
+  >({});
+
+  const toggleBlockExpanded = useCallback(
+    (blockId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpandedBlockIds((prev) => ({
+        ...prev,
+        [blockId]: prev[blockId] === false ? true : false,
+      }));
+    },
+    [],
+  );
+
+  const toggleSubLayerExpanded = useCallback(
+    (nodeId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpandedSubLayerIds((prev) => ({
+        ...prev,
+        [nodeId]: prev[nodeId] === false ? true : false,
+      }));
+    },
+    [],
+  );
+
+  const handleHoverSubElement = useCallback(
+    (blockId: string | null, subSelector: string | null) => {
+      iframeRef.current?.contentWindow?.postMessage(
+        {
+          type: "LANDING_HOVER_SUBELEMENT",
+          blockId,
+          subSelector,
+        },
+        "*",
+      );
+    },
+    [],
+  );
 
   // Libraries state
   const [customModules, setCustomModules] = useState<LandingCustomModuleView[]>(
@@ -461,6 +887,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     selectedSubElement,
   );
   const interactiveCanvasRef = useRef<boolean>(interactiveCanvas);
+  const draggedComponentKindRef =
+    useRef<InsertableInnerElementKind | null>(null);
+  const draggedBuiltinKeyRef = useRef<string | null>(null);
+  const draggedCustomIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedBlockIdRef.current = selectedBlockId;
@@ -473,6 +903,35 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   useEffect(() => {
     interactiveCanvasRef.current = interactiveCanvas;
   }, [interactiveCanvas]);
+
+  useEffect(() => {
+    draggedComponentKindRef.current = draggedComponentKind;
+  }, [draggedComponentKind]);
+
+  useEffect(() => {
+    draggedBuiltinKeyRef.current = draggedBuiltinKey;
+  }, [draggedBuiltinKey]);
+
+  useEffect(() => {
+    draggedCustomIdRef.current = draggedCustomId;
+  }, [draggedCustomId]);
+
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      setIsDraggingComponentOverCanvas(false);
+      setDraggedComponentKind(null);
+      setDraggedBuiltinKey(null);
+      setDraggedCustomId(null);
+      const win = getDragWindow();
+      if (win) {
+        win.__draggedComponentKind = null;
+        win.__draggedBuiltinKey = null;
+        win.__draggedCustomId = null;
+      }
+    };
+    window.addEventListener("dragend", handleGlobalDragEnd);
+    return () => window.removeEventListener("dragend", handleGlobalDragEnd);
+  }, []);
 
   const updateDocument = useCallback(
     (
@@ -734,6 +1193,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       : activeSubElement.currentHref;
   }, [selectedBlock, activeSubElement]);
 
+  const blockSubLayerTrees = useMemo(() => {
+    const map = new Map<string, LandingSubLayerNode[]>();
+    for (const block of documentState.blocks) {
+      map.set(block.id, buildBlockSubLayerTree(block));
+    }
+    return map;
+  }, [documentState.blocks]);
+
   const pageAnchors = useMemo(
     () => resolveDocumentBlockAnchors(documentState.blocks),
     [documentState.blocks],
@@ -761,6 +1228,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       setSelectedSubElement(null);
       if (blockId) {
         setRightTab("properties");
+        setExpandedBlockIds((prev) => ({ ...prev, [blockId]: true }));
       }
       if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage(
@@ -781,6 +1249,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     (blockId: string, subSelector: string | null) => {
       setSelectedBlockId(blockId);
       setRightTab("properties");
+      setExpandedBlockIds((prev) => ({ ...prev, [blockId]: true }));
       if (!subSelector) {
         setSelectedSubElement(null);
       }
@@ -856,6 +1325,28 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     (customModule: LandingCustomModuleView) => {
       const created = createBlockFromCustomModule(customModule);
       insertBlockSmartly(created);
+    },
+    [insertBlockSmartly],
+  );
+
+  const handleCreateContainerSection = useCallback(
+    (kind?: InsertableInnerElementKind) => {
+      let created = createBlankContainerBlock(kind);
+      if (
+        kind &&
+        kind !== "container" &&
+        kind !== "columns-2" &&
+        kind !== "columns-3" &&
+        kind !== "flex-row"
+      ) {
+        created = insertInnerElementInBlock(created, null, kind);
+      }
+      insertBlockSmartly(created);
+      setFeedback({
+        type: "success",
+        message:
+          "Sección creada con tu componente.",
+      });
     },
     [insertBlockSmartly],
   );
@@ -1321,23 +1812,80 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         } else if (data.action === "delete") {
           handleDeleteBlock(data.blockId);
         }
+      } else if (data.type === "LANDING_CANVAS_DROP") {
+        setIsDraggingComponentOverCanvas(false);
+        const dragWin = getDragWindow();
+        const compKind = (data.componentKind ||
+          draggedComponentKindRef.current ||
+          dragWin?.__draggedComponentKind) as InsertableInnerElementKind | null;
+        const bKey = (data.builtinKey ||
+          draggedBuiltinKeyRef.current ||
+          dragWin?.__draggedBuiltinKey) as string | null;
+        const cId = (data.customId ||
+          draggedCustomIdRef.current ||
+          dragWin?.__draggedCustomId) as string | null;
+
+        if (compKind) {
+          if (data.blockId) {
+            handleInsertInnerElement(
+              data.blockId,
+              data.subSelector ?? null,
+              compKind,
+            );
+            selectSubElementOnStudio(data.blockId, data.subSelector ?? null);
+          } else if (selectedBlockIdRef.current) {
+            handleInsertInnerElement(
+              selectedBlockIdRef.current,
+              null,
+              compKind,
+            );
+          } else {
+            handleCreateContainerSection(compKind);
+          }
+          setDraggedComponentKind(null);
+          if (dragWin) {
+            dragWin.__draggedComponentKind = null;
+          }
+        } else if (bKey) {
+          const found = BUILTIN_LANDING_MODULES.find(
+            (m) => m.moduleKey === bKey,
+          );
+          if (found) handleAddBuiltinBlock(found);
+          setDraggedBuiltinKey(null);
+          if (dragWin) {
+            dragWin.__draggedBuiltinKey = null;
+          }
+        } else if (cId) {
+          const found = customModules.find((m) => m.id === cId);
+          if (found) handleAddCustomBlock(found);
+          setDraggedCustomId(null);
+          if (dragWin) {
+            dragWin.__draggedCustomId = null;
+          }
+        }
       }
     };
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [
+    customModules,
     documentState.blocks,
+    handleAddBuiltinBlock,
+    handleAddCustomBlock,
+    handleCreateContainerSection,
     handleDeleteBlock,
     handleDeleteSubElement,
     handleDuplicateBlock,
     handleDuplicateSubElement,
+    handleInsertInnerElement,
     handleMoveBlock,
     handleMoveSubElement,
     handleRedo,
     handleSaveDraft,
     handleUndo,
     handleUpdateBlockValue,
+    selectSubElementOnStudio,
   ]);
 
   const handlePublish = () => {
@@ -1632,6 +2180,23 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     );
   }, [customModules, componentSearch]);
 
+  const filteredAtomicComponents = useMemo(() => {
+    const q = componentSearch.trim().toLowerCase();
+    return ATOMIC_COMPONENTS_CATALOG.filter((item) => {
+      const matchesCategory =
+        selectedComponentCategory === "all" ||
+        item.category === selectedComponentCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.tag.toLowerCase().includes(q) ||
+        item.kind.toLowerCase().includes(q)
+      );
+    });
+  }, [componentSearch, selectedComponentCategory]);
+
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-100 text-zinc-900 overflow-hidden select-none">
       {/* ================================================================= */}
@@ -1862,32 +2427,44 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* --------------------------------------------------------------- */}
         {/* LEFT SIDEBAR: Layers & + Components (OpenPage / M3E Canvas)     */}
         {/* --------------------------------------------------------------- */}
-        <aside className="w-68 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
-          {/* Segmented Pill Toggle: Layers | + Components */}
-          <div className="p-2.5 border-b border-zinc-200">
-            <div className="grid grid-cols-2 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+        <aside className="w-80 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
+          {/* Segmented Pill Toggle: Layers | Components | Modules */}
+          <div className="p-2 border-b border-zinc-200">
+            <div className="grid grid-cols-3 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
               <button
                 type="button"
                 onClick={() => setLeftTab("layers")}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
                   leftTab === "layers"
                     ? "bg-white text-zinc-900 shadow-2xs"
                     : "text-zinc-500 hover:text-zinc-900"
                 }`}
               >
-                <Layers className="h-3.5 w-3.5" />
+                <Layers className="h-3 w-3" />
                 Capas
               </button>
               <button
                 type="button"
                 onClick={() => setLeftTab("components")}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
                   leftTab === "components"
-                    ? "bg-white text-zinc-900 shadow-2xs"
+                    ? "bg-white text-blue-700 shadow-2xs"
                     : "text-zinc-500 hover:text-zinc-900"
                 }`}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Box className="h-3 w-3 text-blue-600" />
+                Componentes
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftTab("modules")}
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                  leftTab === "modules"
+                    ? "bg-white text-amber-700 shadow-2xs"
+                    : "text-zinc-500 hover:text-zinc-900"
+                }`}
+              >
+                <Sparkles className="h-3 w-3 text-amber-500" />
                 Módulos
               </button>
             </div>
@@ -1906,91 +2483,174 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
               <div className="flex-1 overflow-y-auto px-2 space-y-1">
                 {documentState.blocks.map((block, idx) => {
-                  const active = block.id === selectedBlockId;
+                  const isBlockSelected = block.id === selectedBlockId;
+                  const isSectionActive = isBlockSelected && !activeSubElement;
                   const Icon = getModuleIcon(block.moduleKey);
+                  const subLayers = blockSubLayerTrees.get(block.id) || [];
+                  const hasSubLayers = subLayers.length > 0;
+                  const isBlockExpanded = expandedBlockIds[block.id] !== false;
+
                   return (
-                    <div
-                      key={block.id}
-                      draggable
-                      onDragStart={() => setDraggedLayerIndex(idx)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (draggedLayerIndex !== null) {
-                          handleReorderBlocks(draggedLayerIndex, idx);
-                          setDraggedLayerIndex(null);
-                        }
-                      }}
-                      onClick={() => selectBlockOnStudio(block.id, true)}
-                      className={`group flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all border ${
-                        active
-                          ? "bg-blue-50/80 border-blue-300 text-blue-900 shadow-2xs font-medium"
-                          : "bg-transparent border-transparent hover:bg-zinc-50 text-zinc-700"
-                      } ${!block.visible ? "opacity-45" : ""}`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <GripVertical className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
-                            active
-                              ? "bg-blue-100 border-blue-200 text-blue-600"
-                              : "bg-zinc-100 border-zinc-200 text-zinc-500"
-                          }`}
+                    <div key={block.id} className="flex flex-col">
+                      <div
+                        draggable
+                        onDragStart={() => setDraggedLayerIndex(idx)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDrop={(e) => {
+                          if (draggedComponentKind) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleInsertInnerElement(
+                              block.id,
+                              null,
+                              draggedComponentKind,
+                            );
+                            setDraggedComponentKind(null);
+                            return;
+                          }
+                          if (draggedLayerIndex !== null) {
+                            handleReorderBlocks(draggedLayerIndex, idx);
+                            setDraggedLayerIndex(null);
+                          }
+                        }}
+                        onClick={() => selectBlockOnStudio(block.id, true)}
+                        className={`group flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all border ${
+                          isSectionActive
+                            ? "bg-blue-50/80 border-blue-300 text-blue-900 shadow-2xs font-medium"
+                            : isBlockSelected
+                              ? "bg-zinc-100/70 border-zinc-200 text-zinc-800"
+                              : "bg-transparent border-transparent hover:bg-zinc-50 text-zinc-700"
+                        } ${!block.visible ? "opacity-45" : ""}`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {hasSubLayers ? (
+                            <button
+                              type="button"
+                              onClick={(e) => toggleBlockExpanded(block.id, e)}
+                              className="p-0.5 text-zinc-400 hover:text-zinc-700 rounded hover:bg-zinc-200/60"
+                              title={
+                                isBlockExpanded
+                                  ? "Colapsar capas del bloque"
+                                  : "Expandir capas del bloque"
+                              }
+                            >
+                              {isBlockExpanded ? (
+                                <ChevronDown className="h-3 w-3 shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 shrink-0" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="w-3 shrink-0" />
+                          )}
+
+                          <GripVertical className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+                              isSectionActive
+                                ? "bg-blue-100 border-blue-200 text-blue-600"
+                                : "bg-zinc-100 border-zinc-200 text-zinc-500"
+                            }`}
+                          >
+                            <Icon className="h-3 w-3" />
+                          </span>
+                          <span className="text-xs font-medium truncate">
+                            {block.name}
+                          </span>
+                        </div>
+
+                        <div
+                          className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="text-xs font-medium truncate">
-                          {block.name}
-                        </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleBlockVisibility(block.id)}
+                            className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
+                            title={block.visible ? "Ocultar" : "Mostrar"}
+                          >
+                            {block.visible ? (
+                              <Eye className="h-3 w-3" />
+                            ) : (
+                              <EyeOff className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateBlock(block)}
+                            className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
+                            title="Duplicar"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBlock(block.id)}
+                            className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
 
-                      <div
-                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleToggleBlockVisibility(block.id)}
-                          className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
-                          title={block.visible ? "Ocultar" : "Mostrar"}
-                        >
-                          {block.visible ? (
-                            <Eye className="h-3 w-3" />
-                          ) : (
-                            <EyeOff className="h-3 w-3" />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateBlock(block)}
-                          className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded"
-                          title="Duplicar"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteBlock(block.id)}
-                          className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {/* Nested Sub-Layers (Figma Style) */}
+                      {hasSubLayers && isBlockExpanded && (
+                        <div className="flex flex-col ml-3 pl-1.5 border-l border-zinc-200/80 my-0.5 space-y-0.5">
+                          {subLayers.map((subNode) => (
+                            <SubLayerTreeRow
+                              key={subNode.id}
+                              block={block}
+                              node={subNode}
+                              depth={1}
+                              selectedBlockId={selectedBlockId}
+                              activeSubElementSelector={activeSubElement?.selector}
+                              expandedSubLayerIds={expandedSubLayerIds}
+                              onSelectSubElement={selectSubElementOnStudio}
+                              onHoverSubElement={handleHoverSubElement}
+                              onToggleExpand={toggleSubLayerExpanded}
+                              onDuplicateSubElement={handleDuplicateSubElement}
+                              onDeleteSubElement={handleDeleteSubElement}
+                              onDropComponentOnSubElement={(
+                                bId,
+                                selector,
+                                kind,
+                              ) => {
+                                handleInsertInnerElement(bId, selector, kind);
+                                setDraggedComponentKind(null);
+                              }}
+                              draggedComponentKind={draggedComponentKind}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Bottom pinned "+ Add Component" button (like OpenPage!) */}
+              {/* Bottom pinned actions in Layers */}
               <div className="p-3 border-t border-zinc-200 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setLeftTab("components")}
-                  className="w-full py-2 px-3 rounded-lg border border-dashed border-zinc-300 hover:border-zinc-400 bg-zinc-50 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Agregar Componente
-                </button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("components")}
+                    className="py-1.5 px-2 rounded-lg border border-dashed border-zinc-300 hover:border-blue-400 bg-zinc-50 hover:bg-blue-50/60 text-[11px] font-semibold text-zinc-700 hover:text-blue-700 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Plus className="h-3 w-3 text-blue-600" />
+                    Componente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateContainerSection()}
+                    className="py-1.5 px-2 rounded-lg border border-dashed border-zinc-300 hover:border-violet-400 bg-zinc-50 hover:bg-violet-50/60 text-[11px] font-semibold text-zinc-700 hover:text-violet-700 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Box className="h-3 w-3 text-violet-600" />
+                    Contenedor
+                  </button>
+                </div>
                 <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
@@ -2011,9 +2671,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 </div>
               </div>
             </>
-          ) : (
-            /* + COMPONENTS TAB: Visual 2-Column Draggable Grid (M3E Canvas / Framely style) */
-            <div className="flex-1 flex flex-col min-h-0">
+          ) : leftTab === "components" ? (
+            /* ======================================================= */
+            /* + COMPONENTS TAB: Atomic UI Components (Figma / OpenPage)*/
+            /* ======================================================= */
+            <div className="flex-1 flex flex-col min-h-0 bg-white">
+              {/* Search */}
               <div className="p-2.5 border-b border-zinc-200">
                 <div className="relative">
                   <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -2021,7 +2684,162 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     type="text"
                     value={componentSearch}
                     onChange={(e) => setComponentSearch(e.target.value)}
-                    placeholder="Buscar bloques o cards..."
+                    placeholder="Buscar contenedor, botón, texto..."
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Category filter pills */}
+              <div className="px-2.5 py-1.5 border-b border-zinc-100 flex items-center gap-1 overflow-x-auto no-scrollbar">
+                {(
+                  [
+                    { id: "all", label: "Todos" },
+                    { id: "layout", label: "Estructura" },
+                    { id: "text", label: "Textos" },
+                    { id: "action", label: "Acciones" },
+                    { id: "media", label: "Medios" },
+                  ] as const
+                ).map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedComponentCategory(cat.id)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap transition-colors ${
+                      selectedComponentCategory === cat.id
+                        ? "bg-zinc-900 text-white"
+                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Direct Action: Create Container Section */}
+              <div className="p-2.5 pb-1">
+                <button
+                  type="button"
+                  onClick={() => handleCreateContainerSection()}
+                  className="w-full py-2 px-3 rounded-xl bg-blue-50/80 hover:bg-blue-100 border border-blue-200 text-left flex items-center justify-between group transition-colors shadow-2xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                      <Box className="h-3.5 w-3.5" />
+                    </span>
+                    <div>
+                      <span className="text-xs font-semibold text-blue-900 block leading-tight">
+                        + Nueva Sección Contenedor
+                      </span>
+                      <span className="text-[10px] text-blue-700/80 leading-tight">
+                        Crea una sección libre para armar
+                      </span>
+                    </div>
+                  </div>
+                  <Plus className="h-3.5 w-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
+                </button>
+              </div>
+
+              {/* Component Cards List */}
+              <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                    Arrastrá al lienzo o clic
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">
+                    {filteredAtomicComponents.length} items
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {filteredAtomicComponents.map((comp) => {
+                    const CompIcon = comp.icon;
+                    return (
+                      <div
+                        key={comp.kind}
+                        draggable
+                        onDragStart={(e) => {
+                          try {
+                            e.dataTransfer.setData(
+                              "application/x-landing-component",
+                              comp.kind,
+                            );
+                            e.dataTransfer.setData(
+                              "text/plain",
+                              `landing-component:${comp.kind}`,
+                            );
+                            e.dataTransfer.effectAllowed = "copy";
+                          } catch {
+                            // ignore dataTransfer access errors
+                          }
+                          const win = getDragWindow();
+                          if (win) {
+                            win.__draggedComponentKind = comp.kind;
+                          }
+                          draggedComponentKindRef.current = comp.kind;
+                          setDraggedComponentKind(comp.kind);
+                        }}
+                        onDragEnd={() => {
+                          const win = getDragWindow();
+                          if (win) {
+                            win.__draggedComponentKind = null;
+                          }
+                          draggedComponentKindRef.current = null;
+                          setDraggedComponentKind(null);
+                          setIsDraggingComponentOverCanvas(false);
+                        }}
+                        onClick={() => {
+                          if (selectedBlockId) {
+                            handleInsertInnerElement(
+                              selectedBlockId,
+                              activeSubElement?.selector ?? null,
+                              comp.kind,
+                            );
+                            setFeedback({
+                              type: "success",
+                              message: `Componente "${comp.name}" agregado.`,
+                            });
+                          } else {
+                            handleCreateContainerSection(comp.kind);
+                          }
+                        }}
+                        className="group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-blue-50/40 border border-zinc-200 hover:border-blue-300 transition-all cursor-grab active:cursor-grabbing shadow-2xs select-none"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 group-hover:bg-blue-100 text-zinc-600 group-hover:text-blue-600 transition-colors">
+                          <CompIcon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="text-xs font-semibold text-zinc-800 group-hover:text-blue-900 truncate">
+                              {comp.name}
+                            </span>
+                            <span className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-500 group-hover:bg-blue-100 group-hover:text-blue-700 shrink-0">
+                              {comp.tag}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 line-clamp-1 leading-snug">
+                            {comp.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ======================================================= */
+            /* MÓDULOS TAB: Pre-built full sections & Custom Modules    */
+            /* ======================================================= */
+            <div className="flex-1 flex flex-col min-h-0 bg-white">
+              <div className="p-2.5 border-b border-zinc-200">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={componentSearch}
+                    onChange={(e) => setComponentSearch(e.target.value)}
+                    placeholder="Buscar secciones o módulos..."
                     className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white"
                   />
                 </div>
@@ -2031,7 +2849,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 <div>
                   <div className="flex items-center justify-between px-1 mb-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-                      Arrastrá o hacé clic para insertar
+                      Módulos Prearmados ({filteredBuiltinModules.length})
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -2043,10 +2861,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           type="button"
                           draggable
                           onDragStart={(e) => {
-                            e.dataTransfer.setData(
-                              "application/x-landing-builtin",
-                              mod.moduleKey,
-                            );
+                            try {
+                              e.dataTransfer.setData(
+                                "application/x-landing-builtin",
+                                mod.moduleKey,
+                              );
+                              e.dataTransfer.setData(
+                                "text/plain",
+                                `landing-builtin:${mod.moduleKey}`,
+                              );
+                              e.dataTransfer.effectAllowed = "copy";
+                            } catch {
+                              // ignore
+                            }
+                            const win = getDragWindow();
+                            if (win) {
+                              win.__draggedBuiltinKey = mod.moduleKey;
+                            }
+                            draggedBuiltinKeyRef.current = mod.moduleKey;
+                            setDraggedBuiltinKey(mod.moduleKey);
+                          }}
+                          onDragEnd={() => {
+                            const win = getDragWindow();
+                            if (win) {
+                              win.__draggedBuiltinKey = null;
+                            }
+                            draggedBuiltinKeyRef.current = null;
+                            setDraggedBuiltinKey(null);
+                            setIsDraggingComponentOverCanvas(false);
                           }}
                           onClick={() => handleAddBuiltinBlock(mod)}
                           className="group flex flex-col items-center justify-center text-center p-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-blue-400 hover:shadow-xs transition-all cursor-grab active:cursor-grabbing"
@@ -2088,10 +2930,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           key={cm.id}
                           draggable
                           onDragStart={(e) => {
-                            e.dataTransfer.setData(
-                              "application/x-landing-custom",
-                              cm.id,
-                            );
+                            try {
+                              e.dataTransfer.setData(
+                                "application/x-landing-custom",
+                                cm.id,
+                              );
+                              e.dataTransfer.setData(
+                                "text/plain",
+                                `landing-custom:${cm.id}`,
+                              );
+                              e.dataTransfer.effectAllowed = "copy";
+                            } catch {
+                              // ignore
+                            }
+                            const win = getDragWindow();
+                            if (win) {
+                              win.__draggedCustomId = cm.id;
+                            }
+                            draggedCustomIdRef.current = cm.id;
+                            setDraggedCustomId(cm.id);
+                          }}
+                          onDragEnd={() => {
+                            const win = getDragWindow();
+                            if (win) {
+                              win.__draggedCustomId = null;
+                            }
+                            draggedCustomIdRef.current = null;
+                            setDraggedCustomId(null);
+                            setIsDraggingComponentOverCanvas(false);
                           }}
                           className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-amber-400 transition-colors cursor-grab shadow-2xs"
                         >
@@ -2149,35 +3015,78 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           onDrop={(e) => {
             e.preventDefault();
             setIsDraggingComponentOverCanvas(false);
-            const builtinKey = e.dataTransfer.getData(
-              "application/x-landing-builtin",
-            );
+            const dragWin = getDragWindow();
+            let plainText = "";
+            try {
+              plainText = e.dataTransfer.getData("text/plain") || "";
+            } catch {
+              // ignore
+            }
+
+            let compKind = (e.dataTransfer.getData(
+              "application/x-landing-component",
+            ) ||
+              draggedComponentKindRef.current ||
+              dragWin?.__draggedComponentKind) as InsertableInnerElementKind | null;
+            if (!compKind && plainText.startsWith("landing-component:")) {
+              compKind = plainText.slice(
+                "landing-component:".length,
+              ) as InsertableInnerElementKind;
+            }
+
+            if (compKind) {
+              if (selectedBlockIdRef.current) {
+                handleInsertInnerElement(
+                  selectedBlockIdRef.current,
+                  selectedSubElementRef.current?.selector ?? null,
+                  compKind,
+                );
+              } else {
+                handleCreateContainerSection(compKind);
+              }
+              setDraggedComponentKind(null);
+              if (dragWin) {
+                dragWin.__draggedComponentKind = null;
+              }
+              return;
+            }
+
+            let builtinKey =
+              e.dataTransfer.getData("application/x-landing-builtin") ||
+              draggedBuiltinKeyRef.current ||
+              dragWin?.__draggedBuiltinKey;
+            if (!builtinKey && plainText.startsWith("landing-builtin:")) {
+              builtinKey = plainText.slice("landing-builtin:".length);
+            }
             if (builtinKey) {
               const found = BUILTIN_LANDING_MODULES.find(
                 (m) => m.moduleKey === builtinKey,
               );
               if (found) handleAddBuiltinBlock(found);
+              setDraggedBuiltinKey(null);
+              if (dragWin) {
+                dragWin.__draggedBuiltinKey = null;
+              }
               return;
             }
-            const customId = e.dataTransfer.getData(
-              "application/x-landing-custom",
-            );
+
+            let customId =
+              e.dataTransfer.getData("application/x-landing-custom") ||
+              draggedCustomIdRef.current ||
+              dragWin?.__draggedCustomId;
+            if (!customId && plainText.startsWith("landing-custom:")) {
+              customId = plainText.slice("landing-custom:".length);
+            }
             if (customId) {
               const found = customModules.find((m) => m.id === customId);
               if (found) handleAddCustomBlock(found);
+              setDraggedCustomId(null);
+              if (dragWin) {
+                dragWin.__draggedCustomId = null;
+              }
             }
           }}
         >
-          {/* Drop indicator overlay when dragging a component over the canvas */}
-          {isDraggingComponentOverCanvas && (
-            <div className="pointer-events-none absolute inset-3 z-40 rounded-2xl border-2 border-dashed border-blue-500 bg-blue-500/10 flex items-center justify-center backdrop-blur-[1px]">
-              <div className="px-4 py-2 rounded-xl bg-white border border-blue-200 text-xs font-semibold text-blue-700 shadow-xl flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Soltá acá para insertar el módulo en el lienzo
-              </div>
-            </div>
-          )}
-
           {/* Top Canvas Hint Bar */}
           <div className="flex items-center justify-between px-4 py-1.5 text-[11px] text-zinc-600 border-b border-zinc-200 bg-white/90 backdrop-blur-xs shrink-0 gap-3">
             <div className="flex items-center gap-2 min-w-0">
@@ -2223,7 +3132,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           {/* Center Artboard Container */}
           <div className="flex-1 overflow-auto flex items-start justify-center p-4 sm:p-6 min-h-0">
             <div
-              className={`bg-white rounded-xl overflow-hidden shadow-[0_16px_45px_rgba(0,0,0,0.12)] border border-zinc-300 transition-all duration-300 flex flex-col ${
+              className={`bg-white rounded-xl overflow-hidden shadow-[0_16px_45px_rgba(0,0,0,0.12)] border transition-all duration-300 flex flex-col ${
+                isDraggingComponentOverCanvas
+                  ? "border-blue-400 ring-4 ring-blue-400/20"
+                  : "border-zinc-300"
+              } ${
                 viewport === "desktop"
                   ? "w-full h-full"
                   : viewport === "tablet"
@@ -2250,7 +3163,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 ref={iframeRef}
                 title="Lienzo Visual de Landing"
                 srcDoc={debouncedSrcDoc}
-                sandbox="allow-scripts allow-forms allow-popups"
+                sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
                 onLoad={() => {
                   iframeRef.current?.contentWindow?.postMessage(
                     {
@@ -2697,8 +3610,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           )}
                         </div>
 
-                        {/* Direct Content / Attributes (Text, Image, Link) */}
+                        {/* Direct Content / Attributes (Text, Image, Link, Card Fields) */}
                         {(activeSubElement.boundTextField ||
+                          (activeSubElement.childFieldKeys &&
+                            activeSubElement.childFieldKeys.length > 0) ||
                           activeSubElement.isImage ||
                           activeSubElement.isLink) && (
                           <div className="p-3.5 space-y-3">
@@ -2734,6 +3649,92 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 />
                               </div>
                             )}
+
+                            {activeSubElement.childFieldKeys &&
+                              activeSubElement.childFieldKeys.filter(
+                                (k) => k !== activeSubElement.boundTextField,
+                              ).length > 0 && (
+                                <div className="space-y-2.5 pt-1">
+                                  {activeSubElement.childFieldKeys
+                                    .filter(
+                                      (k) =>
+                                        k !== activeSubElement.boundTextField,
+                                    )
+                                    .map((key) => {
+                                      const fieldDef =
+                                        selectedBlock.fields.find(
+                                          (f) => f.key === key,
+                                        );
+                                      const label = fieldDef?.label || key;
+                                      const val =
+                                        selectedBlock.values[key] ??
+                                        fieldDef?.defaultValue ??
+                                        "";
+                                      const isImg =
+                                        fieldDef?.type === "image" ||
+                                        /image|img|photo|foto|logo|banner|thumb/i.test(
+                                          key,
+                                        );
+
+                                      return (
+                                        <div key={key} className="space-y-1">
+                                          <div className="flex items-center justify-between">
+                                            <label className="text-[11px] font-medium text-zinc-700">
+                                              {label}
+                                            </label>
+                                            <code className="text-[10px] text-zinc-400 font-mono">
+                                              {`{{${key}}}`}
+                                            </code>
+                                          </div>
+                                          {isImg ? (
+                                            <div className="flex items-center gap-1.5">
+                                              <input
+                                                type="text"
+                                                value={val}
+                                                onChange={(e) =>
+                                                  handleUpdateBlockValue(
+                                                    selectedBlock.id,
+                                                    key,
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs text-zinc-900 focus:outline-none focus:border-violet-500 focus:bg-white"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setMediaPickerTarget({
+                                                    kind: "field",
+                                                    blockId: selectedBlock.id,
+                                                    fieldKey: key,
+                                                    currentUrl: val,
+                                                    title: `Cambiar ${label}`,
+                                                  })
+                                                }
+                                                className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
+                                              >
+                                                Galería
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <input
+                                              type="text"
+                                              value={val}
+                                              onChange={(e) =>
+                                                handleUpdateBlockValue(
+                                                  selectedBlock.id,
+                                                  key,
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-violet-500 focus:bg-white"
+                                            />
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              )}
 
                             {activeSubElement.isImage && (
                               <div className="space-y-2.5">
@@ -3537,39 +4538,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           </div>
                         </div>
 
-                        {/* Insert Inner Element next to / inside selected sub-element */}
-                        <div className="p-3.5 space-y-2.5">
-                          <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                            + Insertar Elemento Aquí
-                          </span>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {(
-                              [
-                                { kind: "button", label: "+ Botón" },
-                                { kind: "image", label: "+ Imagen" },
-                                { kind: "heading", label: "+ Título" },
-                                { kind: "text", label: "+ Párrafo" },
-                                { kind: "badge", label: "+ Insignia" },
-                                { kind: "card", label: "+ Tarjeta" },
-                              ] as const
-                            ).map((item) => (
-                              <button
-                                key={item.kind}
-                                type="button"
-                                onClick={() =>
-                                  handleInsertInnerElement(
-                                    selectedBlock.id,
-                                    activeSubElement.selector,
-                                    item.kind,
-                                  )
-                                }
-                                className="rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 transition"
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+
                       </>
                 ) : (
                   /* ========================================================= */
@@ -3681,7 +4650,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       <div className="flex items-center gap-2 rounded-lg border border-violet-200/80 bg-violet-50/50 px-2.5 py-2 text-[11px] text-violet-900">
                         <MousePointerClick className="h-4 w-4 shrink-0 text-violet-600" />
                         <span>
-                          Hacé clic en cualquier <strong>botón, tarjeta, título o foto</strong> dentro del lienzo para editar su estilo o duplicarlo.
+                          Estás editando la <strong>sección completa</strong>. Para modificar un elemento hijo específico (texto, botón, imagen), haz clic directamente en él en el lienzo o selecciónalo en el árbol de <strong>Capas</strong>.
                         </span>
                       </div>
 
@@ -3719,261 +4688,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       </div>
                     </div>
 
-                    {/* Insert Inner Elements into Block without touching code */}
-                    <div className="p-3.5 space-y-2.5">
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                        + Insertar Elemento en el Bloque
-                      </span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {(
-                          [
-                            { kind: "button", label: "+ Botón CTA" },
-                            { kind: "image", label: "+ Imagen" },
-                            { kind: "heading", label: "+ Título" },
-                            { kind: "text", label: "+ Párrafo" },
-                            { kind: "badge", label: "+ Insignia" },
-                            { kind: "card", label: "+ Tarjeta" },
-                          ] as const
-                        ).map((item) => (
-                          <button
-                            key={item.kind}
-                            type="button"
-                            onClick={() =>
-                              handleInsertInnerElement(
-                                selectedBlock.id,
-                                null,
-                                item.kind,
-                              )
-                            }
-                            className="rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2 text-[11px] font-semibold text-zinc-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition"
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Content Fields ({{variables}}) */}
-                    <div className="p-3.5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                          <Type className="h-3.5 w-3.5 text-zinc-400" />
-                          Contenido Editable ({selectedBlock.fields.length})
-                        </span>
-                      </div>
-
-                      {selectedBlock.fields.length === 0 ? (
-                        <p className="text-xs text-zinc-500">
-                          Este módulo no tiene variables{" "}
-                          <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
-                            {"{{variable}}"}
-                          </code>
-                          . Usá los botones de arriba o abrí{" "}
-                          <strong>Código HTML/JS</strong>.
-                        </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {selectedBlock.fields.map((field) => {
-                            const val =
-                              selectedBlock.values[field.key] ??
-                              field.defaultValue ??
-                              "";
-                            const isImageField =
-                              field.type === "image" ||
-                              /image|img|photo|foto|logo|banner|thumb/i.test(
-                                field.key,
-                              );
-
-                            return (
-                              <div key={field.key} className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-[11px] font-medium text-zinc-700">
-                                    {field.label}
-                                  </label>
-                                  <code className="text-[10px] text-zinc-400 font-mono">
-                                    {`{{${field.key}}}`}
-                                  </code>
-                                </div>
-
-                                {isImageField ? (
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-10 w-12 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
-                                        {val ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={val}
-                                            alt={field.label}
-                                            className="h-full w-full object-cover"
-                                          />
-                                        ) : null}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setMediaPickerTarget({
-                                            kind: "field",
-                                            blockId: selectedBlock.id,
-                                            fieldKey: field.key,
-                                            currentUrl: val,
-                                            title: `Imagen: ${field.label}`,
-                                          })
-                                        }
-                                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                                      >
-                                        <ImageIcon className="h-3.5 w-3.5" />
-                                        Elegir / Subir Foto
-                                      </button>
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={val}
-                                      onChange={(e) =>
-                                        handleUpdateBlockValue(
-                                          selectedBlock.id,
-                                          field.key,
-                                          e.target.value,
-                                        )
-                                      }
-                                      placeholder="URL de la imagen..."
-                                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-[11px] text-zinc-700 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                    />
-                                  </div>
-                                ) : field.type === "textarea" ? (
-                                  <textarea
-                                    rows={2}
-                                    value={val}
-                                    onChange={(e) =>
-                                      handleUpdateBlockValue(
-                                        selectedBlock.id,
-                                        field.key,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                  />
-                                ) : field.type === "color" ? (
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="color"
-                                      value={
-                                        val.startsWith("#") ? val : "#c49a45"
-                                      }
-                                      onChange={(e) =>
-                                        handleUpdateBlockValue(
-                                          selectedBlock.id,
-                                          field.key,
-                                          e.target.value,
-                                        )
-                                      }
-                                      className="h-7 w-8 rounded bg-transparent border border-zinc-300 cursor-pointer"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={val}
-                                      onChange={(e) =>
-                                        handleUpdateBlockValue(
-                                          selectedBlock.id,
-                                          field.key,
-                                          e.target.value,
-                                        )
-                                      }
-                                      className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                    />
-                                  </div>
-                                ) : field.type === "url" ? (
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="text"
-                                        value={val}
-                                        onChange={(e) =>
-                                          handleUpdateBlockValue(
-                                            selectedBlock.id,
-                                            field.key,
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="/m/mi-restaurante o #destacados"
-                                        className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                      />
-                                      {val.startsWith("#") && val.length > 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handlePreviewScrollToAnchor(val)
-                                          }
-                                          className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
-                                          title="Probar scroll hacia esta sección"
-                                        >
-                                          ⤵ Ir
-                                        </button>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleUpdateBlockValue(
-                                            selectedBlock.id,
-                                            field.key,
-                                            `/m/${tenant.slug}`,
-                                          )
-                                        }
-                                        className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-100"
-                                      >
-                                        Carta Digital
-                                      </button>
-                                      {pageAnchors.map((anc) => (
-                                        <button
-                                          key={anc.blockId}
-                                          type="button"
-                                          onClick={() => {
-                                            handleUpdateBlockValue(
-                                              selectedBlock.id,
-                                              field.key,
-                                              anc.href,
-                                            );
-                                            handlePreviewScrollToAnchor(anc.href);
-                                          }}
-                                          title={`Scroll a: ${anc.blockName}`}
-                                          className={`rounded border px-1.5 py-0.5 text-[10px] transition ${
-                                            val === anc.href
-                                              ? "border-blue-300 bg-blue-50 text-blue-800 font-semibold"
-                                              : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
-                                          }`}
-                                        >
-                                          {anc.href}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    value={val}
-                                    onChange={(e) =>
-                                      handleUpdateBlockValue(
-                                        selectedBlock.id,
-                                        field.key,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                                  />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Appearance & Layout Overrides (Framely Right Panel style!) */}
+                    {/* Section Appearance & Layout Overrides */}
                     <div className="p-3.5 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                          Appearance & Layout
+                          Apariencia de la Sección
                         </span>
                         {(selectedBlock.values.__bgColor ||
                           selectedBlock.values.__bgImage ||
@@ -4307,6 +5026,230 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           </div>
                         )}
                     </div>
+
+
+
+                    {/* Collapsible Block Variables (Advanced / Raw template fields) */}
+                    <details className="border-t border-zinc-200 group">
+                      <summary className="p-3.5 flex items-center justify-between cursor-pointer select-none text-[11px] font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-800 transition-colors">
+                        <span className="flex items-center gap-1.5">
+                          <Type className="h-3.5 w-3.5 text-zinc-400" />
+                          Variables del Bloque ({selectedBlock.fields.length})
+                        </span>
+                        <ChevronRight className="h-3.5 w-3.5 text-zinc-400 transition-transform group-open:rotate-90" />
+                      </summary>
+
+                      <div className="px-3.5 pb-4 space-y-3">
+                        <p className="text-[11px] text-zinc-500">
+                          Valores crudos de plantilla. Para editar visualmente cualquier elemento (título, tarjeta, botón), haz clic sobre él en el lienzo.
+                        </p>
+                        {selectedBlock.fields.length === 0 ? (
+                        <p className="text-xs text-zinc-500">
+                          Este módulo no tiene variables{" "}
+                          <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                            {"{{variable}}"}
+                          </code>
+                          . Usá los botones de arriba o abrí{" "}
+                          <strong>Código HTML/JS</strong>.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {selectedBlock.fields.map((field) => {
+                            const val =
+                              selectedBlock.values[field.key] ??
+                              field.defaultValue ??
+                              "";
+                            const isImageField =
+                              field.type === "image" ||
+                              /image|img|photo|foto|logo|banner|thumb/i.test(
+                                field.key,
+                              );
+
+                            return (
+                              <div key={field.key} className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] font-medium text-zinc-700">
+                                    {field.label}
+                                  </label>
+                                  <code className="text-[10px] text-zinc-400 font-mono">
+                                    {`{{${field.key}}}`}
+                                  </code>
+                                </div>
+
+                                {isImageField ? (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-10 w-12 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
+                                        {val ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={val}
+                                            alt={field.label}
+                                            className="h-full w-full object-cover"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setMediaPickerTarget({
+                                            kind: "field",
+                                            blockId: selectedBlock.id,
+                                            fieldKey: field.key,
+                                            currentUrl: val,
+                                            title: `Imagen: ${field.label}`,
+                                          })
+                                        }
+                                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                      >
+                                        <ImageIcon className="h-3.5 w-3.5" />
+                                        Elegir / Subir Foto
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="URL de la imagen..."
+                                      className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-[11px] text-zinc-700 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                    />
+                                  </div>
+                                ) : field.type === "textarea" ? (
+                                  <textarea
+                                    rows={2}
+                                    value={val}
+                                    onChange={(e) =>
+                                      handleUpdateBlockValue(
+                                        selectedBlock.id,
+                                        field.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                ) : field.type === "color" ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="color"
+                                      value={
+                                        val.startsWith("#") ? val : "#c49a45"
+                                      }
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="h-7 w-8 rounded bg-transparent border border-zinc-300 cursor-pointer"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={(e) =>
+                                        handleUpdateBlockValue(
+                                          selectedBlock.id,
+                                          field.key,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1 text-xs font-mono text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                    />
+                                  </div>
+                                ) : field.type === "url" ? (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={val}
+                                        onChange={(e) =>
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            field.key,
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="/m/mi-restaurante o #destacados"
+                                        className="flex-1 rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                      />
+                                      {val.startsWith("#") && val.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handlePreviewScrollToAnchor(val)
+                                          }
+                                          className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+                                          title="Probar scroll hacia esta sección"
+                                        >
+                                          ⤵ Ir
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleUpdateBlockValue(
+                                            selectedBlock.id,
+                                            field.key,
+                                            `/m/${tenant.slug}`,
+                                          )
+                                        }
+                                        className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-100"
+                                      >
+                                        Carta Digital
+                                      </button>
+                                      {pageAnchors.map((anc) => (
+                                        <button
+                                          key={anc.blockId}
+                                          type="button"
+                                          onClick={() => {
+                                            handleUpdateBlockValue(
+                                              selectedBlock.id,
+                                              field.key,
+                                              anc.href,
+                                            );
+                                            handlePreviewScrollToAnchor(anc.href);
+                                          }}
+                                          title={`Scroll a: ${anc.blockName}`}
+                                          className={`rounded border px-1.5 py-0.5 text-[10px] transition ${
+                                            val === anc.href
+                                              ? "border-blue-300 bg-blue-50 text-blue-800 font-semibold"
+                                              : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                                          }`}
+                                        >
+                                          {anc.href}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onChange={(e) =>
+                                      handleUpdateBlockValue(
+                                        selectedBlock.id,
+                                        field.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      </div>
+                    </details>
                   </>
                 )}
               </div>

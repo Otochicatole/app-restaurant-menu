@@ -17,6 +17,45 @@ export type BuiltinLandingModuleDefinition = {
 
 export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
+    moduleKey: "blank-container",
+    name: "Contenedor / Sección Libre",
+    description: "Sección vacía con contenedor central responsive lista para arrastrar y soltar componentes.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Sección / Contenedor Libre -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="content-container" style="padding: 32px; border: 2px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Contenedor Libre — Arrastrá componentes o hacé clic para insertar</p>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
+    moduleKey: "columns-container",
+    name: "Sección 2 Columnas",
+    description: "Sección con grilla responsive de 2 columnas para armar layouts divididos.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Sección 2 Columnas -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; width: 100%; box-sizing: border-box;">
+      <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>
+      </div>
+      <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>
+      </div>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
     moduleKey: "header",
     name: "Barra de Navegación",
     description: "Encabezado fijo con nombre del restaurante, enlaces de ancla y botón directo a la carta digital.",
