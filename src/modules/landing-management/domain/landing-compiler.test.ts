@@ -28,6 +28,7 @@ import {
   decodeLandingTemplateBundle,
   encodeLandingTemplateBundle,
 } from "./landing-template-bundle";
+import { LANDING_TEMPLATE_PRESETS } from "./landing-template-presets";
 
 describe("landing-compiler", () => {
   it("compiles html, css, and js into a complete responsive HTML5 document", () => {
@@ -118,7 +119,7 @@ describe("landing-compiler", () => {
     expect(compiled.fullHtml).toContain("<l-field data-landing-field=");
     expect(compiled.fullHtml).toContain("neutralizeLinks");
     expect(compiled.previewCss).toContain("--color-primary");
-    expect(compiled.previewCss).toContain("__landing-editor-toolbar");
+    expect(compiled.previewCss).toContain('[data-selected="true"]');
     expect(compiled.previewCss).toContain('[data-sub-selected="true"]');
   });
 
@@ -729,6 +730,37 @@ describe("landing-compiler", () => {
       block = insertInnerElementInBlock(block, null, "columns-4");
       expect(block.htmlTemplate).toContain("grid-columns-4");
       expect(block.htmlTemplate).toContain("Columna 4");
+    });
+
+    it("verifies canvas preview is free of floating toolbars and floating badges", () => {
+      const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Casa Brasa",
+        restaurantSlug: "casa-brasa",
+      }, { interactiveEditor: true });
+
+      // Floating toolbar and floating badge must NOT be present in preview CSS or JS
+      expect(compiled.previewCss).not.toContain("#__landing-editor-toolbar");
+      expect(compiled.previewCss).not.toContain("[data-landing-block]::before");
+      expect(compiled.previewJs).not.toContain("__landing-editor-toolbar");
+      expect(compiled.previewJs).not.toContain("positionToolbar");
+
+      // Clean selection outlines remain intact
+      expect(compiled.previewCss).toContain('[data-selected="true"]');
+      expect(compiled.previewCss).toContain('[data-sub-selected="true"]');
+    });
+
+    it("compiles all 6 landing template presets successfully", () => {
+      expect(LANDING_TEMPLATE_PRESETS.length).toBe(6);
+
+      for (const preset of LANDING_TEMPLATE_PRESETS) {
+        const compiled = compileLandingFromDocument(preset.document, {
+          restaurantName: preset.name,
+          restaurantSlug: "restaurante",
+        });
+        expect(compiled.htmlContent.length).toBeGreaterThan(100);
+        expect(compiled.cssContent.length).toBeGreaterThan(50);
+      }
     });
   });
 });

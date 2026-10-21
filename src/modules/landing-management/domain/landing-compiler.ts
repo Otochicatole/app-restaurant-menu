@@ -776,32 +776,6 @@ html:not([data-preview-mode="true"]) [data-landing-block][data-selected="true"] 
   outline-offset: -2px !important;
   z-index: 20;
 }
-[data-landing-block]::before {
-  content: attr(data-block-label);
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  z-index: 50;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background: #2563eb;
-  color: #ffffff;
-  font-family: 'Inter', system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
-  box-shadow: 0 4px 12px rgba(37,99,235,0.25);
-  border: 1px solid #1d4ed8;
-}
-html:not([data-preview-mode="true"]) [data-landing-block]:hover::before,
-html:not([data-preview-mode="true"]) [data-landing-block][data-selected="true"]::before {
-  opacity: 1;
-  transform: translateY(0);
-}
 html:not([data-preview-mode="true"]) [data-sub-hover="true"]:not([data-sub-selected="true"]) {
   outline: 1.5px dashed rgba(124, 58, 237, 0.75) !important;
   outline-offset: 2px !important;
@@ -830,9 +804,6 @@ html[data-preview-mode="true"] [data-landing-block] {
 html[data-preview-mode="true"] [data-landing-field] {
   cursor: inherit !important;
 }
-html[data-preview-mode="true"] #__landing-editor-toolbar {
-  display: none !important;
-}
 html:not([data-preview-mode="true"]) .landing-drag-target {
   outline: 2px dashed #2563eb !important;
   outline-offset: 4px !important;
@@ -843,60 +814,6 @@ a[data-original-href] {
   -webkit-user-drag: none;
   user-select: text;
 }
-#__landing-editor-toolbar {
-  position: fixed;
-  z-index: 9999;
-  display: none;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 6px;
-  background: #ffffff;
-  border: 1px solid #e4e4e7;
-  border-radius: 9px;
-  box-shadow: 0 10px 25px -3px rgba(0,0,0,0.12), 0 4px 6px -4px rgba(0,0,0,0.06);
-  font-family: 'Inter', system-ui, sans-serif;
-}
-#__landing-editor-toolbar .__toolbar-label {
-  color: #2563eb;
-  background: #eff6ff;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 5px;
-  border: 1px solid #bfdbfe;
-  margin-right: 3px;
-  max-width: 150px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-#__landing-editor-toolbar[data-mode="sub"] .__toolbar-label {
-  color: #6d28d9;
-  background: #f5f3ff;
-  border-color: #ddd6fe;
-}
-#__landing-editor-toolbar button {
-  background: transparent;
-  border: none;
-  color: #374151;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 7px;
-  border-radius: 5px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: background-color 0.1s ease, color 0.1s ease;
-}
-#__landing-editor-toolbar button:hover {
-  background: #f4f4f5;
-  color: #111827;
-}
-#__landing-editor-toolbar button[data-danger="true"]:hover {
-  background: #fee2e2;
-  color: #dc2626;
-}
 `;
 
   const initialSelected = selectedBlockId ? JSON.stringify(selectedBlockId) : "null";
@@ -906,10 +823,6 @@ a[data-original-href] {
   var currentSelectedId = ${initialSelected};
   var currentSubSelector = null;
   var currentHoverEl = null;
-
-  var toolbar = document.createElement('div');
-  toolbar.id = '__landing-editor-toolbar';
-  document.body.appendChild(toolbar);
 
   function closestEl(target, selector) {
     var el = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
@@ -1188,34 +1101,6 @@ a[data-original-href] {
     };
   }
 
-  function renderToolbarContent(blockEl, subEl) {
-    if (subEl) {
-      toolbar.setAttribute('data-mode', 'sub');
-      var label = describeElement(subEl);
-      var isImg = subEl.tagName.toLowerCase() === 'img';
-      toolbar.innerHTML = [
-        '<span class="__toolbar-label" id="__toolbar-block-name">' + label + '</span>',
-        '<button type="button" data-sub-action="select-parent" title="Subir al elemento contenedor o bloque">↖ Padre</button>',
-        '<button type="button" data-sub-action="move-prev" title="Mover antes">←</button>',
-        '<button type="button" data-sub-action="move-next" title="Mover después">→</button>',
-        '<button type="button" data-sub-action="duplicate" title="Duplicar este elemento">⧉ Duplicar</button>',
-        isImg ? '<button type="button" data-sub-action="pick-image" title="Cambiar imagen">🖼 Imagen</button>' : '',
-        '<button type="button" data-sub-action="delete" data-danger="true" title="Eliminar este elemento">🗑</button>'
-      ].join('');
-    } else {
-      toolbar.setAttribute('data-mode', 'block');
-      var blockLabel = (blockEl && blockEl.getAttribute('data-block-label')) || 'Bloque';
-      toolbar.innerHTML = [
-        '<span class="__toolbar-label" id="__toolbar-block-name">' + blockLabel + '</span>',
-        '<button type="button" data-action="move-up" title="Subir bloque">↑</button>',
-        '<button type="button" data-action="move-down" title="Bajar bloque">↓</button>',
-        '<button type="button" data-action="duplicate" title="Duplicar bloque">⧉ Duplicar</button>',
-        '<button type="button" data-action="code" title="Editar HTML/CSS/JS">&lt;/&gt; Código</button>',
-        '<button type="button" data-action="delete" data-danger="true" title="Eliminar bloque">🗑</button>'
-      ].join('');
-    }
-  }
-
   function neutralizeLinks() {
     var isPreview = document.documentElement.getAttribute('data-preview-mode') === 'true';
     var links = document.querySelectorAll('[data-landing-block] a');
@@ -1240,35 +1125,6 @@ a[data-original-href] {
     document.querySelectorAll('.js-current-year').forEach(function(el) {
       el.textContent = String(new Date().getFullYear());
     });
-  }
-
-  function positionToolbar(blockEl, subEl) {
-    var anchorEl = subEl || blockEl;
-    if (!anchorEl || document.documentElement.getAttribute('data-preview-mode') === 'true') {
-      toolbar.style.display = 'none';
-      return;
-    }
-    var rect = anchorEl.getBoundingClientRect();
-    if (rect.bottom < 28 || rect.top > window.innerHeight - 20) {
-      toolbar.style.display = 'none';
-      return;
-    }
-    renderToolbarContent(blockEl, subEl);
-    toolbar.style.display = 'flex';
-    var topPos;
-    if (rect.top >= 42) {
-      topPos = rect.top - 36;
-    } else if (rect.height < 140 && rect.bottom + 38 < window.innerHeight) {
-      topPos = rect.bottom + 6;
-    } else {
-      topPos = Math.max(8, rect.top + 8);
-    }
-    var rightPos = Math.max(12, window.innerWidth - rect.right + 6);
-    if (rightPos > window.innerWidth - 260) {
-      rightPos = Math.max(12, window.innerWidth - rect.left - 240);
-    }
-    toolbar.style.top = topPos + 'px';
-    toolbar.style.right = rightPos + 'px';
   }
 
   function applySelection(blockId, subSelector) {
@@ -1296,7 +1152,6 @@ a[data-original-href] {
         currentSubSelector = null;
       }
     }
-    positionToolbar(activeBlockEl, activeSubEl);
     return { activeBlockEl: activeBlockEl, activeSubEl: activeSubEl };
   }
 
@@ -1309,22 +1164,10 @@ a[data-original-href] {
       type: 'LANDING_SCROLL_SYNC',
       scrollY: window.scrollY || document.documentElement.scrollTop || 0
     }, '*');
-    if (!currentSelectedId) return;
-    var blockEl = document.querySelector('[data-landing-block="' + currentSelectedId + '"]');
-    var subEl = blockEl && currentSubSelector ? findSubElementBySelector(blockEl, currentSubSelector) : null;
-    positionToolbar(blockEl, subEl);
   }, { passive: true });
-
-  window.addEventListener('resize', function() {
-    if (!currentSelectedId) return;
-    var blockEl = document.querySelector('[data-landing-block="' + currentSelectedId + '"]');
-    var subEl = blockEl && currentSubSelector ? findSubElementBySelector(blockEl, currentSubSelector) : null;
-    positionToolbar(blockEl, subEl);
-  });
 
   document.addEventListener('mouseover', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
-    if (closestEl(e.target, '#__landing-editor-toolbar')) return;
     var blockEl = closestEl(e.target, '[data-landing-block]');
     var subEl = blockEl ? resolveSelectableSubElement(e.target, blockEl) : null;
     if (currentHoverEl && currentHoverEl !== subEl) {
@@ -1343,55 +1186,6 @@ a[data-original-href] {
       currentHoverEl = null;
     }
   }, true);
-
-  toolbar.addEventListener('mousedown', function(e) {
-    e.stopPropagation();
-  });
-
-  toolbar.addEventListener('click', function(e) {
-    var subBtn = closestEl(e.target, 'button[data-sub-action]');
-    if (subBtn && currentSelectedId && currentSubSelector) {
-      e.stopPropagation();
-      e.preventDefault();
-      var subAction = subBtn.getAttribute('data-sub-action');
-      if (subAction === 'select-parent') {
-        var blockEl = document.querySelector('[data-landing-block="' + currentSelectedId + '"]');
-        var subEl = blockEl ? findSubElementBySelector(blockEl, currentSubSelector) : null;
-        var parentSub = subEl && subEl.parentElement ? resolveSelectableSubElement(subEl.parentElement, blockEl) : null;
-        if (parentSub && blockEl) {
-          var parentPayload = buildSubElementPayload(blockEl, parentSub);
-          applySelection(currentSelectedId, parentPayload ? parentPayload.selector : null);
-          window.parent.postMessage({
-            type: 'LANDING_SELECT_SUBELEMENT',
-            blockId: currentSelectedId,
-            subElement: parentPayload
-          }, '*');
-        } else {
-          applySelection(currentSelectedId, null);
-          window.parent.postMessage({ type: 'LANDING_SELECT_BLOCK', blockId: currentSelectedId }, '*');
-        }
-        return;
-      }
-      window.parent.postMessage({
-        type: 'LANDING_SUBELEMENT_ACTION',
-        blockId: currentSelectedId,
-        selector: currentSubSelector,
-        action: subAction
-      }, '*');
-      return;
-    }
-
-    var btn = closestEl(e.target, 'button[data-action]');
-    if (!btn || !currentSelectedId) return;
-    e.stopPropagation();
-    e.preventDefault();
-    var action = btn.getAttribute('data-action');
-    window.parent.postMessage({
-      type: 'LANDING_BLOCK_ACTION',
-      blockId: currentSelectedId,
-      action: action
-    }, '*');
-  });
 
   document.addEventListener('dragstart', function(e) {
     if (closestEl(e.target, 'a, img')) {
@@ -1502,7 +1296,6 @@ a[data-original-href] {
   }
 
   document.addEventListener('click', function(e) {
-    if (closestEl(e.target, '#__landing-editor-toolbar')) return;
     var link = closestEl(e.target, 'a');
     var isPreview = document.documentElement.getAttribute('data-preview-mode') === 'true';
     if (link) {
@@ -1763,6 +1556,7 @@ export function compileLandingFromDocument(
   htmlContent: string;
   cssContent: string;
   previewCss: string;
+  previewJs: string;
   jsContent: string;
   fullHtml: string;
 } {
@@ -1855,6 +1649,7 @@ export function compileLandingFromDocument(
     htmlContent,
     cssContent,
     previewCss,
+    previewJs,
     jsContent,
     fullHtml,
   };

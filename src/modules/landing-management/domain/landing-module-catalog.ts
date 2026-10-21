@@ -56,6 +56,93 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     jsTemplate: ``,
   },
   {
+    moduleKey: "columns-3-container",
+    name: "Sección 3 Columnas (CSS Grid)",
+    description: "Sección con grilla responsive de 3 columnas para tarjetas, servicios o menú.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Sección 3 Columnas -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box;">
+      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
+      </div>
+      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
+      </div>
+      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
+      </div>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
+    moduleKey: "columns-4-container",
+    name: "Sección 4 Columnas (CSS Grid)",
+    description: "Sección con grilla responsive de 4 columnas para métricas, fotos o productos.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Sección 4 Columnas -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="grid-columns-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;">
+      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
+      </div>
+      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
+      </div>
+      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
+      </div>
+      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 4</p>
+      </div>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
+    moduleKey: "flex-row-container",
+    name: "Fila Flexible (Flex Row)",
+    description: "Contenedor horizontal flexible con display: flex y dirección row, con salto de línea y gap.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Fila Flexible -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="flex-row" style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; width: 100%; box-sizing: border-box; padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px);">
+      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Fila Flex — Insertá elementos para alinearlos horizontalmente</p>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
+    moduleKey: "flex-col-container",
+    name: "Columna Flexible (Flex Column)",
+    description: "Contenedor vertical flexible con display: flex y dirección column para apilar elementos.",
+    category: "estructura",
+    fields: [],
+    htmlTemplate: `<!-- Columna Flexible -->
+<section class="section" style="padding: 48px 0;">
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
+    <div class="flex-col" style="display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 100%; box-sizing: border-box; padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px);">
+      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Columna Flex — Insertá elementos para apilarlos verticalmente</p>
+    </div>
+  </div>
+</section>`,
+    cssTemplate: ``,
+    jsTemplate: ``,
+  },
+  {
     moduleKey: "header",
     name: "Barra de Navegación",
     description: "Encabezado fijo con nombre del restaurante, enlaces de ancla y botón directo a la carta digital.",
