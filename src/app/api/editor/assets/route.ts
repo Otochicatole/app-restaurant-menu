@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { BadRequestError } from "@/platform/application/errors";
-import { requireTenantAdmin } from "@/modules/identity-access/server";
+import { resolveEditorAssetTenantId } from "./resolve-tenant";
 import { menuEditor, type MenuAssetKind } from "@/modules/menu-editor/server";
 import { checksum } from "@/modules/menu-editor/server";
 import { blobStore } from "@/platform/storage";
@@ -14,10 +14,10 @@ const FONT_TYPES = new Set(["font/woff", "font/woff2", "font/ttf", "font/otf", "
 
 export async function GET(request: NextRequest) {
   try {
-    const actor = await requireTenantAdmin();
+    const tenantId = await resolveEditorAssetTenantId(request);
     const kind = new URL(request.url).searchParams.get("kind");
     if (kind && kind !== "IMAGE" && kind !== "VIDEO" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
-    return successResponse(await menuEditor.listAssets(actor.tenantId, kind as MenuAssetKind | undefined));
+    return successResponse(await menuEditor.listAssets(tenantId, kind as MenuAssetKind | undefined));
   } catch (error) {
     return handleApiError(error);
   }
@@ -26,8 +26,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     if (!validateOrigin(request)) return csrfErrorResponse();
-    const actor = await requireTenantAdmin();
     const form = await request.formData();
+    const tenantId = await resolveEditorAssetTenantId(
+      request,
+      form.get("tenantId") as string | null,
+      form.get("tenantSlug") as string | null,
+    );
     const kind = form.get("kind");
     if (kind !== "IMAGE" && kind !== "VIDEO" && kind !== "FONT") throw new BadRequestError("Tipo de asset inválido");
     const file = form.get("file");
@@ -41,11 +45,11 @@ export async function POST(request: NextRequest) {
     if (file.size <= 0 || file.size > max) throw new BadRequestError("El archivo excede el tamaño máximo permitido.");
     const dimensions = kind === "IMAGE" ? imageDimensions(content, file.type) : null;
     if (kind === "IMAGE" && (!dimensions || dimensions.width > 8192 || dimensions.height > 8192)) throw new BadRequestError("La imagen no es válida o supera 8192×8192 píxeles.");
-    const storageKey = `tenants/${actor.tenantId}/editor-assets/${randomUUID()}.${extension}`;
+    const storageKey = `tenants/${tenantId}/editor-assets/${randomUUID()}.${extension}`;
     await blobStore.put(storageKey, Buffer.from(content));
     try {
-      const asset = await menuEditor.createAsset(actor.tenantId, {
-        tenantId: actor.tenantId,
+      const asset = await menuEditor.createAsset(tenantId, {
+        tenantId,
         kind,
         name: String(form.get("name") || file.name).trim().slice(0, 100) || file.name,
         mimeType: file.type,

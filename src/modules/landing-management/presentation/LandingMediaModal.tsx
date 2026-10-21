@@ -64,6 +64,7 @@ const CURATED_STOCK_PHOTOS: CuratedStockPhoto[] = [
 interface LandingMediaModalProps {
   open: boolean;
   tenantSlug: string;
+  tenantId?: string;
   currentUrl?: string;
   title?: string;
   onClose: () => void;
@@ -73,6 +74,7 @@ interface LandingMediaModalProps {
 export function LandingMediaModal({
   open,
   tenantSlug,
+  tenantId,
   currentUrl = "",
   title = "Biblioteca de Imágenes",
   onClose,
@@ -98,16 +100,21 @@ export function LandingMediaModal({
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/editor/assets?kind=IMAGE", {
+        const query = new URLSearchParams({ kind: "IMAGE" });
+        if (tenantId) query.set("tenantId", tenantId);
+        if (tenantSlug) query.set("tenantSlug", tenantSlug);
+        const res = await fetch(`/api/editor/assets?${query.toString()}`, {
           credentials: "same-origin",
         });
         const payload = (await res.json()) as {
+          success?: boolean;
           ok?: boolean;
           data?: UploadedImageAsset[];
           error?: { message?: string };
         };
         if (cancelled) return;
-        if (!res.ok || !payload.ok) {
+        const isSuccess = res.ok && (payload.success === true || payload.ok === true);
+        if (!isSuccess) {
           setError(
             payload.error?.message ?? "No se pudieron cargar las imágenes.",
           );
@@ -131,7 +138,7 @@ export function LandingMediaModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, tenantId, tenantSlug]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -145,6 +152,8 @@ export function LandingMediaModal({
       form.append("kind", "IMAGE");
       form.append("name", file.name.replace(/\.[^.]+$/, ""));
       form.append("file", file);
+      if (tenantId) form.append("tenantId", tenantId);
+      if (tenantSlug) form.append("tenantSlug", tenantSlug);
 
       const res = await fetch("/api/editor/assets", {
         method: "POST",
@@ -152,12 +161,18 @@ export function LandingMediaModal({
         credentials: "same-origin",
       });
       const payload = (await res.json()) as {
+        success?: boolean;
         ok?: boolean;
         data?: UploadedImageAsset;
         error?: { message?: string };
       };
 
-      if (!res.ok || !payload.ok || !payload.data) {
+      const isSuccess =
+        res.ok &&
+        (payload.success === true || payload.ok === true) &&
+        Boolean(payload.data);
+
+      if (!isSuccess || !payload.data) {
         throw new Error(
           payload.error?.message ?? "No se pudo subir la imagen.",
         );

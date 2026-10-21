@@ -35,6 +35,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
+  FoldVertical,
   Palette,
   LayoutTemplate,
   Download,
@@ -721,6 +723,9 @@ interface SubLayerTreeRowProps {
   selectedBlockId: string | null;
   activeSubElementSelector?: string | null;
   expandedSubLayerIds: Record<string, boolean>;
+  matchingNodeIds?: Set<string>;
+  ancestorNodeIds?: Set<string>;
+  isSearching?: boolean;
   onSelectSubElement: (blockId: string, selector: string) => void;
   onHoverSubElement: (blockId: string | null, selector: string | null) => void;
   onToggleExpand: (nodeId: string, e: React.MouseEvent) => void;
@@ -761,6 +766,9 @@ function SubLayerTreeRow({
   selectedBlockId,
   activeSubElementSelector,
   expandedSubLayerIds,
+  matchingNodeIds,
+  ancestorNodeIds,
+  isSearching,
   onSelectSubElement,
   onHoverSubElement,
   onToggleExpand,
@@ -782,7 +790,13 @@ function SubLayerTreeRow({
     selectedBlockId === block.id &&
     activeSubElementSelector === node.selector;
   const hasChildren = node.children.length > 0;
-  const isExpanded = expandedSubLayerIds[node.id] !== false; // default expanded
+  const isSearchingActive = Boolean(isSearching);
+  const isExpanded =
+    isSearchingActive && ancestorNodeIds?.has(node.id)
+      ? true
+      : Boolean(expandedSubLayerIds[node.id]);
+  const isMatching =
+    isSearchingActive && Boolean(matchingNodeIds?.has(node.id));
 
   const isSelfDragging =
     draggedLayerItem?.type === "sublayer" &&
@@ -962,7 +976,9 @@ function SubLayerTreeRow({
               ? "bg-violet-100/90 border-violet-400 text-violet-950 font-semibold ring-2 ring-violet-300 shadow-2xs"
               : isSelected
                 ? "bg-violet-100/90 border-violet-300 text-violet-900 font-semibold shadow-2xs"
-                : "border-transparent hover:bg-zinc-100/80 text-zinc-600 hover:text-zinc-900"
+                : isMatching
+                  ? "bg-blue-50/90 border-blue-400 text-blue-900 font-semibold ring-1 ring-blue-300 shadow-2xs"
+                  : "border-transparent hover:bg-zinc-100/80 text-zinc-600 hover:text-zinc-900"
         }`}
         title={`Seleccionar ${node.label} (Arrastrá para reordenar o anidar)`}
       >
@@ -1048,6 +1064,9 @@ function SubLayerTreeRow({
               selectedBlockId={selectedBlockId}
               activeSubElementSelector={activeSubElementSelector}
               expandedSubLayerIds={expandedSubLayerIds}
+              matchingNodeIds={matchingNodeIds}
+              ancestorNodeIds={ancestorNodeIds}
+              isSearching={isSearching}
               onSelectSubElement={onSelectSubElement}
               onHoverSubElement={onHoverSubElement}
               onToggleExpand={onToggleExpand}
@@ -3597,37 +3616,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     "all" | "layout" | "text" | "action" | "media"
   >("all");
 
-  // Nested Figma-style Layers state
+  // Nested Figma-style Layers state (collapsed by default)
   const [expandedBlockIds, setExpandedBlockIds] = useState<
     Record<string, boolean>
-  >(() => {
-    const initial: Record<string, boolean> = {};
-    if (initialDoc.blocks[0]) {
-      initial[initialDoc.blocks[0].id] = true;
-    }
-    return initial;
-  });
+  >({});
   const [expandedSubLayerIds, setExpandedSubLayerIds] = useState<
     Record<string, boolean>
   >({});
+  const [layerSearchQuery, setLayerSearchQuery] = useState("");
+  const [isLeftTabMenuOpen, setIsLeftTabMenuOpen] = useState(false);
+  const leftTabMenuRef = useRef<HTMLDivElement>(null);
 
   const toggleBlockExpanded = useCallback(
-    (blockId: string, e: React.MouseEvent) => {
-      e.stopPropagation();
+    (blockId: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
       setExpandedBlockIds((prev) => ({
         ...prev,
-        [blockId]: prev[blockId] === false ? true : false,
+        [blockId]: !prev[blockId],
       }));
     },
     [],
   );
 
   const toggleSubLayerExpanded = useCallback(
-    (nodeId: string, e: React.MouseEvent) => {
-      e.stopPropagation();
+    (nodeId: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
       setExpandedSubLayerIds((prev) => ({
         ...prev,
-        [nodeId]: prev[nodeId] === false ? true : false,
+        [nodeId]: !prev[nodeId],
       }));
     },
     [],
@@ -4006,6 +4022,117 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     }
     return map;
   }, [documentState.blocks]);
+
+  const handleExpandAllLayers = useCallback(() => {
+    const nextBlocks: Record<string, boolean> = {};
+    for (const b of documentState.blocks) {
+      nextBlocks[b.id] = true;
+    }
+    const nextSubLayers: Record<string, boolean> = {};
+    const collectSubIds = (nodes: LandingSubLayerNode[]) => {
+      for (const n of nodes) {
+        nextSubLayers[n.id] = true;
+        if (n.children && n.children.length > 0) {
+          collectSubIds(n.children);
+        }
+      }
+    };
+    blockSubLayerTrees.forEach((tree) => collectSubIds(tree));
+    setExpandedBlockIds(nextBlocks);
+    setExpandedSubLayerIds(nextSubLayers);
+  }, [documentState.blocks, blockSubLayerTrees]);
+
+  const handleCollapseAllLayers = useCallback(() => {
+    setExpandedBlockIds({});
+    setExpandedSubLayerIds({});
+  }, []);
+
+  const { matchingNodeIds, ancestorNodeIds, matchingBlockIds } = useMemo(() => {
+    const q = layerSearchQuery.trim().toLowerCase();
+    const matchNodes = new Set<string>();
+    const ancNodes = new Set<string>();
+    const matchBlocks = new Set<string>();
+
+    if (!q) {
+      return {
+        matchingNodeIds: matchNodes,
+        ancestorNodeIds: ancNodes,
+        matchingBlockIds: matchBlocks,
+      };
+    }
+
+    const checkNode = (
+      node: LandingSubLayerNode,
+      block: LandingBlock,
+    ): boolean => {
+      let selfMatch = false;
+      if (node.label.toLowerCase().includes(q)) selfMatch = true;
+      if (node.tag.toLowerCase().includes(q)) selfMatch = true;
+      if (node.selector.toLowerCase().includes(q)) selfMatch = true;
+      for (const key of node.childFieldKeys) {
+        const val = block.values[key];
+        if (typeof val === "string" && val.toLowerCase().includes(q)) {
+          selfMatch = true;
+          break;
+        }
+      }
+
+      let childMatch = false;
+      if (node.children) {
+        for (const child of node.children) {
+          if (checkNode(child, block)) {
+            childMatch = true;
+          }
+        }
+      }
+
+      if (selfMatch) {
+        matchNodes.add(node.id);
+      }
+      if (selfMatch || childMatch) {
+        ancNodes.add(node.id);
+        return true;
+      }
+      return false;
+    };
+
+    for (const block of documentState.blocks) {
+      const blockNameMatch = block.name.toLowerCase().includes(q);
+      const blockKeyMatch = block.moduleKey.toLowerCase().includes(q);
+      const tree = blockSubLayerTrees.get(block.id) || [];
+      let subLayerMatch = false;
+      for (const rootNode of tree) {
+        if (checkNode(rootNode, block)) {
+          subLayerMatch = true;
+        }
+      }
+      if (blockNameMatch || blockKeyMatch || subLayerMatch) {
+        matchBlocks.add(block.id);
+      }
+    }
+
+    return {
+      matchingNodeIds: matchNodes,
+      ancestorNodeIds: ancNodes,
+      matchingBlockIds: matchBlocks,
+    };
+  }, [layerSearchQuery, documentState.blocks, blockSubLayerTrees]);
+
+  useEffect(() => {
+    if (!isLeftTabMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        leftTabMenuRef.current &&
+        !leftTabMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsLeftTabMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isLeftTabMenuOpen]);
 
   const pageAnchors = useMemo(
     () => resolveDocumentBlockAnchors(documentState.blocks),
@@ -5408,67 +5535,284 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* LEFT SIDEBAR: Layers & + Components (OpenPage / M3E Canvas)     */}
         {/* --------------------------------------------------------------- */}
         <aside className="w-80 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
-          {/* Segmented Pill Toggle: Layers | Components | Modules */}
-          <div className="p-2 border-b border-zinc-200">
-            <div className="grid grid-cols-3 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-              <button
-                type="button"
-                onClick={() => setLeftTab("layers")}
-                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
-                  leftTab === "layers"
-                    ? "bg-white text-zinc-900 shadow-2xs"
-                    : "text-zinc-500 hover:text-zinc-900"
-                }`}
+          {/* Listado Selector: Capas | Componentes | Módulos */}
+          <div className="p-2 border-b border-zinc-200 relative" ref={leftTabMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsLeftTabMenuOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-800 transition-colors shadow-2xs group"
+              aria-expanded={isLeftTabMenuOpen}
+              aria-haspopup="listbox"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {leftTab === "layers" ? (
+                  <>
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-200/80 text-zinc-700 shrink-0">
+                      <Layers className="h-3 w-3" />
+                    </span>
+                    <span className="font-semibold text-zinc-900 truncate">Capas</span>
+                    <span className="text-[10px] bg-zinc-200 text-zinc-600 font-bold px-1.5 py-0.2 rounded-full shrink-0">
+                      {documentState.blocks.length}
+                    </span>
+                  </>
+                ) : leftTab === "components" ? (
+                  <>
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-100 text-blue-700 shrink-0">
+                      <Box className="h-3 w-3" />
+                    </span>
+                    <span className="font-semibold text-blue-900 truncate">Componentes</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.2 rounded-full shrink-0">
+                      Atómicos
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-100 text-amber-700 shrink-0">
+                      <Sparkles className="h-3 w-3" />
+                    </span>
+                    <span className="font-semibold text-amber-900 truncate">Módulos</span>
+                    <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.2 rounded-full shrink-0">
+                      Plantillas
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 text-zinc-400 group-hover:text-zinc-600">
+                <span className="text-[10px] font-medium text-zinc-400">Listado</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform duration-150 ${
+                    isLeftTabMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </button>
+
+            {isLeftTabMenuOpen && (
+              <div
+                role="listbox"
+                className="absolute top-full left-2 right-2 mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-40 p-1 space-y-1 animate-in fade-in-50 zoom-in-95 duration-100"
               >
-                <Layers className="h-3 w-3" />
-                Capas
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftTab("components")}
-                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
-                  leftTab === "components"
-                    ? "bg-white text-blue-700 shadow-2xs"
-                    : "text-zinc-500 hover:text-zinc-900"
-                }`}
-              >
-                <Box className="h-3 w-3 text-blue-600" />
-                Componentes
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftTab("modules")}
-                className={`flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
-                  leftTab === "modules"
-                    ? "bg-white text-amber-700 shadow-2xs"
-                    : "text-zinc-500 hover:text-zinc-900"
-                }`}
-              >
-                <Sparkles className="h-3 w-3 text-amber-500" />
-                Módulos
-              </button>
-            </div>
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100">
+                  Seleccionar panel
+                </div>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={leftTab === "layers"}
+                  onClick={() => {
+                    setLeftTab("layers");
+                    setIsLeftTabMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                    leftTab === "layers"
+                      ? "bg-zinc-100 text-zinc-900 font-semibold"
+                      : "hover:bg-zinc-50 text-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 shrink-0">
+                      <Layers className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-zinc-900">Capas</div>
+                      <div className="text-[10px] text-zinc-500 truncate">
+                        Estructura y jerarquía del lienzo
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] bg-zinc-200 text-zinc-600 font-bold px-1.5 py-0.5 rounded-full">
+                      {documentState.blocks.length}
+                    </span>
+                    {leftTab === "layers" && <Check className="h-3.5 w-3.5 text-zinc-800" />}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={leftTab === "components"}
+                  onClick={() => {
+                    setLeftTab("components");
+                    setIsLeftTabMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                    leftTab === "components"
+                      ? "bg-blue-50 text-blue-900 font-semibold"
+                      : "hover:bg-zinc-50 text-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 border border-blue-200 text-blue-700 shrink-0">
+                      <Box className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-zinc-900">Componentes</div>
+                      <div className="text-[10px] text-zinc-500 truncate">
+                        Elementos atómicos y contenedores
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">
+                      {filteredAtomicComponents.length}
+                    </span>
+                    {leftTab === "components" && <Check className="h-3.5 w-3.5 text-blue-700" />}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={leftTab === "modules"}
+                  onClick={() => {
+                    setLeftTab("modules");
+                    setIsLeftTabMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                    leftTab === "modules"
+                      ? "bg-amber-50 text-amber-900 font-semibold"
+                      : "hover:bg-zinc-50 text-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 border border-amber-200 text-amber-700 shrink-0">
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-zinc-900">Módulos</div>
+                      <div className="text-[10px] text-zinc-500 truncate">
+                        Secciones y plantillas prearmadas
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full">
+                      {BUILTIN_LANDING_MODULES.length + customModules.length}
+                    </span>
+                    {leftTab === "modules" && <Check className="h-3.5 w-3.5 text-amber-700" />}
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
 
           {leftTab === "layers" ? (
             <>
-              <div className="flex items-center justify-between px-3.5 py-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-                  Estructura de Capas
-                </span>
-                <span className="text-[11px] font-semibold text-zinc-400">
-                  {documentState.blocks.length}
-                </span>
+              {/* Capas Header with Expand/Collapse All buttons */}
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-zinc-100 bg-zinc-50/50">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                    Estructura de Capas
+                  </span>
+                  <span className="text-[10px] font-bold text-zinc-600 bg-zinc-200/80 px-1.5 py-0.2 rounded-full">
+                    {documentState.blocks.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleExpandAllLayers}
+                    title="Expandir todas las capas"
+                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/60 transition-colors flex items-center gap-1 text-[10px] font-medium"
+                  >
+                    <ChevronsUpDown className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Expandir</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCollapseAllLayers}
+                    title="Contraer todas las capas"
+                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/60 transition-colors flex items-center gap-1 text-[10px] font-medium"
+                  >
+                    <FoldVertical className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Contraer</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Layer Search Input */}
+              <div className="p-2 border-b border-zinc-100">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={layerSearchQuery}
+                    onChange={(e) => setLayerSearchQuery(e.target.value)}
+                    placeholder="Buscar capas por nombre, etiqueta o texto..."
+                    className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  />
+                  {layerSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLayerSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 p-0.5"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {layerSearchQuery.trim() && (
+                  <div className="flex items-center justify-between mt-1 px-1 text-[10px] text-zinc-500">
+                    <span>
+                      {matchingBlockIds.size}{" "}
+                      {matchingBlockIds.size === 1
+                        ? "sección encontrada"
+                        : "secciones encontradas"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLayerSearchQuery("")}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto px-2 space-y-1">
-                {documentState.blocks.map((block, idx) => {
-                  const isBlockSelected = block.id === selectedBlockId;
-                  const isSectionActive = isBlockSelected && !activeSubElement;
-                  const Icon = getModuleIcon(block.moduleKey);
-                  const subLayers = blockSubLayerTrees.get(block.id) || [];
-                  const hasSubLayers = subLayers.length > 0;
-                  const isBlockExpanded = expandedBlockIds[block.id] !== false;
+                {(() => {
+                  const visibleBlocks = layerSearchQuery.trim()
+                    ? documentState.blocks.filter((b) =>
+                        matchingBlockIds.has(b.id),
+                      )
+                    : documentState.blocks;
+
+                  if (visibleBlocks.length === 0) {
+                    return (
+                      <div className="py-8 px-4 text-center">
+                        <Search className="h-6 w-6 text-zinc-300 mx-auto mb-2" />
+                        <p className="text-xs font-semibold text-zinc-700">
+                          No se encontraron capas
+                        </p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          No hay capas ni textos que coincidan con &ldquo;
+                          {layerSearchQuery}&rdquo;
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setLayerSearchQuery("")}
+                          className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                        >
+                          Limpiar búsqueda
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return visibleBlocks.map((block, idx) => {
+                    const isBlockSelected = block.id === selectedBlockId;
+                    const isSectionActive =
+                      isBlockSelected && !activeSubElement;
+                    const Icon = getModuleIcon(block.moduleKey);
+                    const subLayers = blockSubLayerTrees.get(block.id) || [];
+                    const hasSubLayers = subLayers.length > 0;
+                    const isSearching = Boolean(layerSearchQuery.trim());
+                    const isBlockExpanded = isSearching
+                      ? true
+                      : Boolean(expandedBlockIds[block.id]);
 
                   const isThisBlockDrop = blockDropTarget?.blockId === block.id;
                   const isThisBlockInside =
@@ -5490,14 +5834,18 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             e.preventDefault();
                             return;
                           }
+                          const realIdx = documentState.blocks.findIndex(
+                            (b) => b.id === block.id,
+                          );
+                          const blockIndex = realIdx !== -1 ? realIdx : idx;
                           const item: DraggedLayerItem = {
                             type: "block",
                             blockId: block.id,
-                            blockIndex: idx,
+                            blockIndex,
                             label: block.name,
                           };
                           setDraggedLayerItem(item);
-                          setDraggedLayerIndex(idx);
+                          setDraggedLayerIndex(blockIndex);
                           const win = getDragWindow();
                           if (win) win.__draggedLayerItem = item;
                           try {
@@ -5649,7 +5997,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           }
 
                           if (draggedLayerIndex !== null) {
-                            handleReorderBlocks(draggedLayerIndex, idx);
+                            const targetRealIdx =
+                              documentState.blocks.findIndex(
+                                (b) => b.id === block.id,
+                              );
+                            handleReorderBlocks(
+                              draggedLayerIndex,
+                              targetRealIdx !== -1 ? targetRealIdx : idx,
+                            );
                             setDraggedLayerIndex(null);
                           }
                         }}
@@ -5767,6 +6122,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 activeSubElement?.selector
                               }
                               expandedSubLayerIds={expandedSubLayerIds}
+                              matchingNodeIds={matchingNodeIds}
+                              ancestorNodeIds={ancestorNodeIds}
+                              isSearching={isSearching}
                               onSelectSubElement={selectSubElementOnStudio}
                               onHoverSubElement={handleHoverSubElement}
                               onToggleExpand={toggleSubLayerExpanded}
@@ -5820,7 +6178,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       )}
                     </div>
                   );
-                })}
+                });
+              })()}
               </div>
 
               {/* Bottom pinned actions in Layers */}
@@ -9590,6 +9949,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         <LandingMediaModal
           open={true}
           tenantSlug={tenant.slug}
+          tenantId={tenant.id}
           currentUrl={mediaPickerTarget.currentUrl}
           title={mediaPickerTarget.title}
           onClose={() => setMediaPickerTarget(null)}
