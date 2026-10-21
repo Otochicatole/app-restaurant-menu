@@ -35,6 +35,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   ChevronsUpDown,
   FoldVertical,
   Palette,
@@ -3591,6 +3592,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   // Studio UI panels state
   const [leftTab, setLeftTab] = useState<LeftSidebarTab>("layers");
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [rightTab, setRightTab] = useState<RightSidebarTab>("properties");
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [interactiveCanvas, setInteractiveCanvas] = useState<boolean>(true);
@@ -5531,7 +5533,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* --------------------------------------------------------------- */}
         {/* LEFT SIDEBAR: Layers & + Components (OpenPage / M3E Canvas)     */}
         {/* --------------------------------------------------------------- */}
-        <aside className="w-96 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
+        <div className="relative flex shrink-0">
+          <aside
+            className={`bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0 transition-[width,opacity] duration-200 ease-in-out overflow-hidden ${
+              isLeftSidebarOpen
+                ? "w-96 opacity-100"
+                : "w-0 border-r-0 opacity-0"
+            }`}
+          >
+            <div className="w-96 h-full flex flex-col shrink-0 min-h-0">
           {/* Listado Selector: Capas | Componentes | Módulos */}
           <div className="p-2 border-b border-zinc-200 relative" ref={leftTabMenuRef}>
             <button
@@ -6540,7 +6550,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               </div>
             </div>
           )}
-        </aside>
+            </div>
+          </aside>
+
+          {/* Flechita flotante en el medio del borde para cerrar/abrir */}
+          <button
+            type="button"
+            onClick={() => setIsLeftSidebarOpen((prev) => !prev)}
+            className={`absolute top-1/2 -translate-y-1/2 z-40 flex h-7 w-7 items-center justify-center rounded-full bg-white border border-zinc-300 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+              isLeftSidebarOpen ? "-right-3.5" : "left-3"
+            }`}
+            title={
+              isLeftSidebarOpen
+                ? "Ocultar panel lateral (Capas y Componentes)"
+                : "Mostrar panel lateral (Capas y Componentes)"
+            }
+            aria-label={
+              isLeftSidebarOpen
+                ? "Ocultar panel lateral"
+                : "Mostrar panel lateral"
+            }
+          >
+            {isLeftSidebarOpen ? (
+              <ChevronLeft className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        </div>
 
         {/* --------------------------------------------------------------- */}
         {/* CENTER INTERACTIVE CANVAS + OPTIONAL CODE DRAWER                 */}
@@ -6676,7 +6713,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           </div>
 
           {/* Center Artboard Container */}
-          <div className="flex-1 overflow-auto flex items-start justify-center p-4 sm:p-6 min-h-0">
+          <div className="flex-1 overflow-auto flex items-start justify-center p-4 sm:p-6 pl-14 sm:pl-16 min-h-0">
             <div
               className={`bg-white rounded-xl overflow-hidden shadow-[0_16px_45px_rgba(0,0,0,0.12)] border transition-all duration-300 flex flex-col ${
                 isDraggingComponentOverCanvas
