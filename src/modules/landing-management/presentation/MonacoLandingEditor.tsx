@@ -49,7 +49,6 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  GripVertical,
   Sliders,
   Box,
   Type,
@@ -990,8 +989,6 @@ function SubLayerTreeRow({
         )}
 
         <div className="flex items-center gap-1.5 min-w-0">
-          <GripVertical className="h-3 w-3 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing shrink-0 transition-opacity" />
-
           {hasChildren ? (
             <button
               type="button"
@@ -5534,7 +5531,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* --------------------------------------------------------------- */}
         {/* LEFT SIDEBAR: Layers & + Components (OpenPage / M3E Canvas)     */}
         {/* --------------------------------------------------------------- */}
-        <aside className="w-80 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
+        <aside className="w-96 bg-white border-r border-zinc-200 flex flex-col shrink-0 min-h-0">
           {/* Listado Selector: Capas | Componentes | Módulos */}
           <div className="p-2 border-b border-zinc-200 relative" ref={leftTabMenuRef}>
             <button
@@ -5544,7 +5541,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               aria-expanded={isLeftTabMenuOpen}
               aria-haspopup="listbox"
             >
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
                 {leftTab === "layers" ? (
                   <>
                     <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-200/80 text-zinc-700 shrink-0">
@@ -5577,8 +5574,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0 text-zinc-400 group-hover:text-zinc-600">
-                <span className="text-[10px] font-medium text-zinc-400">Listado</span>
+              <div className="flex items-center shrink-0 text-zinc-400 group-hover:text-zinc-600 ml-1">
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform duration-150 ${
                     isLeftTabMenuOpen ? "rotate-180" : ""
@@ -6050,7 +6046,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             <span className="w-3 shrink-0" />
                           )}
 
-                          <GripVertical className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing shrink-0" />
                           <span
                             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
                               isSectionActive
@@ -6956,7 +6951,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* --------------------------------------------------------------- */}
         {/* RIGHT SIDEBAR: Properties & Design (OpenPage / Framely style)   */}
         {/* --------------------------------------------------------------- */}
-        <aside className="w-80 bg-white border-l border-zinc-200 flex flex-col shrink-0 min-h-0">
+        <aside className="w-96 bg-white border-l border-zinc-200 flex flex-col shrink-0 min-h-0">
           {/* Top Tabs: Propiedades | Diseño Global */}
           <div className="grid grid-cols-2 border-b border-zinc-200 bg-white">
             <button
