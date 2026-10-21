@@ -19,6 +19,7 @@ import {
   serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
   updateSubElementAttributeInBlock,
+  updateSubElementTextInBlock,
 } from "./landing-compiler";
 import {
   BUILTIN_LANDING_MODULES,
@@ -336,6 +337,126 @@ describe("landing-compiler", () => {
       if (root.children.length > 0) {
         expect(root.children[0].selector).toContain("section:nth-of-type(1) >");
       }
+    });
+
+    it("represents ALL nested tags in header including brand icon/name spans and hamburger toggle spans", () => {
+      const headerMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "header")!;
+      const block = createBlockFromBuiltinModule(headerMod);
+      const tree = buildBlockSubLayerTree(block);
+
+      const root = tree[0];
+      expect(root.tag).toBe("header");
+      const navContainer = root.children[0];
+      expect(navContainer.tag).toBe("div");
+
+      // Brand logo <a> should have children: span.brand-icon and span.brand-name
+      const brandLogo = navContainer.children.find((c) => c.selector.includes("a:nth-of-type(1)"));
+      expect(brandLogo).toBeDefined();
+      expect(brandLogo?.tag).toBe("a");
+      expect(brandLogo?.children.length).toBe(2);
+      expect(brandLogo?.children[0].tag).toBe("span");
+      expect(brandLogo?.children[0].label).toContain("Ícono");
+      expect(brandLogo?.children[1].tag).toBe("span");
+      expect(brandLogo?.children[1].label).toContain("Marca");
+
+      // Nav toggle <button> should have 3 span children for the hamburger bars
+      const navToggle = navContainer.children.find((c) => c.tag === "button");
+      expect(navToggle).toBeDefined();
+      expect(navToggle?.children.length).toBe(3);
+      expect(navToggle?.children.every((c) => c.tag === "span")).toBe(true);
+    });
+
+    it("represents ALL nested tags in hero including hero-actions and button text spans", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const block = createBlockFromBuiltinModule(heroMod);
+      const tree = buildBlockSubLayerTree(block);
+
+      const root = tree[0];
+      const container = root.children[0];
+      const heroContent = container.children[0];
+      expect(heroContent.tag).toBe("div");
+      expect(heroContent.label).toContain("Contenido Hero");
+
+      // Badge, Title, Subtitle, Actions
+      const heroActions = heroContent.children.find((c) => c.label.includes("Grupo de Botones"));
+      expect(heroActions).toBeDefined();
+      expect(heroActions?.children.length).toBe(2);
+
+      // Each button CTA should contain its inner span text tag
+      const primaryBtn = heroActions?.children[0];
+      expect(primaryBtn?.tag).toBe("a");
+      expect(primaryBtn?.children.length).toBe(1);
+      expect(primaryBtn?.children[0].tag).toBe("span");
+
+      const secondaryBtn = heroActions?.children[1];
+      expect(secondaryBtn?.tag).toBe("a");
+      expect(secondaryBtn?.children.length).toBe(1);
+      expect(secondaryBtn?.children[0].tag).toBe("span");
+    });
+
+    it("represents ALL nested tags in experience-split including features-list, check spans and strong tags", () => {
+      const expMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "experience-split")!;
+      const block = createBlockFromBuiltinModule(expMod);
+      const tree = buildBlockSubLayerTree(block);
+
+      const root = tree[0];
+      const container = root.children[0];
+
+      // Left column (visual)
+      const visualCol = container.children.find((c) => c.label.includes("Visual"));
+      expect(visualCol).toBeDefined();
+      const badgeFloat = visualCol?.children[0];
+      expect(badgeFloat?.children.length).toBe(2);
+      expect(badgeFloat?.children[0].label).toContain("Valor");
+      expect(badgeFloat?.children[1].label).toContain("Etiqueta");
+
+      const quoteBox = visualCol?.children[1];
+      expect(quoteBox?.children[0].tag).toBe("p");
+
+      // Right column (editorial content)
+      const contentCol = container.children.find((c) => c.label.includes("Editorial"));
+      expect(contentCol).toBeDefined();
+      const featuresList = contentCol?.children.find((c) => c.label.includes("Características"));
+      expect(featuresList).toBeDefined();
+      expect(featuresList?.children.length).toBe(3);
+
+      const firstItem = featuresList?.children[0];
+      expect(firstItem?.tag).toBe("div");
+      expect(firstItem?.children.length).toBe(2);
+      expect(firstItem?.children[0].tag).toBe("span");
+      expect(firstItem?.children[0].label).toContain("Tilde");
+
+      const itemTextBox = firstItem?.children[1];
+      expect(itemTextBox?.tag).toBe("div");
+      expect(itemTextBox?.children.length).toBe(1);
+      expect(itemTextBox?.children[0].tag).toBe("strong");
+      expect(itemTextBox?.children[0].label).toContain("Negrita");
+    });
+
+    it("represents ALL nested tags in footer including footer-brand, year span inside p, and footer-links", () => {
+      const footerMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "footer")!;
+      const block = createBlockFromBuiltinModule(footerMod);
+      const tree = buildBlockSubLayerTree(block);
+
+      const root = tree[0];
+      expect(root.tag).toBe("footer");
+      const container = root.children[0];
+
+      const footerBrand = container.children.find((c) => c.label.includes("Marca del Pie"));
+      expect(footerBrand).toBeDefined();
+      expect(footerBrand?.children.length).toBe(2);
+      expect(footerBrand?.children[0].tag).toBe("span");
+      expect(footerBrand?.children[1].tag).toBe("p");
+
+      // The p.footer-copy contains child span.js-current-year
+      const copyParagraph = footerBrand?.children[1];
+      expect(copyParagraph?.children.length).toBe(1);
+      expect(copyParagraph?.children[0].tag).toBe("span");
+
+      const footerLinks = container.children.find((c) => c.label.includes("Grupo de Botones"));
+      expect(footerLinks).toBeDefined();
+      expect(footerLinks?.children.length).toBe(2);
+      expect(footerLinks?.children.every((c) => c.tag === "a")).toBe(true);
     });
   });
 
@@ -748,6 +869,52 @@ describe("landing-compiler", () => {
       // Clean selection outlines remain intact
       expect(compiled.previewCss).toContain('[data-selected="true"]');
       expect(compiled.previewCss).toContain('[data-sub-selected="true"]');
+
+      // Drag preview indicator and inline editing styles
+      expect(compiled.previewCss).toContain("#__landing-drop-indicator");
+      expect(compiled.previewCss).toContain(".landing-drop-inside");
+      expect(compiled.previewCss).toContain(".landing-inline-editing");
+    });
+
+    it("updates sub-element text content cleanly via inline editing", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      let block = createBlockFromBuiltinModule(heroMod);
+
+      // 1. Update bound variable text
+      const titleSelector = "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1)";
+      block = updateSubElementTextInBlock(block, titleSelector, "Nuevo Título Gourmet");
+      expect(block.values.title).toBe("Nuevo Título Gourmet");
+
+      // 2. Insert preset element and update its text (bound to unique variable)
+      block = insertInnerElementInBlock(block, null, "h2", "after");
+      expect(block.htmlTemplate).toContain("<h2");
+      const h2Selector = "section:nth-of-type(1) > div:nth-of-type(1) > h2:nth-of-type(1)";
+      block = updateSubElementTextInBlock(block, h2Selector, "Subtítulo de Prueba");
+      expect(Object.values(block.values)).toContain("Subtítulo de Prueba");
+
+      // 3. Raw HTML sub-element without variables in a blank container
+      let blank = createBlankContainerBlock();
+      blank.htmlTemplate = `<section><div class="container"><p class="raw-note">Texto Original</p></div></section>`;
+      const rawSelector = "section:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)";
+      blank = updateSubElementTextInBlock(blank, rawSelector, "Texto Reemplazado");
+      expect(blank.htmlTemplate).toContain("Texto Reemplazado");
+    });
+
+    it("inserts inner elements with specific positions (before, after, inside)", () => {
+      let block = createBlankContainerBlock("flex-col");
+      const colSelector = "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)";
+
+      // Insert button inside
+      block = insertInnerElementInBlock(block, colSelector, "button", "inside");
+      expect(block.htmlTemplate).toContain("btn-primary");
+
+      // Insert heading before button
+      const btnSelector = `${colSelector} > a:nth-of-type(1)`;
+      block = insertInnerElementInBlock(block, btnSelector, "h1", "before");
+      expect(block.htmlTemplate).toContain("<h1");
+      const h1Idx = block.htmlTemplate.indexOf("<h1");
+      const btnIdx = block.htmlTemplate.indexOf("btn-primary");
+      expect(h1Idx).toBeLessThan(btnIdx);
     });
 
     it("compiles all 6 landing template presets successfully", () => {

@@ -422,7 +422,7 @@ export function interpolateBlockHtml(
       "";
     const escaped = escapeHtml(resolveTokens(rawVal));
     if (isInteractive && !insideTag) {
-      return `<l-field data-landing-field="${escapeHtml(key)}" contenteditable="true" spellcheck="false">${escaped}</l-field>`;
+      return `<l-field data-landing-field="${escapeHtml(key)}" contenteditable="false" spellcheck="false">${escaped}</l-field>`;
     }
     return escaped;
   };
@@ -810,6 +810,70 @@ html:not([data-preview-mode="true"]) .landing-drag-target {
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12) !important;
   position: relative !important;
 }
+/* Drag & Drop Canvas Indicators */
+.landing-dragging-source {
+  opacity: 0.35 !important;
+  outline: 2px dashed #2563eb !important;
+  outline-offset: 2px !important;
+}
+html:not([data-preview-mode="true"]) .landing-drop-inside {
+  outline: 2.5px dashed #2563eb !important;
+  outline-offset: -2px !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25) !important;
+  transition: background-color 0.1s ease, outline-color 0.1s ease !important;
+}
+#__landing-drop-indicator {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10000;
+  display: none;
+  background: #2563eb;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.8), 0 2px 4px rgba(0,0,0,0.2);
+  transition: top 0.05s ease, left 0.05s ease, width 0.05s ease, height 0.05s ease;
+}
+#__landing-drop-indicator::before {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  top: -3px;
+  left: -5px;
+  box-shadow: 0 0 6px rgba(37, 99, 235, 0.9);
+}
+#__landing-drop-badge {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10001;
+  display: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  white-space: nowrap;
+}
+/* Inline text editing */
+.landing-inline-editing {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 3px !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
+  border-radius: 4px !important;
+  cursor: text !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+[data-landing-field] {
+  cursor: inherit;
+  user-select: inherit;
+}
 a[data-original-href] {
   -webkit-user-drag: none;
   user-select: text;
@@ -859,6 +923,18 @@ a[data-original-href] {
     if (tag === 'li') return 'Ítem (<li>)';
     if (tag === 'nav') return 'Navegación (<nav>)';
     if (tag === 'aside') return 'Lateral (<aside>)';
+    if (tag === 'section') return 'Sección (<section>)';
+    if (tag === 'header') return 'Encabezado (<header>)';
+    if (tag === 'footer') return 'Pie (<footer>)';
+    if (tag === 'strong') return 'Texto Destacado (<strong>)';
+    if (tag === 'em') return 'Texto Cursiva (<em>)';
+    if (tag === 'small') return 'Texto Pequeño (<small>)';
+    if (tag === 'time') return 'Fecha/Hora (<time>)';
+    if (/\\bbrand-icon\\b/.test(cls)) return 'Ícono de Marca (span)';
+    if (/\\bbrand-name\\b/.test(cls)) return 'Nombre de Marca (span)';
+    if (/\\bfeature-check\\b/.test(cls)) return 'Tilde / Check (span)';
+    if (/\\b(stat-val|exp-number)\\b/.test(cls)) return 'Valor Métrica (span)';
+    if (/\\b(stat-lbl|exp-label)\\b/.test(cls)) return 'Etiqueta Métrica (span)';
     if (/\\bgrid-columns-2\\b/.test(cls)) return 'Grilla (2 Col)';
     if (/\\bgrid-columns-3\\b/.test(cls)) return 'Grilla (3 Col)';
     if (/\\bgrid-columns-4\\b/.test(cls)) return 'Grilla (4 Col)';
@@ -880,8 +956,25 @@ a[data-original-href] {
     if (/\\bfeature-item\\b/.test(cls)) return 'Ítem de Lista';
     if (/\\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\\b/.test(cls)) return 'Insignia (<span>)';
     if (/\\b(cards-grid|info-grid|gallery-mosaic|stats-strip-grid)\\b/.test(cls)) return 'Grilla';
-    if (/\\b(hero-actions|section-cta-wrap|footer-links)\\b/.test(cls)) return 'Grupo de Botones';
+    if (/\\b(hero-actions|section-cta-wrap|footer-links|image-spotlight-actions|spotlight-action)\\b/.test(cls)) return 'Grupo de Botones';
+    if (/\\bhero-content\\b/.test(cls)) return 'Contenido Hero (div)';
+    if (/\\bfeatures-list\\b/.test(cls)) return 'Lista de Características (div)';
+    if (/\\b(container|nav-container|hero-container|experience-container|footer-container)\\b/.test(cls)) return 'Contenedor (.container)';
+    if (/\\bspotlight-body\\b/.test(cls)) return 'Cuerpo de Tarjeta (div)';
+    if (/\\bspotlight-meta\\b/.test(cls)) return 'Metadatos (div)';
+    if (/\\bfooter-brand\\b/.test(cls)) return 'Marca del Pie (div)';
+    if (/\\bexperience-visual\\b/.test(cls)) return 'Bloque Visual (div)';
+    if (/\\bexperience-content\\b/.test(cls)) return 'Columna Editorial (div)';
+    if (/\\bpromo-banner-box\\b/.test(cls)) return 'Caja Promocional (div)';
+    if (/\\bpromo-banner-copy\\b/.test(cls)) return 'Texto Promocional (div)';
+    if (/\\bimage-spotlight-media\\b/.test(cls)) return 'Contenedor de Foto (div)';
+    if (/\\bimage-spotlight-copy\\b/.test(cls)) return 'Columna de Texto (div)';
     if (tag === 'hr') return 'Separador (<hr>)';
+    if (tag === 'span') return 'Texto (<span>)';
+    if (cls) {
+      var firstC = cls.trim().split(/\\s+/)[0];
+      return tag + '.' + firstC;
+    }
     return 'Elemento (<' + tag + '>)';
   }
 
@@ -938,65 +1031,29 @@ a[data-original-href] {
     return false;
   }
 
-  function isLayoutWrapper(el, blockEl) {
-    if (!el || el === blockEl) return true;
-    if (isEditableContainer(el)) return false;
-    var tag = el.tagName.toLowerCase();
-    if (tag === 'section' || tag === 'header' || tag === 'footer' || tag === 'main') return true;
-    if (el.parentElement === blockEl) return true;
-    var cls = el.className && typeof el.className === 'string' ? el.className.toLowerCase() : '';
-    if (/^container$|\\b(nav-container|hero-content|hero-inner|section-header|wrapper|content-wrapper)\\b/.test(cls)) {
-      return true;
-    }
-    return false;
-  }
+
 
   function resolveSelectableSubElement(target, blockEl) {
     if (!target || !blockEl || target === blockEl) return null;
     var el = target.nodeType === 1 ? target : target.parentElement;
     if (!el || !blockEl.contains(el) || el === blockEl) return null;
 
-    var fieldWrapper = closestEl(el, '[data-landing-field]');
-    if (fieldWrapper && fieldWrapper.parentElement && blockEl.contains(fieldWrapper.parentElement)) {
-      return fieldWrapper.parentElement;
+    // Resolve SVG shapes up to their root <svg> element
+    var svgChild = closestEl(el, 'path, circle, rect, polygon, line, polyline, g');
+    if (svgChild && blockEl.contains(svgChild)) {
+      var svgEl = closestEl(svgChild, 'svg');
+      if (svgEl && blockEl.contains(svgEl)) {
+        el = svgEl;
+      }
     }
 
-    var interactiveParent = closestEl(el, 'a, button');
-    if (interactiveParent && blockEl.contains(interactiveParent)) {
-      return interactiveParent;
+    // Resolve synthetic l-field tokens up to their actual HTML tag in the template
+    var fieldWrapper = closestEl(el, '[data-landing-field], l-field');
+    if (fieldWrapper && fieldWrapper.parentElement && blockEl.contains(fieldWrapper.parentElement) && fieldWrapper.parentElement !== blockEl) {
+      el = fieldWrapper.parentElement;
     }
 
-    var contentEl = closestEl(el, 'img, h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, summary, li, time');
-    if (contentEl && blockEl.contains(contentEl)) {
-      return contentEl;
-    }
-
-    var cardEl = closestEl(el, 'article, figure, details, .card, .info-card, .stat-card, .gallery-item, .faq-item, .feature-item, .spotlight-card, .review-card, .hero-badge, .card-badge, .promo-tag, .section-kicker');
-    if (cardEl && blockEl.contains(cardEl) && cardEl !== blockEl) {
-      return cardEl;
-    }
-
-    if (isEditableContainer(el)) {
-      return el;
-    }
-
-    var editableAncestor = closestEl(el, '.content-container, .section-box, .header-box, .footer-box, .nav-bar, .aside-box, .grid-columns-2, .grid-columns-3, .grid-columns-4, .grid-column, .flex-row, .flex-col, .spacer, nav, aside, ul, ol');
-    if (editableAncestor && blockEl.contains(editableAncestor) && editableAncestor !== blockEl) {
-      return editableAncestor;
-    }
-
-    if (isLayoutWrapper(el, blockEl)) {
-      return null;
-    }
-
-    var tag = el.tagName.toLowerCase();
-    if (tag === 'span' || tag === 'strong' || tag === 'em' || tag === 'small' || tag === 'b' || tag === 'i' || tag === 'hr') {
-      return el;
-    }
-
-    if (el.children && el.children.length > 1) {
-      return null;
-    }
+    if (!el || el === blockEl || !blockEl.contains(el)) return null;
 
     return el;
   }
@@ -1010,18 +1067,11 @@ a[data-original-href] {
     if (subEl.hasAttribute('data-landing-field')) {
       boundFieldEl = subEl;
     } else {
-      var isTextTag = /^(h[1-6]|p|blockquote|figcaption|a|button|span|strong|em|small|time|li|summary|label|b|i)$/.test(tag);
-      if (isTextTag) {
-        for (var ci = 0; ci < subEl.children.length; ci++) {
-          var ch = subEl.children[ci];
-          if (ch.hasAttribute('data-landing-field')) {
-            boundFieldEl = ch;
-            break;
-          }
-          if (ch.tagName.toLowerCase() === 'l-field') {
-            boundFieldEl = ch;
-            break;
-          }
+      for (var ci = 0; ci < subEl.children.length; ci++) {
+        var ch = subEl.children[ci];
+        if (ch.hasAttribute('data-landing-field') || ch.tagName.toLowerCase() === 'l-field') {
+          boundFieldEl = ch;
+          break;
         }
       }
     }
@@ -1035,10 +1085,8 @@ a[data-original-href] {
 
     var ancestors = [];
     var cur = subEl.parentElement;
-    while (cur && cur !== blockEl && cur.parentElement && cur.parentElement !== blockEl) {
-      var ancCls = cur.className && typeof cur.className === 'string' ? cur.className : '';
-      var isRootContainer = /\\bcontainer\\b/.test(ancCls) && cur.parentElement && cur.parentElement.parentElement === blockEl;
-      if (!isRootContainer && !cur.hasAttribute('data-landing-field') && cur.tagName.toLowerCase() !== 'l-field') {
+    while (cur && cur !== blockEl) {
+      if (!cur.hasAttribute('data-landing-field') && cur.tagName.toLowerCase() !== 'l-field') {
         var ancSelector = computeRelativeSelector(blockEl, cur);
         if (ancSelector) {
           ancestors.unshift({
@@ -1117,14 +1165,53 @@ a[data-original-href] {
     });
     var fields = document.querySelectorAll('[data-landing-field]');
     fields.forEach(function(f) {
-      f.setAttribute('contenteditable', isPreview ? 'false' : 'true');
+      f.setAttribute('contenteditable', 'false');
     });
+    syncDraggableElements();
   }
 
   function runDynamicHelpers() {
     document.querySelectorAll('.js-current-year').forEach(function(el) {
       el.textContent = String(new Date().getFullYear());
     });
+  }
+
+  function syncDraggableElements() {
+    var isPreview = document.documentElement.getAttribute('data-preview-mode') === 'true';
+    var blocks = document.querySelectorAll('[data-landing-block]');
+    blocks.forEach(function(b) {
+      b.setAttribute('draggable', isPreview ? 'false' : 'true');
+      var selectables = b.querySelectorAll(
+        'div, section, article, figure, nav, header, footer, h1, h2, h3, h4, h5, h6, p, blockquote, ul, ol, li, a, button, img, details, summary, span, .card, .info-card, .stat-card, .gallery-item, .faq-item, .flex-row, .flex-col, .grid-column, [data-landing-field]'
+      );
+      selectables.forEach(function(el) {
+        if (!el.classList.contains('landing-inline-editing')) {
+          el.setAttribute('draggable', isPreview ? 'false' : 'true');
+        }
+      });
+    });
+  }
+
+  var dropIndicator = document.createElement('div');
+  dropIndicator.id = '__landing-drop-indicator';
+  document.body.appendChild(dropIndicator);
+
+  var dropBadge = document.createElement('div');
+  dropBadge.id = '__landing-drop-badge';
+  document.body.appendChild(dropBadge);
+
+  var currentDropTargetEl = null;
+  var currentDropPosition = 'inside';
+  var currentDraggedItem = null;
+  var currentDraggedSourceEl = null;
+
+  function clearDropIndicators() {
+    dropIndicator.style.display = 'none';
+    dropBadge.style.display = 'none';
+    if (currentDropTargetEl) {
+      currentDropTargetEl.classList.remove('landing-drop-inside');
+      currentDropTargetEl = null;
+    }
   }
 
   function applySelection(blockId, subSelector) {
@@ -1188,12 +1275,73 @@ a[data-original-href] {
   }, true);
 
   document.addEventListener('dragstart', function(e) {
-    if (closestEl(e.target, 'a, img')) {
+    if (document.documentElement.getAttribute('data-preview-mode') === 'true') {
       e.preventDefault();
+      return;
     }
-  }, true);
+    if (e.target && (e.target.isContentEditable || e.target.classList.contains('landing-inline-editing'))) {
+      e.preventDefault();
+      return;
+    }
 
-  var currentDragTargetEl = null;
+    var blockEl = closestEl(e.target, '[data-landing-block]');
+    if (!blockEl) return;
+    var blockId = blockEl.getAttribute('data-landing-block');
+    var subEl = resolveSelectableSubElement(e.target, blockEl);
+
+    var isSub = subEl && subEl !== blockEl;
+    var draggedEl = isSub ? subEl : blockEl;
+    currentDraggedSourceEl = draggedEl;
+
+    if (isSub) {
+      var selector = computeRelativeSelector(blockEl, subEl);
+      var label = describeElement(subEl);
+      var tag = subEl.tagName.toLowerCase();
+      currentDraggedItem = {
+        type: 'sublayer',
+        blockId: blockId,
+        selector: selector,
+        label: label,
+        tag: tag
+      };
+    } else {
+      var blockLabel = blockEl.getAttribute('data-block-label') || 'Bloque';
+      currentDraggedItem = {
+        type: 'block',
+        blockId: blockId,
+        label: blockLabel
+      };
+    }
+
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try {
+        e.dataTransfer.setData('application/x-landing-canvas-move', JSON.stringify(currentDraggedItem));
+        e.dataTransfer.setData('text/plain', 'canvas-move:' + currentDraggedItem.type);
+      } catch (_) {}
+    }
+
+    window.__draggedCanvasItem = currentDraggedItem;
+    if (window.parent) {
+      window.parent.__draggedCanvasItem = currentDraggedItem;
+    }
+
+    draggedEl.classList.add('landing-dragging-source');
+    e.stopPropagation();
+  }, false);
+
+  document.addEventListener('dragend', function() {
+    clearDropIndicators();
+    if (currentDraggedSourceEl) {
+      currentDraggedSourceEl.classList.remove('landing-dragging-source');
+      currentDraggedSourceEl = null;
+    }
+    currentDraggedItem = null;
+    window.__draggedCanvasItem = null;
+    if (window.parent) {
+      window.parent.__draggedCanvasItem = null;
+    }
+  }, false);
 
   document.addEventListener('dragenter', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
@@ -1204,36 +1352,141 @@ a[data-original-href] {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
     e.preventDefault();
     if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy';
+      e.dataTransfer.dropEffect = 'move';
     }
+
     var blockEl = closestEl(e.target, '[data-landing-block]');
-    var subEl = blockEl ? resolveSelectableSubElement(e.target, blockEl) : null;
+    if (!blockEl) {
+      clearDropIndicators();
+      return;
+    }
+
+    var subEl = resolveSelectableSubElement(e.target, blockEl);
     var targetEl = subEl || blockEl;
-    if (targetEl !== currentDragTargetEl) {
-      if (currentDragTargetEl) currentDragTargetEl.classList.remove('landing-drag-target');
-      currentDragTargetEl = targetEl;
-      if (currentDragTargetEl) currentDragTargetEl.classList.add('landing-drag-target');
+
+    if (currentDraggedSourceEl && (currentDraggedSourceEl === targetEl || currentDraggedSourceEl.contains(targetEl))) {
+      clearDropIndicators();
+      return;
+    }
+
+    var isTargetContainer = isEditableContainer(targetEl) || targetEl === blockEl;
+    var rect = targetEl.getBoundingClientRect();
+    var position = 'inside';
+
+    var parent = targetEl.parentElement;
+    var isHorizontal = false;
+    if (parent) {
+      var comp = window.getComputedStyle(parent);
+      if (comp.display === 'flex' && (comp.flexDirection === 'row' || comp.flexDirection === 'row-reverse')) {
+        isHorizontal = true;
+      }
+    }
+
+    if (isTargetContainer) {
+      var edgeY = Math.min(28, rect.height * 0.22);
+      if (targetEl !== blockEl && e.clientY < rect.top + edgeY) {
+        position = 'before';
+      } else if (targetEl !== blockEl && e.clientY > rect.bottom - edgeY) {
+        position = 'after';
+      } else {
+        position = 'inside';
+      }
+    } else {
+      if (isHorizontal) {
+        var midX = rect.left + rect.width / 2;
+        position = e.clientX < midX ? 'before' : 'after';
+      } else {
+        var midY = rect.top + rect.height / 2;
+        position = e.clientY < midY ? 'before' : 'after';
+      }
+    }
+
+    if (currentDropTargetEl && currentDropTargetEl !== targetEl) {
+      currentDropTargetEl.classList.remove('landing-drop-inside');
+    }
+    currentDropTargetEl = targetEl;
+    currentDropPosition = position;
+
+    var scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    var scrollX = window.scrollX || document.documentElement.scrollLeft || 0;
+
+    if (position === 'inside') {
+      dropIndicator.style.display = 'none';
+      targetEl.classList.add('landing-drop-inside');
+
+      var label = targetEl === blockEl
+        ? (blockEl.getAttribute('data-block-label') || 'Sección')
+        : describeElement(targetEl);
+
+      dropBadge.textContent = '📥 Soltar dentro de ' + label;
+      dropBadge.style.top = Math.max(8, rect.top + scrollY + 6) + 'px';
+      dropBadge.style.left = (rect.left + scrollX + 12) + 'px';
+      dropBadge.style.display = 'block';
+    } else {
+      targetEl.classList.remove('landing-drop-inside');
+      dropBadge.style.display = 'none';
+
+      if (isHorizontal) {
+        var x = position === 'before' ? rect.left : rect.right;
+        dropIndicator.style.top = (rect.top + scrollY) + 'px';
+        dropIndicator.style.left = (x + scrollX - 1.5) + 'px';
+        dropIndicator.style.width = '3px';
+        dropIndicator.style.height = rect.height + 'px';
+      } else {
+        var y = position === 'before' ? rect.top : rect.bottom;
+        dropIndicator.style.top = (y + scrollY - 1.5) + 'px';
+        dropIndicator.style.left = (rect.left + scrollX) + 'px';
+        dropIndicator.style.width = rect.width + 'px';
+        dropIndicator.style.height = '3px';
+      }
+      dropIndicator.style.display = 'block';
     }
   }, false);
 
   document.addEventListener('dragleave', function(e) {
-    if (!e.relatedTarget && currentDragTargetEl) {
-      currentDragTargetEl.classList.remove('landing-drag-target');
-      currentDragTargetEl = null;
+    if (!e.relatedTarget) {
+      clearDropIndicators();
     }
   }, false);
 
   document.addEventListener('drop', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
     e.preventDefault();
-    if (currentDragTargetEl) {
-      currentDragTargetEl.classList.remove('landing-drag-target');
-      currentDragTargetEl = null;
+
+    var targetEl = currentDropTargetEl;
+    var position = currentDropPosition;
+    clearDropIndicators();
+
+    if (!targetEl) return;
+    var targetBlockEl = closestEl(targetEl, '[data-landing-block]');
+    if (!targetBlockEl) return;
+    var targetBlockId = targetBlockEl.getAttribute('data-landing-block');
+    var isTargetBlockRoot = targetEl === targetBlockEl;
+    var targetSelector = isTargetBlockRoot ? null : computeRelativeSelector(targetBlockEl, targetEl);
+
+    var canvasMoveItem = currentDraggedItem || window.__draggedCanvasItem;
+    if (!canvasMoveItem && window.parent && window.parent.__draggedCanvasItem) {
+      canvasMoveItem = window.parent.__draggedCanvasItem;
     }
-    var blockEl = closestEl(e.target, '[data-landing-block]');
-    var blockId = blockEl ? blockEl.getAttribute('data-landing-block') : null;
-    var subEl = blockEl ? resolveSelectableSubElement(e.target, blockEl) : null;
-    var subSelector = (blockEl && subEl) ? computeRelativeSelector(blockEl, subEl) : null;
+    if (!canvasMoveItem && e.dataTransfer) {
+      try {
+        var raw = e.dataTransfer.getData('application/x-landing-canvas-move');
+        if (raw) canvasMoveItem = JSON.parse(raw);
+      } catch (_) {}
+    }
+
+    if (canvasMoveItem) {
+      window.parent.postMessage({
+        type: 'LANDING_CANVAS_MOVE',
+        sourceItem: canvasMoveItem,
+        target: {
+          blockId: targetBlockId,
+          selector: targetSelector
+        },
+        position: position
+      }, '*');
+      return;
+    }
 
     var componentKind = '';
     var builtinKey = '';
@@ -1256,28 +1509,25 @@ a[data-original-href] {
       }
     } catch (_) {}
 
-    try {
-      if (!componentKind && window.parent && window.parent.__draggedComponentKind) {
-        componentKind = window.parent.__draggedComponentKind;
-      }
-      if (!builtinKey && window.parent && window.parent.__draggedBuiltinKey) {
-        builtinKey = window.parent.__draggedBuiltinKey;
-      }
-      if (!customId && window.parent && window.parent.__draggedCustomId) {
-        customId = window.parent.__draggedCustomId;
-      }
-    } catch (_) {}
+    if (!componentKind && window.parent && window.parent.__draggedComponentKind) {
+      componentKind = window.parent.__draggedComponentKind;
+    }
+    if (!builtinKey && window.parent && window.parent.__draggedBuiltinKey) {
+      builtinKey = window.parent.__draggedBuiltinKey;
+    }
+    if (!customId && window.parent && window.parent.__draggedCustomId) {
+      customId = window.parent.__draggedCustomId;
+    }
 
-    try {
-      window.parent.postMessage({
-        type: 'LANDING_CANVAS_DROP',
-        blockId: blockId,
-        subSelector: subSelector,
-        componentKind: componentKind,
-        builtinKey: builtinKey,
-        customId: customId
-      }, '*');
-    } catch (_) {}
+    window.parent.postMessage({
+      type: 'LANDING_CANVAS_DROP',
+      blockId: targetBlockId,
+      subSelector: targetSelector,
+      position: position,
+      componentKind: componentKind,
+      builtinKey: builtinKey,
+      customId: customId
+    }, '*');
   }, false);
 
   function scrollToAnchorTarget(rawHash) {
@@ -1309,6 +1559,9 @@ a[data-original-href] {
       }
     }
     if (isPreview) return;
+    if (e.target && e.target.classList && e.target.classList.contains('landing-inline-editing')) {
+      return;
+    }
     var blockEl = closestEl(e.target, '[data-landing-block]');
     if (!blockEl) return;
     var id = blockEl.getAttribute('data-landing-block');
@@ -1331,22 +1584,91 @@ a[data-original-href] {
 
   document.addEventListener('dblclick', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
+    var blockEl = closestEl(e.target, '[data-landing-block]');
+    if (!blockEl) return;
+    var id = blockEl.getAttribute('data-landing-block');
+
     var imgEl = closestEl(e.target, 'img');
-    var blockEl = imgEl ? closestEl(imgEl, '[data-landing-block]') : null;
-    if (imgEl && blockEl) {
+    if (imgEl) {
       e.preventDefault();
       e.stopPropagation();
-      var id = blockEl.getAttribute('data-landing-block');
-      var payload = buildSubElementPayload(blockEl, imgEl);
-      if (payload) {
-        applySelection(id, payload.selector);
+      var imgPayload = buildSubElementPayload(blockEl, imgEl);
+      if (imgPayload) {
+        applySelection(id, imgPayload.selector);
         window.parent.postMessage({
           type: 'LANDING_SUBELEMENT_ACTION',
           blockId: id,
-          selector: payload.selector,
+          selector: imgPayload.selector,
           action: 'pick-image'
         }, '*');
       }
+      return;
+    }
+
+    var fieldEl = closestEl(e.target, '[data-landing-field]');
+    var textEl = fieldEl || closestEl(
+      e.target,
+      'h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, summary, span, li, button, a'
+    );
+    if (textEl && !textEl.classList.contains('landing-inline-editing')) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      textEl.setAttribute('contenteditable', 'true');
+      textEl.setAttribute('draggable', 'false');
+      textEl.classList.add('landing-inline-editing');
+      textEl.focus();
+
+      var range = document.createRange();
+      range.selectNodeContents(textEl);
+      var sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      var onFinish = function() {
+        textEl.removeEventListener('blur', onFinish);
+        textEl.removeAttribute('contenteditable');
+        textEl.classList.remove('landing-inline-editing');
+        syncDraggableElements();
+
+        var updatedText = (textEl.innerText !== undefined ? textEl.innerText : textEl.textContent || '').trim();
+        var fieldKey = textEl.getAttribute('data-landing-field');
+
+        if (fieldKey) {
+          window.parent.postMessage({
+            type: 'LANDING_UPDATE_VALUE',
+            blockId: id,
+            fieldKey: fieldKey,
+            value: updatedText
+          }, '*');
+        } else {
+          var relSel = computeRelativeSelector(blockEl, textEl);
+          if (relSel) {
+            window.parent.postMessage({
+              type: 'LANDING_SUBELEMENT_TEXT_UPDATE',
+              blockId: id,
+              selector: relSel,
+              text: updatedText
+            }, '*');
+          }
+        }
+      };
+
+      textEl.addEventListener('blur', onFinish, { once: true });
+      textEl.addEventListener('keydown', function(evt) {
+        if (evt.key === 'Escape') {
+          evt.preventDefault();
+          textEl.blur();
+        } else if (evt.key === 'Enter' && !evt.shiftKey) {
+          var tag = textEl.tagName.toLowerCase();
+          if (tag !== 'p' && tag !== 'blockquote') {
+            evt.preventDefault();
+            textEl.blur();
+          }
+        }
+      });
     }
   }, true);
 
@@ -2553,6 +2875,7 @@ export function insertInnerElementInBlock(
   block: LandingBlock,
   targetSelector: string | null,
   kind: InsertableInnerElementKind,
+  position: "inside" | "before" | "after" = "inside",
 ): LandingBlock {
   const usedKeys = new Set<string>([
     ...extractTemplateVariables(block.htmlTemplate),
@@ -2799,6 +3122,10 @@ export function insertInnerElementInBlock(
           start: found.node.startOffset,
           end: found.node.endOffset,
         };
+      } else if (position === "before") {
+        insertOffset = found.node.startOffset;
+      } else if (position === "after") {
+        insertOffset = found.node.endOffset;
       } else {
         const placeholderChild = found.node.children.find((c) =>
           isPlaceholderParagraph(c, block.htmlTemplate),
@@ -2996,6 +3323,52 @@ export function updateSubElementAttributeInBlock(
   };
 }
 
+export function updateSubElementTextInBlock(
+  block: LandingBlock,
+  relativeSelector: string,
+  newText: string,
+): LandingBlock {
+  const ast = parseHtmlTemplateAst(block.htmlTemplate);
+  const found = findAstNodeByRelativeSelector(ast, relativeSelector);
+  if (!found) return block;
+
+  const { node } = found;
+  const innerHtml = block.htmlTemplate.slice(
+    node.innerStartOffset,
+    node.innerEndOffset,
+  );
+  const boundVarMatch = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/.exec(innerHtml);
+  if (boundVarMatch?.[1] && !SYSTEM_VARIABLES.has(boundVarMatch[1])) {
+    const boundKey = boundVarMatch[1];
+    return {
+      ...block,
+      values: {
+        ...block.values,
+        [boundKey]: newText,
+      },
+    };
+  }
+
+  const safeText = escapeHtml(newText);
+  const nextHtmlTemplate =
+    block.htmlTemplate.slice(0, node.innerStartOffset) +
+    safeText +
+    block.htmlTemplate.slice(node.innerEndOffset);
+
+  const synced = syncFieldsWithHtmlTemplate(
+    block.fields,
+    block.values,
+    nextHtmlTemplate,
+  );
+
+  return {
+    ...block,
+    htmlTemplate: nextHtmlTemplate,
+    fields: synced.fields,
+    values: synced.values,
+  };
+}
+
 export const DEFAULT_LANDING_THEME: LandingTheme = {
   primaryColor: "#1e3321",
   primaryLightColor: "#2c4a30",
@@ -3152,19 +3525,6 @@ function findCardTitleText(
   return null;
 }
 
-function isDecorativeEmptyNode(node: HtmlAstNode, html: string): boolean {
-  const tag = node.tagName.toLowerCase();
-  if (tag !== "span" && tag !== "i" && tag !== "b" && tag !== "em") {
-    return false;
-  }
-  if (node.children.length > 0) return false;
-  const inner = html.slice(node.innerStartOffset, node.innerEndOffset).trim();
-  if (inner.length > 0) return false;
-  const attrs = extractNodeAttributes(html, node);
-  if (attrs.ariaLabel) return false;
-  return true;
-}
-
 function mapAstNodeToSubLayer(
   block: LandingBlock,
   node: HtmlAstNode,
@@ -3172,10 +3532,6 @@ function mapAstNodeToSubLayer(
   parentNode?: HtmlAstNode,
   columnPosition?: number,
 ): LandingSubLayerNode | null {
-  if (isDecorativeEmptyNode(node, block.htmlTemplate)) {
-    return null;
-  }
-
   const tag = node.tagName.toLowerCase();
   const attrs = extractNodeAttributes(block.htmlTemplate, node);
   const textPreview = extractNodeTextPreview(
@@ -3188,11 +3544,10 @@ function mapAstNodeToSubLayer(
 
   let iconType: LandingSubLayerIconType = "container";
   let label = tag;
-  let forceLeaf = false;
+  const isVoid = VOID_HTML_TAGS.has(tag);
 
   if (tag === "img") {
     iconType = "image";
-    forceLeaf = true;
     if (attrs.alt) {
       label = `Imagen ("${truncateString(attrs.alt, 20)}")`;
     } else {
@@ -3201,13 +3556,11 @@ function mapAstNodeToSubLayer(
     }
   } else if (tag === "button") {
     iconType = "button";
-    forceLeaf = true;
     const btnText = textPreview || attrs.ariaLabel;
     label = btnText ? `Botón ("${truncateString(btnText, 22)}")` : "Botón";
   } else if (tag === "a") {
     const isBtn = /\bbtn\b/.test(attrs.className);
     iconType = isBtn ? "button" : "link";
-    forceLeaf = true;
     const aText = textPreview || attrs.ariaLabel;
     if (aText) {
       label = isBtn
@@ -3220,25 +3573,21 @@ function mapAstNodeToSubLayer(
     }
   } else if (/^h[1-6]$/.test(tag)) {
     iconType = "text";
-    forceLeaf = true;
     label = textPreview
       ? `${tag.toUpperCase()} ("${truncateString(textPreview, 24)}")`
       : `Título (${tag.toUpperCase()})`;
   } else if (tag === "p") {
     iconType = "text";
-    forceLeaf = true;
     label = textPreview
       ? `Párrafo ("${truncateString(textPreview, 24)}")`
       : "Párrafo";
   } else if (tag === "blockquote") {
     iconType = "text";
-    forceLeaf = true;
     label = textPreview
       ? `Cita ("${truncateString(textPreview, 22)}")`
       : "Cita (blockquote)";
   } else if (tag === "figcaption") {
     iconType = "text";
-    forceLeaf = true;
     label = textPreview
       ? `Epígrafe ("${truncateString(textPreview, 22)}")`
       : "Epígrafe (figcaption)";
@@ -3251,7 +3600,6 @@ function mapAstNodeToSubLayer(
     )
   ) {
     iconType = "badge";
-    forceLeaf = true;
     label = textPreview
       ? `Insignia ("${truncateString(textPreview, 20)}")`
       : "Insignia";
@@ -3263,9 +3611,15 @@ function mapAstNodeToSubLayer(
   ) {
     iconType = "card";
     const cardTitle = findCardTitleText(node, block.htmlTemplate, block.values);
-    label = cardTitle
-      ? `Tarjeta ("${truncateString(cardTitle, 20)}")`
-      : "Tarjeta";
+    if (/\bfeature-item\b/.test(attrs.className)) {
+      label = textPreview ? `Ítem ("${truncateString(textPreview, 20)}")` : "Ítem de Lista";
+    } else if (/\bstat-card\b/.test(attrs.className)) {
+      label = textPreview ? `Métrica ("${truncateString(textPreview, 20)}")` : "Tarjeta Métrica";
+    } else {
+      label = cardTitle
+        ? `Tarjeta ("${truncateString(cardTitle, 20)}")`
+        : "Tarjeta";
+    }
   } else if (tag === "nav") {
     iconType = "container";
     label = "Menú de Navegación (<nav>)";
@@ -3277,7 +3631,6 @@ function mapAstNodeToSubLayer(
     label = tag === "ol" ? "Lista numerada (<ol>)" : "Lista con viñetas (<ul>)";
   } else if (tag === "li") {
     iconType = "text";
-    forceLeaf = node.children.length === 0;
     label = textPreview
       ? `Ítem ("${truncateString(textPreview, 20)}")`
       : "Ítem de lista (<li>)";
@@ -3294,7 +3647,6 @@ function mapAstNodeToSubLayer(
       : "Acordeón (<details>)";
   } else if (tag === "summary") {
     iconType = "text";
-    forceLeaf = true;
     label = textPreview
       ? `Pregunta ("${truncateString(textPreview, 22)}")`
       : "Pregunta (<summary>)";
@@ -3302,15 +3654,31 @@ function mapAstNodeToSubLayer(
     tag === "span" ||
     tag === "strong" ||
     tag === "em" ||
-    tag === "small"
+    tag === "small" ||
+    tag === "b" ||
+    tag === "i" ||
+    tag === "time"
   ) {
     iconType = "text";
-    label = textPreview
-      ? `${tag} ("${truncateString(textPreview, 18)}")`
-      : tag;
+    if (/\bbrand-icon\b/.test(attrs.className)) {
+      label = textPreview ? `Ícono ("${truncateString(textPreview, 16)}")` : "Ícono de Marca (span)";
+    } else if (/\bbrand-name\b/.test(attrs.className)) {
+      label = textPreview ? `Marca ("${truncateString(textPreview, 18)}")` : "Nombre de Marca (span)";
+    } else if (/\bfeature-check\b/.test(attrs.className)) {
+      label = "Tilde / Check (span)";
+    } else if (/\b(stat-val|exp-number)\b/.test(attrs.className)) {
+      label = textPreview ? `Valor ("${truncateString(textPreview, 16)}")` : "Valor Métrica (span)";
+    } else if (/\b(stat-lbl|exp-label)\b/.test(attrs.className)) {
+      label = textPreview ? `Etiqueta ("${truncateString(textPreview, 18)}")` : "Etiqueta Métrica (span)";
+    } else if (tag === "strong") {
+      label = textPreview ? `Negrita ("${truncateString(textPreview, 18)}")` : "Texto destacado (strong)";
+    } else {
+      label = textPreview
+        ? `${tag} ("${truncateString(textPreview, 18)}")`
+        : tag;
+    }
   } else if (tag === "hr") {
     iconType = "container";
-    forceLeaf = true;
     label = "Separador (<hr>)";
   } else {
     iconType = "container";
@@ -3326,7 +3694,6 @@ function mapAstNodeToSubLayer(
       label = "Columna Flex (div.flex-col)";
     } else if (/\bspacer\b/.test(attrs.className)) {
       label = "Espaciador (div.spacer)";
-      forceLeaf = true;
     } else if (/\bsection-box\b/.test(attrs.className)) {
       label = "Sub-sección (<section>)";
     } else if (/\bheader-box\b/.test(attrs.className)) {
@@ -3337,44 +3704,46 @@ function mapAstNodeToSubLayer(
       label = "Contenedor (<div>)";
     } else if (/\bgrid-column\b/.test(attrs.className)) {
       label = columnPosition ? `Columna ${columnPosition}` : "Columna";
-    } else if (parentNode) {
-      const parentAttrs = extractNodeAttributes(block.htmlTemplate, parentNode);
-      if (/\bgrid-columns-2|grid-columns-3|grid-columns-4\b/.test(parentAttrs.className)) {
-        label = columnPosition ? `Columna ${columnPosition}` : "Columna";
-      } else if (/\bcards-grid|grid|mosaic|gallery-mosaic\b/.test(attrs.className)) {
-        label = "Grilla";
-      } else if (
-        /\b(hero-actions|cta-wrap|btn-group|buttons)\b/.test(attrs.className)
-      ) {
-        label = "Grupo de Botones";
-      } else if (/\bsection-header\b/.test(attrs.className)) {
-        label = "Encabezado de Sección";
-      } else if (/\b(container|nav-container)\b/.test(attrs.className)) {
-        label = "Contenedor (.container)";
-      } else if (tag === "header") {
-        label = "Encabezado (header)";
-      } else if (tag === "footer") {
-        label = "Pie de página (footer)";
-      } else if (attrs.className) {
-        const firstCls = attrs.className.trim().split(/\s+/)[0];
-        label = `${tag}.${firstCls}`;
-      } else {
-        label = tag;
-      }
-    } else if (/\bcards-grid|grid|mosaic|gallery-mosaic\b/.test(attrs.className)) {
+    } else if (parentNode && /\bgrid-columns-2|grid-columns-3|grid-columns-4\b/.test(extractNodeAttributes(block.htmlTemplate, parentNode).className)) {
+      label = columnPosition ? `Columna ${columnPosition}` : "Columna";
+    } else if (/\b(cards-grid|grid|mosaic|gallery-mosaic|stats-strip-grid|info-grid)\b/.test(attrs.className)) {
       label = "Grilla";
     } else if (
-      /\b(hero-actions|cta-wrap|btn-group|buttons)\b/.test(attrs.className)
+      /\b(hero-actions|cta-wrap|btn-group|buttons|footer-links|image-spotlight-actions|spotlight-action)\b/.test(attrs.className)
     ) {
       label = "Grupo de Botones";
     } else if (/\bsection-header\b/.test(attrs.className)) {
       label = "Encabezado de Sección";
-    } else if (/\b(container|nav-container)\b/.test(attrs.className)) {
+    } else if (/\b(hero-content|hero-inner)\b/.test(attrs.className)) {
+      label = "Contenido Hero";
+    } else if (/\bfeatures-list\b/.test(attrs.className)) {
+      label = "Lista de Características";
+    } else if (/\b(container|nav-container|hero-container|experience-container|faq-container|footer-container)\b/.test(attrs.className)) {
       label = "Contenedor (.container)";
+    } else if (/\bspotlight-body\b/.test(attrs.className)) {
+      label = "Cuerpo de Tarjeta";
+    } else if (/\bspotlight-meta\b/.test(attrs.className)) {
+      label = "Metadatos";
+    } else if (/\bexperience-visual\b/.test(attrs.className)) {
+      label = "Bloque Visual";
+    } else if (/\bexperience-content\b/.test(attrs.className)) {
+      label = "Columna Editorial";
+    } else if (/\bpromo-banner-box\b/.test(attrs.className)) {
+      label = "Caja Promocional";
+    } else if (/\bpromo-banner-copy\b/.test(attrs.className)) {
+      label = "Texto Promocional";
+    } else if (/\bimage-spotlight-media\b/.test(attrs.className)) {
+      label = "Contenedor de Foto";
+    } else if (/\bimage-spotlight-copy\b/.test(attrs.className)) {
+      label = "Columna de Texto";
+    } else if (/\bfooter-brand\b/.test(attrs.className)) {
+      label = "Marca del Pie";
     } else if (tag === "header") {
       label = "Encabezado (header)";
     } else if (tag === "footer") {
       label = "Pie de página (footer)";
+    } else if (tag === "section") {
+      label = "Sección (section)";
     } else if (attrs.className) {
       const firstCls = attrs.className.trim().split(/\s+/)[0];
       label = `${tag}.${firstCls}`;
@@ -3384,7 +3753,7 @@ function mapAstNodeToSubLayer(
   }
 
   const children: LandingSubLayerNode[] = [];
-  if (!forceLeaf && node.children.length > 0) {
+  if (!isVoid && node.children.length > 0) {
     const childTagCounts = new Map<string, number>();
     for (const child of node.children) {
       const childTag = child.tagName.toLowerCase();

@@ -113,6 +113,7 @@ import {
   serializeSubElementStyles,
   syncFieldsWithHtmlTemplate,
   updateSubElementAttributeInBlock,
+  updateSubElementTextInBlock,
   type InsertableInnerElementKind,
   type LandingSubLayerIconType,
   type LandingSubLayerNode,
@@ -4537,11 +4538,21 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             });
           }
         } else {
+          const sourceIdx =
+            "blockIndex" in sourceItem && sourceItem.blockIndex !== undefined
+              ? sourceItem.blockIndex
+              : documentState.blocks.findIndex((b) => b.id === sourceItem.blockId);
           const targetIdx = documentState.blocks.findIndex(
             (b) => b.id === target.blockId,
           );
-          if (sourceItem.blockIndex !== undefined && targetIdx >= 0) {
-            handleReorderBlocks(sourceItem.blockIndex, targetIdx);
+          if (sourceIdx >= 0 && targetIdx >= 0 && sourceIdx !== targetIdx) {
+            let finalTargetIdx = targetIdx;
+            if (position === "after" && sourceIdx < targetIdx) {
+              finalTargetIdx = targetIdx;
+            } else if (position === "before" && sourceIdx > targetIdx) {
+              finalTargetIdx = targetIdx;
+            }
+            handleReorderBlocks(sourceIdx, finalTargetIdx);
           }
         }
       }
@@ -4575,18 +4586,32 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       blockId: string,
       targetSelector: string | null,
       kind: InsertableInnerElementKind,
+      position: "inside" | "before" | "after" = "inside",
     ) => {
       updateDocument((prev) => ({
         ...prev,
         blocks: prev.blocks.map((b) => {
           if (b.id !== blockId) return b;
-          return insertInnerElementInBlock(b, targetSelector, kind);
+          return insertInnerElementInBlock(b, targetSelector, kind, position);
         }),
       }));
       setFeedback({
         type: "success",
         message: "Nuevo elemento agregado al bloque.",
       });
+    },
+    [updateDocument],
+  );
+
+  const handleUpdateSubElementText = useCallback(
+    (blockId: string, selector: string, text: string) => {
+      updateDocument((prev) => ({
+        ...prev,
+        blocks: prev.blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          return updateSubElementTextInBlock(b, selector, text);
+        }),
+      }));
     },
     [updateDocument],
   );
@@ -4755,6 +4780,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         } else if (data.action === "delete") {
           handleDeleteBlock(data.blockId);
         }
+      } else if (data.type === "LANDING_CANVAS_MOVE") {
+        if (data.sourceItem && data.target) {
+          handleMoveLayer(data.sourceItem, data.target, data.position || "inside");
+        }
+      } else if (data.type === "LANDING_SUBELEMENT_TEXT_UPDATE") {
+        if (data.blockId && data.selector && typeof data.text === "string") {
+          handleUpdateSubElementText(data.blockId, data.selector, data.text);
+        }
       } else if (data.type === "LANDING_CANVAS_DROP") {
         setIsDraggingComponentOverCanvas(false);
         const dragWin = getDragWindow();
@@ -4774,6 +4807,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               data.blockId,
               data.subSelector ?? null,
               compKind,
+              data.position || "inside",
             );
             selectSubElementOnStudio(data.blockId, data.subSelector ?? null);
           } else if (selectedBlockIdRef.current) {
@@ -4781,6 +4815,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               selectedBlockIdRef.current,
               null,
               compKind,
+              data.position || "inside",
             );
           } else {
             handleCreateContainerSection(compKind);
@@ -4823,11 +4858,13 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     handleDuplicateSubElement,
     handleInsertInnerElement,
     handleMoveBlock,
+    handleMoveLayer,
     handleMoveSubElement,
     handleRedo,
     handleSaveDraft,
     handleUndo,
     handleUpdateBlockValue,
+    handleUpdateSubElementText,
     selectSubElementOnStudio,
   ]);
 
