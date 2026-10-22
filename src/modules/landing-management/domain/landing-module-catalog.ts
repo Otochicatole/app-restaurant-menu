@@ -259,8 +259,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 }`,
     jsTemplate: `(function() {
   document.addEventListener('click', function(e) {
+    if (document.getElementById('__landing-blocks-root') && document.documentElement.getAttribute('data-preview-mode') !== 'true') {
+      return;
+    }
+    if (e.__navToggleHandled) return;
     const toggle = e.target.closest('#navToggle, .nav-toggle');
     if (toggle) {
+      e.__navToggleHandled = true;
       const header = toggle.closest('.site-header') || document;
       const menu = header.querySelector('#navMenu, .nav-menu');
       if (menu) {

@@ -5418,25 +5418,34 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           <div className="h-4 w-px bg-zinc-200 mx-0.5" />
 
           {/* Clean Preview vs Interactive Canvas Toggle */}
-          <button
-            type="button"
-            onClick={() => setInteractiveCanvas((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              !interactiveCanvas
-                ? "bg-blue-50 text-blue-700 border-blue-200 shadow-2xs font-semibold"
-                : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-2xs"
-            }`}
-            title={
-              interactiveCanvas
-                ? "Cambiar a vista previa limpia (sin bordes de edición)"
-                : "Volver al lienzo interactivo"
-            }
-          >
-            <Eye className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">
-              {interactiveCanvas ? "Interactivo" : "Vista Previa"}
-            </span>
-          </button>
+          <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+            <button
+              type="button"
+              onClick={() => setInteractiveCanvas(true)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                interactiveCanvas
+                  ? "bg-white text-zinc-900 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-900"
+              }`}
+              title="Lienzo de edición: seleccioná bloques, arrastrá elementos y editá textos"
+            >
+              <MousePointerClick className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Editor</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setInteractiveCanvas(false)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                !interactiveCanvas
+                  ? "bg-white text-zinc-900 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-900"
+              }`}
+              title="Vista previa interactiva: probá el sitio como un cliente final (menú responsive, enlaces, acordeones)"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Interactivo</span>
+            </button>
+          </div>
 
           {/* Code Drawer Toggle (Full-Screen Modal) */}
           <button

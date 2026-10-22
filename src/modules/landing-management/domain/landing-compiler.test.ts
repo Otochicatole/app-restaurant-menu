@@ -955,6 +955,9 @@ describe("landing-compiler", () => {
 
       // Verify module scripts are wrapped safely for readyState
       expect(compiled.previewJs).toContain("__initModuleScripts");
+
+      // Verify that runtime navigation scripts do NOT run in editor mode (guarded by data-preview-mode !== 'true')
+      expect(compiled.fullHtml).toContain('document.documentElement.getAttribute(\'data-preview-mode\') !== \'true\'');
     });
   });
 });
