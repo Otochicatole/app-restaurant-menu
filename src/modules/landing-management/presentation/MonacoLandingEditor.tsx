@@ -3594,6 +3594,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const [leftTab, setLeftTab] = useState<LeftSidebarTab>("layers");
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [rightTab, setRightTab] = useState<RightSidebarTab>("properties");
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [interactiveCanvas, setInteractiveCanvas] = useState<boolean>(true);
   const [codeDrawerMode, setCodeDrawerMode] = useState<CodeDrawerMode>("closed");
@@ -6781,7 +6782,38 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         {/* --------------------------------------------------------------- */}
         {/* RIGHT SIDEBAR: Properties & Design (OpenPage / Framely style)   */}
         {/* --------------------------------------------------------------- */}
-        <aside className="w-96 bg-white border-l border-zinc-200 flex flex-col shrink-0 min-h-0">
+        <div className="relative flex shrink-0">
+          {/* Flechita flotante en el medio del borde para cerrar/abrir */}
+          <button
+            type="button"
+            onClick={() => setIsRightSidebarOpen((prev) => !prev)}
+            className="absolute top-1/2 -translate-y-1/2 right-full z-40 flex h-8 w-4.5 items-center justify-center bg-white border-y border-l border-zinc-300 border-r-0 rounded-l-md text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400 hover:w-5 shadow-xs active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            title={
+              isRightSidebarOpen
+                ? "Ocultar panel lateral (Propiedades y Diseño)"
+                : "Mostrar panel lateral (Propiedades y Diseño)"
+            }
+            aria-label={
+              isRightSidebarOpen
+                ? "Ocultar panel lateral"
+                : "Mostrar panel lateral"
+            }
+          >
+            {isRightSidebarOpen ? (
+              <ChevronRight className="h-3.5 w-3.5 -mr-0.5" />
+            ) : (
+              <ChevronLeft className="h-3.5 w-3.5 -mr-0.5" />
+            )}
+          </button>
+
+          <aside
+            className={`bg-white border-l border-zinc-200 flex flex-col shrink-0 min-h-0 transition-[width,opacity] duration-200 ease-in-out overflow-hidden ${
+              isRightSidebarOpen
+                ? "w-96 opacity-100"
+                : "w-0 border-l-0 opacity-0"
+            }`}
+          >
+            <div className="w-96 h-full flex flex-col shrink-0 min-h-0">
           {/* Top Tabs: Propiedades | Diseño Global */}
           <div className="grid grid-cols-2 border-b border-zinc-200 bg-white">
             <button
@@ -9508,7 +9540,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               </div>
             </div>
           )}
-        </aside>
+            </div>
+          </aside>
+        </div>
       </div>
 
       {/* ================================================================= */}
