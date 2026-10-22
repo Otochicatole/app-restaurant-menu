@@ -6573,9 +6573,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           <button
             type="button"
             onClick={() => setIsLeftSidebarOpen((prev) => !prev)}
-            className={`absolute top-1/2 -translate-y-1/2 z-40 flex h-7 w-7 items-center justify-center rounded-full bg-white border border-zinc-300 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-              isLeftSidebarOpen ? "-right-3.5" : "left-3"
-            }`}
+            className="absolute top-1/2 -translate-y-1/2 left-full z-40 flex h-8 w-4.5 items-center justify-center bg-white border-y border-r border-zinc-300 border-l-0 rounded-r-md text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400 hover:w-5 shadow-xs active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             title={
               isLeftSidebarOpen
                 ? "Ocultar panel lateral (Capas y Componentes)"
@@ -6588,9 +6586,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             }
           >
             {isLeftSidebarOpen ? (
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5 -ml-0.5" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5 -ml-0.5" />
             )}
           </button>
         </div>
@@ -6729,7 +6727,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           </div>
 
           {/* Center Artboard Container */}
-          <div className="flex-1 overflow-auto flex items-start justify-center p-4 sm:p-6 pl-14 sm:pl-16 min-h-0">
+          <div className="flex-1 overflow-auto flex items-start justify-center p-4 sm:p-6 min-h-0">
             <div
               className={`bg-white rounded-xl overflow-hidden shadow-[0_16px_45px_rgba(0,0,0,0.12)] border transition-all duration-300 flex flex-col ${
                 isDraggingComponentOverCanvas
