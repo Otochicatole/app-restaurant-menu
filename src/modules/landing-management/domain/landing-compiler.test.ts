@@ -929,6 +929,33 @@ describe("landing-compiler", () => {
         expect(compiled.cssContent.length).toBeGreaterThan(50);
       }
     });
+
+    it("injects responsive navigation toggle and runtime handlers into preview and document", () => {
+      const headerMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "header")!;
+      const headerBlock = createBlockFromBuiltinModule(headerMod);
+      const doc = createDefaultLandingDocument("Restaurante Test", "test-rest");
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Restaurante Test",
+        restaurantSlug: "test-rest",
+      }, {
+        interactiveEditor: true,
+        selectedBlockId: headerBlock.id,
+      });
+
+      // Verify interactive preview contains responsive nav menu styles
+      expect(compiled.previewCss).toContain(".nav-menu.open");
+      expect(compiled.previewCss).toContain("display: flex !important");
+
+      // Verify fullHtml includes runtime navigation script and responsive toggle handler
+      expect(compiled.fullHtml).toContain("landing-runtime-nav");
+      expect(compiled.fullHtml).toContain("#navToggle");
+      expect(compiled.fullHtml).toContain(".nav-toggle");
+      expect(compiled.fullHtml).toContain("aria-expanded");
+
+      // Verify module scripts are wrapped safely for readyState
+      expect(compiled.previewJs).toContain("__initModuleScripts");
+    });
   });
 });
 

@@ -68,13 +68,71 @@ function sanitizeInlineScript(js: string): string {
 export const LANDING_RUNTIME_NAVIGATION_SCRIPT = `(function() {
   if (window.__landingNavBound) return;
   window.__landingNavBound = true;
+
+  function closeAllResponsiveMenus(exceptContainer) {
+    var menus = document.querySelectorAll('#navMenu.open, .nav-menu.open, [data-nav-menu].open');
+    menus.forEach(function(m) {
+      if (!exceptContainer || !exceptContainer.contains(m)) {
+        m.classList.remove('open');
+      }
+    });
+    var toggles = document.querySelectorAll('#navToggle.open, .nav-toggle.open, [data-nav-toggle].open');
+    toggles.forEach(function(t) {
+      if (!exceptContainer || !exceptContainer.contains(t)) {
+        t.classList.remove('open');
+        t.setAttribute('aria-expanded', 'false');
+        t.setAttribute('aria-label', 'Abrir menú');
+      }
+    });
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeAllResponsiveMenus();
+    }
+  });
+
   document.addEventListener('click', function(e) {
+    var el = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement ? e.target.parentElement : null);
+    if (!el) return;
+
+    // Responsive navigation hamburger button toggle
+    var toggle = el.closest ? el.closest('#navToggle, .nav-toggle, [data-nav-toggle], button[aria-label*="menú" i], button[aria-label*="menu" i]') : null;
+    if (toggle) {
+      e.preventDefault();
+      var header = toggle.closest('.site-header, header, .nav-container, [data-landing-block]') || document;
+      var menu = header.querySelector('#navMenu, .nav-menu, [data-nav-menu]') || document.getElementById('navMenu') || document.querySelector('.nav-menu');
+      if (menu) {
+        var willOpen = !menu.classList.contains('open');
+        if (willOpen) {
+          closeAllResponsiveMenus(header);
+        }
+        menu.classList.toggle('open', willOpen);
+        toggle.classList.toggle('open', willOpen);
+        toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        toggle.setAttribute('aria-label', willOpen ? 'Cerrar menú' : 'Abrir menú');
+      }
+      return;
+    }
+
+    // Close menu when clicking outside any nav menu or toggle button
+    var openMenu = document.querySelector('#navMenu.open, .nav-menu.open, [data-nav-menu].open');
+    if (openMenu && !el.closest('#navMenu, .nav-menu, [data-nav-menu], #navToggle, .nav-toggle, [data-nav-toggle]')) {
+      closeAllResponsiveMenus();
+    }
+
     if (document.getElementById('__landing-blocks-root') && document.documentElement.getAttribute('data-preview-mode') !== 'true') {
       return;
     }
-    var el = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement ? e.target.parentElement : null);
-    var link = el && el.closest ? el.closest('a') : null;
+
+    var link = el.closest ? el.closest('a') : null;
     if (!link) return;
+
+    // Clicking a link inside the nav menu closes the menu
+    if (openMenu && el.closest('#navMenu, .nav-menu, [data-nav-menu]')) {
+      closeAllResponsiveMenus();
+    }
+
     var rawHref = (link.getAttribute('data-original-href') || link.getAttribute('href') || '').trim();
     if (!rawHref || rawHref === 'javascript:void(0)') return;
 
@@ -878,6 +936,20 @@ a[data-original-href] {
   -webkit-user-drag: none;
   user-select: text;
 }
+/* Responsive Nav Menu in Interactive Canvas */
+.nav-menu.open, [data-nav-menu].open, #navMenu.open {
+  display: flex !important;
+  z-index: 9999 !important;
+}
+.nav-toggle.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+.nav-toggle.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
 `;
 
   const initialSelected = selectedBlockId ? JSON.stringify(selectedBlockId) : "null";
@@ -1186,7 +1258,11 @@ a[data-original-href] {
       );
       selectables.forEach(function(el) {
         if (!el.classList.contains('landing-inline-editing')) {
-          el.setAttribute('draggable', isPreview ? 'false' : 'true');
+          if (closestEl(el, '#navToggle, .nav-toggle, [data-nav-toggle]')) {
+            el.setAttribute('draggable', 'false');
+          } else {
+            el.setAttribute('draggable', isPreview ? 'false' : 'true');
+          }
         }
       });
     });
@@ -1279,7 +1355,7 @@ a[data-original-href] {
       e.preventDefault();
       return;
     }
-    if (e.target && (e.target.isContentEditable || e.target.classList.contains('landing-inline-editing'))) {
+    if (e.target && (e.target.isContentEditable || e.target.classList.contains('landing-inline-editing') || closestEl(e.target, '#navToggle, .nav-toggle, [data-nav-toggle]'))) {
       e.preventDefault();
       return;
     }
@@ -1548,10 +1624,38 @@ a[data-original-href] {
   document.addEventListener('click', function(e) {
     var link = closestEl(e.target, 'a');
     var isPreview = document.documentElement.getAttribute('data-preview-mode') === 'true';
+
+    // Responsive navigation hamburger button toggle
+    var toggleBtn = closestEl(e.target, '#navToggle, .nav-toggle, [data-nav-toggle], button[aria-label*="menú" i], button[aria-label*="menu" i]');
+    if (toggleBtn) {
+      var headerContainer = closestEl(toggleBtn, '.site-header, header, .nav-container, [data-landing-block]') || document;
+      var targetMenu = headerContainer.querySelector('#navMenu, .nav-menu, [data-nav-menu]') || document.getElementById('navMenu') || document.querySelector('.nav-menu');
+      if (targetMenu) {
+        var willOpen = !targetMenu.classList.contains('open');
+        targetMenu.classList.toggle('open', willOpen);
+        toggleBtn.classList.toggle('open', willOpen);
+        toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        toggleBtn.setAttribute('aria-label', willOpen ? 'Cerrar menú' : 'Abrir menú');
+      }
+      if (isPreview) {
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (link) {
       e.preventDefault();
       if (isPreview) {
         var origHref = link.getAttribute('data-original-href') || link.getAttribute('href') || '';
+        var openMenu = document.querySelector('#navMenu.open, .nav-menu.open, [data-nav-menu].open');
+        if (openMenu) {
+          openMenu.classList.remove('open');
+          var openToggle = document.querySelector('#navToggle.open, .nav-toggle.open, [data-nav-toggle].open');
+          if (openToggle) {
+            openToggle.classList.remove('open');
+            openToggle.setAttribute('aria-expanded', 'false');
+          }
+        }
         if (origHref.indexOf('#') === 0 && origHref.length > 1) {
           scrollToAnchorTarget(origHref);
         }
@@ -1834,7 +1938,17 @@ a[data-original-href] {
       if (!e.data.skipDomHtmlUpdate && typeof e.data.htmlContent === 'string') {
         var rootEl = document.getElementById('__landing-blocks-root');
         if (rootEl) {
+          var wasMenuOpen = rootEl.querySelector('#navMenu.open, .nav-menu.open, [data-nav-menu].open') !== null;
           rootEl.innerHTML = e.data.htmlContent;
+          if (wasMenuOpen) {
+            var restoredMenu = rootEl.querySelector('#navMenu, .nav-menu, [data-nav-menu]');
+            var restoredToggle = rootEl.querySelector('#navToggle, .nav-toggle, [data-nav-toggle]');
+            if (restoredMenu) restoredMenu.classList.add('open');
+            if (restoredToggle) {
+              restoredToggle.classList.add('open');
+              restoredToggle.setAttribute('aria-expanded', 'true');
+            }
+          }
         }
         neutralizeLinks();
         runDynamicHelpers();
@@ -1941,7 +2055,7 @@ export function compileLandingFromDocument(
   }
 
   const combinedModuleJs = jsParts.length
-    ? `document.addEventListener('DOMContentLoaded', () => {\n${jsParts.join("\n\n")}\n});`
+    ? `(function() {\n  function __initModuleScripts() {\n${jsParts.join("\n\n")}\n  }\n  if (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', __initModuleScripts);\n  } else {\n    __initModuleScripts();\n  }\n})();`
     : "";
 
   const finalJsParts = [combinedModuleJs, document.globalJs.trim()].filter(Boolean);

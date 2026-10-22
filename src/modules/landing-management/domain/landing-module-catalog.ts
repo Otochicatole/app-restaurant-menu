@@ -251,21 +251,41 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     display: none;
     box-shadow: var(--shadow-soft);
   }
-  .nav-menu.open { display: flex; }
+  .nav-menu.open { display: flex; z-index: 999; }
   .nav-toggle { display: flex; }
+  .nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .nav-toggle.open span:nth-child(2) { opacity: 0; }
+  .nav-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 }`,
-    jsTemplate: `const navToggle = document.getElementById('navToggle');
-const navMenu = document.getElementById('navMenu');
-if (navToggle && navMenu) {
-  navToggle.addEventListener('click', () => {
-    navMenu.classList.toggle('open');
+    jsTemplate: `(function() {
+  document.addEventListener('click', function(e) {
+    const toggle = e.target.closest('#navToggle, .nav-toggle');
+    if (toggle) {
+      const header = toggle.closest('.site-header') || document;
+      const menu = header.querySelector('#navMenu, .nav-menu');
+      if (menu) {
+        const isOpen = menu.classList.toggle('open');
+        toggle.classList.toggle('open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        toggle.setAttribute('aria-label', isOpen ? 'Cerrar menú' : 'Abrir menú');
+      }
+      return;
+    }
+    const link = e.target.closest('#navMenu a, .nav-menu a');
+    if (link) {
+      const menu = link.closest('#navMenu, .nav-menu');
+      if (menu) {
+        menu.classList.remove('open');
+        const header = menu.closest('.site-header') || document;
+        const toggle = header.querySelector('#navToggle, .nav-toggle');
+        if (toggle) {
+          toggle.classList.remove('open');
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+      }
+    }
   });
-  navMenu.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', () => {
-      navMenu.classList.remove('open');
-    });
-  });
-}`,
+})();`,
   },
   {
     moduleKey: "hero",
