@@ -5022,9 +5022,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     });
   };
 
-  // Keyboard shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y)
+  // Keyboard shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, Escape)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && codeDrawerMode !== "closed") {
+        e.preventDefault();
+        setCodeDrawerMode("closed");
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleSaveDraft();
@@ -5433,18 +5438,20 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             </span>
           </button>
 
-          {/* Code Drawer Toggle (</> like OpenPage) */}
+          {/* Code Drawer Toggle (Full-Screen Modal) */}
           <button
             type="button"
             onClick={() =>
-              setCodeDrawerMode((m) => (m === "closed" ? "block" : "closed"))
+              setCodeDrawerMode((m) =>
+                m === "closed" ? (selectedBlockId ? "block" : "global") : "closed",
+              )
             }
             className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               codeDrawerMode !== "closed"
-                ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs font-semibold"
+                ? "bg-blue-50 text-blue-700 border-blue-300 shadow-2xs font-semibold"
                 : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-2xs"
             }`}
-            title="Abrir / cerrar editor de código HTML, CSS, JS y JSON"
+            title="Abrir editor de código a pantalla completa"
           >
             <Code2 className="h-3.5 w-3.5" />
             <span className="hidden lg:inline">Código</span>
@@ -6762,227 +6769,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               />
             </div>
           </div>
-
-          {/* ------------------------------------------------------------- */}
-          {/* OPTIONAL DOCKED MONACO CODE DRAWER (Block Code or Global/JSON) */}
-          {/* ------------------------------------------------------------- */}
-          {codeDrawerMode !== "closed" && (
-            <div className="h-80 bg-white border-t border-zinc-200 flex flex-col shrink-0 shadow-lg">
-              <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-50 border-b border-zinc-200">
-                <div className="flex items-center gap-2">
-                  {/* Switch between Selected Block Code vs Full Page / JSON */}
-                  <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCodeDrawerMode("block");
-                        if (codeTab === "json") setCodeTab("html");
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                        codeDrawerMode === "block"
-                          ? "bg-white text-zinc-900 shadow-2xs"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      Módulo: {selectedBlock?.name ?? "Ninguno"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCodeDrawerMode("global")}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                        codeDrawerMode === "global"
-                          ? "bg-white text-zinc-900 shadow-2xs"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      Página Global / JSON
-                    </button>
-                  </div>
-
-                  {/* Language Tabs: HTML | CSS | JS | JSON */}
-                  <div className="flex items-center gap-1 ml-2">
-                    <button
-                      type="button"
-                      onClick={() => setCodeTab("html")}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${
-                        codeTab === "html"
-                          ? "bg-white text-orange-600 shadow-2xs border border-zinc-200/80 font-semibold"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      <FileCode2 className="h-3.5 w-3.5" />
-                      HTML
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCodeTab("css")}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${
-                        codeTab === "css"
-                          ? "bg-white text-sky-600 shadow-2xs border border-zinc-200/80 font-semibold"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      <Paintbrush className="h-3.5 w-3.5" />
-                      CSS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCodeTab("js")}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${
-                        codeTab === "js"
-                          ? "bg-white text-yellow-600 shadow-2xs border border-zinc-200/80 font-semibold"
-                          : "text-zinc-500 hover:text-zinc-900"
-                      }`}
-                    >
-                      <Braces className="h-3.5 w-3.5" />
-                      JS
-                    </button>
-                    {codeDrawerMode === "global" && (
-                      <button
-                        type="button"
-                        onClick={() => setCodeTab("json")}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium ${
-                          codeTab === "json"
-                            ? "bg-white text-emerald-600 shadow-2xs border border-zinc-200/80 font-semibold"
-                            : "text-zinc-500 hover:text-zinc-900"
-                        }`}
-                      >
-                        <Code2 className="h-3.5 w-3.5" />
-                        JSON Config
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {codeDrawerMode === "block" && (
-                    <span className="text-[11px] text-zinc-500 hidden md:inline">
-                      Tip: escribí{" "}
-                      <code className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">{"{{miVariable}}"}</code>{" "}
-                      en el HTML para crear un campo visual automáticamente
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setCodeDrawerMode("closed")}
-                    className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded-md"
-                    title="Cerrar panel de código"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 bg-white">
-                {codeDrawerMode === "block" && selectedBlock ? (
-                  <Editor
-                    height="100%"
-                    theme="vs"
-                    path={`block-${selectedBlock.id}.${codeTab}`}
-                    language={
-                      codeTab === "html"
-                        ? "html"
-                        : codeTab === "css"
-                        ? "css"
-                        : "javascript"
-                    }
-                    value={
-                      codeTab === "html"
-                        ? selectedBlock.htmlTemplate
-                        : codeTab === "css"
-                        ? selectedBlock.cssTemplate
-                        : selectedBlock.jsTemplate
-                    }
-                    onChange={(val) => {
-                      const nextVal = val ?? "";
-                      if (codeTab === "html") {
-                        handleUpdateBlockCode(selectedBlock.id, {
-                          htmlTemplate: nextVal,
-                        });
-                      } else if (codeTab === "css") {
-                        handleUpdateBlockCode(selectedBlock.id, {
-                          cssTemplate: nextVal,
-                        });
-                      } else {
-                        handleUpdateBlockCode(selectedBlock.id, {
-                          jsTemplate: nextVal,
-                        });
-                      }
-                    }}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 12.5,
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      tabSize: 2,
-                      padding: { top: 10 },
-                    }}
-                  />
-                ) : (
-                  <Editor
-                    height="100%"
-                    theme="vs"
-                    path={`global-landing.${codeTab}`}
-                    language={
-                      codeTab === "html"
-                        ? "html"
-                        : codeTab === "css"
-                        ? "css"
-                        : codeTab === "json"
-                        ? "json"
-                        : "javascript"
-                    }
-                    value={
-                      codeTab === "json"
-                        ? jsonEditorText
-                        : codeTab === "html"
-                        ? activeCodePayload.htmlContent
-                        : codeTab === "css"
-                        ? documentState.globalCss
-                        : documentState.globalJs
-                    }
-                    onChange={(val) => {
-                      const nextVal = val ?? "";
-                      if (codeTab === "json") {
-                        setJsonEditorText(nextVal);
-                        try {
-                          const parsed = JSON.parse(nextVal);
-                          if (parsed && Array.isArray(parsed.blocks)) {
-                            updateDocument(parsed, false);
-                          }
-                        } catch {
-                          // Allow intermediate typing in JSON editor
-                        }
-                      } else if (codeTab === "html") {
-                        setRawHtml(nextVal);
-                        updateDocument((prev) => ({ ...prev, mode: "raw" }));
-                      } else if (codeTab === "css") {
-                        updateDocument((prev) => ({
-                          ...prev,
-                          globalCss: nextVal,
-                        }));
-                      } else {
-                        updateDocument((prev) => ({
-                          ...prev,
-                          globalJs: nextVal,
-                        }));
-                      }
-                    }}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 12.5,
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      tabSize: 2,
-                      padding: { top: 10 },
-                    }}
-                  />
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* --------------------------------------------------------------- */}
@@ -7023,44 +6809,60 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             /* ============================================================= */
             selectedBlock ? (
               <div className="flex-1 overflow-y-auto divide-y divide-zinc-200">
-                {/* Breadcrumb Hierarchy Bar */}
-                <div className="bg-zinc-50 px-3.5 py-2 flex flex-wrap items-center gap-1 text-[11px]">
+                {/* Breadcrumb Hierarchy Bar + Ver Código Action */}
+                <div className="bg-zinc-50 border-b border-zinc-200/70 px-3 py-2 flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1 text-[11px] min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => selectSubElementOnStudio(selectedBlock.id, null)}
+                      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold transition shrink-0 ${
+                        !activeSubElement
+                          ? "bg-blue-600 text-white shadow-2xs"
+                          : "text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900"
+                      }`}
+                      title="Seleccionar sección completa"
+                    >
+                      <Layers className="h-3 w-3" />
+                      <span className="max-w-28 truncate">{selectedBlock.name}</span>
+                    </button>
+
+                    {activeSubElement?.ancestors.map((anc) => (
+                      <React.Fragment key={anc.selector}>
+                        <span className="text-zinc-400">›</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectSubElementOnStudio(selectedBlock.id, anc.selector)
+                          }
+                          className="rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 truncate max-w-24"
+                        >
+                          {anc.label}
+                        </button>
+                      </React.Fragment>
+                    ))}
+
+                    {activeSubElement && (
+                      <>
+                        <span className="text-zinc-400">›</span>
+                        <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 font-semibold text-white shadow-2xs truncate max-w-28">
+                          {activeSubElement.label}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => selectSubElementOnStudio(selectedBlock.id, null)}
-                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold transition ${
-                      !activeSubElement
-                        ? "bg-blue-600 text-white shadow-2xs"
-                        : "text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900"
-                    }`}
+                    onClick={() => {
+                      setCodeDrawerMode("block");
+                      setCodeTab("html");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 border border-blue-200 text-xs font-semibold shrink-0 shadow-2xs transition-colors"
+                    title="Ver y editar el código HTML/CSS/JS de este bloque a pantalla completa"
                   >
-                    <Layers className="h-3 w-3" />
-                    <span className="max-w-28 truncate">{selectedBlock.name}</span>
+                    <Code2 className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Ver Código</span>
                   </button>
-
-                  {activeSubElement?.ancestors.map((anc) => (
-                    <React.Fragment key={anc.selector}>
-                      <span className="text-zinc-400">›</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          selectSubElementOnStudio(selectedBlock.id, anc.selector)
-                        }
-                        className="rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900"
-                      >
-                        {anc.label}
-                      </button>
-                    </React.Fragment>
-                  ))}
-
-                  {activeSubElement && (
-                    <>
-                      <span className="text-zinc-400">›</span>
-                      <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 font-semibold text-white shadow-2xs">
-                        {activeSubElement.label}
-                      </span>
-                    </>
-                  )}
                 </div>
 
                 {activeSubElement ? (
@@ -7081,6 +6883,18 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             </div>
 
                             <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCodeDrawerMode("block");
+                                  setCodeTab("html");
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white hover:bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 transition-colors shadow-2xs"
+                                title="Ver código HTML/CSS/JS en pantalla completa"
+                              >
+                                <Code2 className="h-3 w-3 text-blue-600" />
+                                Código
+                              </button>
                               {hasSubStyleOverrides && (
                                 <button
                                   type="button"
@@ -8475,9 +8289,23 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     {/* Block Header & Module Actions */}
                     <div className="p-3.5 space-y-3 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                          {selectedBlock.moduleKey}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            {selectedBlock.moduleKey}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCodeDrawerMode("block");
+                              setCodeTab("html");
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white hover:bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 transition-colors shadow-2xs"
+                            title="Ver código del módulo a pantalla completa"
+                          >
+                            <Code2 className="h-3 w-3 text-blue-600" />
+                            Código
+                          </button>
+                        </div>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
@@ -8586,19 +8414,17 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         <button
                           type="button"
                           onClick={() => {
-                            setCodeDrawerMode((m) =>
-                              m === "block" ? "closed" : "block",
-                            );
+                            setCodeDrawerMode("block");
                             setCodeTab("html");
                           }}
                           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition-colors ${
                             codeDrawerMode === "block"
-                              ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs"
-                              : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200"
+                              ? "bg-blue-50 text-blue-800 border-blue-300 shadow-2xs"
+                              : "bg-blue-50/60 hover:bg-blue-100 text-blue-700 border-blue-200"
                           }`}
                         >
-                          <Code2 className="h-3.5 w-3.5 text-amber-600" />
-                          Código HTML/JS
+                          <Code2 className="h-3.5 w-3.5 text-blue-600" />
+                          Ver Código HTML/JS
                         </button>
                         <button
                           type="button"
@@ -9677,6 +9503,287 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           )}
         </aside>
       </div>
+
+      {/* ================================================================= */}
+      {/* FULL-SCREEN CODE EDITOR MODAL                                      */}
+      {/* ================================================================= */}
+      {codeDrawerMode !== "closed" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-white animate-in fade-in-50 duration-150 overflow-hidden"
+        >
+          {/* Top Modal Header */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-900 border-b border-zinc-800 shrink-0 gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-wrap">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                  <Code2 className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-bold text-white hidden sm:inline">
+                  Editor de Código
+                </span>
+              </div>
+
+              {/* Mode Switcher: Selected Block vs Full Page / JSON */}
+              <div className="flex items-center bg-zinc-800 p-0.5 rounded-lg border border-zinc-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCodeDrawerMode("block");
+                    if (codeTab === "json") setCodeTab("html");
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                    codeDrawerMode === "block"
+                      ? "bg-zinc-700 text-white shadow-xs"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Módulo: {selectedBlock?.name ?? "Seleccionado"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCodeDrawerMode("global")}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                    codeDrawerMode === "global"
+                      ? "bg-zinc-700 text-white shadow-xs"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Página Global / JSON
+                </button>
+              </div>
+
+              {/* Language Tabs: HTML | CSS | JS | JSON */}
+              <div className="flex items-center gap-1 bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-700/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCodeTab("html")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    codeTab === "html"
+                      ? "bg-orange-500/25 text-orange-300 font-semibold border border-orange-500/40"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <FileCode2 className="h-3.5 w-3.5 text-orange-400" />
+                  HTML
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCodeTab("css")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    codeTab === "css"
+                      ? "bg-sky-500/25 text-sky-300 font-semibold border border-sky-500/40"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <Paintbrush className="h-3.5 w-3.5 text-sky-400" />
+                  CSS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCodeTab("js")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    codeTab === "js"
+                      ? "bg-yellow-500/25 text-yellow-300 font-semibold border border-yellow-500/40"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <Braces className="h-3.5 w-3.5 text-yellow-400" />
+                  JS
+                </button>
+                {codeDrawerMode === "global" && (
+                  <button
+                    type="button"
+                    onClick={() => setCodeTab("json")}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      codeTab === "json"
+                        ? "bg-emerald-500/25 text-emerald-300 font-semibold border border-emerald-500/40"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Code2 className="h-3.5 w-3.5 text-emerald-400" />
+                    JSON Config
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Right side of header */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              {codeDrawerMode === "block" && (
+                <span className="text-[11px] text-zinc-400 hidden xl:inline">
+                  Tip: escribí{" "}
+                  <code className="text-amber-300 bg-zinc-800 px-1 py-0.5 rounded border border-zinc-700">
+                    {"{{miVariable}}"}
+                  </code>{" "}
+                  en el HTML para crear campos visuales automáticos
+                </span>
+              )}
+              <span className="text-[11px] text-zinc-500 hidden md:inline font-mono">
+                <kbd className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-700">
+                  Esc
+                </kbd>{" "}
+                para salir
+              </span>
+              <button
+                type="button"
+                onClick={() => setCodeDrawerMode("closed")}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Listo y Volver
+              </button>
+              <button
+                type="button"
+                onClick={() => setCodeDrawerMode("closed")}
+                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Cerrar editor de código (Esc)"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Monaco Editor Container - 100% full screen height */}
+          <div className="flex-1 min-h-0 bg-[#1e1e1e] relative">
+            {codeDrawerMode === "block" && selectedBlock ? (
+              <Editor
+                height="100%"
+                theme="vs-dark"
+                path={`block-${selectedBlock.id}.${codeTab}`}
+                language={
+                  codeTab === "html"
+                    ? "html"
+                    : codeTab === "css"
+                    ? "css"
+                    : "javascript"
+                }
+                value={
+                  codeTab === "html"
+                    ? selectedBlock.htmlTemplate
+                    : codeTab === "css"
+                    ? selectedBlock.cssTemplate
+                    : selectedBlock.jsTemplate
+                }
+                onChange={(val) => {
+                  const nextVal = val ?? "";
+                  if (codeTab === "html") {
+                    handleUpdateBlockCode(selectedBlock.id, {
+                      htmlTemplate: nextVal,
+                    });
+                  } else if (codeTab === "css") {
+                    handleUpdateBlockCode(selectedBlock.id, {
+                      cssTemplate: nextVal,
+                    });
+                  } else {
+                    handleUpdateBlockCode(selectedBlock.id, {
+                      jsTemplate: nextVal,
+                    });
+                  }
+                }}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 13.5,
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  padding: { top: 12 },
+                }}
+              />
+            ) : (
+              <Editor
+                height="100%"
+                theme="vs-dark"
+                path={`global-landing.${codeTab}`}
+                language={
+                  codeTab === "html"
+                    ? "html"
+                    : codeTab === "css"
+                    ? "css"
+                    : codeTab === "json"
+                    ? "json"
+                    : "javascript"
+                }
+                value={
+                  codeTab === "json"
+                    ? jsonEditorText
+                    : codeTab === "html"
+                    ? activeCodePayload.htmlContent
+                    : codeTab === "css"
+                    ? documentState.globalCss
+                    : documentState.globalJs
+                }
+                onChange={(val) => {
+                  const nextVal = val ?? "";
+                  if (codeTab === "json") {
+                    setJsonEditorText(nextVal);
+                    try {
+                      const parsed = JSON.parse(nextVal);
+                      if (parsed && Array.isArray(parsed.blocks)) {
+                        updateDocument(parsed, false);
+                      }
+                    } catch {
+                      // Allow intermediate typing in JSON editor
+                    }
+                  } else if (codeTab === "html") {
+                    setRawHtml(nextVal);
+                    updateDocument((prev) => ({ ...prev, mode: "raw" }));
+                  } else if (codeTab === "css") {
+                    updateDocument((prev) => ({
+                      ...prev,
+                      globalCss: nextVal,
+                    }));
+                  } else {
+                    updateDocument((prev) => ({
+                      ...prev,
+                      globalJs: nextVal,
+                    }));
+                  }
+                }}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 13.5,
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  padding: { top: 12 },
+                }}
+              />
+            )}
+          </div>
+
+          {/* Bottom Status / Footer Bar */}
+          <div className="flex items-center justify-between px-4 py-2 bg-zinc-950 text-zinc-400 border-t border-zinc-850 text-xs shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Sincronización en vivo con el lienzo
+              </span>
+              <span className="text-zinc-700">|</span>
+              <span className="text-zinc-400">
+                {codeDrawerMode === "block"
+                  ? `Módulo: ${selectedBlock?.name ?? "Bloque"}`
+                  : `Documento completo: ${documentState.blocks.length} módulos`}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[11px] text-zinc-500">
+                {codeTab.toUpperCase()} • Monaco IDE
+              </span>
+              <button
+                type="button"
+                onClick={() => setCodeDrawerMode("closed")}
+                className="px-3 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors"
+              >
+                Cerrar Editor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================================================================= */}
       {/* MODAL: SAVE AS REUSABLE CUSTOM MODULE                             */}
