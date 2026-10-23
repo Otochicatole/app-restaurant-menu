@@ -929,6 +929,84 @@ html:not([data-preview-mode="true"]) .landing-drop-inside {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
   white-space: nowrap;
 }
+/* Block Drag Handle on Canvas */
+.landing-block-handle {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 999;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35), 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: grab;
+  user-select: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+  pointer-events: auto;
+}
+.landing-block-handle:hover,
+.landing-block-handle:active {
+  background: #1d4ed8;
+  cursor: grabbing;
+}
+.landing-drag-grip {
+  font-size: 13px;
+  letter-spacing: -1px;
+  opacity: 0.85;
+  cursor: grab;
+}
+.landing-block-handle-title {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landing-block-handle-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+.landing-block-btn-up,
+.landing-block-btn-down {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.landing-block-btn-up:hover,
+.landing-block-btn-down:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+html:not([data-preview-mode="true"]) [data-landing-block]:hover > .landing-block-handle,
+html:not([data-preview-mode="true"]) [data-landing-block][data-selected="true"] > .landing-block-handle {
+  opacity: 1;
+  transform: translateY(0);
+}
+html[data-preview-mode="true"] .landing-block-handle {
+  display: none !important;
+}
 /* Inline text editing */
 .landing-inline-editing {
   outline: 2px solid #2563eb !important;
@@ -1120,6 +1198,7 @@ a[data-original-href] {
     if (!target || !blockEl || target === blockEl) return null;
     var el = target.nodeType === 1 ? target : target.parentElement;
     if (!el || !blockEl.contains(el) || el === blockEl) return null;
+    if (closestEl(el, '.landing-block-handle, #__landing-drop-indicator, #__landing-drop-badge')) return null;
 
     // Resolve SVG shapes up to their root <svg> element
     var svgChild = closestEl(el, 'path, circle, rect, polygon, line, polyline, g');
@@ -1266,12 +1345,21 @@ a[data-original-href] {
     var blocks = document.querySelectorAll('[data-landing-block]');
     blocks.forEach(function(b) {
       b.setAttribute('draggable', isPreview ? 'false' : 'true');
+      var handle = b.querySelector('.landing-block-handle');
+      if (handle) {
+        handle.setAttribute('draggable', isPreview ? 'false' : 'true');
+        var handleBtns = handle.querySelectorAll('button');
+        handleBtns.forEach(function(btn) { btn.setAttribute('draggable', 'false'); });
+      }
       var selectables = b.querySelectorAll(
         'div, section, article, figure, nav, header, footer, h1, h2, h3, h4, h5, h6, p, blockquote, ul, ol, li, a, button, img, details, summary, span, .card, .info-card, .stat-card, .gallery-item, .faq-item, .flex-row, .flex-col, .grid-column, [data-landing-field]'
       );
       selectables.forEach(function(el) {
+        if (closestEl(el, '.landing-block-handle')) return;
         if (!el.classList.contains('landing-inline-editing') && !el.isContentEditable && document.activeElement !== el) {
           if (closestEl(el, '#navToggle, .nav-toggle, [data-nav-toggle]')) {
+            el.setAttribute('draggable', 'false');
+          } else if (el.tagName.toLowerCase() === 'span' && !el.classList.contains('card') && !el.hasAttribute('data-landing-field') && !el.hasAttribute('data-bound-field')) {
             el.setAttribute('draggable', 'false');
           } else {
             el.setAttribute('draggable', isPreview ? 'false' : 'true');
@@ -1375,15 +1463,53 @@ a[data-original-href] {
       e.preventDefault();
       return;
     }
-    if (e.target && (e.target.isContentEditable || e.target.classList.contains('landing-inline-editing') || closestEl(e.target, '#navToggle, .nav-toggle, [data-nav-toggle]'))) {
+    if (e.target && (e.target.isContentEditable || e.target.classList.contains('landing-inline-editing') || closestEl(e.target, '#navToggle, .nav-toggle, [data-nav-toggle], .landing-block-btn-up, .landing-block-btn-down'))) {
       e.preventDefault();
       return;
     }
 
-    var blockEl = closestEl(e.target, '[data-landing-block]');
+    var handleEl = closestEl(e.target, '.landing-block-handle');
+    var blockEl = handleEl
+      ? closestEl(handleEl, '[data-landing-block]')
+      : closestEl(e.target, '[data-landing-block]');
     if (!blockEl) return;
     var blockId = blockEl.getAttribute('data-landing-block');
-    var subEl = resolveSelectableSubElement(e.target, blockEl);
+    var blockLabel = blockEl.getAttribute('data-block-label') || 'Bloque';
+
+    // 1. If dragged from the block handle OR dragging block directly:
+    if (handleEl || e.target === blockEl) {
+      currentDraggedSourceEl = blockEl;
+      currentDraggedItem = {
+        type: 'block',
+        blockId: blockId,
+        label: blockLabel
+      };
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+          e.dataTransfer.setData('application/x-landing-canvas-move', JSON.stringify(currentDraggedItem));
+          e.dataTransfer.setData('application/x-landing-block', blockId);
+          e.dataTransfer.setData('text/plain', 'canvas-move:block:' + blockId);
+        } catch (_) {}
+      }
+      window.__draggedCanvasItem = currentDraggedItem;
+      if (window.parent) {
+        window.parent.__draggedCanvasItem = currentDraggedItem;
+        window.parent.__draggedLayerItem = currentDraggedItem;
+      }
+      blockEl.classList.add('landing-dragging-source');
+      e.stopPropagation();
+      return;
+    }
+
+    // 2. Dragging an element/sublayer
+    var activeSubEl = blockEl.querySelector('[data-sub-selected="true"]');
+    var subEl = null;
+    if (activeSubEl && (activeSubEl === e.target || activeSubEl.contains(e.target))) {
+      subEl = activeSubEl;
+    } else {
+      subEl = resolveSelectableSubElement(e.target, blockEl);
+    }
 
     var isSub = subEl && subEl !== blockEl;
     var draggedEl = isSub ? subEl : blockEl;
@@ -1401,7 +1527,6 @@ a[data-original-href] {
         tag: tag
       };
     } else {
-      var blockLabel = blockEl.getAttribute('data-block-label') || 'Bloque';
       currentDraggedItem = {
         type: 'block',
         blockId: blockId,
@@ -1420,6 +1545,7 @@ a[data-original-href] {
     window.__draggedCanvasItem = currentDraggedItem;
     if (window.parent) {
       window.parent.__draggedCanvasItem = currentDraggedItem;
+      window.parent.__draggedLayerItem = currentDraggedItem;
     }
 
     draggedEl.classList.add('landing-dragging-source');
@@ -1436,6 +1562,7 @@ a[data-original-href] {
     window.__draggedCanvasItem = null;
     if (window.parent) {
       window.parent.__draggedCanvasItem = null;
+      window.parent.__draggedLayerItem = null;
     }
   }, false);
 
@@ -1448,7 +1575,7 @@ a[data-original-href] {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
     e.preventDefault();
     if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy';
+      e.dataTransfer.dropEffect = 'move';
     }
 
     var droppedBuiltinKey = (window.parent && window.parent.__draggedBuiltinKey) || '';
@@ -1463,6 +1590,10 @@ a[data-original-href] {
         }
       }
     }
+
+    var parentDraggedLayer = (window.parent && window.parent.__draggedLayerItem) || null;
+    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (window.parent && window.parent.__draggedCanvasItem);
+    var isBlockDrag = (!isModuleDrag && ((canvasMove && canvasMove.type === 'block') || (parentDraggedLayer && parentDraggedLayer.type === 'block')));
 
     var blockEl = closestEl(e.target, '[data-landing-block]');
     if (!blockEl) {
@@ -1488,6 +1619,7 @@ a[data-original-href] {
       return;
     }
 
+    // 1. Module drag from catalog
     if (isModuleDrag) {
       var rect = blockEl.getBoundingClientRect();
       var midY = rect.top + rect.height / 2;
@@ -1521,28 +1653,99 @@ a[data-original-href] {
       return;
     }
 
-    var subEl = resolveSelectableSubElement(e.target, blockEl);
-    var targetEl = subEl || blockEl;
+    // 2. Existing Block drag (from canvas handle or from Layers panel)
+    if (isBlockDrag) {
+      var draggingBlockId = (canvasMove && canvasMove.blockId) || (parentDraggedLayer && parentDraggedLayer.blockId);
+      if (blockEl.getAttribute('data-landing-block') === draggingBlockId) {
+        clearDropIndicators();
+        return;
+      }
 
-    if (currentDraggedSourceEl && (currentDraggedSourceEl === targetEl || currentDraggedSourceEl.contains(targetEl))) {
+      var rect = blockEl.getBoundingClientRect();
+      var midY = rect.top + rect.height / 2;
+      var position = e.clientY < midY ? 'before' : 'after';
+
+      if (currentDropTargetEl && currentDropTargetEl !== blockEl) {
+        currentDropTargetEl.classList.remove('landing-drop-inside');
+      }
+      currentDropTargetEl = blockEl;
+      currentDropPosition = position;
+
+      var scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      var scrollX = window.scrollX || document.documentElement.scrollLeft || 0;
+
+      var lineY = position === 'before' ? rect.top : rect.bottom;
+      dropIndicator.style.top = (lineY + scrollY - 2) + 'px';
+      dropIndicator.style.left = (rect.left + scrollX) + 'px';
+      dropIndicator.style.width = rect.width + 'px';
+      dropIndicator.style.height = '4px';
+      dropIndicator.style.backgroundColor = '#2563eb';
+      dropIndicator.style.borderRadius = '2px';
+      dropIndicator.style.boxShadow = '0 0 10px rgba(37, 99, 235, 0.75)';
+      dropIndicator.style.display = 'block';
+
+      var sectionLabel = blockEl.getAttribute('data-block-label') || 'Sección';
+      var draggedLabel = (canvasMove && canvasMove.label) || (parentDraggedLayer && parentDraggedLayer.label) || 'Módulo';
+      dropBadge.textContent = (position === 'before' ? '⬆️ Mover "' + draggedLabel + '" antes de ' : '⬇️ Mover "' + draggedLabel + '" después de ') + sectionLabel;
+      var badgeTop = position === 'before' ? (rect.top + scrollY - 28) : (rect.bottom + scrollY + 4);
+      dropBadge.style.top = Math.max(8, badgeTop) + 'px';
+      dropBadge.style.left = (rect.left + scrollX + 16) + 'px';
+      dropBadge.style.display = 'block';
+      return;
+    }
+
+    // 3. Subelement / object drag
+    if (currentDraggedSourceEl && (currentDraggedSourceEl === e.target || currentDraggedSourceEl.contains(e.target))) {
       clearDropIndicators();
       return;
     }
 
-    var isTargetContainer = isEditableContainer(targetEl) || targetEl === blockEl;
-    var rect = targetEl.getBoundingClientRect();
-    var position = 'inside';
+    var sourceParent = currentDraggedSourceEl ? currentDraggedSourceEl.parentElement : null;
+    var targetEl = null;
+    var isSiblingReorder = false;
 
-    var parent = targetEl.parentElement;
-    var isHorizontal = false;
-    if (parent) {
-      var comp = window.getComputedStyle(parent);
-      if (comp.display === 'flex' && (comp.flexDirection === 'row' || comp.flexDirection === 'row-reverse')) {
-        isHorizontal = true;
+    // Check sibling reorder inside same parent container
+    if (sourceParent && sourceParent.contains(e.target) && sourceParent !== blockEl) {
+      var sTarget = e.target;
+      while (sTarget && sTarget.parentElement !== sourceParent) {
+        sTarget = sTarget.parentElement;
+      }
+      if (sTarget && sTarget !== currentDraggedSourceEl && sTarget !== blockEl) {
+        targetEl = sTarget;
+        isSiblingReorder = true;
       }
     }
 
-    if (isTargetContainer) {
+    if (!targetEl) {
+      var subEl = resolveSelectableSubElement(e.target, blockEl);
+      targetEl = subEl || blockEl;
+      if (currentDraggedSourceEl && (currentDraggedSourceEl === targetEl || currentDraggedSourceEl.contains(targetEl))) {
+        clearDropIndicators();
+        return;
+      }
+    }
+
+    var parentContainer = targetEl.parentElement || blockEl;
+    var comp = window.getComputedStyle(parentContainer);
+    var isHorizontal =
+      (comp.display === 'flex' && (comp.flexDirection === 'row' || comp.flexDirection === 'row-reverse')) ||
+      (comp.display === 'grid' && comp.gridTemplateColumns && comp.gridTemplateColumns.split(' ').length > 1) ||
+      parentContainer.classList.contains('flex-row') ||
+      parentContainer.classList.contains('grid');
+
+    var isTargetContainer = (!isSiblingReorder && (isEditableContainer(targetEl) || targetEl === blockEl));
+    var rect = targetEl.getBoundingClientRect();
+    var position = 'inside';
+
+    if (isSiblingReorder) {
+      if (isHorizontal) {
+        var midX = rect.left + rect.width / 2;
+        position = e.clientX < midX ? 'before' : 'after';
+      } else {
+        var midY = rect.top + rect.height / 2;
+        position = e.clientY < midY ? 'before' : 'after';
+      }
+    } else if (isTargetContainer) {
       var edgeY = Math.min(28, rect.height * 0.22);
       if (targetEl !== blockEl && e.clientY < rect.top + edgeY) {
         position = 'before';
@@ -1584,22 +1787,37 @@ a[data-original-href] {
       dropBadge.style.display = 'block';
     } else {
       targetEl.classList.remove('landing-drop-inside');
-      dropBadge.style.display = 'none';
 
       if (isHorizontal) {
         var x = position === 'before' ? rect.left : rect.right;
         dropIndicator.style.top = (rect.top + scrollY) + 'px';
-        dropIndicator.style.left = (x + scrollX - 1.5) + 'px';
-        dropIndicator.style.width = '3px';
+        dropIndicator.style.left = (x + scrollX - 2) + 'px';
+        dropIndicator.style.width = '4px';
         dropIndicator.style.height = rect.height + 'px';
+        dropIndicator.style.backgroundColor = '#2563eb';
+        dropIndicator.style.borderRadius = '2px';
+        dropIndicator.style.boxShadow = '0 0 10px rgba(37, 99, 235, 0.75)';
+
+        dropBadge.textContent = (position === 'before' ? '⬅️ Mover antes de ' : '➡️ Mover después de ') + describeElement(targetEl);
+        dropBadge.style.top = Math.max(8, rect.top + scrollY - 26) + 'px';
+        dropBadge.style.left = (x + scrollX + 8) + 'px';
       } else {
         var y = position === 'before' ? rect.top : rect.bottom;
-        dropIndicator.style.top = (y + scrollY - 1.5) + 'px';
+        dropIndicator.style.top = (y + scrollY - 2) + 'px';
         dropIndicator.style.left = (rect.left + scrollX) + 'px';
         dropIndicator.style.width = rect.width + 'px';
-        dropIndicator.style.height = '3px';
+        dropIndicator.style.height = '4px';
+        dropIndicator.style.backgroundColor = '#2563eb';
+        dropIndicator.style.borderRadius = '2px';
+        dropIndicator.style.boxShadow = '0 0 10px rgba(37, 99, 235, 0.75)';
+
+        dropBadge.textContent = (position === 'before' ? '⬆️ Mover antes de ' : '⬇️ Mover después de ') + describeElement(targetEl);
+        var badgeTop = position === 'before' ? (rect.top + scrollY - 26) : (rect.bottom + scrollY + 4);
+        dropBadge.style.top = Math.max(8, badgeTop) + 'px';
+        dropBadge.style.left = (rect.left + scrollX + 16) + 'px';
       }
       dropIndicator.style.display = 'block';
+      dropBadge.style.display = 'block';
     }
   }, false);
 
@@ -1676,6 +1894,34 @@ a[data-original-href] {
       return;
     }
 
+    var parentDraggedLayer = (window.parent && window.parent.__draggedLayerItem) || null;
+    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (window.parent && window.parent.__draggedCanvasItem);
+    var isBlockDrop = (!isModuleDrop && ((canvasMove && canvasMove.type === 'block') || (parentDraggedLayer && parentDraggedLayer.type === 'block')));
+
+    if (isBlockDrop) {
+      var sourceBlockId = (canvasMove && canvasMove.blockId) || (parentDraggedLayer && parentDraggedLayer.blockId);
+      var sourceBlockLabel = (canvasMove && canvasMove.label) || (parentDraggedLayer && parentDraggedLayer.label) || 'Bloque';
+      var targetBlockEl = targetEl ? closestEl(targetEl, '[data-landing-block]') : null;
+      var targetBlockId = targetBlockEl ? targetBlockEl.getAttribute('data-landing-block') : null;
+
+      if (sourceBlockId && targetBlockId && sourceBlockId !== targetBlockId) {
+        window.parent.postMessage({
+          type: 'LANDING_CANVAS_MOVE',
+          sourceItem: {
+            type: 'block',
+            blockId: sourceBlockId,
+            label: sourceBlockLabel
+          },
+          target: {
+            blockId: targetBlockId,
+            selector: null
+          },
+          position: position
+        }, '*');
+      }
+      return;
+    }
+
     if (!targetEl) {
       return;
     }
@@ -1685,10 +1931,7 @@ a[data-original-href] {
     var isTargetBlockRoot = targetEl === targetBlockEl;
     var targetSelector = isTargetBlockRoot ? null : computeRelativeSelector(targetBlockEl, targetEl);
 
-    var canvasMoveItem = currentDraggedItem || window.__draggedCanvasItem;
-    if (!canvasMoveItem && window.parent && window.parent.__draggedCanvasItem) {
-      canvasMoveItem = window.parent.__draggedCanvasItem;
-    }
+    var canvasMoveItem = canvasMove || parentDraggedLayer;
     if (!canvasMoveItem && e.dataTransfer) {
       try {
         var raw = e.dataTransfer.getData('application/x-landing-canvas-move');
@@ -1803,6 +2046,37 @@ a[data-original-href] {
     if (activeEditingEl) {
       return;
     }
+
+    var blockHandleBtn = closestEl(e.target, '.landing-block-btn-up, .landing-block-btn-down');
+    if (blockHandleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var bEl = closestEl(blockHandleBtn, '[data-landing-block]');
+      if (bEl) {
+        var bId = bEl.getAttribute('data-landing-block');
+        var action = blockHandleBtn.classList.contains('landing-block-btn-up') ? 'move-up' : 'move-down';
+        window.parent.postMessage({
+          type: 'LANDING_BLOCK_ACTION',
+          blockId: bId,
+          action: action
+        }, '*');
+      }
+      return;
+    }
+
+    var blockHandle = closestEl(e.target, '.landing-block-handle');
+    if (blockHandle) {
+      e.preventDefault();
+      e.stopPropagation();
+      var bEl = closestEl(blockHandle, '[data-landing-block]');
+      if (bEl) {
+        var bId = bEl.getAttribute('data-landing-block');
+        applySelection(bId, null);
+        window.parent.postMessage({ type: 'LANDING_SELECT_BLOCK', blockId: bId }, '*');
+      }
+      return;
+    }
+
     e.preventDefault();
     var blockEl = closestEl(e.target, '[data-landing-block]');
     if (!blockEl) return;
@@ -2141,6 +2415,7 @@ a[data-original-href] {
         }
         neutralizeLinks();
         runDynamicHelpers();
+        syncDraggableElements();
         if (typeof window.__initLandingModuleScripts === 'function') {
           try { window.__initLandingModuleScripts(); } catch (err) { console.error('Error in __initLandingModuleScripts:', err); }
         }
@@ -2166,6 +2441,7 @@ a[data-original-href] {
         }
       } else {
         neutralizeLinks();
+        syncDraggableElements();
         applySelection(e.data.selectedBlockId || currentSelectedId, targetSubSel);
       }
     }
@@ -2217,8 +2493,12 @@ export function compileLandingFromDocument(
     ).test(innerHtml);
     const idAttr = innerHasSameId ? "" : ` id="${escapeHtml(anchorId)}"`;
 
+    const handleHtml = options?.interactiveEditor
+      ? `\n  <div class="landing-block-handle" draggable="true" data-landing-block-handle="${escapeHtml(block.id)}" title="Arrastrar para reordenar módulo">\n    <span class="landing-drag-grip">⋮⋮</span>\n    <span class="landing-block-handle-title">${escapeHtml(block.name)}</span>\n    <div class="landing-block-handle-actions">\n      <button type="button" class="landing-block-btn-up" title="Subir módulo (anterior)">▲</button>\n      <button type="button" class="landing-block-btn-down" title="Bajar módulo (siguiente)">▼</button>\n    </div>\n  </div>`
+      : "";
+
     htmlParts.push(
-      `<div${idAttr} data-landing-block="${escapeHtml(block.id)}" data-anchor-id="${escapeHtml(anchorId)}" data-module-key="${escapeHtml(block.moduleKey)}" data-block-label="${escapeHtml(block.name)}"${selectedAttr}${styleAttr}>\n${innerHtml}\n</div>`,
+      `<div${idAttr} data-landing-block="${escapeHtml(block.id)}" data-anchor-id="${escapeHtml(anchorId)}" data-module-key="${escapeHtml(block.moduleKey)}" data-block-label="${escapeHtml(block.name)}"${selectedAttr}${styleAttr}>${handleHtml}\n${innerHtml}\n</div>`,
     );
 
     const trimmedCss = block.cssTemplate.trim();

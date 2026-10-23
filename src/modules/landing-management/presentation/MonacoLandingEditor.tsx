@@ -4807,7 +4807,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       }
 
       if (sourceItem.type === "block") {
-        if (position === "inside" && sourceItem.blockId !== target.blockId) {
+        if (
+          position === "inside" &&
+          sourceItem.blockId !== target.blockId &&
+          target.selector
+        ) {
           let nextSel: string | null = null;
           updateDocument((prev) => {
             const sourceBlock = prev.blocks.find(
@@ -4821,7 +4825,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             const res = moveBlockIntoBlock(
               sourceBlock,
               targetBlock,
-              target.selector ?? null,
+              target.selector,
             );
             if (!res) return prev;
             nextSel = res.newSelector;
@@ -4851,13 +4855,19 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             (b) => b.id === target.blockId,
           );
           if (sourceIdx >= 0 && targetIdx >= 0 && sourceIdx !== targetIdx) {
-            let finalTargetIdx = targetIdx;
-            if (position === "after" && sourceIdx < targetIdx) {
-              finalTargetIdx = targetIdx;
-            } else if (position === "before" && sourceIdx > targetIdx) {
-              finalTargetIdx = targetIdx;
+            let toIndex = targetIdx;
+            if (sourceIdx < targetIdx) {
+              toIndex = position === "before" ? targetIdx - 1 : targetIdx;
+            } else {
+              toIndex = position === "before" ? targetIdx : targetIdx + 1;
             }
-            handleReorderBlocks(sourceIdx, finalTargetIdx);
+            toIndex = Math.max(0, Math.min(documentState.blocks.length - 1, toIndex));
+            pendingScrollBlockIdRef.current = sourceItem.blockId;
+            handleReorderBlocks(sourceIdx, toIndex);
+            setFeedback({
+              type: "success",
+              message: `Módulo "${sourceItem.label || "Bloque"}" reordenado con éxito.`,
+            });
           }
         }
       }
@@ -6125,9 +6135,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
                             let pos: "inside" | "before" | "after" = "inside";
                             if (currentLayer?.type === "block") {
-                              if (ratio < 0.25) pos = "before";
-                              else if (ratio > 0.75) pos = "after";
-                              else pos = "inside";
+                              pos = ratio < 0.5 ? "before" : "after";
                             } else {
                               pos = "inside";
                             }
@@ -6228,10 +6236,18 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               documentState.blocks.findIndex(
                                 (b) => b.id === block.id,
                               );
-                            handleReorderBlocks(
-                              draggedLayerIndex,
-                              targetRealIdx !== -1 ? targetRealIdx : idx,
-                            );
+                            const toIdx = targetRealIdx !== -1 ? targetRealIdx : idx;
+                            const fromIdx = draggedLayerIndex;
+                            if (fromIdx !== toIdx) {
+                              let calculatedToIdx = toIdx;
+                              if (fromIdx < toIdx) {
+                                calculatedToIdx = pos === "before" ? toIdx - 1 : toIdx;
+                              } else {
+                                calculatedToIdx = pos === "before" ? toIdx : toIdx + 1;
+                              }
+                              calculatedToIdx = Math.max(0, Math.min(documentState.blocks.length - 1, calculatedToIdx));
+                              handleReorderBlocks(fromIdx, calculatedToIdx);
+                            }
                             setDraggedLayerIndex(null);
                           }
                         }}

@@ -1051,6 +1051,47 @@ describe("landing-compiler", () => {
       expect(compiled.cssContent).toContain(".event-card");
       expect(compiled.jsContent).toContain("/reservations/events");
     });
+
+    it("renders draggable block handles and reorder action buttons only when interactiveEditor is enabled", () => {
+      const doc = createDefaultLandingDocument("La Terraza", "la-terraza");
+      const editorCompiled = compileLandingFromDocument(doc, {
+        restaurantName: "La Terraza",
+        restaurantSlug: "la-terraza",
+      }, { interactiveEditor: true });
+
+      expect(editorCompiled.htmlContent).toContain("landing-block-handle");
+      expect(editorCompiled.htmlContent).toContain("landing-block-btn-up");
+      expect(editorCompiled.htmlContent).toContain("landing-block-btn-down");
+      expect(editorCompiled.previewCss).toContain(".landing-block-handle");
+
+      const publicCompiled = compileLandingFromDocument(doc, {
+        restaurantName: "La Terraza",
+        restaurantSlug: "la-terraza",
+      });
+
+      expect(publicCompiled.htmlContent).not.toContain("landing-block-handle");
+      expect(publicCompiled.htmlContent).not.toContain("landing-block-btn-up");
+    });
+
+    it("reorders sibling elements before and after each other using reparentSubElementInBlock", () => {
+      const block = createBlankContainerBlock("columns-2");
+      // col 1 selector and col 2 selector
+      const tree = buildBlockSubLayerTree(block);
+      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(grid).toBeDefined();
+      const col1Selector = grid!.children[0].selector;
+      const col2Selector = grid!.children[1].selector;
+
+      // Moving col2 before col1
+      const resBefore = reparentSubElementInBlock(block, col2Selector, col1Selector, "before");
+      expect(resBefore).not.toBeNull();
+      expect(resBefore!.block.htmlTemplate).toBeTruthy();
+
+      // Moving col1 after col2
+      const resAfter = reparentSubElementInBlock(block, col1Selector, col2Selector, "after");
+      expect(resAfter).not.toBeNull();
+      expect(resAfter!.block.htmlTemplate).toBeTruthy();
+    });
   });
 });
 
