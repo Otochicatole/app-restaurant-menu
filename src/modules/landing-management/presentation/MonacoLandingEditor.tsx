@@ -7479,18 +7479,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCodeDrawerMode("block");
-                                  setCodeTab("html");
-                                }}
-                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white hover:bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 transition-colors shadow-2xs"
-                                title="Ver código HTML/CSS/JS en pantalla completa"
-                              >
-                                <Code2 className="h-3 w-3 text-blue-600" />
-                                Código
-                              </button>
                               {hasSubStyleOverrides && (
                                 <button
                                   type="button"
@@ -8889,18 +8877,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                             {selectedBlock.moduleKey}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCodeDrawerMode("block");
-                              setCodeTab("html");
-                            }}
-                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white hover:bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 transition-colors shadow-2xs"
-                            title="Ver código del módulo a pantalla completa"
-                          >
-                            <Code2 className="h-3 w-3 text-blue-600" />
-                            Código
-                          </button>
                         </div>
                         <div className="flex items-center gap-1">
                           <button
