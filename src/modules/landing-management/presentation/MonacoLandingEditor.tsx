@@ -202,6 +202,11 @@ type SelectedSubElementInfo = {
     minHeight?: string;
     overflow?: string;
     position?: string;
+    top?: string;
+    right?: string;
+    bottom?: string;
+    left?: string;
+    zIndex?: string;
   };
 };
 
@@ -1257,7 +1262,7 @@ interface DirectionalInputProps {
   placeholder?: string;
   title: string;
   onChange: (val: string) => void;
-  variant?: "neutral" | "margin" | "padding";
+  variant?: "neutral" | "margin" | "padding" | "position";
   className?: string;
 }
 
@@ -1297,6 +1302,9 @@ function DirectionalInput({
     } else if (variant === "padding") {
       variantClasses =
         "border-blue-400 bg-blue-50 text-blue-950 font-semibold shadow-2xs";
+    } else if (variant === "position") {
+      variantClasses =
+        "border-indigo-400 bg-indigo-50 text-indigo-950 font-semibold shadow-2xs";
     } else {
       variantClasses =
         "border-zinc-400 bg-zinc-50 text-zinc-900 font-semibold shadow-2xs";
@@ -3638,8 +3646,14 @@ function StudioDimensionsAndPositionEditor({
         </div>
       </div>
 
-      {/* 3. PROPORCIÓN, RECORTE Y POSICIÓN */}
+      {/* 3. PROPORCIÓN Y DESBORDE */}
       <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-violet-500" />
+          <span className="text-xs font-semibold text-zinc-800">
+            Proporción y Desborde (Aspect & Overflow)
+          </span>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <span className="block text-[10px] font-medium text-zinc-600 mb-1">
@@ -3674,36 +3688,353 @@ function StudioDimensionsAndPositionEditor({
             </select>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-zinc-100">
-          <div>
-            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
-              Posición (Position)
+      {/* 4. POSICIONAMIENTO Y COORDENADAS (POSITION, TOP, RIGHT, BOTTOM, LEFT, Z-INDEX) */}
+      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-indigo-500" />
+            <span className="text-xs font-semibold text-zinc-800">
+              Posicionamiento (Position)
             </span>
-            <select
-              value={style.position || ""}
-              onChange={(e) => onUpdateStyle({ position: e.target.value })}
-              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs text-zinc-800"
-            >
-              <option value="">Normal (static)</option>
-              <option value="relative">Relativa (relative)</option>
-              <option value="sticky">Fija al Scroll (sticky)</option>
-              <option value="absolute">Absoluta (absolute)</option>
-            </select>
           </div>
+          {style.position && (
+            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-indigo-700 uppercase">
+              {style.position}
+            </span>
+          )}
+        </div>
+
+        {/* Dropdown Selector de Posición */}
+        <div>
+          <select
+            value={style.position || ""}
+            onChange={(e) => onUpdateStyle({ position: e.target.value })}
+            className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 focus:bg-white focus:border-indigo-500 focus:outline-none font-medium"
+          >
+            <option value="">Normal / Estática (static)</option>
+            <option value="relative">Relativa (relative)</option>
+            <option value="absolute">Absoluta (absolute)</option>
+            <option value="fixed">Fija en pantalla (fixed)</option>
+            <option value="sticky">Pegajosa / Fija al scroll (sticky)</option>
+          </select>
+        </div>
+
+        {/* Botones de acceso rápido a los tipos de position */}
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            { id: "", label: "Static", title: "Flujo normal del documento" },
+            { id: "relative", label: "Relative", title: "Desplazamiento relativo a su posición natural" },
+            { id: "absolute", label: "Absolute", title: "Posicionamiento absoluto respecto al ancestro con posición" },
+            { id: "fixed", label: "Fixed", title: "Fijo en la ventana del navegador (viewport)" },
+            { id: "sticky", label: "Sticky", title: "Pegajoso al hacer scroll" },
+          ].map((pos) => {
+            const isActive = (style.position || "") === pos.id;
+            return (
+              <button
+                key={pos.id || "static"}
+                type="button"
+                title={pos.title}
+                onClick={() => onUpdateStyle({ position: pos.id })}
+                className={`py-1 px-0.5 rounded text-[10px] font-medium text-center transition-colors truncate ${
+                  isActive
+                    ? "bg-indigo-600 text-white font-semibold shadow-2xs"
+                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                }`}
+              >
+                {pos.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* COORDENADAS: TOP, RIGHT, BOTTOM, LEFT */}
+        <div className="pt-2 border-t border-zinc-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
+              <span>Coordenadas de Ubicación</span>
+              {Boolean(style.top || style.right || style.bottom || style.left) && (
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+              )}
+            </span>
+            {Boolean(style.top || style.right || style.bottom || style.left) && (
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateStyle({
+                    top: "",
+                    right: "",
+                    bottom: "",
+                    left: "",
+                  })
+                }
+                className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
+                title="Limpiar todas las coordenadas"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+
+          {/* Matriz Visual de Anclaje Rápido (Pin Presets) */}
+          <div className="bg-zinc-50 rounded-lg p-2 border border-zinc-200/80 space-y-1.5">
+            <span className="block text-[9px] font-medium uppercase tracking-wider text-zinc-400">
+              Anclaje Rápido (Presets)
+            </span>
+            <div className="grid grid-cols-3 gap-1">
+              {[
+                {
+                  label: "↖ Arr-Izq",
+                  title: "Superior Izquierda (Top: 0, Left: 0)",
+                  patch: { top: "0px", left: "0px", right: "", bottom: "" },
+                },
+                {
+                  label: "⬆ Arr-Centro",
+                  title: "Superior Centrado (Top: 0, Left: 50%)",
+                  patch: { top: "0px", left: "50%", right: "", bottom: "" },
+                },
+                {
+                  label: "↗ Arr-Der",
+                  title: "Superior Derecha (Top: 0, Right: 0)",
+                  patch: { top: "0px", right: "0px", left: "", bottom: "" },
+                },
+                {
+                  label: "⬅ Cen-Izq",
+                  title: "Centro Izquierda (Top: 50%, Left: 0)",
+                  patch: { top: "50%", left: "0px", right: "", bottom: "" },
+                },
+                {
+                  label: "⏺ Centro",
+                  title: "Centro Absoluto (Top: 50%, Left: 50%)",
+                  patch: { top: "50%", left: "50%", right: "", bottom: "" },
+                },
+                {
+                  label: "➡ Cen-Der",
+                  title: "Centro Derecha (Top: 50%, Right: 0)",
+                  patch: { top: "50%", right: "0px", left: "", bottom: "" },
+                },
+                {
+                  label: "↙ Aba-Izq",
+                  title: "Inferior Izquierda (Bottom: 0, Left: 0)",
+                  patch: { bottom: "0px", left: "0px", top: "", right: "" },
+                },
+                {
+                  label: "⬇ Aba-Centro",
+                  title: "Inferior Centrado (Bottom: 0, Left: 50%)",
+                  patch: { bottom: "0px", left: "50%", top: "", right: "" },
+                },
+                {
+                  label: "↘ Aba-Der",
+                  title: "Inferior Derecha (Bottom: 0, Right: 0)",
+                  patch: { bottom: "0px", right: "0px", top: "", left: "" },
+                },
+              ].map((pin) => (
+                <button
+                  key={pin.label}
+                  type="button"
+                  title={pin.title}
+                  onClick={() =>
+                    onUpdateStyle({
+                      ...pin.patch,
+                      ...(!style.position || style.position === "static"
+                        ? { position: "absolute" }
+                        : {}),
+                    })
+                  }
+                  className="px-1 py-1 rounded bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 border border-zinc-200 text-[10px] font-medium text-zinc-700 transition-colors shadow-2xs text-center"
+                >
+                  {pin.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Presets adicionales: Inset 0 (Cubrir todo) */}
+            <div className="flex items-center gap-1 pt-0.5">
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateStyle({
+                    top: "0px",
+                    right: "0px",
+                    bottom: "0px",
+                    left: "0px",
+                    ...(!style.position || style.position === "static"
+                      ? { position: "absolute" }
+                      : {}),
+                  })
+                }
+                className="flex-1 py-1 px-1.5 rounded bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 border border-zinc-200 text-[10px] font-medium text-zinc-700 text-center transition-colors shadow-2xs"
+                title="Cubrir todo el contenedor (Top: 0, Right: 0, Bottom: 0, Left: 0)"
+              >
+                ⤢ Cubrir Todo (Inset 0)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateStyle({
+                    top: "",
+                    right: "",
+                    bottom: "",
+                    left: "",
+                  })
+                }
+                className="py-1 px-2 rounded bg-white hover:bg-red-50 hover:text-red-700 hover:border-red-300 border border-zinc-200 text-[10px] font-medium text-zinc-500 text-center transition-colors shadow-2xs"
+                title="Limpiar coordenadas (auto)"
+              >
+                Restablecer
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Inputs Direccionales (Top, Right, Bottom, Left) */}
+          <div className="grid grid-cols-4 gap-1.5">
+            <div>
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                Top
+              </span>
+              <DirectionalInput
+                value={style.top ?? ""}
+                placeholder={computedStyles?.top || "auto"}
+                title="Posición Superior (top)"
+                variant="position"
+                onChange={(val) =>
+                  onUpdateStyle({
+                    top: val,
+                    ...(!style.position || style.position === "static"
+                      ? { position: "absolute" }
+                      : {}),
+                  })
+                }
+                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-indigo-500 focus:outline-none text-zinc-800"
+              />
+            </div>
+            <div>
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                Der
+              </span>
+              <DirectionalInput
+                value={style.right ?? ""}
+                placeholder={computedStyles?.right || "auto"}
+                title="Posición Derecha (right)"
+                variant="position"
+                onChange={(val) =>
+                  onUpdateStyle({
+                    right: val,
+                    ...(!style.position || style.position === "static"
+                      ? { position: "absolute" }
+                      : {}),
+                  })
+                }
+                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-indigo-500 focus:outline-none text-zinc-800"
+              />
+            </div>
+            <div>
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                Abajo
+              </span>
+              <DirectionalInput
+                value={style.bottom ?? ""}
+                placeholder={computedStyles?.bottom || "auto"}
+                title="Posición Inferior (bottom)"
+                variant="position"
+                onChange={(val) =>
+                  onUpdateStyle({
+                    bottom: val,
+                    ...(!style.position || style.position === "static"
+                      ? { position: "absolute" }
+                      : {}),
+                  })
+                }
+                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-indigo-500 focus:outline-none text-zinc-800"
+              />
+            </div>
+            <div>
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-400 mb-0.5 text-center">
+                Izq
+              </span>
+              <DirectionalInput
+                value={style.left ?? ""}
+                placeholder={computedStyles?.left || "auto"}
+                title="Posición Izquierda (left)"
+                variant="position"
+                onChange={(val) =>
+                  onUpdateStyle({
+                    left: val,
+                    ...(!style.position || style.position === "static"
+                      ? { position: "absolute" }
+                      : {}),
+                  })
+                }
+                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50/80 focus:bg-white focus:border-indigo-500 focus:outline-none text-zinc-800"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Z-INDEX (CAPA / PROFUNDIDAD) */}
+        <div className="pt-2 border-t border-zinc-100 flex items-center justify-between gap-2">
           <div>
-            <span className="block text-[10px] font-medium text-zinc-600 mb-1">
+            <span className="block text-[10px] font-semibold text-zinc-700">
               Capa Z (z-index)
             </span>
+            <span className="text-[9px] text-zinc-400">
+              Superposición visual
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
             <input
               type="text"
               value={style.zIndex ?? ""}
-              placeholder="auto"
+              placeholder={computedStyles?.zIndex || "auto"}
               onChange={(e) => onUpdateStyle({ zIndex: e.target.value })}
-              className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2 py-1 text-xs font-mono text-zinc-800 focus:bg-white focus:outline-none focus:border-blue-500"
+              className="w-16 h-6 text-center text-[11px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800 focus:bg-white focus:outline-none focus:border-indigo-500"
+              title="z-index (número o auto)"
             />
+            {["0", "10", "20", "50"].map((z) => (
+              <button
+                key={z}
+                type="button"
+                onClick={() =>
+                  onUpdateStyle({ zIndex: style.zIndex === z ? "" : z })
+                }
+                className={`px-1.5 h-6 rounded text-[9px] font-mono font-medium transition-colors ${
+                  style.zIndex === z
+                    ? "bg-indigo-600 text-white font-semibold"
+                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                }`}
+              >
+                {z}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* NOTA CONTEXTUAL EXPLICATIVA */}
+        {style.position === "absolute" && (
+          <div className="rounded-lg bg-indigo-50/70 border border-indigo-100 p-2 text-[10px] text-indigo-900 leading-relaxed">
+            <span className="font-semibold block mb-0.5">💡 Posición Absoluta:</span>
+            El elemento se ubica en las coordenadas indicadas (top, right, bottom, left) respecto a su contenedor padre más cercano que tenga posición (ej. <code className="bg-white/80 px-1 py-0.5 rounded text-indigo-800 font-mono">relative</code>).
+          </div>
+        )}
+        {style.position === "fixed" && (
+          <div className="rounded-lg bg-indigo-50/70 border border-indigo-100 p-2 text-[10px] text-indigo-900 leading-relaxed">
+            <span className="font-semibold block mb-0.5">💡 Posición Fixed (Fija):</span>
+            El elemento permanece anclado en la ventana del navegador (viewport) incluso al desplazarse o hacer scroll por la página.
+          </div>
+        )}
+        {style.position === "sticky" && (
+          <div className="rounded-lg bg-indigo-50/70 border border-indigo-100 p-2 text-[10px] text-indigo-900 leading-relaxed">
+            <span className="font-semibold block mb-0.5">💡 Posición Sticky:</span>
+            El elemento se desplaza en el flujo normal hasta que alcanza el umbral de scroll especificado (ej. <code className="bg-white/80 px-1 py-0.5 rounded text-indigo-800 font-mono">top: 0px</code>).
+          </div>
+        )}
+        {style.position === "relative" && (
+          <div className="rounded-lg bg-indigo-50/70 border border-indigo-100 p-2 text-[10px] text-indigo-900 leading-relaxed">
+            <span className="font-semibold block mb-0.5">💡 Posición Relativa:</span>
+            Permite desplazar el elemento desde su posición original y sirve como referencia de anclaje para los elementos hijos con posición absoluta.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -8702,6 +9033,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 curStyle.aspectRatio ||
                                 curStyle.overflow ||
                                 curStyle.position ||
+                                curStyle.top ||
+                                curStyle.right ||
+                                curStyle.bottom ||
+                                curStyle.left ||
                                 curStyle.zIndex,
                             ) ? (
                               <span
@@ -8721,6 +9056,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 curStyle.aspectRatio ||
                                 curStyle.overflow ||
                                 curStyle.position ||
+                                curStyle.top ||
+                                curStyle.right ||
+                                curStyle.bottom ||
+                                curStyle.left ||
                                 curStyle.zIndex,
                             ) ? (
                               <button
@@ -8739,6 +9078,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       aspectRatio: "",
                                       overflow: "",
                                       position: "",
+                                      top: "",
+                                      right: "",
+                                      bottom: "",
+                                      left: "",
                                       zIndex: "",
                                     },
                                   )
@@ -9264,11 +9607,17 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             selectedBlock.values.__gridTemplateColumns ||
                             selectedBlock.values.__gap ||
                             selectedBlock.values.__minHeight ||
-                            selectedBlock.values.__overflow,
+                            selectedBlock.values.__overflow ||
+                            selectedBlock.values.__position ||
+                            selectedBlock.values.__top ||
+                            selectedBlock.values.__right ||
+                            selectedBlock.values.__bottom ||
+                            selectedBlock.values.__left ||
+                            selectedBlock.values.__zIndex,
                         ) ? (
                           <span
                             className="h-1.5 w-1.5 rounded-full bg-violet-500"
-                            title="Disposición o tamaño de sección personalizado"
+                            title="Disposición, tamaño o posición de sección personalizada"
                           />
                         ) : undefined
                       }
@@ -9281,7 +9630,13 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             selectedBlock.values.__gridTemplateColumns ||
                             selectedBlock.values.__gap ||
                             selectedBlock.values.__minHeight ||
-                            selectedBlock.values.__overflow,
+                            selectedBlock.values.__overflow ||
+                            selectedBlock.values.__position ||
+                            selectedBlock.values.__top ||
+                            selectedBlock.values.__right ||
+                            selectedBlock.values.__bottom ||
+                            selectedBlock.values.__left ||
+                            selectedBlock.values.__zIndex,
                         ) ? (
                           <button
                             type="button"
@@ -9296,6 +9651,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 __gap: "",
                                 __minHeight: "",
                                 __overflow: "",
+                                __position: "",
+                                __top: "",
+                                __right: "",
+                                __bottom: "",
+                                __left: "",
+                                __zIndex: "",
                               })
                             }
                             className="text-[10px] text-zinc-400 hover:text-red-600 font-medium transition-colors"
@@ -9384,7 +9745,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   selectedBlock.id,
                                   "__minHeight",
                                   mh.val,
-                                )
+                                  )
                               }
                               className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
                                 (selectedBlock.values.__minHeight || "") ===
@@ -9397,6 +9758,96 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Posición de la Sección */}
+                      <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-2xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-zinc-800">
+                            Posicionamiento de Sección (Position)
+                          </span>
+                          {selectedBlock.values.__position && (
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-indigo-700 uppercase">
+                              {selectedBlock.values.__position}
+                            </span>
+                          )}
+                        </div>
+                        <select
+                          value={selectedBlock.values.__position || ""}
+                          onChange={(e) =>
+                            handleUpdateBlockValue(
+                              selectedBlock.id,
+                              "__position",
+                              e.target.value,
+                            )
+                          }
+                          className="w-full rounded-lg bg-zinc-50 border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-800 font-medium"
+                        >
+                          <option value="">Normal (static)</option>
+                          <option value="relative">Relativa (relative)</option>
+                          <option value="sticky">Pegajosa al Scroll (sticky)</option>
+                          <option value="fixed">Fija en pantalla (fixed)</option>
+                          <option value="absolute">Absoluta (absolute)</option>
+                        </select>
+                        {(selectedBlock.values.__position || "") && (
+                          <div className="pt-1.5 border-t border-zinc-100 grid grid-cols-5 gap-1">
+                            <div>
+                              <span className="block text-[9px] font-semibold uppercase text-zinc-400 mb-0.5 text-center">Top</span>
+                              <DirectionalInput
+                                value={selectedBlock.values.__top ?? ""}
+                                placeholder="auto"
+                                title="Posición Superior (top)"
+                                variant="position"
+                                onChange={(val) => handleUpdateBlockValue(selectedBlock.id, "__top", val)}
+                                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-semibold uppercase text-zinc-400 mb-0.5 text-center">Der</span>
+                              <DirectionalInput
+                                value={selectedBlock.values.__right ?? ""}
+                                placeholder="auto"
+                                title="Posición Derecha (right)"
+                                variant="position"
+                                onChange={(val) => handleUpdateBlockValue(selectedBlock.id, "__right", val)}
+                                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-semibold uppercase text-zinc-400 mb-0.5 text-center">Abajo</span>
+                              <DirectionalInput
+                                value={selectedBlock.values.__bottom ?? ""}
+                                placeholder="auto"
+                                title="Posición Inferior (bottom)"
+                                variant="position"
+                                onChange={(val) => handleUpdateBlockValue(selectedBlock.id, "__bottom", val)}
+                                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-semibold uppercase text-zinc-400 mb-0.5 text-center">Izq</span>
+                              <DirectionalInput
+                                value={selectedBlock.values.__left ?? ""}
+                                placeholder="auto"
+                                title="Posición Izquierda (left)"
+                                variant="position"
+                                onChange={(val) => handleUpdateBlockValue(selectedBlock.id, "__left", val)}
+                                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-semibold uppercase text-zinc-400 mb-0.5 text-center">Z-Index</span>
+                              <input
+                                type="text"
+                                value={selectedBlock.values.__zIndex ?? ""}
+                                placeholder="auto"
+                                title="Capa Z (z-index)"
+                                onChange={(e) => handleUpdateBlockValue(selectedBlock.id, "__zIndex", e.target.value)}
+                                className="w-full h-6 text-center text-[10px] font-mono rounded-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </StudioInspectorSection>
 

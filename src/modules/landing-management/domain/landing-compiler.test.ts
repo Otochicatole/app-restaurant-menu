@@ -830,6 +830,57 @@ describe("landing-compiler", () => {
       expect(compiled.cssContent).toContain("font-style: italic !important");
     });
 
+    it("compiles position, top, right, bottom, left, and z-index for sub-elements and sections", () => {
+      const heroMod = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
+      const heroBlock = createBlockFromBuiltinModule(heroMod);
+      heroBlock.values.__position = "sticky";
+      heroBlock.values.__top = "0px";
+      heroBlock.values.__zIndex = "50";
+      heroBlock.values.__subStyles = JSON.stringify({
+        ".floating-badge": {
+          position: "absolute",
+          top: "12px",
+          right: "16px",
+          bottom: "auto",
+          left: "auto",
+          zIndex: "20",
+        },
+        ".fixed-whatsapp-button": {
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          zIndex: "999",
+        },
+      });
+
+      const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
+      doc.blocks = [heroBlock];
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Casa Brasa",
+        restaurantSlug: "casa-brasa",
+      });
+
+      // Section wrapper position styles
+      expect(compiled.htmlContent).toContain("position: sticky !important");
+      expect(compiled.htmlContent).toContain("top: 0px !important");
+      expect(compiled.htmlContent).toContain("z-index: 50 !important");
+
+      // Sub-element absolute position & coordinates
+      expect(compiled.cssContent).toContain("position: absolute !important");
+      expect(compiled.cssContent).toContain("top: 12px !important");
+      expect(compiled.cssContent).toContain("right: 16px !important");
+      expect(compiled.cssContent).toContain("bottom: auto !important");
+      expect(compiled.cssContent).toContain("left: auto !important");
+      expect(compiled.cssContent).toContain("z-index: 20 !important");
+
+      // Sub-element fixed position
+      expect(compiled.cssContent).toContain("position: fixed !important");
+      expect(compiled.cssContent).toContain("bottom: 24px !important");
+      expect(compiled.cssContent).toContain("right: 24px !important");
+      expect(compiled.cssContent).toContain("z-index: 999 !important");
+    });
+
     it("inserts semantic HTML tag presets into blocks and standalone containers", () => {
       let block = createBlankContainerBlock("flex-col");
       expect(block.htmlTemplate).toContain("flex-col");

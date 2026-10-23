@@ -592,6 +592,14 @@ function buildBlockWrapperStyle(values: Record<string, string>): string {
   if (values.__overflow?.trim()) {
     styles.push(`overflow: ${values.__overflow.trim()} !important`);
   }
+  if (values.__position?.trim()) {
+    styles.push(`position: ${values.__position.trim()} !important`);
+  }
+  if (values.__top?.trim()) styles.push(`top: ${values.__top.trim()} !important`);
+  if (values.__right?.trim()) styles.push(`right: ${values.__right.trim()} !important`);
+  if (values.__bottom?.trim()) styles.push(`bottom: ${values.__bottom.trim()} !important`);
+  if (values.__left?.trim()) styles.push(`left: ${values.__left.trim()} !important`);
+  if (values.__zIndex?.trim()) styles.push(`z-index: ${values.__zIndex.trim()} !important`);
   // Border in 4 directions or unified
   const hasIndividualBlockBorders = Boolean(
     values.__borderTopWidth?.trim() ||
@@ -1335,7 +1343,12 @@ a[data-original-href] {
         height: cs.height || '',
         minHeight: cs.minHeight || '',
         overflow: cs.overflow || '',
-        position: cs.position || ''
+        position: cs.position || '',
+        top: cs.top || '',
+        right: cs.right || '',
+        bottom: cs.bottom || '',
+        left: cs.left || '',
+        zIndex: cs.zIndex || ''
       }
     };
   }
