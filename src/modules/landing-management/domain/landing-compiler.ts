@@ -1076,73 +1076,39 @@ a[data-original-href] {
   function describeElement(el) {
     if (!el || el.nodeType !== 1) return 'Elemento';
     var tag = el.tagName.toLowerCase();
-    var cls = el.className && typeof el.className === 'string' ? el.className : '';
-    if (tag === 'img') return 'Imagen (<img>)';
-    if (tag === 'a' && /\\bbtn\\b/.test(cls)) return 'Botón CTA (<a>)';
-    if (tag === 'button') return 'Botón (<button>)';
-    if (tag === 'a') return 'Enlace (<a>)';
-    if (/^h[1-6]$/.test(tag)) return 'Título (' + tag.toUpperCase() + ')';
-    if (tag === 'p') return 'Párrafo (<p>)';
-    if (tag === 'blockquote') return 'Cita (<blockquote>)';
-    if (tag === 'figcaption') return 'Epígrafe (<figcaption>)';
-    if (tag === 'ul') return 'Lista (<ul>)';
-    if (tag === 'ol') return 'Lista (<ol>)';
-    if (tag === 'li') return 'Ítem (<li>)';
-    if (tag === 'nav') return 'Navegación (<nav>)';
-    if (tag === 'aside') return 'Lateral (<aside>)';
-    if (tag === 'section') return 'Sección (<section>)';
-    if (tag === 'header') return 'Encabezado (<header>)';
-    if (tag === 'footer') return 'Pie (<footer>)';
-    if (tag === 'strong') return 'Texto Destacado (<strong>)';
-    if (tag === 'em') return 'Texto Cursiva (<em>)';
-    if (tag === 'small') return 'Texto Pequeño (<small>)';
-    if (tag === 'time') return 'Fecha/Hora (<time>)';
-    if (/\\bbrand-icon\\b/.test(cls)) return 'Ícono de Marca (span)';
-    if (/\\bbrand-name\\b/.test(cls)) return 'Nombre de Marca (span)';
-    if (/\\bfeature-check\\b/.test(cls)) return 'Tilde / Check (span)';
-    if (/\\b(stat-val|exp-number)\\b/.test(cls)) return 'Valor Métrica (span)';
-    if (/\\b(stat-lbl|exp-label)\\b/.test(cls)) return 'Etiqueta Métrica (span)';
-    if (/\\bgrid-columns-2\\b/.test(cls)) return 'Grilla (2 Col)';
-    if (/\\bgrid-columns-3\\b/.test(cls)) return 'Grilla (3 Col)';
-    if (/\\bgrid-columns-4\\b/.test(cls)) return 'Grilla (4 Col)';
-    if (/\\bflex-row\\b/.test(cls)) return 'Fila Flex (div.flex-row)';
-    if (/\\bflex-col\\b/.test(cls)) return 'Columna Flex (div.flex-col)';
-    if (/\\bspacer\\b/.test(cls)) return 'Espaciador (div.spacer)';
-    if (/\\bsection-box\\b/.test(cls)) return 'Sub-Sección (<section>)';
-    if (/\\bheader-box\\b/.test(cls)) return 'Encabezado (<header>)';
-    if (/\\bfooter-box\\b/.test(cls)) return 'Pie (<footer>)';
-    if (/\\bcontent-container\\b/.test(cls)) return 'Contenedor (<div>)';
-    if (/\\bgrid-column\\b/.test(cls) || (el.parentElement && /\\b(grid-columns-2|grid-columns-3|grid-columns-4)\\b/.test(el.parentElement.className || ''))) {
-      var colIdx = Array.prototype.indexOf.call(el.parentElement ? el.parentElement.children : [], el) + 1;
-      return 'Columna ' + (colIdx || 1);
+    var sig = tag;
+    if (el.id) {
+      sig += '#' + el.id.trim();
     }
-    if (tag === 'article' || /\\b(card|info-card|stat-card|spotlight-card|review-card)\\b/.test(cls)) return 'Tarjeta (<article>)';
-    if (tag === 'figure' || /\\bgallery-item\\b/.test(cls)) return 'Figura (<figure>)';
-    if (tag === 'details' || /\\bfaq-item\\b/.test(cls)) return 'Acordeón (<details>)';
-    if (tag === 'summary') return 'Título Acordeón (<summary>)';
-    if (/\\bfeature-item\\b/.test(cls)) return 'Ítem de Lista';
-    if (/\\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\\b/.test(cls)) return 'Insignia (<span>)';
-    if (/\\b(cards-grid|info-grid|gallery-mosaic|stats-strip-grid)\\b/.test(cls)) return 'Grilla';
-    if (/\\b(hero-actions|section-cta-wrap|footer-links|image-spotlight-actions|spotlight-action)\\b/.test(cls)) return 'Grupo de Botones';
-    if (/\\bhero-content\\b/.test(cls)) return 'Contenido Hero (div)';
-    if (/\\bfeatures-list\\b/.test(cls)) return 'Lista de Características (div)';
-    if (/\\b(container|nav-container|hero-container|experience-container|footer-container)\\b/.test(cls)) return 'Contenedor (.container)';
-    if (/\\bspotlight-body\\b/.test(cls)) return 'Cuerpo de Tarjeta (div)';
-    if (/\\bspotlight-meta\\b/.test(cls)) return 'Metadatos (div)';
-    if (/\\bfooter-brand\\b/.test(cls)) return 'Marca del Pie (div)';
-    if (/\\bexperience-visual\\b/.test(cls)) return 'Bloque Visual (div)';
-    if (/\\bexperience-content\\b/.test(cls)) return 'Columna Editorial (div)';
-    if (/\\bpromo-banner-box\\b/.test(cls)) return 'Caja Promocional (div)';
-    if (/\\bpromo-banner-copy\\b/.test(cls)) return 'Texto Promocional (div)';
-    if (/\\bimage-spotlight-media\\b/.test(cls)) return 'Contenedor de Foto (div)';
-    if (/\\bimage-spotlight-copy\\b/.test(cls)) return 'Columna de Texto (div)';
-    if (tag === 'hr') return 'Separador (<hr>)';
-    if (tag === 'span') return 'Texto (<span>)';
+    var cls = el.className && typeof el.className === 'string' ? el.className.trim() : '';
     if (cls) {
-      var firstC = cls.trim().split(/\\s+/)[0];
-      return tag + '.' + firstC;
+      var parts = cls.split(/\\s+/).filter(function(c) {
+        return c && c.indexOf('landing-') !== 0 && c !== 'open';
+      }).slice(0, 2);
+      if (parts.length > 0) {
+        sig += '.' + parts.join('.');
+      }
     }
-    return 'Elemento (<' + tag + '>)';
+    if (tag === 'img') {
+      var alt = el.getAttribute('alt');
+      if (alt) return '<' + sig + ' alt="' + (alt.length > 22 ? alt.slice(0, 21) + '.' : alt) + '">';
+      return '<' + sig + '>';
+    }
+    if (tag === 'input') {
+      var ph = el.getAttribute('placeholder');
+      if (ph) return '<' + sig + ' placeholder="' + (ph.length > 20 ? ph.slice(0, 19) + '.' : ph) + '">';
+      return '<' + sig + '>';
+    }
+    var isContainer = (tag === 'div' || tag === 'section' || tag === 'article' || tag === 'header' || tag === 'footer' || tag === 'nav' || tag === 'ul' || tag === 'ol' || tag === 'figure' || tag === 'details');
+    if (isContainer && el.children && el.children.length > 0) {
+      return '<' + sig + '>';
+    }
+    var txt = (el.innerText !== undefined ? el.innerText : el.textContent || '').replace(/\\s+/g, ' ').trim();
+    if (txt) {
+      var trunc = txt.length > 26 ? txt.slice(0, 25) + '.' : txt;
+      return '<' + sig + '> "' + trunc + '"';
+    }
+    return '<' + sig + '>';
   }
 
   function computeRelativeSelector(blockEl, targetEl) {
@@ -4316,31 +4282,95 @@ function truncateString(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 1) + "…";
 }
 
-function findCardTitleText(
-  node: HtmlAstNode,
-  html: string,
-  values: Record<string, string>,
-): string | null {
-  for (const child of node.children) {
-    if (/^h[1-6]$/i.test(child.tagName)) {
-      const text = extractNodeTextPreview(html, child, values);
-      if (text) return text;
-    }
-    const attrs = extractNodeAttributes(html, child);
-    if (/title|name|heading/i.test(attrs.className)) {
-      const text = extractNodeTextPreview(html, child, values);
-      if (text) return text;
+export function formatVerbatimHtmlLayerLabel(
+  tag: string,
+  attrs: {
+    className?: string;
+    id?: string;
+    alt?: string;
+    href?: string;
+    type?: string;
+    placeholder?: string;
+    ariaLabel?: string;
+    src?: string;
+  },
+  textPreview?: string,
+  hasChildren: boolean = false,
+  boundVar?: string,
+): string {
+  const cleanTag = (tag || "div").toLowerCase();
+  let sig = cleanTag;
+
+  if (attrs.id) {
+    sig += `#${attrs.id.trim()}`;
+  }
+
+  if (attrs.className) {
+    const rawClasses = attrs.className
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((c) => !c.startsWith("landing-") && c !== "open");
+    if (rawClasses.length > 0) {
+      sig += `.${rawClasses.slice(0, 2).join(".")}`;
     }
   }
-  return null;
+
+  // 1. Image
+  if (cleanTag === "img") {
+    if (attrs.alt) {
+      return `<${sig} alt="${truncateString(attrs.alt, 24)}">`;
+    }
+    if (boundVar) {
+      return `<${sig} src="{{${boundVar}}}">`;
+    }
+    if (attrs.src && attrs.src !== "#" && !attrs.src.startsWith("data:")) {
+      return `<${sig} src="${truncateString(attrs.src, 22)}">`;
+    }
+    return `<${sig}>`;
+  }
+
+  // 2. Input
+  if (cleanTag === "input") {
+    if (attrs.placeholder) {
+      return `<${sig} placeholder="${truncateString(attrs.placeholder, 22)}">`;
+    }
+    return `<${sig} type="${attrs.type || "text"}">`;
+  }
+
+  // 3. Structural container tags with child elements don't repeat inner text
+  const structuralContainerTags = new Set([
+    "div",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "nav",
+    "ul",
+    "ol",
+    "figure",
+    "details",
+    "main",
+    "aside",
+  ]);
+
+  if (hasChildren && structuralContainerTags.has(cleanTag)) {
+    return `<${sig}>`;
+  }
+
+  // 4. Text preview
+  const cleanText = (textPreview || attrs.ariaLabel || "").trim();
+  if (cleanText) {
+    return `<${sig}> "${truncateString(cleanText, 26)}"`;
+  }
+
+  return `<${sig}>`;
 }
 
 function mapAstNodeToSubLayer(
   block: LandingBlock,
   node: HtmlAstNode,
   selector: string,
-  parentNode?: HtmlAstNode,
-  columnPosition?: number,
 ): LandingSubLayerNode | null {
   const tag = node.tagName.toLowerCase();
   const attrs = extractNodeAttributes(block.htmlTemplate, node);
@@ -4351,216 +4381,57 @@ function mapAstNodeToSubLayer(
   );
   const subtreeHtml = block.htmlTemplate.slice(node.startOffset, node.endOffset);
   const childFieldKeys = extractTemplateVariables(subtreeHtml);
-
-  let iconType: LandingSubLayerIconType = "container";
-  let label = tag;
   const isVoid = VOID_HTML_TAGS.has(tag);
 
+  let iconType: LandingSubLayerIconType = "container";
   if (tag === "img") {
     iconType = "image";
-    if (attrs.alt) {
-      label = `Imagen ("${truncateString(attrs.alt, 20)}")`;
-    } else {
-      const boundVar = childFieldKeys[0];
-      label = boundVar ? `Imagen (${boundVar})` : "Imagen";
-    }
-  } else if (tag === "button") {
+  } else if (tag === "button" || (tag === "a" && /\bbtn\b/.test(attrs.className))) {
     iconType = "button";
-    const btnText = textPreview || attrs.ariaLabel;
-    label = btnText ? `Botón ("${truncateString(btnText, 22)}")` : "Botón";
   } else if (tag === "a") {
-    const isBtn = /\bbtn\b/.test(attrs.className);
-    iconType = isBtn ? "button" : "link";
-    const aText = textPreview || attrs.ariaLabel;
-    if (aText) {
-      label = isBtn
-        ? `Botón ("${truncateString(aText, 22)}")`
-        : `Enlace ("${truncateString(aText, 22)}")`;
-    } else if (attrs.href && attrs.href !== "#") {
-      label = `Enlace (${truncateString(attrs.href, 20)})`;
-    } else {
-      label = isBtn ? "Botón" : "Enlace";
-    }
-  } else if (/^h[1-6]$/.test(tag)) {
-    iconType = "text";
-    label = textPreview
-      ? `${tag.toUpperCase()} ("${truncateString(textPreview, 24)}")`
-      : `Título (${tag.toUpperCase()})`;
-  } else if (tag === "p") {
-    iconType = "text";
-    label = textPreview
-      ? `Párrafo ("${truncateString(textPreview, 24)}")`
-      : "Párrafo";
-  } else if (tag === "blockquote") {
-    iconType = "text";
-    label = textPreview
-      ? `Cita ("${truncateString(textPreview, 22)}")`
-      : "Cita (blockquote)";
-  } else if (tag === "figcaption") {
-    iconType = "text";
-    label = textPreview
-      ? `Epígrafe ("${truncateString(textPreview, 22)}")`
-      : "Epígrafe (figcaption)";
-  } else if (tag === "figure") {
-    iconType = "card";
-    label = "Figura (figure)";
+    iconType = "link";
   } else if (
-    /\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\b/.test(
-      attrs.className,
-    )
-  ) {
-    iconType = "badge";
-    label = textPreview
-      ? `Insignia ("${truncateString(textPreview, 20)}")`
-      : "Insignia";
-  } else if (
-    tag === "article" ||
-    /\b(card|info-card|stat-card|gallery-item|faq-item|feature-item|spotlight-card|review-card)\b/.test(
-      attrs.className,
-    )
-  ) {
-    iconType = "card";
-    const cardTitle = findCardTitleText(node, block.htmlTemplate, block.values);
-    if (/\bfeature-item\b/.test(attrs.className)) {
-      label = textPreview ? `Ítem ("${truncateString(textPreview, 20)}")` : "Ítem de Lista";
-    } else if (/\bstat-card\b/.test(attrs.className)) {
-      label = textPreview ? `Métrica ("${truncateString(textPreview, 20)}")` : "Tarjeta Métrica";
-    } else {
-      label = cardTitle
-        ? `Tarjeta ("${truncateString(cardTitle, 20)}")`
-        : "Tarjeta";
-    }
-  } else if (tag === "nav") {
-    iconType = "container";
-    label = "Menú de Navegación (<nav>)";
-  } else if (tag === "aside") {
-    iconType = "container";
-    label = "Lateral (<aside>)";
-  } else if (tag === "ul" || tag === "ol") {
-    iconType = "container";
-    label = tag === "ol" ? "Lista numerada (<ol>)" : "Lista con viñetas (<ul>)";
-  } else if (tag === "li") {
-    iconType = "text";
-    label = textPreview
-      ? `Ítem ("${truncateString(textPreview, 20)}")`
-      : "Ítem de lista (<li>)";
-  } else if (tag === "details") {
-    iconType = "card";
-    const summaryChild = node.children.find(
-      (c) => c.tagName.toLowerCase() === "summary",
-    );
-    const sumText = summaryChild
-      ? extractNodeTextPreview(block.htmlTemplate, summaryChild, block.values)
-      : "";
-    label = sumText
-      ? `Acordeón ("${truncateString(sumText, 20)}")`
-      : "Acordeón (<details>)";
-  } else if (tag === "summary") {
-    iconType = "text";
-    label = textPreview
-      ? `Pregunta ("${truncateString(textPreview, 22)}")`
-      : "Pregunta (<summary>)";
-  } else if (
+    /^h[1-6]$/.test(tag) ||
+    tag === "p" ||
+    tag === "blockquote" ||
+    tag === "figcaption" ||
+    tag === "summary" ||
     tag === "span" ||
     tag === "strong" ||
     tag === "em" ||
     tag === "small" ||
     tag === "b" ||
     tag === "i" ||
-    tag === "time"
+    tag === "time" ||
+    tag === "li"
   ) {
     iconType = "text";
-    if (/\bbrand-icon\b/.test(attrs.className)) {
-      label = textPreview ? `Ícono ("${truncateString(textPreview, 16)}")` : "Ícono de Marca (span)";
-    } else if (/\bbrand-name\b/.test(attrs.className)) {
-      label = textPreview ? `Marca ("${truncateString(textPreview, 18)}")` : "Nombre de Marca (span)";
-    } else if (/\bfeature-check\b/.test(attrs.className)) {
-      label = "Tilde / Check (span)";
-    } else if (/\b(stat-val|exp-number)\b/.test(attrs.className)) {
-      label = textPreview ? `Valor ("${truncateString(textPreview, 16)}")` : "Valor Métrica (span)";
-    } else if (/\b(stat-lbl|exp-label)\b/.test(attrs.className)) {
-      label = textPreview ? `Etiqueta ("${truncateString(textPreview, 18)}")` : "Etiqueta Métrica (span)";
-    } else if (tag === "strong") {
-      label = textPreview ? `Negrita ("${truncateString(textPreview, 18)}")` : "Texto destacado (strong)";
-    } else {
-      label = textPreview
-        ? `${tag} ("${truncateString(textPreview, 18)}")`
-        : tag;
-    }
-  } else if (tag === "hr") {
-    iconType = "container";
-    label = "Separador (<hr>)";
+  } else if (
+    /\b(hero-badge|card-badge|promo-tag|spotlight-badge|section-kicker|section-tag)\b/.test(
+      attrs.className,
+    )
+  ) {
+    iconType = "badge";
+  } else if (
+    tag === "article" ||
+    tag === "figure" ||
+    tag === "details" ||
+    /\b(card|info-card|stat-card|gallery-item|faq-item|feature-item|spotlight-card|review-card)\b/.test(
+      attrs.className,
+    )
+  ) {
+    iconType = "card";
   } else {
     iconType = "container";
-    if (/\bgrid-columns-2\b/.test(attrs.className)) {
-      label = "Grilla (2 Columnas)";
-    } else if (/\bgrid-columns-3\b/.test(attrs.className)) {
-      label = "Grilla (3 Columnas)";
-    } else if (/\bgrid-columns-4\b/.test(attrs.className)) {
-      label = "Grilla (4 Columnas)";
-    } else if (/\bflex-row\b/.test(attrs.className)) {
-      label = "Fila Flex (div.flex-row)";
-    } else if (/\bflex-col\b/.test(attrs.className)) {
-      label = "Columna Flex (div.flex-col)";
-    } else if (/\bspacer\b/.test(attrs.className)) {
-      label = "Espaciador (div.spacer)";
-    } else if (/\bsection-box\b/.test(attrs.className)) {
-      label = "Sub-sección (<section>)";
-    } else if (/\bheader-box\b/.test(attrs.className)) {
-      label = "Encabezado (<header>)";
-    } else if (/\bfooter-box\b/.test(attrs.className)) {
-      label = "Pie (<footer>)";
-    } else if (/\bcontent-container|content-box\b/.test(attrs.className)) {
-      label = "Contenedor (<div>)";
-    } else if (/\bgrid-column\b/.test(attrs.className)) {
-      label = columnPosition ? `Columna ${columnPosition}` : "Columna";
-    } else if (parentNode && /\bgrid-columns-2|grid-columns-3|grid-columns-4\b/.test(extractNodeAttributes(block.htmlTemplate, parentNode).className)) {
-      label = columnPosition ? `Columna ${columnPosition}` : "Columna";
-    } else if (/\b(cards-grid|grid|mosaic|gallery-mosaic|stats-strip-grid|info-grid)\b/.test(attrs.className)) {
-      label = "Grilla";
-    } else if (
-      /\b(hero-actions|cta-wrap|btn-group|buttons|footer-links|image-spotlight-actions|spotlight-action)\b/.test(attrs.className)
-    ) {
-      label = "Grupo de Botones";
-    } else if (/\bsection-header\b/.test(attrs.className)) {
-      label = "Encabezado de Sección";
-    } else if (/\b(hero-content|hero-inner)\b/.test(attrs.className)) {
-      label = "Contenido Hero";
-    } else if (/\bfeatures-list\b/.test(attrs.className)) {
-      label = "Lista de Características";
-    } else if (/\b(container|nav-container|hero-container|experience-container|faq-container|footer-container)\b/.test(attrs.className)) {
-      label = "Contenedor (.container)";
-    } else if (/\bspotlight-body\b/.test(attrs.className)) {
-      label = "Cuerpo de Tarjeta";
-    } else if (/\bspotlight-meta\b/.test(attrs.className)) {
-      label = "Metadatos";
-    } else if (/\bexperience-visual\b/.test(attrs.className)) {
-      label = "Bloque Visual";
-    } else if (/\bexperience-content\b/.test(attrs.className)) {
-      label = "Columna Editorial";
-    } else if (/\bpromo-banner-box\b/.test(attrs.className)) {
-      label = "Caja Promocional";
-    } else if (/\bpromo-banner-copy\b/.test(attrs.className)) {
-      label = "Texto Promocional";
-    } else if (/\bimage-spotlight-media\b/.test(attrs.className)) {
-      label = "Contenedor de Foto";
-    } else if (/\bimage-spotlight-copy\b/.test(attrs.className)) {
-      label = "Columna de Texto";
-    } else if (/\bfooter-brand\b/.test(attrs.className)) {
-      label = "Marca del Pie";
-    } else if (tag === "header") {
-      label = "Encabezado (header)";
-    } else if (tag === "footer") {
-      label = "Pie de página (footer)";
-    } else if (tag === "section") {
-      label = "Sección (section)";
-    } else if (attrs.className) {
-      const firstCls = attrs.className.trim().split(/\s+/)[0];
-      label = `${tag}.${firstCls}`;
-    } else {
-      label = tag;
-    }
   }
+
+  const label = formatVerbatimHtmlLayerLabel(
+    tag,
+    attrs,
+    textPreview,
+    node.children.length > 0,
+    childFieldKeys[0],
+  );
 
   const children: LandingSubLayerNode[] = [];
   if (!isVoid && node.children.length > 0) {
@@ -4574,8 +4445,6 @@ function mapAstNodeToSubLayer(
         block,
         child,
         childSelector,
-        node,
-        count,
       );
       if (childSubLayer) {
         children.push(childSubLayer);

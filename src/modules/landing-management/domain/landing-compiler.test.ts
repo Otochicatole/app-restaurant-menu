@@ -10,6 +10,7 @@ import {
   deleteSubElementInBlock,
   duplicateSubElementInBlock,
   extractTemplateVariables,
+  formatVerbatimHtmlLayerLabel,
   insertInnerElementInBlock,
   insertInnerElementInBlockWithSelector,
   moveBlockIntoBlock,
@@ -288,7 +289,7 @@ describe("landing-compiler", () => {
       const containerNode = rootNode.children[0];
       const navNode = containerNode.children.find((c) => c.tag === "nav");
       expect(navNode).toBeDefined();
-      expect(navNode?.label).toContain("Menú");
+      expect(navNode?.label).toContain("nav");
 
       // navNode should have its children links nested inside it
       expect(navNode?.children.length).toBeGreaterThanOrEqual(3);
@@ -311,7 +312,7 @@ describe("landing-compiler", () => {
       // Container -> cards grid -> card articles
       const container = root.children[0];
       const cardsGrid = container.children.find((c) =>
-        c.label.includes("Grilla"),
+        c.label.includes("cards-grid"),
       );
       expect(cardsGrid).toBeDefined();
       expect(cardsGrid?.children.length).toBeGreaterThanOrEqual(3);
@@ -356,9 +357,9 @@ describe("landing-compiler", () => {
       expect(brandLogo?.tag).toBe("a");
       expect(brandLogo?.children.length).toBe(2);
       expect(brandLogo?.children[0].tag).toBe("span");
-      expect(brandLogo?.children[0].label).toContain("Ícono");
+      expect(brandLogo?.children[0].label).toContain("brand-icon");
       expect(brandLogo?.children[1].tag).toBe("span");
-      expect(brandLogo?.children[1].label).toContain("Marca");
+      expect(brandLogo?.children[1].label).toContain("brand-name");
 
       // Nav toggle <button> should have 3 span children for the hamburger bars
       const navToggle = navContainer.children.find((c) => c.tag === "button");
@@ -376,10 +377,10 @@ describe("landing-compiler", () => {
       const container = root.children[0];
       const heroContent = container.children[0];
       expect(heroContent.tag).toBe("div");
-      expect(heroContent.label).toContain("Contenido Hero");
+      expect(heroContent.label).toContain("hero-content");
 
       // Badge, Title, Subtitle, Actions
-      const heroActions = heroContent.children.find((c) => c.label.includes("Grupo de Botones"));
+      const heroActions = heroContent.children.find((c) => c.label.includes("hero-actions"));
       expect(heroActions).toBeDefined();
       expect(heroActions?.children.length).toBe(2);
 
@@ -404,20 +405,20 @@ describe("landing-compiler", () => {
       const container = root.children[0];
 
       // Left column (visual)
-      const visualCol = container.children.find((c) => c.label.includes("Visual"));
+      const visualCol = container.children.find((c) => c.label.includes("experience-visual"));
       expect(visualCol).toBeDefined();
       const badgeFloat = visualCol?.children[0];
       expect(badgeFloat?.children.length).toBe(2);
-      expect(badgeFloat?.children[0].label).toContain("Valor");
-      expect(badgeFloat?.children[1].label).toContain("Etiqueta");
+      expect(badgeFloat?.children[0].label).toContain("exp-number");
+      expect(badgeFloat?.children[1].label).toContain("exp-label");
 
       const quoteBox = visualCol?.children[1];
       expect(quoteBox?.children[0].tag).toBe("p");
 
       // Right column (editorial content)
-      const contentCol = container.children.find((c) => c.label.includes("Editorial"));
+      const contentCol = container.children.find((c) => c.label.includes("experience-content"));
       expect(contentCol).toBeDefined();
-      const featuresList = contentCol?.children.find((c) => c.label.includes("Características"));
+      const featuresList = contentCol?.children.find((c) => c.label.includes("features-list"));
       expect(featuresList).toBeDefined();
       expect(featuresList?.children.length).toBe(3);
 
@@ -425,13 +426,13 @@ describe("landing-compiler", () => {
       expect(firstItem?.tag).toBe("div");
       expect(firstItem?.children.length).toBe(2);
       expect(firstItem?.children[0].tag).toBe("span");
-      expect(firstItem?.children[0].label).toContain("Tilde");
+      expect(firstItem?.children[0].label).toContain("feature-check");
 
       const itemTextBox = firstItem?.children[1];
       expect(itemTextBox?.tag).toBe("div");
       expect(itemTextBox?.children.length).toBe(1);
       expect(itemTextBox?.children[0].tag).toBe("strong");
-      expect(itemTextBox?.children[0].label).toContain("Negrita");
+      expect(itemTextBox?.children[0].label).toContain("strong");
     });
 
     it("represents ALL nested tags in footer including footer-brand, year span inside p, and footer-links", () => {
@@ -443,7 +444,7 @@ describe("landing-compiler", () => {
       expect(root.tag).toBe("footer");
       const container = root.children[0];
 
-      const footerBrand = container.children.find((c) => c.label.includes("Marca del Pie"));
+      const footerBrand = container.children.find((c) => c.label.includes("footer-brand"));
       expect(footerBrand).toBeDefined();
       expect(footerBrand?.children.length).toBe(2);
       expect(footerBrand?.children[0].tag).toBe("span");
@@ -454,7 +455,7 @@ describe("landing-compiler", () => {
       expect(copyParagraph?.children.length).toBe(1);
       expect(copyParagraph?.children[0].tag).toBe("span");
 
-      const footerLinks = container.children.find((c) => c.label.includes("Grupo de Botones"));
+      const footerLinks = container.children.find((c) => c.label.includes("footer-links"));
       expect(footerLinks).toBeDefined();
       expect(footerLinks?.children.length).toBe(2);
       expect(footerLinks?.children.every((c) => c.tag === "a")).toBe(true);
@@ -472,7 +473,7 @@ describe("landing-compiler", () => {
       const tree = buildBlockSubLayerTree(containerBlock);
       expect(tree.length).toBeGreaterThan(0);
       const innerContainer = tree[0].children[0]?.children[0];
-      expect(innerContainer?.label).toContain("Contenedor");
+      expect(innerContainer?.label).toContain("content-container");
     });
 
     it("creates a container block pre-populated with 2 columns", () => {
@@ -484,7 +485,7 @@ describe("landing-compiler", () => {
       expect(tree.length).toBeGreaterThan(0);
       const root = tree[0];
       const grid = root.children[0]?.children.find((c) =>
-        c.label.includes("Grilla"),
+        c.label.includes("grid-columns-2"),
       );
       expect(grid).toBeDefined();
     });
@@ -556,11 +557,11 @@ describe("landing-compiler", () => {
       let block = createBlankContainerBlock("columns-2");
       const tree = buildBlockSubLayerTree(block);
       const root = tree[0];
-      const grid = root.children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const grid = root.children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       expect(grid?.children.length).toBe(2);
-      expect(grid?.children[0].label).toBe("Columna 1");
-      expect(grid?.children[1].label).toBe("Columna 2");
+      expect(grid?.children[0].label).toContain("grid-column");
+      expect(grid?.children[1].label).toContain("grid-column");
 
       // Insert image into Columna 1
       const col1Selector = grid!.children[0].selector;
@@ -585,7 +586,7 @@ describe("landing-compiler", () => {
       // col 1 and col 2
       const tree = buildBlockSubLayerTree(block);
       const root = tree[0];
-      const grid = root.children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const grid = root.children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
       const col2Selector = grid!.children[1].selector;
@@ -593,7 +594,7 @@ describe("landing-compiler", () => {
       // Insert button in col 1
       block = insertInnerElementInBlock(block, col1Selector, "button");
       const treeAfterBtn = buildBlockSubLayerTree(block);
-      const col1 = treeAfterBtn[0].children[0]?.children.find((c) => c.label.includes("Grilla"))?.children[0];
+      const col1 = treeAfterBtn[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"))?.children[0];
       const btnNode = col1?.children.find((c) => c.tag === "a");
       expect(btnNode).toBeDefined();
 
@@ -616,7 +617,7 @@ describe("landing-compiler", () => {
 
       // Verify the new tree has button inside col 2
       const treeAfterMove = buildBlockSubLayerTree(updatedBlock);
-      const gridAfterMove = treeAfterMove[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const gridAfterMove = treeAfterMove[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(gridAfterMove).toBeDefined();
       const col1AfterMove = gridAfterMove!.children[0];
       const col2AfterMove = gridAfterMove!.children[1];
@@ -1078,7 +1079,7 @@ describe("landing-compiler", () => {
       const block = createBlankContainerBlock("columns-2");
       // col 1 selector and col 2 selector
       const tree = buildBlockSubLayerTree(block);
-      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
       const col2Selector = grid!.children[1].selector;
@@ -1113,7 +1114,7 @@ describe("landing-compiler", () => {
     it("inserts inner element and returns its new selector accurately via insertInnerElementInBlockWithSelector", () => {
       const block = createBlankContainerBlock("columns-2");
       const tree = buildBlockSubLayerTree(block);
-      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
 
@@ -1127,7 +1128,7 @@ describe("landing-compiler", () => {
 
       // Column 1 should still exist and Column 2 should still exist (2 columns, not 3)
       const treeAfter = buildBlockSubLayerTree(res1.block);
-      const gridAfter = treeAfter[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      const gridAfter = treeAfter[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
       expect(gridAfter?.children.length).toBe(2);
 
       // Now insert button into Column 1 before the image
@@ -1145,6 +1146,47 @@ describe("landing-compiler", () => {
       expect(res.newSelector).toBeTruthy();
       expect(res.block.htmlTemplate).toContain("<h3");
       expect(res.block.htmlTemplate).not.toContain("Contenedor Libre");
+    });
+
+    it("represents HTML tags and inner contents verbatim without artificial nesting", () => {
+      // 1. Verbatim layer label formatter tests
+      expect(formatVerbatimHtmlLayerLabel("section", { className: "section" })).toBe("<section.section>");
+      expect(formatVerbatimHtmlLayerLabel("div", { className: "container hero-container" })).toBe("<div.container.hero-container>");
+      expect(formatVerbatimHtmlLayerLabel("div", { id: "main-box", className: "content" })).toBe("<div#main-box.content>");
+      expect(formatVerbatimHtmlLayerLabel("p", {}, "Contenedor Libre - Arrastrá componentes")).toContain('<p> "Contenedor Libre - Arrast');
+      expect(formatVerbatimHtmlLayerLabel("h1", { className: "hero-title" }, "Bienvenidos")).toBe('<h1.hero-title> "Bienvenidos"');
+      expect(formatVerbatimHtmlLayerLabel("img", { alt: "Foto del plato" })).toBe('<img alt="Foto del plato">');
+      expect(formatVerbatimHtmlLayerLabel("input", { placeholder: "Tu email..." })).toBe('<input placeholder="Tu email...">');
+
+      // Containers with children should NOT duplicate inner text
+      expect(formatVerbatimHtmlLayerLabel("div", { className: "box" }, "Texto interior", true)).toBe("<div.box>");
+
+      // 2. Full tree of createBlankContainerBlock represents HTML verbatim
+      const block = createBlankContainerBlock();
+      const tree = buildBlockSubLayerTree(block);
+
+      expect(tree).toHaveLength(1);
+      const rootSection = tree[0];
+      expect(rootSection.tag).toBe("section");
+      expect(rootSection.label).toBe("<section.section>");
+
+      // Direct child is <div.container>
+      expect(rootSection.children).toHaveLength(1);
+      const containerDiv = rootSection.children[0];
+      expect(containerDiv.tag).toBe("div");
+      expect(containerDiv.label).toBe("<div.container>");
+
+      // Direct child of container is <div.content-container>
+      expect(containerDiv.children).toHaveLength(1);
+      const contentContainerDiv = containerDiv.children[0];
+      expect(contentContainerDiv.tag).toBe("div");
+      expect(contentContainerDiv.label).toBe("<div.content-container>");
+
+      // Direct child of content-container is <p> with preview of what's inside
+      expect(contentContainerDiv.children).toHaveLength(1);
+      const paragraph = contentContainerDiv.children[0];
+      expect(paragraph.tag).toBe("p");
+      expect(paragraph.label).toContain("<p> \"Contenedor Libre");
     });
   });
 });

@@ -1169,7 +1169,7 @@ function SubLayerTreeRow({
             <SubLayerIcon iconType={node.iconType} className="h-3 w-3" />
           </span>
 
-          <span className="truncate text-[11px] font-normal" title={node.label}>
+          <span className="truncate text-[11px] font-mono font-medium" title={node.label}>
             {node.label}
           </span>
 
@@ -6023,11 +6023,19 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
                   return visibleBlocks.map((block, idx) => {
                     const isBlockSelected = block.id === selectedBlockId;
-                    const isSectionActive =
-                      isBlockSelected && !activeSubElement;
-                    const Icon = getModuleIcon(block.moduleKey);
-                    const subLayers = blockSubLayerTrees.get(block.id) || [];
+                    const rawTree = blockSubLayerTrees.get(block.id) || [];
+                    const hasSingleRoot = rawTree.length === 1;
+                    const rootSubNode = hasSingleRoot ? rawTree[0] : null;
+                    const subLayers = hasSingleRoot ? rawTree[0].children : rawTree;
                     const hasSubLayers = subLayers.length > 0;
+                    const rootTagLabel = rootSubNode ? rootSubNode.label : `<div.${block.moduleKey}>`;
+
+                    const isRootSelected = Boolean(
+                      rootSubNode && activeSubElement?.selector === rootSubNode.selector,
+                    );
+                    const isSectionActive =
+                      isBlockSelected && (!activeSubElement || isRootSelected);
+                    const Icon = getModuleIcon(block.moduleKey);
                     const isSearching = Boolean(layerSearchQuery.trim());
                     const isBlockExpanded = isSearching
                       ? true
@@ -6192,7 +6200,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             e.stopPropagation();
                             handleInsertInnerElement(
                               block.id,
-                              null,
+                              rootSubNode ? rootSubNode.selector : null,
                               draggedComponentKind,
                             );
                             setDraggedComponentKind(null);
@@ -6271,7 +6279,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             setDraggedLayerIndex(null);
                           }
                         }}
-                        onClick={() => selectBlockOnStudio(block.id, true)}
+                        onClick={() => {
+                          selectBlockOnStudio(block.id, true);
+                          if (rootSubNode) {
+                            selectSubElementOnStudio(block.id, rootSubNode.selector);
+                          }
+                        }}
                         className={`group relative flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all border select-none ${
                           isSelfBlockDragging
                             ? "opacity-35 bg-zinc-100 border-dashed border-zinc-400"
@@ -6322,9 +6335,22 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                           >
                             <Icon className="h-3 w-3" />
                           </span>
-                          <span className="text-xs font-medium truncate">
-                            {block.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className="text-xs font-mono font-semibold truncate text-zinc-900"
+                              title={rootTagLabel}
+                            >
+                              {rootTagLabel}
+                            </span>
+                            {block.name && block.name !== rootTagLabel && (
+                              <span
+                                className="text-[10px] text-zinc-400 font-normal truncate shrink-0 max-w-[120px]"
+                                title={block.name}
+                              >
+                                ({block.name})
+                              </span>
+                            )}
+                          </div>
 
                           {isThisBlockInside && (
                             <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-2xs animate-pulse shrink-0">
@@ -7469,13 +7495,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     {/* Sub-Element Header & Structural Actions */}
                     <div className="p-3.5 space-y-3 bg-violet-50/35 border-b border-zinc-200">
                       <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-900 border border-violet-200 truncate max-w-[280px]" title={activeSubElement.label}>
                                 {activeSubElement.label}
                               </span>
-                              <code className="text-[10px] text-zinc-500 font-mono">
-                                &lt;{activeSubElement.tagName}&gt;
-                              </code>
                             </div>
 
                             <div className="flex items-center gap-1.5">
