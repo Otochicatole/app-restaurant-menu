@@ -3777,8 +3777,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     Record<string, boolean>
   >({});
   const [layerSearchQuery, setLayerSearchQuery] = useState("");
-  const [isLeftTabMenuOpen, setIsLeftTabMenuOpen] = useState(false);
-  const leftTabMenuRef = useRef<HTMLDivElement>(null);
 
   const toggleBlockExpanded = useCallback(
     (blockId: string, e?: React.MouseEvent) => {
@@ -4058,8 +4056,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     if (documentState.mode !== "visual") return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    const skipDomHtmlUpdate = inlineEditingRef.current;
-    inlineEditingRef.current = false;
+    if (inlineEditingRef.current) {
+      // User is actively editing text inline inside the canvas iframe!
+      // Do NOT dispatch live DOM replacement to the iframe.
+      return;
+    }
     const scrollIntoViewBlockId = pendingScrollBlockIdRef.current;
     pendingScrollBlockIdRef.current = null;
     const explicitSubSelector = pendingSubSelectorRef.current;
@@ -4081,7 +4082,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         subSelector: currentSub,
         notifySubElement: explicitSubSelector !== undefined && Boolean(explicitSubSelector),
         previewMode: !interactiveCanvas,
-        skipDomHtmlUpdate,
+        skipDomHtmlUpdate: false,
         scrollIntoViewBlockId,
       },
       "*",
@@ -4270,22 +4271,6 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       matchingBlockIds: matchBlocks,
     };
   }, [layerSearchQuery, documentState.blocks, blockSubLayerTrees]);
-
-  useEffect(() => {
-    if (!isLeftTabMenuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        leftTabMenuRef.current &&
-        !leftTabMenuRef.current.contains(e.target as Node)
-      ) {
-        setIsLeftTabMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isLeftTabMenuOpen]);
 
   const pageAnchors = useMemo(
     () => resolveDocumentBlockAnchors(documentState.blocks),
@@ -5056,14 +5041,20 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             title: "Cambiar Imagen del Elemento",
           });
         }
+      } else if (data.type === "LANDING_INLINE_EDIT_START") {
+        inlineEditingRef.current = true;
+      } else if (data.type === "LANDING_INLINE_EDIT_END") {
+        inlineEditingRef.current = false;
       } else if (
         data.type === "LANDING_INLINE_FIELD_CHANGE" &&
         typeof data.blockId === "string" &&
         typeof data.fieldKey === "string" &&
         typeof data.value === "string"
       ) {
+        inlineEditingRef.current = true;
         handleUpdateBlockValue(data.blockId, data.fieldKey, data.value, true);
       } else if (data.type === "LANDING_INLINE_FIELD_COMMIT") {
+        inlineEditingRef.current = false;
         if (inlineEditSnapshotRef.current) {
           const snapshot = inlineEditSnapshotRef.current;
           inlineEditSnapshotRef.current = null;
@@ -5815,165 +5806,84 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             }`}
           >
             <div className="w-96 h-full flex flex-col shrink-0 min-h-0">
-          {/* Listado Selector: Capas | Componentes | Módulos */}
-          <div className="p-2 border-b border-zinc-200 relative" ref={leftTabMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsLeftTabMenuOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-800 transition-colors shadow-2xs group"
-              aria-expanded={isLeftTabMenuOpen}
-              aria-haspopup="listbox"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                {leftTab === "layers" ? (
-                  <>
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-200/80 text-zinc-700 shrink-0">
-                      <Layers className="h-3 w-3" />
-                    </span>
-                    <span className="font-semibold text-zinc-900 truncate">Capas</span>
-                    <span className="text-[10px] bg-zinc-200 text-zinc-600 font-bold px-1.5 py-0.2 rounded-full shrink-0">
-                      {documentState.blocks.length}
-                    </span>
-                  </>
-                ) : leftTab === "components" ? (
-                  <>
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-100 text-blue-700 shrink-0">
-                      <Box className="h-3 w-3" />
-                    </span>
-                    <span className="font-semibold text-blue-900 truncate">Componentes</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.2 rounded-full shrink-0">
-                      Atómicos
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-100 text-amber-700 shrink-0">
-                      <Sparkles className="h-3 w-3" />
-                    </span>
-                    <span className="font-semibold text-amber-900 truncate">Módulos</span>
-                    <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.2 rounded-full shrink-0">
-                      Plantillas
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center shrink-0 text-zinc-400 group-hover:text-zinc-600 ml-1">
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform duration-150 ${
-                    isLeftTabMenuOpen ? "rotate-180" : ""
+          {/* Segmented Toggle: Capas | Módulos | Componentes */}
+          <div className="p-2 border-b border-zinc-200 bg-white">
+            <div className="grid grid-cols-3 p-1 bg-zinc-100 rounded-xl border border-zinc-200/80 gap-1">
+              {/* Capas */}
+              <button
+                type="button"
+                onClick={() => setLeftTab("layers")}
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  leftTab === "layers"
+                    ? "bg-white text-zinc-900 shadow-2xs font-bold"
+                    : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/50"
+                }`}
+                title="Ver estructura de capas y jerarquía del lienzo"
+              >
+                <Layers
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    leftTab === "layers" ? "text-zinc-800" : "text-zinc-400"
                   }`}
                 />
-              </div>
-            </button>
-
-            {isLeftTabMenuOpen && (
-              <div
-                role="listbox"
-                className="absolute top-full left-2 right-2 mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-40 p-1 space-y-1 animate-in fade-in-50 zoom-in-95 duration-100"
-              >
-                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100">
-                  Seleccionar panel
-                </div>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={leftTab === "layers"}
-                  onClick={() => {
-                    setLeftTab("layers");
-                    setIsLeftTabMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                <span className="truncate">Capas</span>
+                <span
+                  className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
                     leftTab === "layers"
-                      ? "bg-zinc-100 text-zinc-900 font-semibold"
-                      : "hover:bg-zinc-50 text-zinc-700"
+                      ? "bg-zinc-100 text-zinc-700"
+                      : "bg-zinc-200/80 text-zinc-500"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 shrink-0">
-                      <Layers className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-zinc-900">Capas</div>
-                      <div className="text-[10px] text-zinc-500 truncate">
-                        Estructura y jerarquía del lienzo
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] bg-zinc-200 text-zinc-600 font-bold px-1.5 py-0.5 rounded-full">
-                      {documentState.blocks.length}
-                    </span>
-                    {leftTab === "layers" && <Check className="h-3.5 w-3.5 text-zinc-800" />}
-                  </div>
-                </button>
+                  {documentState.blocks.length}
+                </span>
+              </button>
 
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={leftTab === "components"}
-                  onClick={() => {
-                    setLeftTab("components");
-                    setIsLeftTabMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
-                    leftTab === "components"
-                      ? "bg-blue-50 text-blue-900 font-semibold"
-                      : "hover:bg-zinc-50 text-zinc-700"
+              {/* Módulos */}
+              <button
+                type="button"
+                onClick={() => setLeftTab("modules")}
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  leftTab === "modules"
+                    ? "bg-white text-zinc-900 shadow-2xs font-bold"
+                    : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/50"
+                }`}
+                title="Secciones y módulos prearmados"
+              >
+                <Sparkles
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    leftTab === "modules" ? "text-amber-600" : "text-zinc-400"
                   }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 border border-blue-200 text-blue-700 shrink-0">
-                      <Box className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-zinc-900">Componentes</div>
-                      <div className="text-[10px] text-zinc-500 truncate">
-                        Elementos atómicos y contenedores
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">
-                      {filteredAtomicComponents.length}
-                    </span>
-                    {leftTab === "components" && <Check className="h-3.5 w-3.5 text-blue-700" />}
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={leftTab === "modules"}
-                  onClick={() => {
-                    setLeftTab("modules");
-                    setIsLeftTabMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                />
+                <span className="truncate">Módulos</span>
+                <span
+                  className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
                     leftTab === "modules"
-                      ? "bg-amber-50 text-amber-900 font-semibold"
-                      : "hover:bg-zinc-50 text-zinc-700"
+                      ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                      : "bg-zinc-200/80 text-zinc-500"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 border border-amber-200 text-amber-700 shrink-0">
-                      <Sparkles className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-zinc-900">Módulos</div>
-                      <div className="text-[10px] text-zinc-500 truncate">
-                        Secciones y plantillas prearmadas
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full">
-                      {BUILTIN_LANDING_MODULES.length + customModules.length}
-                    </span>
-                    {leftTab === "modules" && <Check className="h-3.5 w-3.5 text-amber-700" />}
-                  </div>
-                </button>
-              </div>
-            )}
+                  {BUILTIN_LANDING_MODULES.length + customModules.length}
+                </span>
+              </button>
+
+              {/* Componentes */}
+              <button
+                type="button"
+                onClick={() => setLeftTab("components")}
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  leftTab === "components"
+                    ? "bg-white text-zinc-900 shadow-2xs font-bold"
+                    : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/50"
+                }`}
+                title="Elementos atómicos y contenedores libres"
+              >
+                <Box
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    leftTab === "components" ? "text-blue-600" : "text-zinc-400"
+                  }`}
+                />
+                <span className="truncate">Componentes</span>
+              </button>
+            </div>
           </div>
 
           {leftTab === "layers" ? (

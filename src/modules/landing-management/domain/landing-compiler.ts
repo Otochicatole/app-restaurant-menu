@@ -1248,7 +1248,9 @@ a[data-original-href] {
     });
     var fields = document.querySelectorAll('[data-landing-field]');
     fields.forEach(function(f) {
-      f.setAttribute('contenteditable', 'false');
+      if (!f.classList.contains('landing-inline-editing') && !f.isContentEditable && document.activeElement !== f) {
+        f.setAttribute('contenteditable', 'false');
+      }
     });
     syncDraggableElements();
   }
@@ -1268,12 +1270,14 @@ a[data-original-href] {
         'div, section, article, figure, nav, header, footer, h1, h2, h3, h4, h5, h6, p, blockquote, ul, ol, li, a, button, img, details, summary, span, .card, .info-card, .stat-card, .gallery-item, .faq-item, .flex-row, .flex-col, .grid-column, [data-landing-field]'
       );
       selectables.forEach(function(el) {
-        if (!el.classList.contains('landing-inline-editing')) {
+        if (!el.classList.contains('landing-inline-editing') && !el.isContentEditable && document.activeElement !== el) {
           if (closestEl(el, '#navToggle, .nav-toggle, [data-nav-toggle]')) {
             el.setAttribute('draggable', 'false');
           } else {
             el.setAttribute('draggable', isPreview ? 'false' : 'true');
           }
+        } else {
+          el.setAttribute('draggable', 'false');
         }
       });
     });
@@ -1302,6 +1306,11 @@ a[data-original-href] {
   }
 
   function applySelection(blockId, subSelector) {
+    var activeEditingEl = document.querySelector('.landing-inline-editing, [contenteditable="true"]');
+    if (activeEditingEl && (document.activeElement === activeEditingEl || activeEditingEl.contains(document.activeElement))) {
+      return { activeBlockEl: closestEl(activeEditingEl, '[data-landing-block]'), activeSubEl: activeEditingEl };
+    }
+
     currentSelectedId = blockId;
     currentSubSelector = subSelector || null;
     document.querySelectorAll('[data-sub-selected]').forEach(function(el) {
@@ -1790,7 +1799,8 @@ a[data-original-href] {
       }
     }
     if (isPreview) return;
-    if (e.target && e.target.classList && e.target.classList.contains('landing-inline-editing')) {
+    var activeEditingEl = closestEl(e.target, '.landing-inline-editing, [contenteditable="true"]');
+    if (activeEditingEl) {
       return;
     }
     e.preventDefault();
@@ -1799,6 +1809,12 @@ a[data-original-href] {
     var id = blockEl.getAttribute('data-landing-block');
     var subEl = resolveSelectableSubElement(e.target, blockEl);
     if (subEl) {
+      var isAlreadySelected = (id === currentSelectedId && subEl.getAttribute('data-sub-selected') === 'true');
+      var isTextTarget = closestEl(e.target, '[data-landing-field]') || closestEl(e.target, 'h1, h2, h3, h4, h5, h6, p, blockquote, figcaption, summary, span, li, button, a');
+      if (isAlreadySelected && isTextTarget && !isTextTarget.classList.contains('landing-inline-editing')) {
+        startInlineEditing(isTextTarget, blockEl);
+        return;
+      }
       var payload = buildSubElementPayload(blockEl, subEl);
       if (payload) {
         applySelection(id, payload.selector);
@@ -1813,6 +1829,75 @@ a[data-original-href] {
     applySelection(id, null);
     window.parent.postMessage({ type: 'LANDING_SELECT_BLOCK', blockId: id }, '*');
   }, true);
+
+  function startInlineEditing(textEl, blockEl) {
+    if (!textEl || textEl.classList.contains('landing-inline-editing')) return;
+    var id = blockEl.getAttribute('data-landing-block');
+
+    textEl.setAttribute('contenteditable', 'true');
+    textEl.setAttribute('draggable', 'false');
+    textEl.classList.add('landing-inline-editing');
+    textEl.focus();
+
+    window.parent.postMessage({
+      type: 'LANDING_INLINE_EDIT_START',
+      blockId: id
+    }, '*');
+
+    var onFinish = function() {
+      textEl.removeEventListener('blur', onFinish);
+      textEl.removeAttribute('contenteditable');
+      textEl.classList.remove('landing-inline-editing');
+      syncDraggableElements();
+
+      var updatedText = (textEl.innerText !== undefined ? textEl.innerText : textEl.textContent || '').trim();
+      var fieldKey = textEl.getAttribute('data-landing-field');
+
+      if (fieldKey) {
+        window.parent.postMessage({
+          type: 'LANDING_UPDATE_VALUE',
+          blockId: id,
+          fieldKey: fieldKey,
+          value: updatedText
+        }, '*');
+        window.parent.postMessage({
+          type: 'LANDING_INLINE_FIELD_COMMIT',
+          blockId: id,
+          fieldKey: fieldKey,
+          value: updatedText
+        }, '*');
+      } else {
+        var relSel = computeRelativeSelector(blockEl, textEl);
+        if (relSel) {
+          window.parent.postMessage({
+            type: 'LANDING_SUBELEMENT_TEXT_UPDATE',
+            blockId: id,
+            selector: relSel,
+            text: updatedText
+          }, '*');
+        }
+      }
+
+      window.parent.postMessage({
+        type: 'LANDING_INLINE_EDIT_END',
+        blockId: id
+      }, '*');
+    };
+
+    textEl.addEventListener('blur', onFinish, { once: true });
+    textEl.addEventListener('keydown', function(evt) {
+      if (evt.key === 'Escape') {
+        evt.preventDefault();
+        textEl.blur();
+      } else if (evt.key === 'Enter' && !evt.shiftKey) {
+        var tag = textEl.tagName.toLowerCase();
+        if (tag !== 'p' && tag !== 'blockquote') {
+          evt.preventDefault();
+          textEl.blur();
+        }
+      }
+    });
+  }
 
   document.addEventListener('dblclick', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
@@ -1845,11 +1930,7 @@ a[data-original-href] {
     if (textEl && !textEl.classList.contains('landing-inline-editing')) {
       e.preventDefault();
       e.stopPropagation();
-
-      textEl.setAttribute('contenteditable', 'true');
-      textEl.setAttribute('draggable', 'false');
-      textEl.classList.add('landing-inline-editing');
-      textEl.focus();
+      startInlineEditing(textEl, blockEl);
 
       var range = document.createRange();
       range.selectNodeContents(textEl);
@@ -1858,49 +1939,6 @@ a[data-original-href] {
         sel.removeAllRanges();
         sel.addRange(range);
       }
-
-      var onFinish = function() {
-        textEl.removeEventListener('blur', onFinish);
-        textEl.removeAttribute('contenteditable');
-        textEl.classList.remove('landing-inline-editing');
-        syncDraggableElements();
-
-        var updatedText = (textEl.innerText !== undefined ? textEl.innerText : textEl.textContent || '').trim();
-        var fieldKey = textEl.getAttribute('data-landing-field');
-
-        if (fieldKey) {
-          window.parent.postMessage({
-            type: 'LANDING_UPDATE_VALUE',
-            blockId: id,
-            fieldKey: fieldKey,
-            value: updatedText
-          }, '*');
-        } else {
-          var relSel = computeRelativeSelector(blockEl, textEl);
-          if (relSel) {
-            window.parent.postMessage({
-              type: 'LANDING_SUBELEMENT_TEXT_UPDATE',
-              blockId: id,
-              selector: relSel,
-              text: updatedText
-            }, '*');
-          }
-        }
-      };
-
-      textEl.addEventListener('blur', onFinish, { once: true });
-      textEl.addEventListener('keydown', function(evt) {
-        if (evt.key === 'Escape') {
-          evt.preventDefault();
-          textEl.blur();
-        } else if (evt.key === 'Enter' && !evt.shiftKey) {
-          var tag = textEl.tagName.toLowerCase();
-          if (tag !== 'p' && tag !== 'blockquote') {
-            evt.preventDefault();
-            textEl.blur();
-          }
-        }
-      });
     }
   }, true);
 
@@ -2079,7 +2117,14 @@ a[data-original-href] {
         }
       }
       var targetSubSel = e.data.subSelector !== undefined ? e.data.subSelector : currentSubSelector;
-      if (!e.data.skipDomHtmlUpdate && typeof e.data.htmlContent === 'string') {
+      var isInlineEditingNow = Boolean(
+        document.querySelector('.landing-inline-editing') ||
+        (document.activeElement && (document.activeElement.isContentEditable || document.activeElement.classList.contains('landing-inline-editing')))
+      );
+      if (isInlineEditingNow || e.data.skipDomHtmlUpdate) {
+        return;
+      }
+      if (typeof e.data.htmlContent === 'string') {
         var rootEl = document.getElementById('__landing-blocks-root');
         if (rootEl) {
           var wasMenuOpen = rootEl.querySelector('#navMenu.open, .nav-menu.open, [data-nav-menu].open') !== null;
