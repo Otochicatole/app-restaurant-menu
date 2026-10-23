@@ -24,10 +24,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Sección / Contenedor Libre -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="content-container" style="padding: 32px; border: 2px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; box-sizing: border-box;">
-      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Contenedor Libre — Arrastrá componentes o hacé clic para insertar</p>
-    </div>
+  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 32px 20px; border: 2px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-sizing: border-box;">
+    <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Contenedor Libre — Arrastrá componentes o hacé clic para insertar</p>
   </div>
 </section>`,
     cssTemplate: ``,
@@ -41,14 +39,12 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Sección 2 Columnas -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="grid-columns-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; width: 100%; box-sizing: border-box;">
-      <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>
-      </div>
-      <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>
-      </div>
+  <div class="container grid-columns-2" style="max-width: 1100px; margin: 0 auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; box-sizing: border-box;">
+    <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1 — Arrastrá componentes aquí</p>
+    </div>
+    <div class="grid-column" style="padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 100px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2 — Arrastrá componentes aquí</p>
     </div>
   </div>
 </section>`,
@@ -63,17 +59,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Sección 3 Columnas -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="grid-columns-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box;">
-      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
-      </div>
-      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
-      </div>
-      <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
-      </div>
+  <div class="container grid-columns-3" style="max-width: 1100px; margin: 0 auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; box-sizing: border-box;">
+    <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
+    </div>
+    <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
+    </div>
+    <div class="grid-column" style="padding: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 90px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
     </div>
   </div>
 </section>`,
@@ -88,20 +82,18 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Sección 4 Columnas -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="grid-columns-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;">
-      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
-      </div>
-      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
-      </div>
-      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
-      </div>
-      <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 4</p>
-      </div>
+  <div class="container grid-columns-4" style="max-width: 1100px; margin: 0 auto; padding: 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; box-sizing: border-box;">
+    <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 1</p>
+    </div>
+    <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 2</p>
+    </div>
+    <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 3</p>
+    </div>
+    <div class="grid-column" style="padding: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 12px); min-height: 80px; box-sizing: border-box;">
+      <p style="color: #94a3b8; font-size: 12px; margin: 0; font-weight: 500;">Columna 4</p>
     </div>
   </div>
 </section>`,
@@ -116,10 +108,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Fila Flexible -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="flex-row" style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; width: 100%; box-sizing: border-box; padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px);">
-      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Fila Flex — Insertá elementos para alinearlos horizontalmente</p>
-    </div>
+  <div class="container flex-row" style="max-width: 1100px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); box-sizing: border-box;">
+    <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Fila Flex — Insertá elementos para alinearlos horizontalmente</p>
   </div>
 </section>`,
     cssTemplate: ``,
@@ -133,10 +123,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     fields: [],
     htmlTemplate: `<!-- Columna Flexible -->
 <section class="section" style="padding: 48px 0;">
-  <div class="container" style="max-width: 1100px; margin: 0 auto; padding: 0 20px;">
-    <div class="flex-col" style="display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 100%; box-sizing: border-box; padding: 24px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px);">
-      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Columna Flex — Insertá elementos para apilarlos verticalmente</p>
-    </div>
+  <div class="container flex-col" style="max-width: 1100px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; align-items: stretch; gap: 16px; border: 1px dashed rgba(0,0,0,0.12); border-radius: var(--radius-md, 14px); box-sizing: border-box;">
+    <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">Columna Flex — Insertá elementos para apilarlos verticalmente</p>
   </div>
 </section>`,
     cssTemplate: ``,
@@ -711,16 +699,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "ctaUrl", label: "URL del botón", type: "url", defaultValue: "{{menuUrl}}" },
     ],
     htmlTemplate: `<section class="promo-banner-section">
-  <div class="container">
-    <div class="promo-banner-box">
-      <div class="promo-banner-copy">
-        <span class="promo-tag">{{tag}}</span>
-        <h2 class="promo-title">{{title}}</h2>
-        <p class="promo-subtitle">{{subtitle}}</p>
-      </div>
-      <div class="promo-banner-cta">
-        <a href="{{ctaUrl}}" target="_top" class="btn btn-primary btn-lg">{{ctaText}}</a>
-      </div>
+  <div class="container promo-banner-box">
+    <div class="promo-banner-copy">
+      <span class="promo-tag">{{tag}}</span>
+      <h2 class="promo-title">{{title}}</h2>
+      <p class="promo-subtitle">{{subtitle}}</p>
+    </div>
+    <div class="promo-banner-cta">
+      <a href="{{ctaUrl}}" target="_top" class="btn btn-primary btn-lg">{{ctaText}}</a>
     </div>
   </div>
 </section>`,
@@ -855,28 +841,28 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     </div>
 
     <div class="info-grid">
-      <div class="info-card">
+      <article class="info-card">
         <span class="info-icon">🕒</span>
         <h3>{{hoursTitle}}</h3>
         <p>{{hoursLine1}}</p>
         <p>{{hoursLine2}}</p>
         <p class="info-note">{{hoursNote}}</p>
-      </div>
+      </article>
 
-      <div class="info-card">
+      <article class="info-card">
         <span class="info-icon">📍</span>
         <h3>{{addressTitle}}</h3>
         <p>{{addressLine1}}</p>
         <p>{{addressLine2}}</p>
-      </div>
+      </article>
 
-      <div class="info-card">
+      <article class="info-card">
         <span class="info-icon">📞</span>
         <h3>{{contactTitle}}</h3>
         <p>{{phoneText}}</p>
         <p>{{whatsappText}}</p>
         <a href="{{whatsappUrl}}" target="_blank" rel="noreferrer" class="btn btn-whatsapp mt-3">{{whatsappBtnLabel}}</a>
-      </div>
+      </article>
     </div>
   </div>
 </section>`,
@@ -4784,10 +4770,10 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     ],
     htmlTemplate: `<section class="section custom-module-block">
   <div class="container">
-    <div class="custom-module-card">
+    <article class="custom-module-card">
       <h3>{{title}}</h3>
       <p>{{subtitle}}</p>
-    </div>
+    </article>
   </div>
 </section>`,
     cssTemplate: `.custom-module-card {
@@ -4822,24 +4808,22 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "stat4Label", label: "Métrica 4 (Etiqueta)", type: "text", defaultValue: "Etiquetas en cava" },
     ],
     htmlTemplate: `<section class="section stats-strip-section">
-  <div class="container">
-    <div class="stats-strip-grid">
-      <div class="stat-card">
-        <span class="stat-val">{{stat1Value}}</span>
-        <span class="stat-lbl">{{stat1Label}}</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-val">{{stat2Value}}</span>
-        <span class="stat-lbl">{{stat2Label}}</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-val">{{stat3Value}}</span>
-        <span class="stat-lbl">{{stat3Label}}</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-val">{{stat4Value}}</span>
-        <span class="stat-lbl">{{stat4Label}}</span>
-      </div>
+  <div class="container stats-strip-grid">
+    <div class="stat-card">
+      <span class="stat-val">{{stat1Value}}</span>
+      <span class="stat-lbl">{{stat1Label}}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val">{{stat2Value}}</span>
+      <span class="stat-lbl">{{stat2Label}}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val">{{stat3Value}}</span>
+      <span class="stat-lbl">{{stat3Label}}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val">{{stat4Value}}</span>
+      <span class="stat-lbl">{{stat4Label}}</span>
     </div>
   </div>
 </section>`,
@@ -4958,10 +4942,10 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     ],
     htmlTemplate: `<section class="section image-spotlight-section">
   <div class="container image-spotlight-grid">
-    <div class="image-spotlight-media">
+    <figure class="image-spotlight-media">
       <img src="{{photoUrl}}" alt="{{title}}" loading="lazy" />
-      <span class="image-spotlight-caption">{{photoCaption}}</span>
-    </div>
+      <figcaption class="image-spotlight-caption">{{photoCaption}}</figcaption>
+    </figure>
     <div class="image-spotlight-copy">
       <span class="section-kicker">{{kicker}}</span>
       <h2 class="section-title">{{title}}</h2>

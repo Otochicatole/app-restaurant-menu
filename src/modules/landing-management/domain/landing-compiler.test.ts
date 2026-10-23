@@ -467,13 +467,18 @@ describe("landing-compiler", () => {
       const containerBlock = createBlankContainerBlock();
       expect(containerBlock.id).toContain("container-");
       expect(containerBlock.moduleKey).toBe("blank-container");
-      expect(containerBlock.htmlTemplate).toContain("content-container");
+      expect(containerBlock.htmlTemplate).not.toContain("content-container");
+      expect(containerBlock.htmlTemplate).toContain("container");
       expect(containerBlock.htmlTemplate).toContain("Arrastrá componentes");
 
       const tree = buildBlockSubLayerTree(containerBlock);
       expect(tree.length).toBeGreaterThan(0);
-      const innerContainer = tree[0].children[0]?.children[0];
-      expect(innerContainer?.label).toContain("content-container");
+      const root = tree[0];
+      expect(root.tag).toBe("section");
+      expect(root.children[0]?.tag).toBe("div");
+      expect(root.children[0]?.label).toContain("container");
+      // Direct child of container is the placeholder <p>, NOT a nested div
+      expect(root.children[0]?.children[0]?.tag).toBe("p");
     });
 
     it("creates a container block pre-populated with 2 columns", () => {
@@ -484,7 +489,7 @@ describe("landing-compiler", () => {
       const tree = buildBlockSubLayerTree(colBlock);
       expect(tree.length).toBeGreaterThan(0);
       const root = tree[0];
-      const grid = root.children[0]?.children.find((c) =>
+      const grid = root.children.find((c) =>
         c.label.includes("grid-columns-2"),
       );
       expect(grid).toBeDefined();
@@ -542,7 +547,7 @@ describe("landing-compiler", () => {
       // Insert heading into the content container
       block = insertInnerElementInBlock(
         block,
-        "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)",
+        "section:nth-of-type(1) > div:nth-of-type(1)",
         "heading",
       );
 
@@ -557,7 +562,7 @@ describe("landing-compiler", () => {
       let block = createBlankContainerBlock("columns-2");
       const tree = buildBlockSubLayerTree(block);
       const root = tree[0];
-      const grid = root.children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const grid = root.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       expect(grid?.children.length).toBe(2);
       expect(grid?.children[0].label).toContain("grid-column");
@@ -586,7 +591,7 @@ describe("landing-compiler", () => {
       // col 1 and col 2
       const tree = buildBlockSubLayerTree(block);
       const root = tree[0];
-      const grid = root.children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const grid = root.children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
       const col2Selector = grid!.children[1].selector;
@@ -594,8 +599,8 @@ describe("landing-compiler", () => {
       // Insert button in col 1
       block = insertInnerElementInBlock(block, col1Selector, "button");
       const treeAfterBtn = buildBlockSubLayerTree(block);
-      const col1 = treeAfterBtn[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"))?.children[0];
-      const btnNode = col1?.children.find((c) => c.tag === "a");
+      const col1 = treeAfterBtn[0].children.find((c) => c.label.includes("grid-columns-2"))?.children[0];
+      const btnNode = col1?.children.find((c) => c.tag === "button" || c.tag === "a");
       expect(btnNode).toBeDefined();
 
       // Add a custom style to the button
@@ -617,7 +622,7 @@ describe("landing-compiler", () => {
 
       // Verify the new tree has button inside col 2
       const treeAfterMove = buildBlockSubLayerTree(updatedBlock);
-      const gridAfterMove = treeAfterMove[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const gridAfterMove = treeAfterMove[0].children.find((c) => c.label.includes("grid-columns-2"));
       expect(gridAfterMove).toBeDefined();
       const col1AfterMove = gridAfterMove!.children[0];
       const col2AfterMove = gridAfterMove!.children[1];
@@ -654,7 +659,7 @@ describe("landing-compiler", () => {
       expect(h1Node).toBeDefined();
 
       const targetTree = buildBlockSubLayerTree(targetBlock);
-      const targetContainer = targetTree[0].children[0]?.children[0];
+      const targetContainer = targetTree[0].children[0];
       expect(targetContainer).toBeDefined();
 
       const res = moveSubElementBetweenBlocks(
@@ -827,7 +832,7 @@ describe("landing-compiler", () => {
 
     it("inserts semantic HTML tag presets into blocks and standalone containers", () => {
       let block = createBlankContainerBlock("flex-col");
-      expect(block.htmlTemplate).toContain('class="flex-col"');
+      expect(block.htmlTemplate).toContain("flex-col");
 
       block = insertInnerElementInBlock(block, null, "h1");
       expect(block.htmlTemplate).toContain("<h1");
@@ -904,7 +909,7 @@ describe("landing-compiler", () => {
 
     it("inserts inner elements with specific positions (before, after, inside)", () => {
       let block = createBlankContainerBlock("flex-col");
-      const colSelector = "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)";
+      const colSelector = "section:nth-of-type(1) > div:nth-of-type(1)";
 
       // Insert button inside
       block = insertInnerElementInBlock(block, colSelector, "button", "inside");
@@ -1079,7 +1084,7 @@ describe("landing-compiler", () => {
       const block = createBlankContainerBlock("columns-2");
       // col 1 selector and col 2 selector
       const tree = buildBlockSubLayerTree(block);
-      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const grid = tree[0].children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
       const col2Selector = grid!.children[1].selector;
@@ -1114,7 +1119,7 @@ describe("landing-compiler", () => {
     it("inserts inner element and returns its new selector accurately via insertInnerElementInBlockWithSelector", () => {
       const block = createBlankContainerBlock("columns-2");
       const tree = buildBlockSubLayerTree(block);
-      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const grid = tree[0].children.find((c) => c.label.includes("grid-columns-2"));
       expect(grid).toBeDefined();
       const col1Selector = grid!.children[0].selector;
 
@@ -1128,7 +1133,7 @@ describe("landing-compiler", () => {
 
       // Column 1 should still exist and Column 2 should still exist (2 columns, not 3)
       const treeAfter = buildBlockSubLayerTree(res1.block);
-      const gridAfter = treeAfter[0].children[0]?.children.find((c) => c.label.includes("grid-columns-2"));
+      const gridAfter = treeAfter[0].children.find((c) => c.label.includes("grid-columns-2"));
       expect(gridAfter?.children.length).toBe(2);
 
       // Now insert button into Column 1 before the image
@@ -1176,15 +1181,9 @@ describe("landing-compiler", () => {
       expect(containerDiv.tag).toBe("div");
       expect(containerDiv.label).toBe("<div.container>");
 
-      // Direct child of container is <div.content-container>
+      // Direct child of container is the placeholder <p> without redundant content-container div!
       expect(containerDiv.children).toHaveLength(1);
-      const contentContainerDiv = containerDiv.children[0];
-      expect(contentContainerDiv.tag).toBe("div");
-      expect(contentContainerDiv.label).toBe("<div.content-container>");
-
-      // Direct child of content-container is <p> with preview of what's inside
-      expect(contentContainerDiv.children).toHaveLength(1);
-      const paragraph = contentContainerDiv.children[0];
+      const paragraph = containerDiv.children[0];
       expect(paragraph.tag).toBe("p");
       expect(paragraph.label).toContain("<p> \"Contenedor Libre");
     });

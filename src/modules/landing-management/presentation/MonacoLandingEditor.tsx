@@ -110,7 +110,6 @@ import {
   createDefaultLandingTemplate,
   deleteSubElementInBlock,
   duplicateSubElementInBlock,
-  insertInnerElementInBlock,
   insertInnerElementInBlockWithSelector,
   moveBlockIntoBlock,
   moveSubElementBetweenBlocks,
@@ -4450,18 +4449,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   const handleCreateContainerSection = useCallback(
     (kind?: InsertableInnerElementKind) => {
-      let created = createBlankContainerBlock(kind);
-      if (
-        kind &&
-        kind !== "container" &&
-        kind !== "columns-2" &&
-        kind !== "columns-3" &&
-        kind !== "columns-4" &&
-        kind !== "flex-row" &&
-        kind !== "flex-col"
-      ) {
-        created = insertInnerElementInBlock(created, null, kind);
-      }
+      const created = createBlankContainerBlock(kind);
       insertBlockSmartly(created);
       setFeedback({
         type: "success",
