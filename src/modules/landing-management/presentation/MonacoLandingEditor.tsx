@@ -60,7 +60,6 @@ import {
   BarChart3,
   CalendarDays,
   Megaphone,
-  Utensils,
   PanelBottom,
   Compass,
   X,
@@ -81,6 +80,11 @@ import {
   CornerUpRight,
   CornerDownLeft,
   CornerDownRight,
+  GripVertical,
+  LayoutGrid,
+  CalendarCheck,
+  UtensilsCrossed,
+  Star,
 } from "lucide-react";
 import type {
   LandingBlock,
@@ -399,23 +403,166 @@ const STUDIO_THEME_PRESETS: ThemePresetItem[] = [
   },
 ];
 
+type ModuleCategory =
+  | "reservas"
+  | "estructura"
+  | "menu"
+  | "contenido"
+  | "contacto"
+  | "codigo";
+
+function getModuleCategory(moduleKey: string): ModuleCategory {
+  if (
+    moduleKey === "reservations-table" ||
+    moduleKey === "reservations-booking" ||
+    moduleKey === "reservations-events" ||
+    moduleKey === "reservations" ||
+    moduleKey === "events"
+  ) {
+    return "reservas";
+  }
+  if (
+    moduleKey === "blank-container" ||
+    moduleKey === "columns-container" ||
+    moduleKey === "columns-3-container" ||
+    moduleKey === "columns-4-container" ||
+    moduleKey === "flex-row-container" ||
+    moduleKey === "flex-col-container" ||
+    moduleKey === "header" ||
+    moduleKey === "footer"
+  ) {
+    return "estructura";
+  }
+  if (
+    moduleKey === "specialties-grid" ||
+    moduleKey === "custom-card" ||
+    moduleKey === "gallery-grid" ||
+    moduleKey === "specialties" ||
+    moduleKey === "card"
+  ) {
+    return "menu";
+  }
+  if (moduleKey === "contact-hours") {
+    return "contacto";
+  }
+  if (moduleKey === "custom-code" || moduleKey.startsWith("custom:")) {
+    return "codigo";
+  }
+  return "contenido";
+}
+
+const MODULE_CATEGORY_META: Record<
+  ModuleCategory,
+  {
+    label: string;
+    fullLabel: string;
+    badgeBg: string;
+    badgeText: string;
+    iconBg: string;
+    iconText: string;
+    iconBorder: string;
+    hoverBorder: string;
+  }
+> = {
+  reservas: {
+    label: "Reservas",
+    fullLabel: "Reservas & Eventos",
+    badgeBg: "bg-rose-50 border border-rose-200/80",
+    badgeText: "text-rose-700",
+    iconBg: "bg-rose-50 group-hover:bg-rose-100",
+    iconText: "text-rose-600",
+    iconBorder: "border-rose-200/80",
+    hoverBorder: "hover:border-rose-300",
+  },
+  estructura: {
+    label: "Estructura",
+    fullLabel: "Estructura & Layout",
+    badgeBg: "bg-sky-50 border border-sky-200/80",
+    badgeText: "text-sky-700",
+    iconBg: "bg-sky-50 group-hover:bg-sky-100",
+    iconText: "text-sky-600",
+    iconBorder: "border-sky-200/80",
+    hoverBorder: "hover:border-sky-300",
+  },
+  menu: {
+    label: "Menú",
+    fullLabel: "Menú & Especialidades",
+    badgeBg: "bg-amber-50 border border-amber-200/80",
+    badgeText: "text-amber-800",
+    iconBg: "bg-amber-50 group-hover:bg-amber-100",
+    iconText: "text-amber-600",
+    iconBorder: "border-amber-200/80",
+    hoverBorder: "hover:border-amber-300",
+  },
+  contenido: {
+    label: "Contenido",
+    fullLabel: "Contenido & Portada",
+    badgeBg: "bg-violet-50 border border-violet-200/80",
+    badgeText: "text-violet-700",
+    iconBg: "bg-violet-50 group-hover:bg-violet-100",
+    iconText: "text-violet-600",
+    iconBorder: "border-violet-200/80",
+    hoverBorder: "hover:border-violet-300",
+  },
+  contacto: {
+    label: "Contacto",
+    fullLabel: "Ubicación & Contacto",
+    badgeBg: "bg-emerald-50 border border-emerald-200/80",
+    badgeText: "text-emerald-700",
+    iconBg: "bg-emerald-50 group-hover:bg-emerald-100",
+    iconText: "text-emerald-600",
+    iconBorder: "border-emerald-200/80",
+    hoverBorder: "hover:border-emerald-300",
+  },
+  codigo: {
+    label: "Código",
+    fullLabel: "Código & Personalizado",
+    badgeBg: "bg-zinc-100 border border-zinc-200",
+    badgeText: "text-zinc-700",
+    iconBg: "bg-zinc-100 group-hover:bg-zinc-200",
+    iconText: "text-zinc-700",
+    iconBorder: "border-zinc-300",
+    hoverBorder: "hover:border-zinc-400",
+  },
+};
+
+const MODULE_GROUPS: {
+  key: ModuleCategory;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { key: "reservas", title: "Reservas & Eventos", icon: CalendarCheck },
+  { key: "estructura", title: "Estructura & Layout", icon: Columns },
+  { key: "menu", title: "Menú & Especialidades", icon: UtensilsCrossed },
+  { key: "contenido", title: "Contenido & Portada", icon: Sparkles },
+  { key: "contacto", title: "Ubicación & Contacto", icon: MapPin },
+  { key: "codigo", title: "Avanzado & Código Libre", icon: Code2 },
+];
+
 function getModuleIcon(moduleKey: string) {
   if (moduleKey === "blank-container") return Box;
   if (moduleKey === "columns-container") return Columns;
+  if (moduleKey === "columns-3-container") return LayoutGrid;
+  if (moduleKey === "columns-4-container") return Grid;
+  if (moduleKey === "flex-row-container") return Rows;
+  if (moduleKey === "flex-col-container") return Columns;
   if (moduleKey === "header") return Compass;
   if (moduleKey === "hero") return Sparkles;
-  if (moduleKey === "custom-card" || moduleKey === "card") return Box;
-  if (moduleKey === "specialties-grid" || moduleKey === "specialties") return Utensils;
+  if (moduleKey === "custom-card" || moduleKey === "card") return Star;
+  if (moduleKey === "specialties-grid" || moduleKey === "specialties") return UtensilsCrossed;
   if (moduleKey === "experience-split" || moduleKey === "story") return ImageIcon;
   if (moduleKey === "promo-banner") return Megaphone;
   if (moduleKey === "testimonials") return MessageSquareQuote;
   if (moduleKey === "contact-hours") return MapPin;
-  if (moduleKey === "reservations-table" || moduleKey === "reservations-booking" || moduleKey === "reservations") return CalendarDays;
+  if (moduleKey === "reservations-table" || moduleKey === "reservations") return CalendarDays;
+  if (moduleKey === "reservations-booking") return CalendarCheck;
   if (moduleKey === "reservations-events" || moduleKey === "events") return PartyPopper;
   if (moduleKey === "footer") return PanelBottom;
   if (moduleKey === "stats-strip") return BarChart3;
-  if (moduleKey === "gallery-grid" || moduleKey === "image-spotlight") return ImageIcon;
+  if (moduleKey === "gallery-grid") return LayoutGrid;
+  if (moduleKey === "image-spotlight") return ImageIcon;
   if (moduleKey === "faq-accordion") return HelpCircle;
+  if (moduleKey === "custom-code") return Code2;
   if (moduleKey.startsWith("custom:")) return Wrench;
   return Code2;
 }
@@ -3619,6 +3766,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const [selectedComponentCategory, setSelectedComponentCategory] = useState<
     "all" | "layout" | "text" | "action" | "media"
   >("all");
+  const [selectedModuleCategory, setSelectedModuleCategory] =
+    useState<string>("all");
 
   // Nested Figma-style Layers state (collapsed by default)
   const [expandedBlockIds, setExpandedBlockIds] = useState<
@@ -5329,16 +5478,30 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   const filteredBuiltinModules = useMemo(() => {
     const q = componentSearch.trim().toLowerCase();
-    if (!q) return BUILTIN_LANDING_MODULES;
-    return BUILTIN_LANDING_MODULES.filter(
-      (m) =>
+    return BUILTIN_LANDING_MODULES.filter((m) => {
+      const cat = getModuleCategory(m.moduleKey);
+      const matchesCategory =
+        selectedModuleCategory === "all" || selectedModuleCategory === cat;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+      const meta = MODULE_CATEGORY_META[cat];
+      return (
         m.name.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
-        m.category.toLowerCase().includes(q),
-    );
-  }, [componentSearch]);
+        cat.toLowerCase().includes(q) ||
+        (meta && meta.label.toLowerCase().includes(q)) ||
+        (meta && meta.fullLabel.toLowerCase().includes(q))
+      );
+    });
+  }, [componentSearch, selectedModuleCategory]);
 
   const filteredCustomModules = useMemo(() => {
+    if (
+      selectedModuleCategory !== "all" &&
+      selectedModuleCategory !== "custom"
+    ) {
+      return [];
+    }
     const q = componentSearch.trim().toLowerCase();
     if (!q) return customModules;
     return customModules.filter(
@@ -5346,7 +5509,44 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         m.name.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q),
     );
-  }, [customModules, componentSearch]);
+  }, [customModules, componentSearch, selectedModuleCategory]);
+
+  const moduleCategoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: BUILTIN_LANDING_MODULES.length,
+      reservas: 0,
+      estructura: 0,
+      menu: 0,
+      contenido: 0,
+      contacto: 0,
+      codigo: 0,
+    };
+    for (const m of BUILTIN_LANDING_MODULES) {
+      const cat = getModuleCategory(m.moduleKey);
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return counts;
+  }, []);
+
+  const moduleChips = useMemo(() => {
+    const chips: { id: string; label: string; count: number }[] = [
+      { id: "all", label: "Todos", count: moduleCategoryCounts.all },
+      { id: "reservas", label: "Reservas", count: moduleCategoryCounts.reservas },
+      { id: "estructura", label: "Estructura", count: moduleCategoryCounts.estructura },
+      { id: "menu", label: "Menú", count: moduleCategoryCounts.menu },
+      { id: "contenido", label: "Contenido", count: moduleCategoryCounts.contenido },
+      { id: "contacto", label: "Contacto", count: moduleCategoryCounts.contacto },
+      { id: "codigo", label: "Código", count: moduleCategoryCounts.codigo },
+    ];
+    if (customModules.length > 0) {
+      chips.push({
+        id: "custom",
+        label: "Guardados",
+        count: customModules.length,
+      });
+    }
+    return chips;
+  }, [moduleCategoryCounts, customModules.length]);
 
   const filteredAtomicComponents = useMemo(() => {
     const q = componentSearch.trim().toLowerCase();
@@ -6508,7 +6708,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             /* MÓDULOS TAB: Pre-built full sections & Custom Modules    */
             /* ======================================================= */
             <div className="flex-1 flex flex-col min-h-0 bg-white">
-              <div className="p-2.5 border-b border-zinc-200">
+              <div className="p-2.5 border-b border-zinc-200 space-y-2">
                 <div className="relative">
                   <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input
@@ -6516,173 +6716,393 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     value={componentSearch}
                     onChange={(e) => setComponentSearch(e.target.value)}
                     placeholder="Buscar secciones o módulos..."
-                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                    className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white"
                   />
+                  {componentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setComponentSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 rounded-md"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Chips de filtro por categoría */}
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pt-0.5">
+                  {moduleChips.map((chip) => {
+                    const isActive = selectedModuleCategory === chip.id;
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setSelectedModuleCategory(chip.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                          isActive
+                            ? "bg-zinc-900 text-white shadow-2xs"
+                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                        }`}
+                      >
+                        <span>{chip.label}</span>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                            isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-zinc-200/80 text-zinc-600"
+                          }`}
+                        >
+                          {chip.count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-2.5 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between px-1 mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-                      Módulos Prearmados ({filteredBuiltinModules.length})
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {filteredBuiltinModules.map((mod) => {
-                      const Icon = getModuleIcon(mod.moduleKey);
+                {/* Vista agrupada cuando no hay búsqueda y categoría es 'all' */}
+                {selectedModuleCategory === "all" && !componentSearch.trim() ? (
+                  <>
+                    {MODULE_GROUPS.map((group) => {
+                      const groupItems = filteredBuiltinModules.filter(
+                        (m) => getModuleCategory(m.moduleKey) === group.key,
+                      );
+                      if (groupItems.length === 0) return null;
+                      const GroupIcon = group.icon;
+
                       return (
-                        <div
-                          key={mod.moduleKey}
-                          draggable
-                          onDragStart={(e) => {
-                            try {
-                              e.dataTransfer.setData(
-                                "application/x-landing-builtin",
-                                mod.moduleKey,
-                              );
-                              e.dataTransfer.setData(
-                                "text/plain",
-                                `landing-builtin:${mod.moduleKey}`,
-                              );
-                              e.dataTransfer.effectAllowed = "copy";
-                            } catch {
-                              // ignore
-                            }
-                            const win = getDragWindow();
-                            if (win) {
-                              win.__draggedBuiltinKey = mod.moduleKey;
-                            }
-                            draggedBuiltinKeyRef.current = mod.moduleKey;
-                            setDraggedBuiltinKey(mod.moduleKey);
-                          }}
-                          onDragEnd={() => {
-                            setTimeout(() => {
-                              const win = getDragWindow();
-                              if (win) {
-                                win.__draggedBuiltinKey = null;
-                              }
-                              draggedBuiltinKeyRef.current = null;
-                              setDraggedBuiltinKey(null);
-                              setIsDraggingComponentOverCanvas(false);
-                            }, 150);
-                          }}
-                          onClick={() => handleAddBuiltinBlock(mod)}
-                          className="group flex flex-col items-center justify-between text-center p-3 rounded-xl bg-white hover:bg-blue-50/20 border border-zinc-200 hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer select-none"
-                          title={mod.description}
-                        >
-                          <div className="flex flex-col items-center w-full min-w-0">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 group-hover:bg-blue-50 text-zinc-600 group-hover:text-blue-600 mb-2 transition-colors">
-                              <Icon className="h-4 w-4" />
+                        <div key={group.key} className="space-y-1.5">
+                          <div className="flex items-center justify-between px-1 mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <GroupIcon className="h-3.5 w-3.5 text-zinc-400" />
+                              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                                {group.title}
+                              </span>
                             </div>
-                            <span className="text-[11px] font-semibold text-zinc-800 line-clamp-2 leading-tight">
-                              {mod.name}
+                            <span className="text-[10px] text-zinc-400 font-medium">
+                              {groupItems.length}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddBuiltinBlock(mod);
-                            }}
-                            className="w-full mt-2.5 py-1 px-2 rounded-md bg-zinc-100 group-hover:bg-blue-600 text-zinc-700 group-hover:text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Agregar
-                          </button>
+
+                          <div className="space-y-1.5">
+                            {groupItems.map((mod) => {
+                              const Icon = getModuleIcon(mod.moduleKey);
+                              const cat = getModuleCategory(mod.moduleKey);
+                              const meta = MODULE_CATEGORY_META[cat];
+
+                              return (
+                                <div
+                                  key={mod.moduleKey}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    try {
+                                      e.dataTransfer.setData(
+                                        "application/x-landing-builtin",
+                                        mod.moduleKey,
+                                      );
+                                      e.dataTransfer.setData(
+                                        "text/plain",
+                                        `landing-builtin:${mod.moduleKey}`,
+                                      );
+                                      e.dataTransfer.effectAllowed = "copy";
+                                    } catch {
+                                      // ignore
+                                    }
+                                    const win = getDragWindow();
+                                    if (win) {
+                                      win.__draggedBuiltinKey = mod.moduleKey;
+                                    }
+                                    draggedBuiltinKeyRef.current = mod.moduleKey;
+                                    setDraggedBuiltinKey(mod.moduleKey);
+                                  }}
+                                  onDragEnd={() => {
+                                    setTimeout(() => {
+                                      const win = getDragWindow();
+                                      if (win) {
+                                        win.__draggedBuiltinKey = null;
+                                      }
+                                      draggedBuiltinKeyRef.current = null;
+                                      setDraggedBuiltinKey(null);
+                                      setIsDraggingComponentOverCanvas(false);
+                                    }, 150);
+                                  }}
+                                  onClick={() => handleAddBuiltinBlock(mod)}
+                                  className={`group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-zinc-50/90 border border-zinc-200/90 ${meta.hoverBorder} transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs`}
+                                  title="Clic para agregar o arrastrá para posicionar"
+                                >
+                                  <div
+                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.iconBg} ${meta.iconText} border ${meta.iconBorder} transition-colors shadow-2xs mt-0.5`}
+                                  >
+                                    <Icon className="h-4 w-4" />
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                                      <span className="text-xs font-semibold text-zinc-900 group-hover:text-blue-700 transition-colors truncate">
+                                        {mod.name}
+                                      </span>
+                                      <span
+                                        className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full ${meta.badgeBg} ${meta.badgeText} shrink-0`}
+                                      >
+                                        {meta.label}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-zinc-500 group-hover:text-zinc-600 leading-snug line-clamp-2">
+                                      {mod.description}
+                                    </p>
+                                  </div>
+
+                                  <div
+                                    className="flex h-9 items-center justify-center text-zinc-300 group-hover:text-blue-600 transition-colors shrink-0 pl-0.5 self-center"
+                                    title="Arrastrar para posicionar"
+                                  >
+                                    <GripVertical className="h-4 w-4" />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })}
-                  </div>
-                </div>
+                  </>
+                ) : (
+                  /* Vista plana cuando se filtra por categoría o búsqueda */
+                  selectedModuleCategory !== "custom" && (
+                    <div>
+                      <div className="flex items-center justify-between px-1 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                          {componentSearch.trim()
+                            ? `Resultados (${filteredBuiltinModules.length})`
+                            : `${
+                                MODULE_CATEGORY_META[
+                                  selectedModuleCategory as ModuleCategory
+                                ]?.fullLabel || "Módulos"
+                              } (${filteredBuiltinModules.length})`}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {filteredBuiltinModules.map((mod) => {
+                          const Icon = getModuleIcon(mod.moduleKey);
+                          const cat = getModuleCategory(mod.moduleKey);
+                          const meta = MODULE_CATEGORY_META[cat];
+
+                          return (
+                            <div
+                              key={mod.moduleKey}
+                              draggable
+                              onDragStart={(e) => {
+                                try {
+                                  e.dataTransfer.setData(
+                                    "application/x-landing-builtin",
+                                    mod.moduleKey,
+                                  );
+                                  e.dataTransfer.setData(
+                                    "text/plain",
+                                    `landing-builtin:${mod.moduleKey}`,
+                                  );
+                                  e.dataTransfer.effectAllowed = "copy";
+                                } catch {
+                                  // ignore
+                                }
+                                const win = getDragWindow();
+                                if (win) {
+                                  win.__draggedBuiltinKey = mod.moduleKey;
+                                }
+                                draggedBuiltinKeyRef.current = mod.moduleKey;
+                                setDraggedBuiltinKey(mod.moduleKey);
+                              }}
+                              onDragEnd={() => {
+                                setTimeout(() => {
+                                  const win = getDragWindow();
+                                  if (win) {
+                                    win.__draggedBuiltinKey = null;
+                                  }
+                                  draggedBuiltinKeyRef.current = null;
+                                  setDraggedBuiltinKey(null);
+                                  setIsDraggingComponentOverCanvas(false);
+                                }, 150);
+                              }}
+                              onClick={() => handleAddBuiltinBlock(mod)}
+                              className={`group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-zinc-50/90 border border-zinc-200/90 ${meta.hoverBorder} transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs`}
+                              title="Clic para agregar o arrastrá para posicionar"
+                            >
+                              <div
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.iconBg} ${meta.iconText} border ${meta.iconBorder} transition-colors shadow-2xs mt-0.5`}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                  <span className="text-xs font-semibold text-zinc-900 group-hover:text-blue-700 transition-colors truncate">
+                                    {mod.name}
+                                  </span>
+                                  <span
+                                    className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full ${meta.badgeBg} ${meta.badgeText} shrink-0`}
+                                  >
+                                    {meta.label}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-zinc-500 group-hover:text-zinc-600 leading-snug line-clamp-2">
+                                  {mod.description}
+                                </p>
+                              </div>
+
+                              <div
+                                className="flex h-9 items-center justify-center text-zinc-300 group-hover:text-blue-600 transition-colors shrink-0 pl-0.5 self-center"
+                                title="Arrastrar para posicionar"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )
+                )}
 
                 {/* User's Saved Custom Modules */}
-                <div>
-                  <div className="flex items-center justify-between px-1 mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">
-                      Mis Módulos Guardados ({filteredCustomModules.length})
-                    </span>
-                  </div>
-                  {filteredCustomModules.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-zinc-200 p-3 text-center bg-zinc-50/50">
-                      <p className="text-[11px] text-zinc-500 leading-relaxed">
-                        Personalizá cualquier Card o bloque y tocá{" "}
-                        <strong className="text-zinc-700">
-                          Guardar como Módulo
-                        </strong>{" "}
-                        para reutilizarlo acá.
-                      </p>
+                {(selectedModuleCategory === "all" ||
+                  selectedModuleCategory === "custom") && (
+                  <div>
+                    <div className="flex items-center justify-between px-1 mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <Wrench className="h-3.5 w-3.5 text-amber-600" />
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+                          Mis Módulos Guardados ({filteredCustomModules.length})
+                        </span>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {filteredCustomModules.map((cm) => (
-                        <div
-                          key={cm.id}
-                          draggable
-                          onDragStart={(e) => {
-                            try {
-                              e.dataTransfer.setData(
-                                "application/x-landing-custom",
-                                cm.id,
-                              );
-                              e.dataTransfer.setData(
-                                "text/plain",
-                                `landing-custom:${cm.id}`,
-                              );
-                              e.dataTransfer.effectAllowed = "copy";
-                            } catch {
-                              // ignore
-                            }
-                            const win = getDragWindow();
-                            if (win) {
-                              win.__draggedCustomId = cm.id;
-                            }
-                            draggedCustomIdRef.current = cm.id;
-                            setDraggedCustomId(cm.id);
-                          }}
-                          onDragEnd={() => {
-                            setTimeout(() => {
+                    {filteredCustomModules.length === 0 ? (
+                      selectedModuleCategory === "custom" ||
+                      customModules.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-zinc-200 p-3 text-center bg-zinc-50/50">
+                          <p className="text-[11px] text-zinc-500 leading-relaxed">
+                            Personalizá cualquier sección y tocá{" "}
+                            <strong className="text-zinc-700">
+                              Guardar como Módulo
+                            </strong>{" "}
+                            para reutilizarlo acá.
+                          </p>
+                        </div>
+                      ) : null
+                    ) : (
+                      <div className="space-y-1.5">
+                        {filteredCustomModules.map((cm) => (
+                          <div
+                            key={cm.id}
+                            draggable
+                            onDragStart={(e) => {
+                              try {
+                                e.dataTransfer.setData(
+                                  "application/x-landing-custom",
+                                  cm.id,
+                                );
+                                e.dataTransfer.setData(
+                                  "text/plain",
+                                  `landing-custom:${cm.id}`,
+                                );
+                                e.dataTransfer.effectAllowed = "copy";
+                              } catch {
+                                // ignore
+                              }
                               const win = getDragWindow();
                               if (win) {
-                                win.__draggedCustomId = null;
+                                win.__draggedCustomId = cm.id;
                               }
-                              draggedCustomIdRef.current = null;
-                              setDraggedCustomId(null);
-                              setIsDraggingComponentOverCanvas(false);
-                            }, 150);
-                          }}
-                          className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-amber-400 transition-colors cursor-grab shadow-2xs"
-                        >
-                          <button
-                            type="button"
+                              draggedCustomIdRef.current = cm.id;
+                              setDraggedCustomId(cm.id);
+                            }}
+                            onDragEnd={() => {
+                              setTimeout(() => {
+                                const win = getDragWindow();
+                                if (win) {
+                                  win.__draggedCustomId = null;
+                                }
+                                draggedCustomIdRef.current = null;
+                                setDraggedCustomId(null);
+                                setIsDraggingComponentOverCanvas(false);
+                              }, 150);
+                            }}
                             onClick={() => handleAddCustomBlock(cm)}
-                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                            className="group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-amber-50/20 border border-zinc-200/90 hover:border-amber-300 transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs"
+                            title="Clic para agregar o arrastrá para posicionar"
                           >
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
-                              <Wrench className="h-3.5 w-3.5" />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-zinc-800 truncate">
-                                {cm.name}
-                              </p>
-                              <p className="text-[10px] text-zinc-500 truncate">
-                                {cm.fields.length} variables editables
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-200/80 group-hover:bg-amber-100 transition-colors shadow-2xs mt-0.5">
+                              <Wrench className="h-4 w-4" />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <span className="text-xs font-semibold text-zinc-900 group-hover:text-amber-800 transition-colors truncate">
+                                  {cm.name}
+                                </span>
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-full bg-amber-50 border border-amber-200 text-amber-800 shrink-0">
+                                  Guardado
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-zinc-500 leading-snug truncate">
+                                {cm.fields.length} variable
+                                {cm.fields.length === 1 ? "" : "s"} editable
+                                {cm.fields.length === 1 ? "" : "s"}
                               </p>
                             </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCustomModule(cm.id)}
-                            className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Eliminar módulo guardado"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
+
+                            <div className="flex items-center gap-0.5 shrink-0 self-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCustomModule(cm.id);
+                                }}
+                                className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                title="Eliminar módulo guardado"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                              <div
+                                className="p-1 text-zinc-300 group-hover:text-amber-600 transition-colors"
+                                title="Arrastrar para posicionar"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Estado vacío cuando no hay coincidencias */}
+                {filteredBuiltinModules.length === 0 &&
+                  filteredCustomModules.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center bg-zinc-50/50">
+                      <Search className="h-5 w-5 text-zinc-300 mx-auto mb-2" />
+                      <p className="text-xs font-semibold text-zinc-700">
+                        No se encontraron módulos
+                      </p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {componentSearch
+                          ? `Sin resultados para "${componentSearch}"`
+                          : "No hay módulos en esta categoría"}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComponentSearch("");
+                          setSelectedModuleCategory("all");
+                        }}
+                        className="mt-3 px-3 py-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Ver todos los módulos
+                      </button>
                     </div>
                   )}
-                </div>
               </div>
             </div>
           )}

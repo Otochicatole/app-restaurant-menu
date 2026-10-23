@@ -19,7 +19,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "blank-container",
     name: "Contenedor / Sección Libre",
-    description: "Sección vacía con contenedor central responsive lista para arrastrar y soltar componentes.",
+    description: "Sección base vacía para estructurar y soltar componentes a medida.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Sección / Contenedor Libre -->
@@ -36,7 +36,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "columns-container",
     name: "Sección 2 Columnas",
-    description: "Sección con grilla responsive de 2 columnas para armar layouts divididos.",
+    description: "Grilla responsive en 2 columnas para layouts divididos o contenido lado a lado.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Sección 2 Columnas -->
@@ -58,7 +58,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "columns-3-container",
     name: "Sección 3 Columnas (CSS Grid)",
-    description: "Sección con grilla responsive de 3 columnas para tarjetas, servicios o menú.",
+    description: "Grilla responsive en 3 columnas ideal para platos, ventajas o servicios.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Sección 3 Columnas -->
@@ -83,7 +83,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "columns-4-container",
     name: "Sección 4 Columnas (CSS Grid)",
-    description: "Sección con grilla responsive de 4 columnas para métricas, fotos o productos.",
+    description: "Grilla en 4 columnas para métricas, fotografías o elementos compactos.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Sección 4 Columnas -->
@@ -111,7 +111,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "flex-row-container",
     name: "Fila Flexible (Flex Row)",
-    description: "Contenedor horizontal flexible con display: flex y dirección row, con salto de línea y gap.",
+    description: "Contenedor horizontal flexible con distribución y salto de línea adaptativo.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Fila Flexible -->
@@ -128,7 +128,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "flex-col-container",
     name: "Columna Flexible (Flex Column)",
-    description: "Contenedor vertical flexible con display: flex y dirección column para apilar elementos.",
+    description: "Contenedor vertical flexible para apilar elementos con espaciado uniforme.",
     category: "estructura",
     fields: [],
     htmlTemplate: `<!-- Columna Flexible -->
@@ -920,7 +920,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "reservations-table",
     name: "Reserva de Mesas (Turnos)",
-    description: "Módulo exclusivo de reserva de mesas con selector visual interactivo de 14 días (chips), turnos disponibles en tiempo real, bloqueo de horarios ocupados y comprobante WhatsApp.",
+    description: "Módulo de reserva de mesas con calendario mensual interactivo, turnos en tiempo real y confirmación WhatsApp.",
     category: "contacto",
     fields: [
       { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Reservas Online" },
@@ -2298,7 +2298,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "reservations-booking",
     name: "Reservas de Mesas y Eventos (Unificado)",
-    description: "Módulo interactivo completo con selector dual: Reserva de Mesas Regulares en Salón (chips interactivos de 14 días y turnos) y Reserva de Entradas para Eventos Especiales (catas, shows y degustaciones con fecha y cupos exclusivos).",
+    description: "Módulo interactivo completo sincronizado al CMS: Reserva de Mesas (calendario y turnos en vivo) y Entradas para Eventos Especiales.",
     category: "contacto",
     fields: [
       { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Reservas Online" },
