@@ -4206,12 +4206,29 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     [],
   );
 
-  // Helper to insert a new block in a logical position (after selected block, or before footer)
-  const insertBlockSmartly = useCallback(
-    (created: LandingBlock) => {
+  // Helper to insert a new block at an exact location (before/after targetBlockId) or smart position
+  const insertBlockAt = useCallback(
+    (
+      created: LandingBlock,
+      targetBlockId?: string | null,
+      position: "before" | "after" = "after",
+    ) => {
       pendingScrollBlockIdRef.current = created.id;
       updateDocument((prev) => {
         const nextBlocks = [...prev.blocks];
+        if (targetBlockId) {
+          const targetIdx = nextBlocks.findIndex((b) => b.id === targetBlockId);
+          if (targetIdx !== -1) {
+            const insertIdx = position === "before" ? targetIdx : targetIdx + 1;
+            nextBlocks.splice(insertIdx, 0, created);
+            return {
+              ...prev,
+              mode: "visual",
+              blocks: nextBlocks,
+            };
+          }
+        }
+
         const currentIdx = selectedBlockIdRef.current
           ? nextBlocks.findIndex((b) => b.id === selectedBlockIdRef.current)
           : -1;
@@ -4242,9 +4259,20 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     [updateDocument],
   );
 
+  const insertBlockSmartly = useCallback(
+    (created: LandingBlock) => {
+      insertBlockAt(created, null, "after");
+    },
+    [insertBlockAt],
+  );
+
   // Block operations
   const handleAddBuiltinBlock = useCallback(
-    (definition: BuiltinLandingModuleDefinition) => {
+    (
+      definition: BuiltinLandingModuleDefinition,
+      targetBlockId?: string | null,
+      position?: "before" | "after",
+    ) => {
       const safeName = tenant.name.trim() || "Nuestro Restaurante";
       const menuUrl = `/m/${tenant.slug}`;
       const created = createBlockFromBuiltinModule(definition);
@@ -4253,25 +4281,29 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           .replace(/\{\{\s*restaurantName\s*\}\}/g, safeName)
           .replace(/\{\{\s*menuUrl\s*\}\}/g, menuUrl);
       }
-      insertBlockSmartly(created);
+      insertBlockAt(created, targetBlockId, position);
       setFeedback({
         type: "success",
         message: `Módulo "${definition.name}" agregado a tu página.`,
       });
     },
-    [insertBlockSmartly, tenant.name, tenant.slug],
+    [insertBlockAt, tenant.name, tenant.slug],
   );
 
   const handleAddCustomBlock = useCallback(
-    (customModule: LandingCustomModuleView) => {
+    (
+      customModule: LandingCustomModuleView,
+      targetBlockId?: string | null,
+      position?: "before" | "after",
+    ) => {
       const created = createBlockFromCustomModule(customModule);
-      insertBlockSmartly(created);
+      insertBlockAt(created, targetBlockId, position);
       setFeedback({
         type: "success",
         message: `Módulo "${customModule.name}" agregado a tu página.`,
       });
     },
-    [insertBlockSmartly],
+    [insertBlockAt],
   );
 
   const handleCreateContainerSection = useCallback(
@@ -4967,14 +4999,26 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           const found = BUILTIN_LANDING_MODULES.find(
             (m) => m.moduleKey === bKey,
           );
-          if (found) handleAddBuiltinBlock(found);
+          if (found) {
+            handleAddBuiltinBlock(
+              found,
+              data.blockId || null,
+              data.position === "before" ? "before" : "after",
+            );
+          }
           setDraggedBuiltinKey(null);
           if (dragWin) {
             dragWin.__draggedBuiltinKey = null;
           }
         } else if (cId) {
           const found = customModules.find((m) => m.id === cId);
-          if (found) handleAddCustomBlock(found);
+          if (found) {
+            handleAddCustomBlock(
+              found,
+              data.blockId || null,
+              data.position === "before" ? "before" : "after",
+            );
+          }
           setDraggedCustomId(null);
           if (dragWin) {
             dragWin.__draggedCustomId = null;
@@ -6031,6 +6075,44 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             return;
                           }
 
+                          const bKey =
+                            draggedBuiltinKey || win?.__draggedBuiltinKey;
+                          if (bKey) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const found = BUILTIN_LANDING_MODULES.find(
+                              (m) => m.moduleKey === bKey,
+                            );
+                            if (found) {
+                              handleAddBuiltinBlock(
+                                found,
+                                block.id,
+                                pos === "before" ? "before" : "after",
+                              );
+                            }
+                            setDraggedBuiltinKey(null);
+                            if (win) win.__draggedBuiltinKey = null;
+                            return;
+                          }
+
+                          const cId =
+                            draggedCustomId || win?.__draggedCustomId;
+                          if (cId) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const found = customModules.find((m) => m.id === cId);
+                            if (found) {
+                              handleAddCustomBlock(
+                                found,
+                                block.id,
+                                pos === "before" ? "before" : "after",
+                              );
+                            }
+                            setDraggedCustomId(null);
+                            if (win) win.__draggedCustomId = null;
+                            return;
+                          }
+
                           if (draggedLayerIndex !== null) {
                             const targetRealIdx =
                               documentState.blocks.findIndex(
@@ -6697,7 +6779,19 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
               const found = BUILTIN_LANDING_MODULES.find(
                 (m) => m.moduleKey === builtinKey,
               );
-              if (found) handleAddBuiltinBlock(found);
+              if (found) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const isTopHalf = rect ? e.clientY < rect.top + rect.height / 3 : false;
+                const headerBlock = documentState.blocks.find((b) => b.moduleKey === "header");
+                const footerBlock = documentState.blocks.find((b) => b.moduleKey === "footer");
+                if (isTopHalf && headerBlock) {
+                  handleAddBuiltinBlock(found, headerBlock.id, "after");
+                } else if (footerBlock) {
+                  handleAddBuiltinBlock(found, footerBlock.id, "before");
+                } else {
+                  handleAddBuiltinBlock(found);
+                }
+              }
               setDraggedBuiltinKey(null);
               if (dragWin) {
                 dragWin.__draggedBuiltinKey = null;
@@ -6714,7 +6808,19 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             }
             if (customId) {
               const found = customModules.find((m) => m.id === customId);
-              if (found) handleAddCustomBlock(found);
+              if (found) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const isTopHalf = rect ? e.clientY < rect.top + rect.height / 3 : false;
+                const headerBlock = documentState.blocks.find((b) => b.moduleKey === "header");
+                const footerBlock = documentState.blocks.find((b) => b.moduleKey === "footer");
+                if (isTopHalf && headerBlock) {
+                  handleAddCustomBlock(found, headerBlock.id, "after");
+                } else if (footerBlock) {
+                  handleAddCustomBlock(found, footerBlock.id, "before");
+                } else {
+                  handleAddCustomBlock(found);
+                }
+              }
               setDraggedCustomId(null);
               if (dragWin) {
                 dragWin.__draggedCustomId = null;
