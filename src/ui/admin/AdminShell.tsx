@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { Globe, Layers3, LayoutGrid, Menu, Settings } from "lucide-react";
+import { CalendarDays, Globe, Layers3, LayoutGrid, Menu, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export function AdminShell({
@@ -29,7 +29,10 @@ export function AdminShell({
   const navigation = [
     { label: "Editor", href: "/admin", exact: true, icon: Layers3 },
     ...(landingEnabled
-      ? [{ label: "Landing", href: "/admin/landing", exact: true, icon: Globe }]
+      ? [
+          { label: "Landing", href: "/admin/landing", exact: true, icon: Globe },
+          { label: "Reservas", href: "/admin/reservas", icon: CalendarDays },
+        ]
       : []),
     { label: "Configuración", href: "/admin/settings", icon: Settings },
   ];

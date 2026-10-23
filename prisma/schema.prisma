@@ -52,6 +52,11 @@ model Tenant {
   menuAssetReferences MenuAssetReference[]
   menuTemplates MenuTemplate[]
   menuTemplateAssetReferences MenuTemplateAssetReference[]
+  reservationTimeSlots ReservationTimeSlot[]
+  reservationRecurringClosures ReservationRecurringClosure[]
+  reservationBlockedDates ReservationBlockedDate[]
+  restaurantEvents RestaurantEvent[]
+  tableReservations TableReservation[]
 }
 
 model Session {
@@ -279,4 +284,106 @@ model LandingTemplate {
 
   @@index([visibility, status])
   @@index([tenantId, status])
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum RestaurantEventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+model ReservationTimeSlot {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  time      String
+  label     String   @default("")
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, time])
+  @@index([tenantId, active])
+}
+
+model ReservationRecurringClosure {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  reason    String   @default("Cerrado por descanso semanal")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, dayOfWeek])
+  @@index([tenantId])
+}
+
+model ReservationBlockedDate {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  date      String
+  reason    String   @default("Cerrado por fecha especial")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, date])
+  @@index([tenantId, date])
+}
+
+model RestaurantEvent {
+  id                        String                @id @default(cuid())
+  tenantId                  String
+  tenant                    Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title                     String
+  description               String                @default("")
+  date                      String
+  startTime                 String
+  endTime                   String                @default("")
+  capacity                  Int                   @default(20)
+  priceLabel                String                @default("")
+  imageUrl                  String                @default("")
+  blocksRegularReservations Boolean               @default(false)
+  status                    RestaurantEventStatus @default(PUBLISHED)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  reservations              TableReservation[]
+
+  @@index([tenantId, date, status])
+}
+
+model TableReservation {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code          String
+  customerName  String
+  customerEmail String            @default("")
+  customerPhone String
+  partySize     Int               @default(2)
+  date          String
+  time          String
+  notes         String            @default("")
+  adminNotes    String            @default("")
+  status        ReservationStatus @default(PENDING)
+  source        String            @default("LANDING")
+  eventId       String?
+  event         RestaurantEvent?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([tenantId, date, status])
+  @@index([tenantId, status])
+  @@index([eventId])
 }

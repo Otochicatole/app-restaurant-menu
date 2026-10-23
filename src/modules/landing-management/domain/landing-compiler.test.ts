@@ -959,6 +959,98 @@ describe("landing-compiler", () => {
       // Verify that runtime navigation scripts do NOT run in editor mode (guarded by data-preview-mode !== 'true')
       expect(compiled.fullHtml).toContain('document.documentElement.getAttribute(\'data-preview-mode\') !== \'true\'');
     });
+
+    it("correctly compiles the reservations-booking builtin module with full availability and event options", () => {
+      const resModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-booking");
+      expect(resModule).toBeDefined();
+      expect(resModule?.category).toBe("contacto");
+
+      const resBlock = createBlockFromBuiltinModule(resModule!);
+      expect(resBlock.fields.length).toBeGreaterThan(10);
+      expect(resBlock.values.title).toBe("Asegurá tu Mesa");
+      expect(resBlock.values.btnSubmitLabel).toBe("Confirmar Reserva");
+
+      const doc = createDefaultLandingDocument("Bistró Gourmet", "bistro-gourmet");
+      doc.blocks.push(resBlock);
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "Bistró Gourmet",
+        restaurantSlug: "bistro-gourmet",
+      });
+
+      // Verify interpolated slug and restaurant name
+      expect(compiled.fullHtml).toContain('data-restaurant-slug="bistro-gourmet"');
+      expect(compiled.fullHtml).toContain('data-restaurant-name="Bistró Gourmet"');
+      expect(compiled.fullHtml).toContain("resBookingForm");
+      expect(compiled.fullHtml).toContain("resPartyPills");
+      expect(compiled.fullHtml).toContain("resSlotsContainer");
+      expect(compiled.fullHtml).toContain("resSuccessView");
+      expect(compiled.fullHtml).toContain("resVoucherCode");
+      expect(compiled.fullHtml).toContain("resVoucherWaBtn");
+
+      // Verify CSS styles are generated
+      expect(compiled.cssContent).toContain(".reservation-container");
+      expect(compiled.cssContent).toContain(".res-party-pill");
+      expect(compiled.cssContent).toContain(".res-slot-pill");
+      expect(compiled.cssContent).toContain(".res-voucher-card");
+
+      // Verify JS script is included and connects to public availability & booking endpoints
+      expect(compiled.jsContent).toContain("/api/public/landing/");
+      expect(compiled.jsContent).toContain("/reservations/availability");
+      expect(compiled.jsContent).toContain("data-restaurant-slug");
+      expect(compiled.jsContent).toContain("resBookingForm");
+    });
+
+    it("correctly compiles the dedicated reservations-table module with interactive 14-day chips and slots", () => {
+      const tableModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-table");
+      expect(tableModule).toBeDefined();
+      expect(tableModule?.category).toBe("contacto");
+
+      const tableBlock = createBlockFromBuiltinModule(tableModule!);
+      expect(tableBlock.fields.length).toBeGreaterThan(10);
+      expect(tableBlock.values.title).toBe("Asegurá tu Mesa");
+
+      const doc = createDefaultLandingDocument("La Terraza", "la-terraza");
+      doc.blocks.push(tableBlock);
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "La Terraza",
+        restaurantSlug: "la-terraza",
+      });
+
+      expect(compiled.fullHtml).toContain('data-restaurant-slug="la-terraza"');
+      expect(compiled.fullHtml).toContain("resDaysRow");
+      expect(compiled.fullHtml).toContain("resSlotsContainer");
+      expect(compiled.fullHtml).toContain("resTableForm");
+      expect(compiled.cssContent).toContain(".res-day-chip");
+      expect(compiled.cssContent).toContain(".res-slot-pill");
+      expect(compiled.jsContent).toContain("/reservations/tables/availability");
+      expect(compiled.jsContent).toContain("/reservations/tables");
+    });
+
+    it("correctly compiles the dedicated reservations-events module with cards and booking modal", () => {
+      const eventsModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-events");
+      expect(eventsModule).toBeDefined();
+      expect(eventsModule?.category).toBe("contacto");
+
+      const eventsBlock = createBlockFromBuiltinModule(eventsModule!);
+      expect(eventsBlock.values.title).toBe("Noches Especiales & Eventos");
+
+      const doc = createDefaultLandingDocument("La Terraza", "la-terraza");
+      doc.blocks.push(eventsBlock);
+
+      const compiled = compileLandingFromDocument(doc, {
+        restaurantName: "La Terraza",
+        restaurantSlug: "la-terraza",
+      });
+
+      expect(compiled.fullHtml).toContain("eventsListGrid");
+      expect(compiled.fullHtml).toContain("eventModalBackdrop");
+      expect(compiled.fullHtml).toContain("eventBookingForm");
+      expect(compiled.cssContent).toContain(".events-grid");
+      expect(compiled.cssContent).toContain(".event-card");
+      expect(compiled.jsContent).toContain("/reservations/events");
+    });
   });
 });
 

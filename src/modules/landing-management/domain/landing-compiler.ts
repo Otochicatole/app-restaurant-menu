@@ -26,7 +26,11 @@ export type CompileLandingInput = {
   title?: string;
 };
 
-const SYSTEM_VARIABLES = new Set(["restaurantName", "menuUrl"]);
+const SYSTEM_VARIABLES = new Set([
+  "restaurantName",
+  "menuUrl",
+  "restaurantSlug",
+]);
 
 const VOID_HTML_TAGS = new Set([
   "area",
@@ -467,16 +471,19 @@ export function interpolateBlockHtml(
   const safeRestaurantName = escapeHtml(
     context.restaurantName.trim() || "Nuestro Restaurante",
   );
+  const safeRestaurantSlug = escapeHtml(context.restaurantSlug.trim());
   const menuUrl = `/m/${context.restaurantSlug}`;
   const isInteractive = Boolean(options?.interactiveEditor);
 
   const resolveTokens = (raw: string): string =>
     raw
       .replace(/\{\{\s*restaurantName\s*\}\}/g, safeRestaurantName)
+      .replace(/\{\{\s*restaurantSlug\s*\}\}/g, safeRestaurantSlug)
       .replace(/\{\{\s*menuUrl\s*\}\}/g, menuUrl);
 
   const replaceToken = (key: string, insideTag: boolean): string => {
     if (key === "restaurantName") return safeRestaurantName;
+    if (key === "restaurantSlug") return safeRestaurantSlug;
     if (key === "menuUrl") return menuUrl;
     const rawVal =
       block.values[key] ??
@@ -1537,7 +1544,41 @@ a[data-original-href] {
     var position = currentDropPosition;
     clearDropIndicators();
 
-    if (!targetEl) return;
+    if (!targetEl) {
+      var droppedBuiltinKey = '';
+      var droppedCustomId = '';
+      try {
+        if (e.dataTransfer) {
+          droppedBuiltinKey = e.dataTransfer.getData('application/x-landing-builtin') || '';
+          droppedCustomId = e.dataTransfer.getData('application/x-landing-custom') || '';
+          var pt = e.dataTransfer.getData('text/plain') || '';
+          if (!droppedBuiltinKey && pt.indexOf('landing-builtin:') === 0) {
+            droppedBuiltinKey = pt.substring('landing-builtin:'.length);
+          }
+          if (!droppedCustomId && pt.indexOf('landing-custom:') === 0) {
+            droppedCustomId = pt.substring('landing-custom:'.length);
+          }
+        }
+      } catch (_) {}
+      if (!droppedBuiltinKey && window.parent && window.parent.__draggedBuiltinKey) {
+        droppedBuiltinKey = window.parent.__draggedBuiltinKey;
+      }
+      if (!droppedCustomId && window.parent && window.parent.__draggedCustomId) {
+        droppedCustomId = window.parent.__draggedCustomId;
+      }
+      if (droppedBuiltinKey || droppedCustomId) {
+        window.parent.postMessage({
+          type: 'LANDING_CANVAS_DROP',
+          blockId: null,
+          subSelector: null,
+          position: 'after',
+          componentKind: '',
+          builtinKey: droppedBuiltinKey,
+          customId: droppedCustomId
+        }, '*');
+      }
+      return;
+    }
     var targetBlockEl = closestEl(targetEl, '[data-landing-block]');
     if (!targetBlockEl) return;
     var targetBlockId = targetBlockEl.getAttribute('data-landing-block');
@@ -1912,17 +1953,33 @@ a[data-original-href] {
       }
     } else if (e.data.type === 'LANDING_SYNC_STATE') {
       if (typeof e.data.previewMode === 'boolean') {
-        document.documentElement.setAttribute('data-preview-mode', e.data.previewMode ? 'true' : 'false');
+        var prevPm = document.documentElement.getAttribute('data-preview-mode');
+        var newPm = e.data.previewMode ? 'true' : 'false';
+        document.documentElement.setAttribute('data-preview-mode', newPm);
+        if (prevPm !== newPm && typeof window.__initLandingModuleScripts === 'function') {
+          try { window.__initLandingModuleScripts(); } catch (err) {}
+        }
       }
-      if (typeof e.data.scrollY === 'number' && e.data.scrollY > 0) {
+      if (typeof e.data.scrollY === 'number' && e.data.scrollY > 0 && !e.data.scrollIntoView) {
         window.scrollTo({ top: e.data.scrollY, left: 0, behavior: 'instant' });
       }
       neutralizeLinks();
       applySelection(e.data.blockId || null, e.data.subSelector || currentSubSelector);
+      if (e.data.scrollIntoView && e.data.blockId) {
+        var scrollSyncTarget = document.querySelector('[data-landing-block="' + e.data.blockId + '"]');
+        if (scrollSyncTarget) {
+          scrollSyncTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
     } else if (e.data.type === 'LANDING_LIVE_PATCH') {
       var prevScrollY = window.scrollY || document.documentElement.scrollTop || 0;
       if (typeof e.data.previewMode === 'boolean') {
-        document.documentElement.setAttribute('data-preview-mode', e.data.previewMode ? 'true' : 'false');
+        var prevPm = document.documentElement.getAttribute('data-preview-mode');
+        var newPm = e.data.previewMode ? 'true' : 'false';
+        document.documentElement.setAttribute('data-preview-mode', newPm);
+        if (prevPm !== newPm && typeof window.__initLandingModuleScripts === 'function') {
+          try { window.__initLandingModuleScripts(); } catch (err) {}
+        }
       }
       if (typeof e.data.cssContent === 'string') {
         var styleEl = document.getElementById('custom-landing-css');
@@ -1948,6 +2005,9 @@ a[data-original-href] {
         }
         neutralizeLinks();
         runDynamicHelpers();
+        if (typeof window.__initLandingModuleScripts === 'function') {
+          try { window.__initLandingModuleScripts(); } catch (err) { console.error('Error in __initLandingModuleScripts:', err); }
+        }
         var selRes = applySelection(e.data.selectedBlockId || null, targetSubSel);
         if (selRes.activeBlockEl && selRes.activeSubEl && e.data.notifySubElement) {
           var subPayload = buildSubElementPayload(selRes.activeBlockEl, selRes.activeSubEl);
@@ -2051,7 +2111,7 @@ export function compileLandingFromDocument(
   }
 
   const combinedModuleJs = jsParts.length
-    ? `(function() {\n  function __initModuleScripts() {\n${jsParts.join("\n\n")}\n  }\n  if (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', __initModuleScripts);\n  } else {\n    __initModuleScripts();\n  }\n})();`
+    ? `(function() {\n  function __initModuleScripts() {\n${jsParts.join("\n\n")}\n  }\n  window.__initLandingModuleScripts = __initModuleScripts;\n  if (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', __initModuleScripts);\n  } else {\n    __initModuleScripts();\n  }\n})();`
     : "";
 
   const finalJsParts = [combinedModuleJs, document.globalJs.trim()].filter(Boolean);

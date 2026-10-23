@@ -3,6 +3,7 @@ const businessModules = [
   "landing-management",
   "menu-editor",
   "public-menu",
+  "reservation-management",
   "tenant-management",
 ];
 

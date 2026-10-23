@@ -8,7 +8,8 @@ const cachedClient = globalForPrisma.restaurantMenuPrisma;
 const hasLatestDelegates =
   Boolean(cachedClient) &&
   typeof cachedClient?.landingCustomModule !== "undefined" &&
-  typeof cachedClient?.landingTemplate !== "undefined";
+  typeof cachedClient?.landingTemplate !== "undefined" &&
+  typeof cachedClient?.tableReservation !== "undefined";
 
 export const prisma =
   hasLatestDelegates && cachedClient
@@ -18,4 +19,3 @@ export const prisma =
 if (env.NODE_ENV !== "production") {
   globalForPrisma.restaurantMenuPrisma = prisma;
 }
-

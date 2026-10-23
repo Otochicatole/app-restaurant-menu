@@ -58,6 +58,7 @@ import {
   MapPin,
   HelpCircle,
   BarChart3,
+  CalendarDays,
   Megaphone,
   Utensils,
   PanelBottom,
@@ -75,6 +76,7 @@ import {
   Rows,
   Scan,
   Square,
+  PartyPopper,
   CornerUpLeft,
   CornerUpRight,
   CornerDownLeft,
@@ -408,6 +410,8 @@ function getModuleIcon(moduleKey: string) {
   if (moduleKey === "promo-banner") return Megaphone;
   if (moduleKey === "testimonials") return MessageSquareQuote;
   if (moduleKey === "contact-hours") return MapPin;
+  if (moduleKey === "reservations-table" || moduleKey === "reservations-booking" || moduleKey === "reservations") return CalendarDays;
+  if (moduleKey === "reservations-events" || moduleKey === "events") return PartyPopper;
   if (moduleKey === "footer") return PanelBottom;
   if (moduleKey === "stats-strip") return BarChart3;
   if (moduleKey === "gallery-grid" || moduleKey === "image-spotlight") return ImageIcon;
@@ -4250,6 +4254,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           .replace(/\{\{\s*menuUrl\s*\}\}/g, menuUrl);
       }
       insertBlockSmartly(created);
+      setFeedback({
+        type: "success",
+        message: `Módulo "${definition.name}" agregado a tu página.`,
+      });
     },
     [insertBlockSmartly, tenant.name, tenant.slug],
   );
@@ -4258,6 +4266,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     (customModule: LandingCustomModuleView) => {
       const created = createBlockFromCustomModule(customModule);
       insertBlockSmartly(created);
+      setFeedback({
+        type: "success",
+        message: `Módulo "${customModule.name}" agregado a tu página.`,
+      });
     },
     [insertBlockSmartly],
   );
@@ -6206,22 +6218,31 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
               {/* Bottom pinned actions in Layers */}
               <div className="p-3 border-t border-zinc-200 space-y-2">
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("modules")}
+                    className="py-1.5 px-1 rounded-lg border border-dashed border-zinc-300 hover:border-amber-400 bg-zinc-50 hover:bg-amber-50/60 text-[11px] font-semibold text-zinc-700 hover:text-amber-700 flex items-center justify-center gap-1 transition-colors"
+                    title="Ver catálogo de módulos prearmados"
+                  >
+                    <Layers className="h-3 w-3 text-amber-600" />
+                    Módulo
+                  </button>
                   <button
                     type="button"
                     onClick={() => setLeftTab("components")}
-                    className="py-1.5 px-2 rounded-lg border border-dashed border-zinc-300 hover:border-blue-400 bg-zinc-50 hover:bg-blue-50/60 text-[11px] font-semibold text-zinc-700 hover:text-blue-700 flex items-center justify-center gap-1 transition-colors"
+                    className="py-1.5 px-1 rounded-lg border border-dashed border-zinc-300 hover:border-blue-400 bg-zinc-50 hover:bg-blue-50/60 text-[11px] font-semibold text-zinc-700 hover:text-blue-700 flex items-center justify-center gap-1 transition-colors"
                   >
                     <Plus className="h-3 w-3 text-blue-600" />
-                    Componente
+                    Elemento
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCreateContainerSection()}
-                    className="py-1.5 px-2 rounded-lg border border-dashed border-zinc-300 hover:border-violet-400 bg-zinc-50 hover:bg-violet-50/60 text-[11px] font-semibold text-zinc-700 hover:text-violet-700 flex items-center justify-center gap-1 transition-colors"
+                    className="py-1.5 px-1 rounded-lg border border-dashed border-zinc-300 hover:border-violet-400 bg-zinc-50 hover:bg-violet-50/60 text-[11px] font-semibold text-zinc-700 hover:text-violet-700 flex items-center justify-center gap-1 transition-colors"
                   >
                     <Box className="h-3 w-3 text-violet-600" />
-                    Contenedor
+                    Caja
                   </button>
                 </div>
                 <div className="flex items-center justify-between gap-2">
@@ -6429,9 +6450,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     {filteredBuiltinModules.map((mod) => {
                       const Icon = getModuleIcon(mod.moduleKey);
                       return (
-                        <button
+                        <div
                           key={mod.moduleKey}
-                          type="button"
                           draggable
                           onDragStart={(e) => {
                             try {
@@ -6455,25 +6475,40 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             setDraggedBuiltinKey(mod.moduleKey);
                           }}
                           onDragEnd={() => {
-                            const win = getDragWindow();
-                            if (win) {
-                              win.__draggedBuiltinKey = null;
-                            }
-                            draggedBuiltinKeyRef.current = null;
-                            setDraggedBuiltinKey(null);
-                            setIsDraggingComponentOverCanvas(false);
+                            setTimeout(() => {
+                              const win = getDragWindow();
+                              if (win) {
+                                win.__draggedBuiltinKey = null;
+                              }
+                              draggedBuiltinKeyRef.current = null;
+                              setDraggedBuiltinKey(null);
+                              setIsDraggingComponentOverCanvas(false);
+                            }, 150);
                           }}
                           onClick={() => handleAddBuiltinBlock(mod)}
-                          className="group flex flex-col items-center justify-center text-center p-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-blue-400 hover:shadow-xs transition-all cursor-grab active:cursor-grabbing"
+                          className="group flex flex-col items-center justify-between text-center p-3 rounded-xl bg-white hover:bg-blue-50/20 border border-zinc-200 hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer select-none"
                           title={mod.description}
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 group-hover:bg-blue-50 text-zinc-600 group-hover:text-blue-600 mb-2 transition-colors">
-                            <Icon className="h-4 w-4" />
+                          <div className="flex flex-col items-center w-full min-w-0">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 group-hover:bg-blue-50 text-zinc-600 group-hover:text-blue-600 mb-2 transition-colors">
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <span className="text-[11px] font-semibold text-zinc-800 line-clamp-2 leading-tight">
+                              {mod.name}
+                            </span>
                           </div>
-                          <span className="text-[11px] font-semibold text-zinc-800 line-clamp-2 leading-tight">
-                            {mod.name}
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddBuiltinBlock(mod);
+                            }}
+                            className="w-full mt-2.5 py-1 px-2 rounded-md bg-zinc-100 group-hover:bg-blue-600 text-zinc-700 group-hover:text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Agregar
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -6524,13 +6559,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                             setDraggedCustomId(cm.id);
                           }}
                           onDragEnd={() => {
-                            const win = getDragWindow();
-                            if (win) {
-                              win.__draggedCustomId = null;
-                            }
-                            draggedCustomIdRef.current = null;
-                            setDraggedCustomId(null);
-                            setIsDraggingComponentOverCanvas(false);
+                            setTimeout(() => {
+                              const win = getDragWindow();
+                              if (win) {
+                                win.__draggedCustomId = null;
+                              }
+                              draggedCustomIdRef.current = null;
+                              setDraggedCustomId(null);
+                              setIsDraggingComponentOverCanvas(false);
+                            }, 150);
                           }}
                           className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-amber-400 transition-colors cursor-grab shadow-2xs"
                         >
@@ -6763,12 +6800,15 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 srcDoc={debouncedSrcDoc}
                 sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
                 onLoad={() => {
+                  const shouldScroll = Boolean(pendingScrollBlockIdRef.current);
+                  pendingScrollBlockIdRef.current = null;
                   iframeRef.current?.contentWindow?.postMessage(
                     {
                       type: "LANDING_SYNC_STATE",
                       blockId: selectedBlockIdRef.current,
                       scrollY: iframeScrollYRef.current,
                       previewMode: !interactiveCanvasRef.current,
+                      scrollIntoView: shouldScroll,
                     },
                     "*",
                   );

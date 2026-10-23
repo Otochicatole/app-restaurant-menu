@@ -1,0 +1,26 @@
+import { NextRequest } from "next/server";
+import { handleApiError, successResponse } from "@/platform/http/api-response";
+import {
+  publicCreateReservationSchema,
+  reservationManagement,
+} from "@/modules/reservation-management/server";
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> },
+) {
+  try {
+    const { slug } = await params;
+    const json = await request.json();
+    const command = publicCreateReservationSchema.parse(json);
+
+    const reservation = await reservationManagement.createPublicReservation(
+      slug,
+      command,
+    );
+
+    return successResponse({ reservation }, 201);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
