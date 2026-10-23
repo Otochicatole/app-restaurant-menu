@@ -11,6 +11,7 @@ import {
   duplicateSubElementInBlock,
   extractTemplateVariables,
   insertInnerElementInBlock,
+  insertInnerElementInBlockWithSelector,
   moveBlockIntoBlock,
   moveSubElementBetweenBlocks,
   moveSubElementInBlock,
@@ -1091,6 +1092,59 @@ describe("landing-compiler", () => {
       const resAfter = reparentSubElementInBlock(block, col1Selector, col2Selector, "after");
       expect(resAfter).not.toBeNull();
       expect(resAfter!.block.htmlTemplate).toBeTruthy();
+    });
+
+    it("renders draggable block handle as <l-handle> to avoid nth-of-type selector skewing for <div> blocks", () => {
+      const doc = createDefaultLandingDocument("La Terraza", "la-terraza");
+      const editorCompiled = compileLandingFromDocument(
+        doc,
+        {
+          restaurantName: "La Terraza",
+          restaurantSlug: "la-terraza",
+        },
+        { interactiveEditor: true },
+      );
+
+      // Must be <l-handle> and not a direct <div> child
+      expect(editorCompiled.htmlContent).toContain("<l-handle class=\"landing-block-handle\"");
+      expect(editorCompiled.htmlContent).not.toContain("<div class=\"landing-block-handle\"");
+    });
+
+    it("inserts inner element and returns its new selector accurately via insertInnerElementInBlockWithSelector", () => {
+      const block = createBlankContainerBlock("columns-2");
+      const tree = buildBlockSubLayerTree(block);
+      const grid = tree[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(grid).toBeDefined();
+      const col1Selector = grid!.children[0].selector;
+
+      // Insert image into Column 1
+      const res1 = insertInnerElementInBlockWithSelector(block, col1Selector, "image", "inside");
+      expect(res1.newSelector).toBeTruthy();
+      expect(res1.newSelector).toContain("img");
+      expect(res1.block.htmlTemplate).toContain("<img");
+      expect(res1.block.htmlTemplate).not.toContain("Columna 1 — Arrastrá componentes aquí");
+      expect(res1.block.htmlTemplate).toContain("Columna 2 — Arrastrá componentes aquí");
+
+      // Column 1 should still exist and Column 2 should still exist (2 columns, not 3)
+      const treeAfter = buildBlockSubLayerTree(res1.block);
+      const gridAfter = treeAfter[0].children[0]?.children.find((c) => c.label.includes("Grilla"));
+      expect(gridAfter?.children.length).toBe(2);
+
+      // Now insert button into Column 1 before the image
+      const res2 = insertInnerElementInBlockWithSelector(res1.block, res1.newSelector, "button", "before");
+      expect(res2.newSelector).toBeTruthy();
+      expect(res2.newSelector).toContain("a:nth-of-type(1)");
+      expect(res2.block.htmlTemplate).toContain("btn-primary");
+    });
+
+    it("falls back safely to replacing placeholder if targetSelector was stale or not found", () => {
+      const block = createBlankContainerBlock("container");
+      expect(block.htmlTemplate).toContain("Contenedor Libre");
+
+      const res = insertInnerElementInBlockWithSelector(block, "non-existent-selector > div", "heading", "inside");
+      expect(res.newSelector).toBeTruthy();
+      expect(res.block.htmlTemplate).toContain("<h3");
+      expect(res.block.htmlTemplate).not.toContain("Contenedor Libre");
     });
   });
 });

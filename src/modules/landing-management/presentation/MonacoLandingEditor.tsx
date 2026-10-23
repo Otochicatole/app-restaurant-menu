@@ -111,6 +111,7 @@ import {
   deleteSubElementInBlock,
   duplicateSubElementInBlock,
   insertInnerElementInBlock,
+  insertInnerElementInBlockWithSelector,
   moveBlockIntoBlock,
   moveSubElementBetweenBlocks,
   moveSubElementInBlock,
@@ -3890,20 +3891,27 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   }, [draggedCustomId]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const handleGlobalDragEnd = () => {
       setIsDraggingComponentOverCanvas(false);
-      setDraggedComponentKind(null);
-      setDraggedBuiltinKey(null);
-      setDraggedCustomId(null);
-      const win = getDragWindow();
-      if (win) {
-        win.__draggedComponentKind = null;
-        win.__draggedBuiltinKey = null;
-        win.__draggedCustomId = null;
-      }
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setDraggedComponentKind(null);
+        setDraggedBuiltinKey(null);
+        setDraggedCustomId(null);
+        const win = getDragWindow();
+        if (win) {
+          win.__draggedComponentKind = null;
+          win.__draggedBuiltinKey = null;
+          win.__draggedCustomId = null;
+        }
+      }, 350);
     };
     window.addEventListener("dragend", handleGlobalDragEnd);
-    return () => window.removeEventListener("dragend", handleGlobalDragEnd);
+    return () => {
+      window.removeEventListener("dragend", handleGlobalDragEnd);
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const updateDocument = useCallback(
@@ -4448,7 +4456,9 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         kind !== "container" &&
         kind !== "columns-2" &&
         kind !== "columns-3" &&
-        kind !== "flex-row"
+        kind !== "columns-4" &&
+        kind !== "flex-row" &&
+        kind !== "flex-col"
       ) {
         created = insertInnerElementInBlock(created, null, kind);
       }
@@ -4902,18 +4912,27 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       targetSelector: string | null,
       kind: InsertableInnerElementKind,
       position: "inside" | "before" | "after" = "inside",
-    ) => {
+    ): string | null => {
+      let insertedSelector: string | null = null;
       updateDocument((prev) => ({
         ...prev,
         blocks: prev.blocks.map((b) => {
           if (b.id !== blockId) return b;
-          return insertInnerElementInBlock(b, targetSelector, kind, position);
+          const result = insertInnerElementInBlockWithSelector(
+            b,
+            targetSelector,
+            kind,
+            position,
+          );
+          insertedSelector = result.newSelector;
+          return result.block;
         }),
       }));
       setFeedback({
         type: "success",
         message: "Nuevo elemento agregado al bloque.",
       });
+      return insertedSelector;
     },
     [updateDocument],
   );
@@ -5124,20 +5143,21 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
         if (compKind) {
           if (data.blockId) {
-            handleInsertInnerElement(
+            const newSel = handleInsertInnerElement(
               data.blockId,
               data.subSelector ?? null,
               compKind,
               data.position || "inside",
             );
-            selectSubElementOnStudio(data.blockId, data.subSelector ?? null);
+            selectSubElementOnStudio(data.blockId, newSel || (data.subSelector ?? null));
           } else if (selectedBlockIdRef.current) {
-            handleInsertInnerElement(
+            const newSel = handleInsertInnerElement(
               selectedBlockIdRef.current,
               null,
               compKind,
               data.position || "inside",
             );
+            selectSubElementOnStudio(selectedBlockIdRef.current, newSel);
           } else {
             handleCreateContainerSection(compKind);
           }
@@ -6570,33 +6590,46 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                               "text/plain",
                               `landing-component:${comp.kind}`,
                             );
-                            e.dataTransfer.effectAllowed = "copy";
+                            e.dataTransfer.effectAllowed = "all";
                           } catch {
                             // ignore dataTransfer access errors
                           }
                           const win = getDragWindow();
                           if (win) {
                             win.__draggedComponentKind = comp.kind;
+                            win.__draggedBuiltinKey = null;
+                            win.__draggedCustomId = null;
+                            win.__draggedLayerItem = null;
                           }
                           draggedComponentKindRef.current = comp.kind;
+                          draggedBuiltinKeyRef.current = null;
+                          draggedCustomIdRef.current = null;
                           setDraggedComponentKind(comp.kind);
+                          setDraggedBuiltinKey(null);
+                          setDraggedCustomId(null);
+                          setDraggedLayerItem(null);
                         }}
                         onDragEnd={() => {
-                          const win = getDragWindow();
-                          if (win) {
-                            win.__draggedComponentKind = null;
-                          }
-                          draggedComponentKindRef.current = null;
-                          setDraggedComponentKind(null);
                           setIsDraggingComponentOverCanvas(false);
+                          setTimeout(() => {
+                            const win = getDragWindow();
+                            if (win) {
+                              win.__draggedComponentKind = null;
+                            }
+                            draggedComponentKindRef.current = null;
+                            setDraggedComponentKind(null);
+                          }, 350);
                         }}
                         onClick={() => {
                           if (selectedBlockId) {
-                            handleInsertInnerElement(
+                            const newSel = handleInsertInnerElement(
                               selectedBlockId,
                               activeSubElement?.selector ?? null,
                               comp.kind,
                             );
+                            if (newSel) {
+                              selectSubElementOnStudio(selectedBlockId, newSel);
+                            }
                             setFeedback({
                               type: "success",
                               message: `Componente "${comp.name}" agregado.`,
@@ -6732,18 +6765,27 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                         "text/plain",
                                         `landing-builtin:${mod.moduleKey}`,
                                       );
-                                      e.dataTransfer.effectAllowed = "copy";
+                                      e.dataTransfer.effectAllowed = "all";
                                     } catch {
                                       // ignore
                                     }
                                     const win = getDragWindow();
                                     if (win) {
                                       win.__draggedBuiltinKey = mod.moduleKey;
+                                      win.__draggedComponentKind = null;
+                                      win.__draggedCustomId = null;
+                                      win.__draggedLayerItem = null;
                                     }
                                     draggedBuiltinKeyRef.current = mod.moduleKey;
+                                    draggedComponentKindRef.current = null;
+                                    draggedCustomIdRef.current = null;
                                     setDraggedBuiltinKey(mod.moduleKey);
+                                    setDraggedComponentKind(null);
+                                    setDraggedCustomId(null);
+                                    setDraggedLayerItem(null);
                                   }}
                                   onDragEnd={() => {
+                                    setIsDraggingComponentOverCanvas(false);
                                     setTimeout(() => {
                                       const win = getDragWindow();
                                       if (win) {
@@ -6751,8 +6793,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       }
                                       draggedBuiltinKeyRef.current = null;
                                       setDraggedBuiltinKey(null);
-                                      setIsDraggingComponentOverCanvas(false);
-                                    }, 150);
+                                    }, 350);
                                   }}
                                   onClick={() => handleAddBuiltinBlock(mod)}
                                   className={`group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-zinc-50/90 border border-zinc-200/90 ${meta.hoverBorder} transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs`}
@@ -6829,18 +6870,27 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     "text/plain",
                                     `landing-builtin:${mod.moduleKey}`,
                                   );
-                                  e.dataTransfer.effectAllowed = "copy";
+                                  e.dataTransfer.effectAllowed = "all";
                                 } catch {
                                   // ignore
                                 }
                                 const win = getDragWindow();
                                 if (win) {
                                   win.__draggedBuiltinKey = mod.moduleKey;
+                                  win.__draggedComponentKind = null;
+                                  win.__draggedCustomId = null;
+                                  win.__draggedLayerItem = null;
                                 }
                                 draggedBuiltinKeyRef.current = mod.moduleKey;
+                                draggedComponentKindRef.current = null;
+                                draggedCustomIdRef.current = null;
                                 setDraggedBuiltinKey(mod.moduleKey);
+                                setDraggedComponentKind(null);
+                                setDraggedCustomId(null);
+                                setDraggedLayerItem(null);
                               }}
                               onDragEnd={() => {
+                                setIsDraggingComponentOverCanvas(false);
                                 setTimeout(() => {
                                   const win = getDragWindow();
                                   if (win) {
@@ -6848,8 +6898,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   }
                                   draggedBuiltinKeyRef.current = null;
                                   setDraggedBuiltinKey(null);
-                                  setIsDraggingComponentOverCanvas(false);
-                                }, 150);
+                                }, 350);
                               }}
                               onClick={() => handleAddBuiltinBlock(mod)}
                               className={`group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-zinc-50/90 border border-zinc-200/90 ${meta.hoverBorder} transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs`}
@@ -6932,18 +6981,27 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   "text/plain",
                                   `landing-custom:${cm.id}`,
                                 );
-                                e.dataTransfer.effectAllowed = "copy";
+                                e.dataTransfer.effectAllowed = "all";
                               } catch {
                                 // ignore
                               }
                               const win = getDragWindow();
                               if (win) {
                                 win.__draggedCustomId = cm.id;
+                                win.__draggedBuiltinKey = null;
+                                win.__draggedComponentKind = null;
+                                win.__draggedLayerItem = null;
                               }
                               draggedCustomIdRef.current = cm.id;
+                              draggedBuiltinKeyRef.current = null;
+                              draggedComponentKindRef.current = null;
                               setDraggedCustomId(cm.id);
+                              setDraggedBuiltinKey(null);
+                              setDraggedComponentKind(null);
+                              setDraggedLayerItem(null);
                             }}
                             onDragEnd={() => {
+                              setIsDraggingComponentOverCanvas(false);
                               setTimeout(() => {
                                 const win = getDragWindow();
                                 if (win) {
@@ -6951,8 +7009,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                 }
                                 draggedCustomIdRef.current = null;
                                 setDraggedCustomId(null);
-                                setIsDraggingComponentOverCanvas(false);
-                              }, 150);
+                              }, 350);
                             }}
                             onClick={() => handleAddCustomBlock(cm)}
                             className="group flex items-start gap-2.5 p-2.5 rounded-xl bg-white hover:bg-amber-50/20 border border-zinc-200/90 hover:border-amber-300 transition-all cursor-grab active:cursor-grabbing select-none shadow-2xs hover:shadow-xs"
@@ -7072,6 +7129,11 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
           }}
           onDragOver={(e) => {
             e.preventDefault();
+            try {
+              e.dataTransfer.dropEffect = "copy";
+            } catch {
+              // ignore
+            }
             setIsDraggingComponentOverCanvas(true);
           }}
           onDragLeave={() => setIsDraggingComponentOverCanvas(false)}
@@ -7099,11 +7161,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
             if (compKind) {
               if (selectedBlockIdRef.current) {
-                handleInsertInnerElement(
+                const newSel = handleInsertInnerElement(
                   selectedBlockIdRef.current,
                   selectedSubElementRef.current?.selector ?? null,
                   compKind,
                 );
+                if (newSel) {
+                  selectSubElementOnStudio(selectedBlockIdRef.current, newSel);
+                }
               } else {
                 handleCreateContainerSection(compKind);
               }

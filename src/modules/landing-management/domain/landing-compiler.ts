@@ -930,6 +930,7 @@ html:not([data-preview-mode="true"]) .landing-drop-inside {
   white-space: nowrap;
 }
 /* Block Drag Handle on Canvas */
+l-handle.landing-block-handle,
 .landing-block-handle {
   position: absolute;
   top: 8px;
@@ -953,6 +954,8 @@ html:not([data-preview-mode="true"]) .landing-drop-inside {
   transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
   pointer-events: auto;
 }
+l-handle.landing-block-handle:hover,
+l-handle.landing-block-handle:active,
 .landing-block-handle:hover,
 .landing-block-handle:active {
   background: #1d4ed8;
@@ -999,11 +1002,14 @@ html:not([data-preview-mode="true"]) .landing-drop-inside {
 .landing-block-btn-down:hover {
   background: rgba(255, 255, 255, 0.4);
 }
+html:not([data-preview-mode="true"]) [data-landing-block]:hover > l-handle.landing-block-handle,
+html:not([data-preview-mode="true"]) [data-landing-block][data-selected="true"] > l-handle.landing-block-handle,
 html:not([data-preview-mode="true"]) [data-landing-block]:hover > .landing-block-handle,
 html:not([data-preview-mode="true"]) [data-landing-block][data-selected="true"] > .landing-block-handle {
   opacity: 1;
   transform: translateY(0);
 }
+html[data-preview-mode="true"] l-handle.landing-block-handle,
 html[data-preview-mode="true"] .landing-block-handle {
   display: none !important;
 }
@@ -1144,7 +1150,7 @@ a[data-original-href] {
     var parts = [];
     var cur = targetEl;
     while (cur && cur !== blockEl && cur.parentElement) {
-      if (cur.tagName.toLowerCase() === 'l-field' || cur.hasAttribute('data-landing-field')) {
+      if (cur.tagName.toLowerCase() === 'l-field' || cur.tagName.toLowerCase() === 'l-handle' || cur.classList.contains('landing-block-handle') || cur.hasAttribute('data-landing-field')) {
         cur = cur.parentElement;
         continue;
       }
@@ -1154,6 +1160,8 @@ a[data-original-href] {
       for (var i = 0; i < parent.children.length; i++) {
         var sib = parent.children[i];
         if (sib === cur) break;
+        if (sib.tagName.toLowerCase() === 'l-handle' || sib.classList.contains('landing-block-handle')) continue;
+        if (sib.id === '__landing-drop-indicator' || sib.id === '__landing-drop-badge') continue;
         if (sib.tagName.toLowerCase() === tag && !sib.hasAttribute('data-landing-field') && sib.tagName.toLowerCase() !== 'l-field') {
           nth++;
         }
@@ -1173,32 +1181,87 @@ a[data-original-href] {
     }
   }
 
+  function isPlaceholderDomElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.tagName.toLowerCase() !== 'p') return false;
+    var text = (el.textContent || '').trim();
+    return /Arrastr[áa]|Contenedor Libre|Columna \\d|Fila Flexible|Columna Flexible|Sub-secci[óo]n|Encabezado|Pie de p[áa]gina|Solt[áa] o agreg[áa]/i.test(text);
+  }
+
+  function getComponentKindLabel(kind) {
+    var map = {
+      'button': 'Botón',
+      'button-secondary': 'Botón Secundario',
+      'html-button': 'Botón Interactivo',
+      'link': 'Enlace',
+      'accordion': 'Acordeón / FAQ',
+      'image': 'Imagen',
+      'figure': 'Figura con Epígrafe',
+      'h1': 'Título H1',
+      'h2': 'Título H2',
+      'heading': 'Subtítulo H3',
+      'h4': 'Encabezado H4',
+      'text': 'Párrafo',
+      'badge': 'Insignia',
+      'blockquote': 'Cita Destacada',
+      'ul-list': 'Lista con Viñetas',
+      'ol-list': 'Lista Numerada',
+      'li-item': 'Ítem de Lista',
+      'card': 'Tarjeta (Card)',
+      'divider': 'Separador (HR)',
+      'spacer': 'Espaciador',
+      'section': 'Sub-Sección',
+      'container': 'Contenedor',
+      'flex-row': 'Fila Flexible',
+      'flex-col': 'Columna Flexible',
+      'columns-2': '2 Columnas',
+      'columns-3': '3 Columnas',
+      'columns-4': '4 Columnas',
+      'nav-bar': 'Barra de Navegación',
+      'header-box': 'Encabezado',
+      'footer-box': 'Pie de Sección'
+    };
+    return map[kind] || 'Componente';
+  }
+
   function isEditableContainer(el) {
     if (!el || el.nodeType !== 1) return false;
     var tag = el.tagName.toLowerCase();
+    if (
+      tag === 'img' || tag === 'input' || tag === 'button' || tag === 'textarea' ||
+      tag === 'select' || tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
+      tag === 'h5' || tag === 'h6' || tag === 'hr' || tag === 'l-handle' || tag === 'span' ||
+      tag === 'strong' || tag === 'em' || tag === 'small' || tag === 'b' || tag === 'i'
+    ) {
+      return false;
+    }
     var cls = el.className && typeof el.className === 'string' ? el.className : '';
-    if (tag === 'nav' || tag === 'aside' || tag === 'ul' || tag === 'ol' || tag === 'blockquote') {
+    if (tag === 'a' && !el.hasAttribute('data-landing-container') && !/\\b(card|container)\\b/.test(cls)) {
+      return false;
+    }
+    if (/\\b(btn|button|badge|pill|avatar|icon)\\b/.test(cls) && !/\\b(container|card)\\b/.test(cls)) {
+      return false;
+    }
+    if (el.hasAttribute('data-landing-block') || el.hasAttribute('data-landing-container')) {
       return true;
     }
-    if (/\\b(content-container|content-box|section-box|header-box|footer-box|nav-bar|aside-box|grid-columns-2|grid-columns-3|grid-columns-4|grid-column|flex-row|flex-col|spacer)\\b/.test(cls)) {
+    if (tag === 'section' || tag === 'article' || tag === 'header' || tag === 'footer' || tag === 'nav' || tag === 'aside' || tag === 'main' || tag === 'figure' || tag === 'ul' || tag === 'ol' || tag === 'blockquote') {
       return true;
     }
-    if (el.parentElement) {
-      var pCls = el.parentElement.className && typeof el.parentElement.className === 'string' ? el.parentElement.className : '';
-      if (/\\b(grid-columns-2|grid-columns-3|grid-columns-4|flex-row|flex-col)\\b/.test(pCls)) {
-        return true;
-      }
+    if (/\\b(container|content-container|content-box|section-box|header-box|footer-box|nav-bar|aside-box|grid-columns-2|grid-columns-3|grid-columns-4|grid-column|grid-2|grid-3|grid-4|grid|flex-row|flex-col|card|info-card|stat-card|spacer)\\b/.test(cls)) {
+      return true;
+    }
+    if (tag === 'div') {
+      return true;
     }
     return false;
   }
-
-
 
   function resolveSelectableSubElement(target, blockEl) {
     if (!target || !blockEl || target === blockEl) return null;
     var el = target.nodeType === 1 ? target : target.parentElement;
     if (!el || !blockEl.contains(el) || el === blockEl) return null;
-    if (closestEl(el, '.landing-block-handle, #__landing-drop-indicator, #__landing-drop-badge')) return null;
+    if (closestEl(el, '.landing-block-handle, l-handle, #__landing-drop-indicator, #__landing-drop-badge')) return null;
 
     // Resolve SVG shapes up to their root <svg> element
     var svgChild = closestEl(el, 'path, circle, rect, polygon, line, polyline, g');
@@ -1345,7 +1408,7 @@ a[data-original-href] {
     var blocks = document.querySelectorAll('[data-landing-block]');
     blocks.forEach(function(b) {
       b.setAttribute('draggable', isPreview ? 'false' : 'true');
-      var handle = b.querySelector('.landing-block-handle');
+      var handle = b.querySelector('.landing-block-handle, l-handle');
       if (handle) {
         handle.setAttribute('draggable', isPreview ? 'false' : 'true');
         var handleBtns = handle.querySelectorAll('button');
@@ -1355,7 +1418,7 @@ a[data-original-href] {
         'div, section, article, figure, nav, header, footer, h1, h2, h3, h4, h5, h6, p, blockquote, ul, ol, li, a, button, img, details, summary, span, .card, .info-card, .stat-card, .gallery-item, .faq-item, .flex-row, .flex-col, .grid-column, [data-landing-field]'
       );
       selectables.forEach(function(el) {
-        if (closestEl(el, '.landing-block-handle')) return;
+        if (closestEl(el, '.landing-block-handle, l-handle')) return;
         if (!el.classList.contains('landing-inline-editing') && !el.isContentEditable && document.activeElement !== el) {
           if (closestEl(el, '#navToggle, .nav-toggle, [data-nav-toggle]')) {
             el.setAttribute('draggable', 'false');
@@ -1389,7 +1452,6 @@ a[data-original-href] {
     dropBadge.style.display = 'none';
     if (currentDropTargetEl) {
       currentDropTargetEl.classList.remove('landing-drop-inside');
-      currentDropTargetEl = null;
     }
   }
 
@@ -1468,7 +1530,7 @@ a[data-original-href] {
       return;
     }
 
-    var handleEl = closestEl(e.target, '.landing-block-handle');
+    var handleEl = closestEl(e.target, '.landing-block-handle, l-handle');
     var blockEl = handleEl
       ? closestEl(handleEl, '[data-landing-block]')
       : closestEl(e.target, '[data-landing-block]');
@@ -1560,6 +1622,7 @@ a[data-original-href] {
     }
     currentDraggedItem = null;
     window.__draggedCanvasItem = null;
+    currentDropTargetEl = null;
     if (window.parent) {
       window.parent.__draggedCanvasItem = null;
       window.parent.__draggedLayerItem = null;
@@ -1574,26 +1637,38 @@ a[data-original-href] {
   document.addEventListener('dragover', function(e) {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
     e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move';
-    }
 
-    var droppedBuiltinKey = (window.parent && window.parent.__draggedBuiltinKey) || '';
-    var droppedCustomId = (window.parent && window.parent.__draggedCustomId) || '';
-    var isModuleDrag = Boolean(droppedBuiltinKey || droppedCustomId);
-    if (!isModuleDrag && e.dataTransfer && e.dataTransfer.types) {
-      for (var t = 0; t < e.dataTransfer.types.length; t++) {
-        var tStr = e.dataTransfer.types[t];
-        if (tStr === 'application/x-landing-builtin' || tStr === 'application/x-landing-custom') {
-          isModuleDrag = true;
-          break;
-        }
+    var types = (e.dataTransfer && e.dataTransfer.types) ? Array.prototype.slice.call(e.dataTransfer.types) : [];
+    var hasComponentType = types.indexOf('application/x-landing-component') !== -1;
+    var hasBuiltinType = types.indexOf('application/x-landing-builtin') !== -1;
+    var hasCustomType = types.indexOf('application/x-landing-custom') !== -1;
+    var hasLayerType = types.indexOf('application/x-landing-layer') !== -1;
+    var hasCanvasMoveType = types.indexOf('application/x-landing-canvas-move') !== -1;
+
+    var parentWin = window.parent || window.top;
+    var droppedBuiltinKey = (parentWin && parentWin.__draggedBuiltinKey) || '';
+    var droppedCustomId = (parentWin && parentWin.__draggedCustomId) || '';
+    var parentDraggedCompKind = (parentWin && parentWin.__draggedComponentKind) || '';
+    var parentDraggedLayer = (parentWin && parentWin.__draggedLayerItem) || null;
+    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (parentWin && parentWin.__draggedCanvasItem);
+
+    // 1. Is it a component drag?
+    var isComponentDrag = hasComponentType || (!hasBuiltinType && !hasCustomType && !hasLayerType && !hasCanvasMoveType && !canvasMove && Boolean(parentDraggedCompKind));
+
+    // 2. Is it a module drag (builtin or custom)?
+    var isModuleDrag = !isComponentDrag && (hasBuiltinType || hasCustomType || (!hasLayerType && !hasCanvasMoveType && !canvasMove && Boolean(droppedBuiltinKey || droppedCustomId)));
+
+    // 3. Is it a block reorder drag?
+    var isBlockDrag = !isComponentDrag && !isModuleDrag && (
+      (canvasMove && canvasMove.type === 'block') ||
+      (parentDraggedLayer && parentDraggedLayer.type === 'block')
+    );
+
+    try {
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = (isModuleDrag || isComponentDrag) ? 'copy' : 'move';
       }
-    }
-
-    var parentDraggedLayer = (window.parent && window.parent.__draggedLayerItem) || null;
-    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (window.parent && window.parent.__draggedCanvasItem);
-    var isBlockDrag = (!isModuleDrag && ((canvasMove && canvasMove.type === 'block') || (parentDraggedLayer && parentDraggedLayer.type === 'block')));
+    } catch (_) {}
 
     var blockEl = closestEl(e.target, '[data-landing-block]');
     if (!blockEl) {
@@ -1694,7 +1769,122 @@ a[data-original-href] {
       return;
     }
 
-    // 3. Subelement / object drag
+    // 3. Component drag from catalog into container or between elements
+    if (isComponentDrag) {
+      var compKind = parentDraggedCompKind || '';
+      var compName = getComponentKindLabel(compKind);
+      var targetEl = null;
+      var position = 'inside';
+
+      // Case 1: Cursor is over or inside a placeholder paragraph
+      var placeholderEl = closestEl(e.target, 'p');
+      if (placeholderEl && isPlaceholderDomElement(placeholderEl) && blockEl.contains(placeholderEl)) {
+        targetEl = placeholderEl;
+        position = 'inside';
+      } else {
+        // Case 2: Find target container or child within container
+        var targetContainer = isEditableContainer(e.target)
+          ? e.target
+          : closestEl(e.target, '.content-container, .content-box, .section-box, .header-box, .footer-box, .nav-bar, .grid-columns-2, .grid-columns-3, .grid-columns-4, .grid-column, .grid-2, .grid-3, .grid-4, .flex-row, .flex-col, .card, [data-landing-container], section, article, nav, header, footer') || blockEl;
+
+        // Check if targetContainer has a placeholder paragraph
+        var containerPlaceholder = targetContainer.querySelector ? targetContainer.querySelector('p') : null;
+        if (containerPlaceholder && isPlaceholderDomElement(containerPlaceholder)) {
+          targetEl = targetContainer;
+          position = 'inside';
+        } else {
+          // Check if hovering over a specific child element inside targetContainer
+          var subChild = resolveSelectableSubElement(e.target, blockEl);
+          if (subChild && subChild !== targetContainer && !isEditableContainer(subChild) && targetContainer.contains(subChild)) {
+            targetEl = subChild;
+            var parentComp = window.getComputedStyle(subChild.parentElement || targetContainer);
+            var isHoriz =
+              (parentComp.display === 'flex' && (parentComp.flexDirection === 'row' || parentComp.flexDirection === 'row-reverse')) ||
+              (parentComp.display === 'grid' && parentComp.gridTemplateColumns && parentComp.gridTemplateColumns.split(' ').length > 1) ||
+              subChild.parentElement.classList.contains('flex-row') ||
+              subChild.parentElement.classList.contains('grid');
+
+            var cRect = subChild.getBoundingClientRect();
+            if (isHoriz) {
+              var midX = cRect.left + cRect.width / 2;
+              position = e.clientX < midX ? 'before' : 'after';
+            } else {
+              var midY = cRect.top + cRect.height / 2;
+              position = e.clientY < midY ? 'before' : 'after';
+            }
+          } else {
+            targetEl = targetContainer;
+            position = 'inside';
+          }
+        }
+      }
+
+      if (currentDropTargetEl && currentDropTargetEl !== targetEl) {
+        currentDropTargetEl.classList.remove('landing-drop-inside');
+      }
+      currentDropTargetEl = targetEl;
+      currentDropPosition = position;
+
+      var scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      var scrollX = window.scrollX || document.documentElement.scrollLeft || 0;
+      var rect = targetEl.getBoundingClientRect();
+
+      if (position === 'inside') {
+        dropIndicator.style.display = 'none';
+        targetEl.classList.add('landing-drop-inside');
+
+        var isPl = isPlaceholderDomElement(targetEl) || (targetEl.querySelector && isPlaceholderDomElement(targetEl.querySelector('p')));
+        dropBadge.textContent = isPl
+          ? ('📥 Reemplazar placeholder con ' + compName)
+          : ('📥 Insertar ' + compName + ' en ' + (targetEl === blockEl ? (blockEl.getAttribute('data-block-label') || 'Sección') : describeElement(targetEl)));
+
+        dropBadge.style.top = Math.max(8, rect.top + scrollY + 6) + 'px';
+        dropBadge.style.left = (rect.left + scrollX + 12) + 'px';
+        dropBadge.style.display = 'block';
+      } else {
+        targetEl.classList.remove('landing-drop-inside');
+        var parentComp = window.getComputedStyle(targetEl.parentElement || blockEl);
+        var isHoriz =
+          (parentComp.display === 'flex' && (parentComp.flexDirection === 'row' || parentComp.flexDirection === 'row-reverse')) ||
+          (parentComp.display === 'grid' && parentComp.gridTemplateColumns && parentComp.gridTemplateColumns.split(' ').length > 1) ||
+          targetEl.parentElement.classList.contains('flex-row') ||
+          targetEl.parentElement.classList.contains('grid');
+
+        if (isHoriz) {
+          var x = position === 'before' ? rect.left : rect.right;
+          dropIndicator.style.top = (rect.top + scrollY) + 'px';
+          dropIndicator.style.left = (x + scrollX - 2) + 'px';
+          dropIndicator.style.width = '4px';
+          dropIndicator.style.height = rect.height + 'px';
+          dropIndicator.style.backgroundColor = '#2563eb';
+          dropIndicator.style.borderRadius = '2px';
+          dropIndicator.style.boxShadow = '0 0 10px rgba(37, 99, 235, 0.75)';
+
+          dropBadge.textContent = (position === 'before' ? '⬅️ Insertar ' : '➡️ Insertar ') + compName + (position === 'before' ? ' antes de ' : ' después de ') + describeElement(targetEl);
+          dropBadge.style.top = Math.max(8, rect.top + scrollY - 26) + 'px';
+          dropBadge.style.left = (x + scrollX + 8) + 'px';
+        } else {
+          var y = position === 'before' ? rect.top : rect.bottom;
+          dropIndicator.style.top = (y + scrollY - 2) + 'px';
+          dropIndicator.style.left = (rect.left + scrollX) + 'px';
+          dropIndicator.style.width = rect.width + 'px';
+          dropIndicator.style.height = '4px';
+          dropIndicator.style.backgroundColor = '#2563eb';
+          dropIndicator.style.borderRadius = '2px';
+          dropIndicator.style.boxShadow = '0 0 10px rgba(37, 99, 235, 0.75)';
+
+          dropBadge.textContent = (position === 'before' ? '⬆️ Insertar ' : '⬇️ Insertar ') + compName + (position === 'before' ? ' antes de ' : ' después de ') + describeElement(targetEl);
+          var badgeTop = position === 'before' ? (rect.top + scrollY - 26) : (rect.bottom + scrollY + 4);
+          dropBadge.style.top = Math.max(8, badgeTop) + 'px';
+          dropBadge.style.left = (rect.left + scrollX + 16) + 'px';
+        }
+        dropIndicator.style.display = 'block';
+        dropBadge.style.display = 'block';
+      }
+      return;
+    }
+
+    // 4. Existing Subelement / canvas move drag
     if (currentDraggedSourceEl && (currentDraggedSourceEl === e.target || currentDraggedSourceEl.contains(e.target))) {
       clearDropIndicators();
       return;
@@ -1831,17 +2021,23 @@ a[data-original-href] {
     if (document.documentElement.getAttribute('data-preview-mode') === 'true') return;
     e.preventDefault();
 
-    var targetEl = currentDropTargetEl;
+    var targetEl = currentDropTargetEl || e.target;
     var position = currentDropPosition || 'after';
     clearDropIndicators();
+    currentDropTargetEl = null;
 
     var droppedBuiltinKey = '';
     var droppedCustomId = '';
+    var componentKind = '';
     try {
       if (e.dataTransfer) {
+        componentKind = e.dataTransfer.getData('application/x-landing-component') || '';
         droppedBuiltinKey = e.dataTransfer.getData('application/x-landing-builtin') || '';
         droppedCustomId = e.dataTransfer.getData('application/x-landing-custom') || '';
         var pt = e.dataTransfer.getData('text/plain') || '';
+        if (!componentKind && pt.indexOf('landing-component:') === 0) {
+          componentKind = pt.substring('landing-component:'.length);
+        }
         if (!droppedBuiltinKey && pt.indexOf('landing-builtin:') === 0) {
           droppedBuiltinKey = pt.substring('landing-builtin:'.length);
         }
@@ -1850,16 +2046,24 @@ a[data-original-href] {
         }
       }
     } catch (_) {}
-    if (!droppedBuiltinKey && window.parent && window.parent.__draggedBuiltinKey) {
-      droppedBuiltinKey = window.parent.__draggedBuiltinKey;
+
+    var parentWin = window.parent || window.top;
+    if (!componentKind && parentWin && parentWin.__draggedComponentKind) {
+      componentKind = parentWin.__draggedComponentKind;
     }
-    if (!droppedCustomId && window.parent && window.parent.__draggedCustomId) {
-      droppedCustomId = window.parent.__draggedCustomId;
+    if (!droppedBuiltinKey && parentWin && parentWin.__draggedBuiltinKey) {
+      droppedBuiltinKey = parentWin.__draggedBuiltinKey;
+    }
+    if (!droppedCustomId && parentWin && parentWin.__draggedCustomId) {
+      droppedCustomId = parentWin.__draggedCustomId;
     }
 
-    var isModuleDrop = Boolean(droppedBuiltinKey || droppedCustomId);
+    var isComponentDrop = Boolean(componentKind);
+    var isModuleDrop = !isComponentDrop && Boolean(droppedBuiltinKey || droppedCustomId);
 
-    if (!targetEl && isModuleDrop) {
+    // Fallback if targetEl is generic/root
+    var isGenericRoot = !targetEl || targetEl === document || targetEl === document.documentElement || targetEl === document.body || (targetEl.id === '_landing-blocks-root');
+    if (isGenericRoot) {
       var allBlocks = Array.prototype.slice.call(document.querySelectorAll('[data-landing-block]'));
       if (allBlocks.length > 0) {
         var cursorY = e.clientY;
@@ -1894,9 +2098,9 @@ a[data-original-href] {
       return;
     }
 
-    var parentDraggedLayer = (window.parent && window.parent.__draggedLayerItem) || null;
-    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (window.parent && window.parent.__draggedCanvasItem);
-    var isBlockDrop = (!isModuleDrop && ((canvasMove && canvasMove.type === 'block') || (parentDraggedLayer && parentDraggedLayer.type === 'block')));
+    var parentDraggedLayer = (parentWin && parentWin.__draggedLayerItem) || null;
+    var canvasMove = currentDraggedItem || window.__draggedCanvasItem || (parentWin && parentWin.__draggedCanvasItem);
+    var isBlockDrop = (!isComponentDrop && !isModuleDrop && ((canvasMove && canvasMove.type === 'block') || (parentDraggedLayer && parentDraggedLayer.type === 'block')));
 
     if (isBlockDrop) {
       var sourceBlockId = (canvasMove && canvasMove.blockId) || (parentDraggedLayer && parentDraggedLayer.blockId);
@@ -1922,17 +2126,17 @@ a[data-original-href] {
       return;
     }
 
-    if (!targetEl) {
-      return;
+    var targetBlockEl = targetEl ? closestEl(targetEl, '[data-landing-block]') : null;
+    if (!targetBlockEl) {
+      var firstBlock = document.querySelector('[data-landing-block]');
+      if (firstBlock) targetBlockEl = firstBlock;
     }
-    var targetBlockEl = closestEl(targetEl, '[data-landing-block]');
-    if (!targetBlockEl) return;
-    var targetBlockId = targetBlockEl.getAttribute('data-landing-block');
-    var isTargetBlockRoot = targetEl === targetBlockEl;
+    var targetBlockId = targetBlockEl ? targetBlockEl.getAttribute('data-landing-block') : null;
+    var isTargetBlockRoot = !targetEl || targetEl === targetBlockEl || isGenericRoot;
     var targetSelector = isTargetBlockRoot ? null : computeRelativeSelector(targetBlockEl, targetEl);
 
-    var canvasMoveItem = canvasMove || parentDraggedLayer;
-    if (!canvasMoveItem && e.dataTransfer) {
+    var canvasMoveItem = (!isComponentDrop && !isModuleDrop) ? (canvasMove || parentDraggedLayer) : null;
+    if (!canvasMoveItem && !isComponentDrop && !isModuleDrop && e.dataTransfer) {
       try {
         var raw = e.dataTransfer.getData('application/x-landing-canvas-move');
         if (raw) canvasMoveItem = JSON.parse(raw);
@@ -1952,45 +2156,14 @@ a[data-original-href] {
       return;
     }
 
-    var componentKind = '';
-    var builtinKey = '';
-    var customId = '';
-    try {
-      if (e.dataTransfer) {
-        componentKind = e.dataTransfer.getData('application/x-landing-component') || '';
-        builtinKey = e.dataTransfer.getData('application/x-landing-builtin') || '';
-        customId = e.dataTransfer.getData('application/x-landing-custom') || '';
-        var plainText = e.dataTransfer.getData('text/plain') || '';
-        if (!componentKind && plainText.indexOf('landing-component:') === 0) {
-          componentKind = plainText.substring('landing-component:'.length);
-        }
-        if (!builtinKey && plainText.indexOf('landing-builtin:') === 0) {
-          builtinKey = plainText.substring('landing-builtin:'.length);
-        }
-        if (!customId && plainText.indexOf('landing-custom:') === 0) {
-          customId = plainText.substring('landing-custom:'.length);
-        }
-      }
-    } catch (_) {}
-
-    if (!componentKind && window.parent && window.parent.__draggedComponentKind) {
-      componentKind = window.parent.__draggedComponentKind;
-    }
-    if (!builtinKey && window.parent && window.parent.__draggedBuiltinKey) {
-      builtinKey = window.parent.__draggedBuiltinKey;
-    }
-    if (!customId && window.parent && window.parent.__draggedCustomId) {
-      customId = window.parent.__draggedCustomId;
-    }
-
     window.parent.postMessage({
       type: 'LANDING_CANVAS_DROP',
       blockId: targetBlockId,
       subSelector: targetSelector,
       position: position,
       componentKind: componentKind,
-      builtinKey: builtinKey,
-      customId: customId
+      builtinKey: droppedBuiltinKey,
+      customId: droppedCustomId
     }, '*');
   }, false);
 
@@ -2064,7 +2237,7 @@ a[data-original-href] {
       return;
     }
 
-    var blockHandle = closestEl(e.target, '.landing-block-handle');
+    var blockHandle = closestEl(e.target, '.landing-block-handle, l-handle');
     if (blockHandle) {
       e.preventDefault();
       e.stopPropagation();
@@ -2494,7 +2667,7 @@ export function compileLandingFromDocument(
     const idAttr = innerHasSameId ? "" : ` id="${escapeHtml(anchorId)}"`;
 
     const handleHtml = options?.interactiveEditor
-      ? `\n  <div class="landing-block-handle" draggable="true" data-landing-block-handle="${escapeHtml(block.id)}" title="Arrastrar para reordenar módulo">\n    <span class="landing-drag-grip">⋮⋮</span>\n    <span class="landing-block-handle-title">${escapeHtml(block.name)}</span>\n    <div class="landing-block-handle-actions">\n      <button type="button" class="landing-block-btn-up" title="Subir módulo (anterior)">▲</button>\n      <button type="button" class="landing-block-btn-down" title="Bajar módulo (siguiente)">▼</button>\n    </div>\n  </div>`
+      ? `\n  <l-handle class="landing-block-handle" draggable="true" data-landing-block-handle="${escapeHtml(block.id)}" title="Arrastrar para reordenar módulo">\n    <span class="landing-drag-grip">⋮⋮</span>\n    <span class="landing-block-handle-title">${escapeHtml(block.name)}</span>\n    <div class="landing-block-handle-actions">\n      <button type="button" class="landing-block-btn-up" title="Subir módulo (anterior)">▲</button>\n      <button type="button" class="landing-block-btn-down" title="Bajar módulo (siguiente)">▼</button>\n    </div>\n  </l-handle>`
       : "";
 
     htmlParts.push(
@@ -3457,12 +3630,12 @@ export type InsertableInnerElementKind =
   | "divider"
   | "spacer";
 
-export function insertInnerElementInBlock(
+export function insertInnerElementInBlockWithSelector(
   block: LandingBlock,
   targetSelector: string | null,
   kind: InsertableInnerElementKind,
   position: "inside" | "before" | "after" = "inside",
-): LandingBlock {
+): { block: LandingBlock; newSelector: string | null } {
   const usedKeys = new Set<string>([
     ...extractTemplateVariables(block.htmlTemplate),
     ...block.fields.map((f) => f.key),
@@ -3708,10 +3881,6 @@ export function insertInnerElementInBlock(
           start: found.node.startOffset,
           end: found.node.endOffset,
         };
-      } else if (position === "before") {
-        insertOffset = found.node.startOffset;
-      } else if (position === "after") {
-        insertOffset = found.node.endOffset;
       } else {
         const placeholderChild = found.node.children.find((c) =>
           isPlaceholderParagraph(c, block.htmlTemplate),
@@ -3721,6 +3890,10 @@ export function insertInnerElementInBlock(
             start: placeholderChild.startOffset,
             end: placeholderChild.endOffset,
           };
+        } else if (position === "before") {
+          insertOffset = found.node.startOffset;
+        } else if (position === "after") {
+          insertOffset = found.node.endOffset;
         } else {
           const containerTags = new Set([
             "div",
@@ -3730,6 +3903,7 @@ export function insertInnerElementInBlock(
             "footer",
             "nav",
             "aside",
+            "main",
             "figure",
             "details",
             "ul",
@@ -3746,6 +3920,30 @@ export function insertInnerElementInBlock(
             insertOffset = found.node.endOffset;
           }
         }
+      }
+    } else if (ast.length > 0) {
+      // Fallback: targetSelector was not resolved in AST, search for any placeholder in block
+      const rootNode = ast[0]!;
+      let foundPlaceholder: HtmlAstNode | null = null;
+      const walk = (n: HtmlAstNode) => {
+        if (foundPlaceholder) return;
+        if (isPlaceholderParagraph(n, block.htmlTemplate)) {
+          foundPlaceholder = n;
+          return;
+        }
+        for (const child of n.children) walk(child);
+      };
+      walk(rootNode);
+
+      if (foundPlaceholder) {
+        replaceRange = {
+          start: (foundPlaceholder as HtmlAstNode).startOffset,
+          end: (foundPlaceholder as HtmlAstNode).endOffset,
+        };
+      } else {
+        const firstContainer =
+          rootNode.children.find((c) => c.tagName === "div") ?? rootNode;
+        insertOffset = firstContainer.innerEndOffset;
       }
     }
   } else if (ast.length > 0) {
@@ -3773,28 +3971,54 @@ export function insertInnerElementInBlock(
     }
   }
 
-  const nextHtmlTemplate = replaceRange
+  const markedSnippet = insertMarkerIntoHtml(snippet);
+  const markedHtmlTemplate = replaceRange
     ? block.htmlTemplate.slice(0, replaceRange.start) +
-      snippet +
+      markedSnippet +
       block.htmlTemplate.slice(replaceRange.end)
     : block.htmlTemplate.slice(0, insertOffset) +
       "\n" +
-      snippet +
+      markedSnippet +
       "\n" +
       block.htmlTemplate.slice(insertOffset);
+
+  const nextAst = parseHtmlTemplateAst(markedHtmlTemplate);
+  const newSelector = findSelectorForAstNode(nextAst, (n) =>
+    markedHtmlTemplate
+      .slice(n.startOffset, n.openTagEndOffset)
+      .includes(DRAG_MOVE_MARKER),
+  );
+  const finalHtmlTemplate = stripMarkerFromHtml(markedHtmlTemplate);
 
   const synced = syncFieldsWithHtmlTemplate(
     nextFields,
     nextValues,
-    nextHtmlTemplate,
+    finalHtmlTemplate,
   );
 
   return {
-    ...block,
-    htmlTemplate: nextHtmlTemplate,
-    fields: synced.fields,
-    values: synced.values,
+    block: {
+      ...block,
+      htmlTemplate: finalHtmlTemplate,
+      fields: synced.fields,
+      values: synced.values,
+    },
+    newSelector,
   };
+}
+
+export function insertInnerElementInBlock(
+  block: LandingBlock,
+  targetSelector: string | null,
+  kind: InsertableInnerElementKind,
+  position: "inside" | "before" | "after" = "inside",
+): LandingBlock {
+  return insertInnerElementInBlockWithSelector(
+    block,
+    targetSelector,
+    kind,
+    position,
+  ).block;
 }
 
 export function createBlankContainerBlock(
