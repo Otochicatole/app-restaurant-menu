@@ -1,26 +1,37 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   AlertCircle,
   Calendar,
   CalendarDays,
   CalendarX2,
+  Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
+  Copy,
   Edit2,
+  ExternalLink,
+  LayoutGrid,
+  List,
   Loader2,
+  Mail,
+  MessageCircle,
+  Moon,
   PartyPopper,
+  Phone,
   Plus,
   Search,
+  Sun,
   Trash2,
   Users,
+  Utensils,
+  X,
 } from "lucide-react";
 import {
-  AdminCard,
   AdminEmptyState,
-  AdminPageHeader,
-  AdminStatCard,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from "@/ui/admin/AdminPrimitives";
@@ -51,23 +62,24 @@ import type {
 } from "../contracts";
 
 type CmsTab = "reservations" | "events" | "shifts" | "closures";
+type ViewMode = "cards" | "table";
 
 const DAYS_OF_WEEK = [
-  { day: 1, label: "Lunes" },
-  { day: 2, label: "Martes" },
-  { day: 3, label: "Miércoles" },
-  { day: 4, label: "Jueves" },
-  { day: 5, label: "Viernes" },
-  { day: 6, label: "Sábado" },
-  { day: 0, label: "Domingo" },
+  { day: 1, label: "Lunes", short: "Lun" },
+  { day: 2, label: "Martes", short: "Mar" },
+  { day: 3, label: "Miércoles", short: "Mié" },
+  { day: 4, label: "Jueves", short: "Jue" },
+  { day: 5, label: "Viernes", short: "Vie" },
+  { day: 6, label: "Sábado", short: "Sáb" },
+  { day: 0, label: "Domingo", short: "Dom" },
 ];
 
 const STATUS_BADGE_CLASSES: Record<ReservationStatus, string> = {
-  PENDING: "bg-amber-50 text-amber-800 border-amber-200/80 font-bold",
-  CONFIRMED: "bg-emerald-50 text-emerald-800 border-emerald-200/80 font-bold",
-  COMPLETED: "bg-zinc-100 text-zinc-700 border-zinc-200/80 font-medium",
-  CANCELLED: "bg-red-50 text-red-700 border-red-200/80 line-through font-medium",
-  REJECTED: "bg-zinc-100 text-zinc-500 border-zinc-200/80 line-through font-medium",
+  PENDING: "bg-amber-50 text-amber-900 border-amber-300 font-bold",
+  CONFIRMED: "bg-emerald-50 text-emerald-900 border-emerald-300 font-bold",
+  COMPLETED: "bg-zinc-100 text-zinc-700 border-zinc-200 font-medium",
+  CANCELLED: "bg-red-50 text-red-700 border-red-200 line-through font-medium",
+  REJECTED: "bg-zinc-100 text-zinc-500 border-zinc-200 line-through font-medium",
 };
 
 const STATUS_LABEL: Record<ReservationStatus, string> = {
@@ -78,6 +90,177 @@ const STATUS_LABEL: Record<ReservationStatus, string> = {
   REJECTED: "Rechazada",
 };
 
+const SPANISH_MONTHS = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
+const SPANISH_DAYS_LONG = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+
+function getTodayIso(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToIso(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const nextY = date.getFullYear();
+  const nextM = String(date.getMonth() + 1).padStart(2, "0");
+  const nextD = String(date.getDate()).padStart(2, "0");
+  return `${nextY}-${nextM}-${nextD}`;
+}
+
+function formatFriendlyDate(isoDate: string): string {
+  if (!isoDate || !isoDate.includes("-")) return isoDate;
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayName = SPANISH_DAYS_LONG[date.getDay()];
+  const monthName = SPANISH_MONTHS[m - 1];
+  return `${dayName}, ${d} de ${monthName}`;
+}
+
+function formatShortDate(isoDate: string): string {
+  if (!isoDate || !isoDate.includes("-")) return isoDate;
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayName = SPANISH_DAYS_LONG[date.getDay()].slice(0, 3);
+  return `${dayName} ${d}/${m}`;
+}
+
+function buildWhatsAppLink(
+  phone: string,
+  customerName: string,
+  restaurantName: string,
+  date: string,
+  time: string,
+  code: string,
+  partySize: number,
+): string | null {
+  const clean = phone.replace(/[^0-9]/g, "");
+  if (!clean || clean.length < 8) return null;
+  const friendly = formatFriendlyDate(date);
+  const text = `Hola ${customerName}! 👋 Te escribimos desde *${restaurantName}* sobre tu reserva (${code}) para *${partySize} ${partySize === 1 ? "persona" : "personas"}* el día *${friendly}* a las *${time} hs*. ¿Nos confirmás tu asistencia? ¡Muchas gracias!`;
+  return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`;
+}
+
+type NoteTag = {
+  id: string;
+  label: string;
+  emoji: string;
+  color: string;
+};
+
+function extractNoteTags(notes: string): NoteTag[] {
+  if (!notes) return [];
+  const lower = notes.toLowerCase();
+  const tags: NoteTag[] = [];
+
+  if (
+    lower.includes("celiac") ||
+    lower.includes("celíac") ||
+    lower.includes("sin tacc") ||
+    lower.includes("gluten")
+  ) {
+    tags.push({
+      id: "celiac",
+      label: "Sin TACC",
+      emoji: "🌾",
+      color: "bg-amber-50 text-amber-900 border-amber-200",
+    });
+  }
+  if (lower.includes("vegan") || lower.includes("vegetar")) {
+    tags.push({
+      id: "veg",
+      label: "Veg / Vegetariano",
+      emoji: "🌱",
+      color: "bg-emerald-50 text-emerald-900 border-emerald-200",
+    });
+  }
+  if (lower.includes("cumple") || lower.includes("cumpleaños")) {
+    tags.push({
+      id: "bday",
+      label: "Cumpleaños",
+      emoji: "🎂",
+      color: "bg-pink-50 text-pink-900 border-pink-200",
+    });
+  }
+  if (
+    lower.includes("aniversario") ||
+    lower.includes("romant") ||
+    lower.includes("románt")
+  ) {
+    tags.push({
+      id: "anniversary",
+      label: "Aniversario",
+      emoji: "💍",
+      color: "bg-rose-50 text-rose-900 border-rose-200",
+    });
+  }
+  if (
+    lower.includes("terraza") ||
+    lower.includes("exterior") ||
+    lower.includes("afuera") ||
+    lower.includes("patio")
+  ) {
+    tags.push({
+      id: "patio",
+      label: "Terraza / Exterior",
+      emoji: "☀️",
+      color: "bg-sky-50 text-sky-900 border-sky-200",
+    });
+  }
+  if (
+    lower.includes("bebe") ||
+    lower.includes("bebé") ||
+    lower.includes("silla") ||
+    lower.includes("niño")
+  ) {
+    tags.push({
+      id: "baby",
+      label: "Silla alta / Niños",
+      emoji: "👶",
+      color: "bg-purple-50 text-purple-900 border-purple-200",
+    });
+  }
+  if (
+    lower.includes("vip") ||
+    lower.includes("urgente") ||
+    lower.includes("importante")
+  ) {
+    tags.push({
+      id: "vip",
+      label: "Atención Especial",
+      emoji: "⭐",
+      color: "bg-yellow-50 text-yellow-900 border-yellow-200",
+    });
+  }
+
+  return tags;
+}
+
 export function ReservationCmsScreen({
   initialData,
 }: {
@@ -85,15 +268,18 @@ export function ReservationCmsScreen({
 }) {
   const [data, setData] = useState<ReservationCmsData>(initialData);
   const [activeTab, setActiveTab] = useState<CmsTab>("reservations");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [isPending, startTransition] = useTransition();
 
-  // Feedback banner
+  // Feedback notification
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
 
-  // Filter states for reservations
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Filters for reservations
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "TABLE" | "EVENT">("ALL");
@@ -101,13 +287,20 @@ export function ReservationCmsScreen({
 
   // Modals state
   const [isCreateResModalOpen, setIsCreateResModalOpen] = useState(false);
-  const [editingReservation, setEditingReservation] = useState<ReservationView | null>(null);
-  const [deletingReservation, setDeletingReservation] = useState<ReservationView | null>(null);
+  const [editingReservation, setEditingReservation] =
+    useState<ReservationView | null>(null);
+  const [deletingReservation, setDeletingReservation] =
+    useState<ReservationView | null>(null);
 
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<RestaurantEventView | null>(null);
-  const [deletingEvent, setDeletingEvent] = useState<RestaurantEventView | null>(null);
-  const [viewingEventAttendees, setViewingEventAttendees] = useState<RestaurantEventView | null>(null);
+  const [editingEvent, setEditingEvent] = useState<RestaurantEventView | null>(
+    null,
+  );
+  const [deletingEvent, setDeletingEvent] = useState<RestaurantEventView | null>(
+    null,
+  );
+  const [viewingEventAttendees, setViewingEventAttendees] =
+    useState<RestaurantEventView | null>(null);
 
   const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimeSlotView | null>(null);
@@ -118,7 +311,7 @@ export function ReservationCmsScreen({
     customerEmail: "",
     customerPhone: "",
     partySize: 2,
-    date: new Date().toISOString().split("T")[0],
+    date: getTodayIso(),
     time: data.timeSlots[0]?.time || "20:00",
     notes: "",
     adminNotes: "",
@@ -130,7 +323,7 @@ export function ReservationCmsScreen({
   const [eventForm, setEventForm] = useState<UpsertRestaurantEventCommand>({
     title: "",
     description: "",
-    date: new Date().toISOString().split("T")[0],
+    date: getTodayIso(),
     startTime: "21:00",
     endTime: "",
     capacity: 20,
@@ -159,17 +352,22 @@ export function ReservationCmsScreen({
     }, 4500);
   };
 
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedCode(id);
+    setTimeout(() => setCopiedCode((prev) => (prev === id ? null : prev)), 2000);
+  };
+
   // ---------------------------------------------------------------------------
   // Handlers: Reservas
   // ---------------------------------------------------------------------------
-
   const handleOpenCreateRes = () => {
     setResForm({
       customerName: "",
       customerEmail: "",
       customerPhone: "",
       partySize: 2,
-      date: new Date().toISOString().split("T")[0],
+      date: dateFilter || getTodayIso(),
       time: data.timeSlots[0]?.time || "20:00",
       notes: "",
       adminNotes: "",
@@ -177,6 +375,7 @@ export function ReservationCmsScreen({
       source: "ADMIN",
       eventId: null,
     });
+    setEditingReservation(null);
     setIsCreateResModalOpen(true);
   };
 
@@ -218,7 +417,7 @@ export function ReservationCmsScreen({
             summary: {
               ...prev.summary,
               totalReservationsToday:
-                res.data.date === new Date().toISOString().split("T")[0]
+                res.data.date === getTodayIso()
                   ? prev.summary.totalReservationsToday + 1
                   : prev.summary.totalReservationsToday,
               confirmedReservationsCount:
@@ -256,8 +455,17 @@ export function ReservationCmsScreen({
           reservations: prev.reservations.map((r) =>
             r.id === reservationId ? res.data : r,
           ),
+          summary: {
+            ...prev.summary,
+            pendingReservationsCount: prev.reservations.filter((r) =>
+              r.id === reservationId ? nextStatus === "PENDING" : r.status === "PENDING",
+            ).length,
+            confirmedReservationsCount: prev.reservations.filter((r) =>
+              r.id === reservationId ? nextStatus === "CONFIRMED" : r.status === "CONFIRMED",
+            ).length,
+          },
         }));
-        showFeedback("success", `Estado actualizado a ${nextStatus}`);
+        showFeedback("success", `Estado actualizado a "${STATUS_LABEL[nextStatus]}"`);
       } else {
         showFeedback("error", res.error.message);
       }
@@ -289,7 +497,6 @@ export function ReservationCmsScreen({
   // ---------------------------------------------------------------------------
   // Handlers: Turnos (Shifts)
   // ---------------------------------------------------------------------------
-
   const handleOpenCreateSlot = () => {
     setSlotForm({
       time: "20:00",
@@ -369,7 +576,6 @@ export function ReservationCmsScreen({
   // ---------------------------------------------------------------------------
   // Handlers: Cierres y Excepciones
   // ---------------------------------------------------------------------------
-
   const handleToggleRecurringDay = (dayOfWeek: number) => {
     startTransition(async () => {
       const exists = data.recurringClosures.some(
@@ -394,7 +600,7 @@ export function ReservationCmsScreen({
           ...prev,
           recurringClosures: res.data,
         }));
-        showFeedback("success", "Días de cierre semanal actualizados.");
+        showFeedback("success", "Días de descanso semanal actualizados.");
       } else {
         showFeedback("error", res.error.message);
       }
@@ -447,12 +653,11 @@ export function ReservationCmsScreen({
   // ---------------------------------------------------------------------------
   // Handlers: Eventos
   // ---------------------------------------------------------------------------
-
   const handleOpenCreateEvent = () => {
     setEventForm({
       title: "",
       description: "",
-      date: new Date().toISOString().split("T")[0],
+      date: getTodayIso(),
       startTime: "21:00",
       endTime: "",
       capacity: 20,
@@ -514,111 +719,271 @@ export function ReservationCmsScreen({
   };
 
   // ---------------------------------------------------------------------------
-  // Filtered reservations
+  // Calculations & Filtered Data
   // ---------------------------------------------------------------------------
-  const filteredReservations = data.reservations.filter((r) => {
-    if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
-    if (dateFilter && r.date !== dateFilter) return false;
-    if (typeFilter === "TABLE" && r.eventId) return false;
-    if (typeFilter === "EVENT" && !r.eventId) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = r.customerName.toLowerCase().includes(q);
-      const matchPhone = r.customerPhone.toLowerCase().includes(q);
-      const matchCode = r.code.toLowerCase().includes(q);
-      const matchEvent = r.eventTitle?.toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchCode && !matchEvent) return false;
-    }
-    return true;
-  });
+  const todayIso = useMemo(() => getTodayIso(), []);
+
+  const filteredReservations = useMemo(() => {
+    return data.reservations.filter((r) => {
+      if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+      if (dateFilter && r.date !== dateFilter) return false;
+      if (typeFilter === "TABLE" && r.eventId) return false;
+      if (typeFilter === "EVENT" && !r.eventId) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = r.customerName.toLowerCase().includes(q);
+        const matchPhone = r.customerPhone.toLowerCase().includes(q);
+        const matchCode = r.code.toLowerCase().includes(q);
+        const matchEvent = r.eventTitle?.toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchCode && !matchEvent) return false;
+      }
+      return true;
+    });
+  }, [data.reservations, statusFilter, dateFilter, typeFilter, searchQuery]);
+
+  // Operational metrics for today
+  const todayStats = useMemo(() => {
+    const todayRes = data.reservations.filter(
+      (r) =>
+        r.date === todayIso &&
+        r.status !== "CANCELLED" &&
+        r.status !== "REJECTED",
+    );
+    const totalDiners = todayRes.reduce((acc, r) => acc + r.partySize, 0);
+    return {
+      reservationsCount: todayRes.length,
+      dinersCount: totalDiners,
+    };
+  }, [data.reservations, todayIso]);
+
+  // Group shifts by time of day
+  const { lunchSlots, dinnerSlots, otherSlots } = useMemo(() => {
+    const lunch: TimeSlotView[] = [];
+    const dinner: TimeSlotView[] = [];
+    const others: TimeSlotView[] = [];
+
+    data.timeSlots.forEach((slot) => {
+      const hour = parseInt(slot.time.split(":")[0] || "0", 10);
+      if (hour >= 11 && hour < 17) {
+        lunch.push(slot);
+      } else if (hour >= 18 && hour <= 23) {
+        dinner.push(slot);
+      } else {
+        others.push(slot);
+      }
+    });
+
+    return { lunchSlots: lunch, dinnerSlots: dinner, otherSlots: others };
+  }, [data.timeSlots]);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <AdminPageHeader
-        eyebrow="Gestión del Restaurante"
-        title="Reservas de Mesas y Eventos"
-        description="Administrá tus reservas entrantes, eventos especiales, horarios de atención por turno y cierres automáticos del calendario."
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleOpenCreateRes}
-              className={adminPrimaryButtonClass}
-            >
-              <Plus size={16} />
-              Nueva Reserva
-            </button>
+    <div className="space-y-6 pb-12">
+      {/* =================================================================== */}
+      {/* 1. HEADER & LIVE OPERATIONAL BAR                                   */}
+      {/* =================================================================== */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200/80 pb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-[#3d5934]">
+              {data.restaurantName} • Reservas en Vivo
+            </span>
           </div>
-        }
-      />
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
+            Gestión de Mesas y Turnos
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-zinc-500 max-w-2xl leading-relaxed">
+            Supervisá comensales, confirmaciones inmediatas por WhatsApp, eventos y disponibilidad de tu restaurante.
+          </p>
+        </div>
 
-      {/* Feedback Banner */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {data.landingEnabled && (
+            <a
+              href={`/p/${data.restaurantSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className={adminSecondaryButtonClass}
+              title="Abrir página pública de reservas en una nueva pestaña"
+            >
+              <ExternalLink size={15} className="text-zinc-500" />
+              <span>Ver Landing</span>
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={handleOpenCreateRes}
+            className={adminPrimaryButtonClass}
+          >
+            <Plus size={16} />
+            <span>Nueva Reserva</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Feedback Toast */}
       {feedback && (
         <div
           role="status"
-          className={`flex items-center gap-3 rounded-xl p-4 text-sm font-medium transition-all ${
+          className={`flex items-center justify-between gap-3 rounded-2xl p-4 text-sm font-medium transition-all shadow-sm ${
             feedback.type === "success"
-              ? "bg-emerald-50 text-emerald-900 border border-emerald-200"
-              : "bg-red-50 text-red-900 border border-red-200"
+              ? "bg-emerald-50/90 text-emerald-950 border border-emerald-300"
+              : "bg-red-50/90 text-red-950 border border-red-300"
           }`}
         >
-          {feedback.type === "success" ? (
-            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-          ) : (
-            <AlertCircle size={18} className="text-red-600 shrink-0" />
-          )}
-          <span>{feedback.message}</span>
+          <div className="flex items-center gap-2.5">
+            {feedback.type === "success" ? (
+              <CheckCircle2 size={18} className="text-emerald-700 shrink-0" />
+            ) : (
+              <AlertCircle size={18} className="text-red-700 shrink-0" />
+            )}
+            <span>{feedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="text-zinc-500 hover:text-zinc-800 p-1"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <AdminStatCard
-          label="Reservas Hoy"
-          value={data.summary.totalReservationsToday}
-          detail="Mesas para la fecha actual"
-          href="#reservas"
-          accent="emerald"
-        />
-        <AdminStatCard
-          label="Pendientes"
-          value={data.summary.pendingReservationsCount}
-          detail="Requieren confirmación"
-          href="#reservas"
-          accent="amber"
-        />
-        <AdminStatCard
-          label="Eventos Activos"
-          value={data.summary.activeEventsCount}
-          detail="Visibles en la landing"
-          href="#eventos"
-          accent="terracotta"
-        />
-        <AdminStatCard
-          label="Turnos Activos"
-          value={data.summary.activeTimeSlotsCount}
-          detail="Horarios configurados"
-          href="#turnos"
-          accent="emerald"
-        />
+      {/* =================================================================== */}
+      {/* 2. OPERATIONAL METRICS COMMAND STRIP                               */}
+      {/* =================================================================== */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Servicio Hoy */}
+        <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-emerald-300 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Servicio Hoy
+            </span>
+            <span className="h-7 w-7 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Utensils size={15} />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-zinc-950 tabular-nums">
+              {todayStats.dinersCount}
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">comensales</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-500">
+            {todayStats.reservationsCount}{" "}
+            {todayStats.reservationsCount === 1 ? "mesa reservada" : "mesas reservadas"} hoy
+          </p>
+        </div>
+
+        {/* Card 2: Pendientes */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("reservations");
+            setStatusFilter("PENDING");
+          }}
+          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-2xs transition-all cursor-pointer ${
+            data.summary.pendingReservationsCount > 0
+              ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50 text-amber-950"
+              : "border-zinc-200/90 bg-white hover:border-zinc-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Por Confirmar
+            </span>
+            <span
+              className={`h-7 w-7 rounded-xl flex items-center justify-center ${
+                data.summary.pendingReservationsCount > 0
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-zinc-100 text-zinc-500"
+              }`}
+            >
+              <Clock size={15} />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-zinc-950 tabular-nums">
+              {data.summary.pendingReservationsCount}
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">solicitudes</span>
+          </div>
+          <p className="mt-1 text-xs font-medium text-amber-800">
+            {data.summary.pendingReservationsCount > 0
+              ? "Requiere atención del host"
+              : "Todo al día"}
+          </p>
+        </button>
+
+        {/* Card 3: Confirmadas */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("reservations");
+            setStatusFilter("CONFIRMED");
+          }}
+          className="text-left rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Confirmadas
+            </span>
+            <span className="h-7 w-7 rounded-xl bg-[#e8efe6] text-[#2b4226] flex items-center justify-center">
+              <CheckCircle2 size={15} />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-zinc-950 tabular-nums">
+              {data.summary.confirmedReservationsCount}
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">activas</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-500">Listas para el salón</p>
+        </button>
+
+        {/* Card 4: Turnos & Eventos */}
+        <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Disponibilidad
+            </span>
+            <span className="h-7 w-7 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
+              <PartyPopper size={15} />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-zinc-950 tabular-nums">
+              {data.summary.activeTimeSlotsCount}
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">turnos activos</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-500">
+            {data.summary.activeEventsCount}{" "}
+            {data.summary.activeEventsCount === 1 ? "evento publicado" : "eventos publicados"}
+          </p>
+        </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-zinc-200 bg-white rounded-2xl shadow-2xs p-1 flex items-center gap-1 overflow-x-auto">
+      {/* =================================================================== */}
+      {/* 3. TABS DE NAVEGACIÓN MODULAR                                      */}
+      {/* =================================================================== */}
+      <nav
+        aria-label="Pestañas de reservas"
+        className="flex items-center gap-1.5 p-1.5 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 overflow-x-auto"
+      >
         <button
           type="button"
           onClick={() => setActiveTab("reservations")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "reservations"
               ? "bg-[#182618] text-white shadow-2xs"
-              : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
+              : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
           <CalendarDays size={16} />
-          Reservas
+          <span>Reservas de Mesas</span>
           <span
-            className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "reservations"
                 ? "bg-white/20 text-white"
                 : "bg-zinc-200 text-zinc-700"
@@ -631,16 +996,16 @@ export function ReservationCmsScreen({
         <button
           type="button"
           onClick={() => setActiveTab("events")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "events"
               ? "bg-[#182618] text-white shadow-2xs"
-              : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
+              : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
           <PartyPopper size={16} />
-          Eventos Especiales
+          <span>Eventos Especiales</span>
           <span
-            className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "events"
                 ? "bg-white/20 text-white"
                 : "bg-zinc-200 text-zinc-700"
@@ -653,16 +1018,16 @@ export function ReservationCmsScreen({
         <button
           type="button"
           onClick={() => setActiveTab("shifts")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "shifts"
               ? "bg-[#182618] text-white shadow-2xs"
-              : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
+              : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
           <Clock size={16} />
-          Horarios de Atención
+          <span>Horarios y Turnos</span>
           <span
-            className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "shifts"
                 ? "bg-white/20 text-white"
                 : "bg-zinc-200 text-zinc-700"
@@ -675,37 +1040,154 @@ export function ReservationCmsScreen({
         <button
           type="button"
           onClick={() => setActiveTab("closures")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "closures"
               ? "bg-[#182618] text-white shadow-2xs"
-              : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100"
+              : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
           <CalendarX2 size={16} />
-          Cierres y Excepciones
-          {(data.recurringClosures.length > 0 ||
-            data.blockedDates.length > 0) && (
+          <span>Cierres y Descansos</span>
+          {(data.recurringClosures.length > 0 || data.blockedDates.length > 0) && (
             <span
-              className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+              className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
                 activeTab === "closures"
                   ? "bg-white/20 text-white"
-                  : "bg-zinc-200 text-zinc-700"
+                  : "bg-amber-100 text-amber-800"
               }`}
             >
               {data.recurringClosures.length + data.blockedDates.length}
             </span>
           )}
         </button>
-      </div>
+      </nav>
 
       {/* =================================================================== */}
       {/* TAB 1: RESERVAS                                                     */}
       {/* =================================================================== */}
       {activeTab === "reservations" && (
-        <div className="space-y-4">
-          {/* Filters Bar */}
-          <AdminCard className="p-4 space-y-3">
+        <section aria-label="Listado de reservas" className="space-y-4">
+          {/* Day Stepper & Quick Date Navigator */}
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-zinc-500 mr-1">Fecha:</span>
+              <button
+                type="button"
+                onClick={() => setDateFilter("")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  dateFilter === ""
+                    ? "bg-[#182618] text-white shadow-2xs"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilter(todayIso)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  dateFilter === todayIso
+                    ? "bg-emerald-700 text-white shadow-2xs"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Hoy ({formatShortDate(todayIso)})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilter(addDaysToIso(todayIso, 1))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  dateFilter === addDaysToIso(todayIso, 1)
+                    ? "bg-emerald-700 text-white shadow-2xs"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Mañana
+              </button>
+
+              {/* Day stepper arrows when date is selected */}
+              <div className="flex items-center gap-1 pl-2 border-l border-zinc-200">
+                <button
+                  type="button"
+                  title="Día anterior"
+                  onClick={() =>
+                    setDateFilter((prev) => addDaysToIso(prev || todayIso, -1))
+                  }
+                  className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="px-2.5 py-1 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-800 focus:bg-white focus:outline-none focus:border-[#182618]"
+                />
+                <button
+                  type="button"
+                  title="Día siguiente"
+                  onClick={() =>
+                    setDateFilter((prev) => addDaysToIso(prev || todayIso, 1))
+                  }
+                  className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Context date badge or summary */}
+            <div className="flex items-center justify-between md:justify-end gap-3 text-xs text-zinc-600">
+              {dateFilter ? (
+                <div className="flex items-center gap-1.5 font-medium">
+                  <Calendar size={14} className="text-[#3d5934]" />
+                  <span>{formatFriendlyDate(dateFilter)}</span>
+                  <span className="font-bold text-zinc-900 ml-1">
+                    ({filteredReservations.length} reservas •{" "}
+                    {filteredReservations.reduce((acc, r) => acc + r.partySize, 0)}{" "}
+                    comensales)
+                  </span>
+                </div>
+              ) : (
+                <span className="text-zinc-500 font-medium">
+                  Mostrando todas las fechas registradas
+                </span>
+              )}
+
+              {/* View mode toggle */}
+              <div className="flex items-center gap-1 p-1 bg-zinc-100 rounded-xl">
+                <button
+                  type="button"
+                  title="Vista tarjetas"
+                  onClick={() => setViewMode("cards")}
+                  className={`p-1.5 rounded-lg transition ${
+                    viewMode === "cards"
+                      ? "bg-white text-zinc-950 shadow-2xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  <LayoutGrid size={15} />
+                </button>
+                <button
+                  type="button"
+                  title="Vista tabla de servicio"
+                  onClick={() => setViewMode("table")}
+                  className={`p-1.5 rounded-lg transition ${
+                    viewMode === "table"
+                      ? "bg-white text-zinc-950 shadow-2xs"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  <List size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Search and Secondary Filter Bar */}
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 shadow-2xs space-y-3">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Search box */}
               <div className="relative flex-1">
                 <Search
                   size={16}
@@ -716,86 +1198,107 @@ export function ReservationCmsScreen({
                   placeholder="Buscar por cliente, teléfono o código (ej. RES-)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 transition"
+                  className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-zinc-50/80 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] transition text-zinc-800 placeholder:text-zinc-400"
                 />
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
-                />
-                {dateFilter && (
+                {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setDateFilter("")}
-                    className="text-xs text-zinc-500 hover:text-zinc-800 underline cursor-pointer"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
                   >
-                    Ver todas las fechas
+                    <X size={14} />
                   </button>
                 )}
+              </div>
 
+              {/* Status filter dropdown */}
+              <div className="flex items-center gap-2">
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-medium"
+                  className="px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium text-zinc-800 cursor-pointer"
                 >
                   <option value="ALL">Todos los estados</option>
-                  <option value="PENDING">Pendientes</option>
+                  <option value="PENDING">Pendientes de confirmar</option>
                   <option value="CONFIRMED">Confirmadas</option>
-                  <option value="COMPLETED">Finalizadas</option>
+                  <option value="COMPLETED">Asistieron</option>
                   <option value="CANCELLED">Canceladas</option>
                   <option value="REJECTED">Rechazadas</option>
                 </select>
               </div>
             </div>
 
-            {/* Separación y Filtro por Tipo de Reserva: Mesas vs Eventos */}
-            <div className="flex items-center gap-1.5 p-1 bg-zinc-100 rounded-xl overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setTypeFilter("ALL")}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
-                  typeFilter === "ALL"
-                    ? "bg-white text-zinc-950 shadow-2xs"
-                    : "text-zinc-600 hover:text-zinc-900"
-                }`}
-              >
-                Todas ({data.reservations.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTypeFilter("TABLE")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
-                  typeFilter === "TABLE"
-                    ? "bg-white text-zinc-950 shadow-2xs"
-                    : "text-zinc-600 hover:text-zinc-900"
-                }`}
-              >
-                <span>🍽️</span> Solo Mesas ({data.reservations.filter((r) => !r.eventId).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTypeFilter("EVENT")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
-                  typeFilter === "EVENT"
-                    ? "bg-white text-zinc-950 shadow-2xs"
-                    : "text-zinc-600 hover:text-zinc-900"
-                }`}
-              >
-                <PartyPopper size={13} className="text-purple-600" />
-                Solo Eventos ({data.reservations.filter((r) => Boolean(r.eventId)).length})
-              </button>
-            </div>
-          </AdminCard>
+            {/* Type Filter Buttons */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100 flex-wrap">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter("ALL")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                    typeFilter === "ALL"
+                      ? "bg-zinc-900 text-white shadow-2xs"
+                      : "bg-zinc-100 text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  Todas ({data.reservations.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter("TABLE")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                    typeFilter === "TABLE"
+                      ? "bg-zinc-900 text-white shadow-2xs"
+                      : "bg-zinc-100 text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <span>🍽️ Mesas Regulares</span>
+                  <span className="text-[11px] opacity-80">
+                    ({data.reservations.filter((r) => !r.eventId).length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter("EVENT")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                    typeFilter === "EVENT"
+                      ? "bg-purple-900 text-white shadow-2xs"
+                      : "bg-purple-50 text-purple-800 hover:bg-purple-100"
+                  }`}
+                >
+                  <PartyPopper size={13} />
+                  <span>Eventos Especiales</span>
+                  <span className="text-[11px] opacity-80">
+                    ({data.reservations.filter((r) => Boolean(r.eventId)).length})
+                  </span>
+                </button>
+              </div>
 
-          {/* Reservations List */}
+              {(searchQuery || statusFilter !== "ALL" || dateFilter || typeFilter !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("ALL");
+                    setDateFilter("");
+                    setTypeFilter("ALL");
+                  }}
+                  className="text-xs text-zinc-500 hover:text-red-700 font-medium transition cursor-pointer"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Reservations Display: Empty State or Content */}
           {filteredReservations.length === 0 ? (
             <AdminEmptyState
               title="No se encontraron reservas"
-              description="No hay reservas que coincidan con los filtros seleccionados."
+              description={
+                searchQuery || statusFilter !== "ALL" || dateFilter
+                  ? "No hay reservas que coincidan con los criterios de búsqueda seleccionados."
+                  : "Tu restaurante aún no tiene reservas registradas. Podés agregar la primera manualmente."
+              }
               action={
                 <button
                   type="button"
@@ -803,91 +1306,158 @@ export function ReservationCmsScreen({
                   className={adminSecondaryButtonClass}
                 >
                   <Plus size={16} />
-                  Crear primera reserva
+                  Nueva Reserva
                 </button>
               }
             />
-          ) : (
+          ) : viewMode === "cards" ? (
+            /* Cards View */
             <div className="space-y-3">
               {filteredReservations.map((res) => {
+                const noteTags = extractNoteTags(res.notes);
+                const waLink = buildWhatsAppLink(
+                  res.customerPhone,
+                  res.customerName,
+                  data.restaurantName,
+                  res.date,
+                  res.time,
+                  res.code,
+                  res.partySize,
+                );
+
                 return (
-                  <AdminCard key={res.id} className="p-4 sm:p-5 transition hover:border-zinc-300">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      {/* Left: Code, Client info */}
-                      <div className="space-y-1.5 min-w-0">
+                  <div
+                    key={res.id}
+                    className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-all space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      {/* Left Block: Time Badge, Code, Status */}
+                      <div className="space-y-2 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-zinc-100 text-zinc-800 border border-zinc-200">
-                            {res.code}
-                          </span>
+                          {/* Time & Date Pill */}
+                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-900 text-white text-xs font-mono font-bold">
+                            <Clock size={13} />
+                            <span>{res.time} hs</span>
+                            <span className="opacity-60">•</span>
+                            <span className="font-sans font-medium text-[11px] opacity-90">
+                              {formatShortDate(res.date)}
+                            </span>
+                          </div>
+
+                          {/* Party Size */}
+                          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-800 text-xs font-bold border border-zinc-200">
+                            <Users size={13} className="text-zinc-600" />
+                            <span>{res.partySize} {res.partySize === 1 ? "persona" : "personas"}</span>
+                          </div>
+
+                          {/* Status Badge */}
                           <span
-                            className={`text-xs px-2.5 py-0.5 rounded-full border ${
+                            className={`text-xs px-2.5 py-1 rounded-xl border ${
                               STATUS_BADGE_CLASSES[res.status]
                             }`}
                           >
                             {STATUS_LABEL[res.status]}
                           </span>
+
+                          {/* Event / Regular Tag */}
                           {res.eventId ? (
-                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
+                            <span className="text-xs px-2.5 py-1 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-semibold flex items-center gap-1">
                               <PartyPopper size={12} />
-                              {res.eventTitle || "Evento Especial"}
+                              <span className="truncate max-w-44">{res.eventTitle || "Evento Especial"}</span>
                             </span>
                           ) : (
-                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium flex items-center gap-1">
-                              🍽️ Mesa regular
+                            <span className="text-xs px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-700 font-medium">
+                              🍽️ Salón
                             </span>
                           )}
-                          <span className="text-[11px] text-zinc-400">
-                            {res.source === "LANDING" ? "Web" : "Admin"}
-                          </span>
+
+                          {/* Code Pill with 1-click copy */}
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(res.code, res.id)}
+                            className="flex items-center gap-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-900 px-2 py-0.5 rounded-md hover:bg-zinc-100 transition"
+                            title="Copiar código de reserva"
+                          >
+                            <span>{res.code}</span>
+                            {copiedCode === res.id ? (
+                              <Check size={12} className="text-emerald-600" />
+                            ) : (
+                              <Copy size={12} />
+                            )}
+                          </button>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-zinc-950 truncate">
+                        {/* Customer Identity & Contact */}
+                        <div className="flex items-center gap-3 flex-wrap pt-0.5">
+                          <h3 className="text-base font-bold text-zinc-950 tracking-tight">
                             {res.customerName}
                           </h3>
-                          <span className="text-xs text-zinc-500 font-medium flex items-center gap-1">
-                            <Users size={14} className="text-zinc-400" />
-                            {res.partySize} {res.partySize === 1 ? "persona" : "personas"}
-                          </span>
+                          <div className="flex items-center gap-3 text-xs text-zinc-600 flex-wrap">
+                            <span className="flex items-center gap-1 font-semibold text-zinc-800">
+                              <Phone size={13} className="text-zinc-400" />
+                              {res.customerPhone}
+                            </span>
+                            {res.customerEmail && (
+                              <span className="flex items-center gap-1 text-zinc-500">
+                                <Mail size={13} className="text-zinc-400" />
+                                {res.customerEmail}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-zinc-400 font-mono">
+                              Vía {res.source === "LANDING" ? "Landing Web" : "Carga Manual"}
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
-                          <span className="font-medium text-zinc-800">
-                            📞 {res.customerPhone}
-                          </span>
-                          {res.customerEmail && (
-                            <span className="truncate">✉️ {res.customerEmail}</span>
-                          )}
-                        </div>
-
-                        {res.notes && (
-                          <p className="text-xs text-zinc-600 bg-zinc-50 p-2 rounded-lg border border-zinc-100">
-                            <span className="font-semibold text-zinc-700">Nota del cliente: </span>
-                            {res.notes}
-                          </p>
+                        {/* Smart Tags Extracted from Notes */}
+                        {noteTags.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                            {noteTags.map((tag) => (
+                              <span
+                                key={tag.id}
+                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${tag.color}`}
+                              >
+                                <span>{tag.emoji}</span>
+                                <span>{tag.label}</span>
+                              </span>
+                            ))}
+                          </div>
                         )}
+
+                        {/* Customer Note */}
+                        {res.notes && (
+                          <div className="text-xs text-zinc-700 bg-zinc-50 p-2.5 rounded-xl border border-zinc-200/80 leading-relaxed">
+                            <span className="font-bold text-zinc-800">Nota del comensal: </span>
+                            {res.notes}
+                          </div>
+                        )}
+
+                        {/* Admin Internal Note */}
                         {res.adminNotes && (
-                          <p className="text-xs text-blue-900 bg-blue-50/70 p-2 rounded-lg border border-blue-100">
-                            <span className="font-semibold text-blue-800">Nota interna: </span>
+                          <div className="text-xs text-blue-950 bg-blue-50/70 p-2.5 rounded-xl border border-blue-200 leading-relaxed">
+                            <span className="font-bold text-blue-900">Nota interna: </span>
                             {res.adminNotes}
-                          </p>
+                          </div>
                         )}
                       </div>
 
-                      {/* Right: Date, Time & Actions */}
-                      <div className="flex flex-col sm:items-end justify-between gap-3 shrink-0">
-                        <div className="flex sm:flex-col items-center sm:items-end gap-1.5 sm:gap-0.5">
-                          <div className="flex items-center gap-1 text-sm font-bold text-zinc-950">
-                            <Calendar size={15} className="text-[#3d5934]" />
-                            <span>{res.date}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-sm font-bold text-[#2b4226]">
-                            <Clock size={15} />
-                            <span>{res.time} hs</span>
-                          </div>
-                        </div>
+                      {/* Right Block: Instant Operational Actions */}
+                      <div className="flex items-center sm:flex-col sm:items-end justify-between sm:justify-start gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                        {/* WhatsApp Direct Action */}
+                        {waLink && (
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs"
+                            title="Abrir chat de WhatsApp con plantilla de confirmación"
+                          >
+                            <MessageCircle size={14} className="text-emerald-700" />
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
 
-                        {/* Status buttons & actions */}
+                        {/* Primary Workflow State Transitions */}
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {res.status === "PENDING" && (
                             <>
@@ -895,15 +1465,16 @@ export function ReservationCmsScreen({
                                 type="button"
                                 disabled={isPending}
                                 onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                               >
+                                <Check size={14} />
                                 Confirmar
                               </button>
                               <button
                                 type="button"
                                 disabled={isPending}
                                 onClick={() => handleQuickStatusChange(res.id, "REJECTED")}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
                               >
                                 Rechazar
                               </button>
@@ -916,21 +1487,23 @@ export function ReservationCmsScreen({
                                 type="button"
                                 disabled={isPending}
                                 onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                               >
+                                <Utensils size={13} />
                                 Asistió
                               </button>
                               <button
                                 type="button"
                                 disabled={isPending}
                                 onClick={() => handleQuickStatusChange(res.id, "CANCELLED")}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer"
                               >
                                 Cancelar
                               </button>
                             </>
                           )}
 
+                          {/* Secondary: Edit & Delete buttons */}
                           <button
                             type="button"
                             onClick={() => {
@@ -948,8 +1521,9 @@ export function ReservationCmsScreen({
                                 source: res.source === "LANDING" ? "LANDING" : "ADMIN",
                                 eventId: res.eventId,
                               });
+                              setIsCreateResModalOpen(true);
                             }}
-                            className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
+                            className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
                             title="Editar reserva"
                           >
                             <Edit2 size={15} />
@@ -957,7 +1531,7 @@ export function ReservationCmsScreen({
                           <button
                             type="button"
                             onClick={() => setDeletingReservation(res)}
-                            className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer"
                             title="Eliminar reserva"
                           >
                             <Trash2 size={15} />
@@ -965,37 +1539,185 @@ export function ReservationCmsScreen({
                         </div>
                       </div>
                     </div>
-                  </AdminCard>
+                  </div>
                 );
               })}
             </div>
+          ) : (
+            /* Table View (High Density Host Service Table) */
+            <div className="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-3 px-4">Hora</th>
+                      <th className="py-3 px-4">Comensales</th>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Contacto</th>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3 px-4">Estado</th>
+                      <th className="py-3 px-4 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 font-medium">
+                    {filteredReservations.map((res) => {
+                      const waLink = buildWhatsAppLink(
+                        res.customerPhone,
+                        res.customerName,
+                        data.restaurantName,
+                        res.date,
+                        res.time,
+                        res.code,
+                        res.partySize,
+                      );
+
+                      return (
+                        <tr
+                          key={res.id}
+                          className="hover:bg-zinc-50/80 transition-colors"
+                        >
+                          <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-zinc-950">
+                            {res.time} hs
+                            <span className="block text-[10px] font-sans font-normal text-zinc-500">
+                              {formatShortDate(res.date)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="font-bold text-zinc-900">
+                              {res.partySize} {res.partySize === 1 ? "pers." : "pers."}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-zinc-900 truncate max-w-44">
+                              {res.customerName}
+                            </div>
+                            <span className="font-mono text-[10px] text-zinc-400">
+                              {res.code}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="text-zinc-800">{res.customerPhone}</div>
+                            {res.customerEmail && (
+                              <div className="text-[10px] text-zinc-400 truncate max-w-36">
+                                {res.customerEmail}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            {res.eventId ? (
+                              <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200">
+                                🎉 {res.eventTitle || "Evento"}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-lg">
+                                🍽️ Salón
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`text-[11px] px-2.5 py-0.5 rounded-full border ${
+                                STATUS_BADGE_CLASSES[res.status]
+                              }`}
+                            >
+                              {STATUS_LABEL[res.status]}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {waLink && (
+                                <a
+                                  href={waLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition"
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle size={14} />
+                                </a>
+                              )}
+                              {res.status === "PENDING" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
+                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition"
+                                >
+                                  Confirmar
+                                </button>
+                              )}
+                              {res.status === "CONFIRMED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
+                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[#182618] text-white hover:bg-[#101c10] transition"
+                                >
+                                  Asistió
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingReservation(res);
+                                  setResForm({
+                                    customerName: res.customerName,
+                                    customerEmail: res.customerEmail,
+                                    customerPhone: res.customerPhone,
+                                    partySize: res.partySize,
+                                    date: res.date,
+                                    time: res.time,
+                                    notes: res.notes,
+                                    adminNotes: res.adminNotes,
+                                    status: res.status,
+                                    source: res.source === "LANDING" ? "LANDING" : "ADMIN",
+                                    eventId: res.eventId,
+                                  });
+                                  setIsCreateResModalOpen(true);
+                                }}
+                                className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* =================================================================== */}
       {/* TAB 2: EVENTOS ESPECIALES                                           */}
       {/* =================================================================== */}
       {activeTab === "events" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-zinc-500">
-              Creá cenas temáticas, noches de música o degustaciones especiales para tu landing page.
-            </p>
+        <section aria-label="Eventos especiales" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-2xs">
+            <div>
+              <h2 className="text-base font-bold text-zinc-950">
+                Cartelera de Eventos y Catas
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Publicá cenas temáticas, noches de música en vivo o degustaciones con cupos limitados en tu landing page.
+              </p>
+            </div>
             <button
               type="button"
               onClick={handleOpenCreateEvent}
               className={adminPrimaryButtonClass}
             >
               <Plus size={16} />
-              Crear Evento
+              <span>Crear Evento</span>
             </button>
           </div>
 
           {data.events.length === 0 ? (
             <AdminEmptyState
-              title="No hay eventos especiales creados"
-              description="Podés publicar catas de vino, cenas show o festejos especiales con cupos limitados."
+              title="No hay eventos creados"
+              description="Aprovechá las noches temáticas para llenar el restaurante con reservas anticipadas."
               action={
                 <button
                   type="button"
@@ -1009,116 +1731,151 @@ export function ReservationCmsScreen({
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data.events.map((evt) => (
-                <AdminCard key={evt.id} className="p-5 flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
-                          evt.status === "PUBLISHED"
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                            : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                        }`}
-                      >
-                        {evt.status === "PUBLISHED" ? "Publicado" : evt.status}
-                      </span>
-                      {evt.blocksRegularReservations && (
-                        <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                          Bloquea turnos regulares
+              {data.events.map((evt) => {
+                const confirmedCount = evt.confirmedReservationsCount ?? 0;
+                const capacity = evt.capacity;
+                const percent = Math.min(100, Math.round((confirmedCount / capacity) * 100));
+                const isSoldOut = confirmedCount >= capacity;
+
+                return (
+                  <div
+                    key={evt.id}
+                    className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs flex flex-col justify-between space-y-4 hover:border-zinc-300 transition-all"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
+                            evt.status === "PUBLISHED"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                          }`}
+                        >
+                          {evt.status === "PUBLISHED" ? "Publicado en Web" : evt.status}
                         </span>
-                      )}
+
+                        {isSoldOut ? (
+                          <span className="text-[11px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-lg border border-red-200">
+                            Agotado (Sold Out)
+                          </span>
+                        ) : evt.blocksRegularReservations ? (
+                          <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                            Salón Exclusivo
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-bold text-zinc-950">{evt.title}</h3>
+                        {evt.description && (
+                          <p className="mt-1 text-xs text-zinc-600 leading-relaxed line-clamp-3">
+                            {evt.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
-                    <h3 className="text-lg font-bold text-zinc-950">{evt.title}</h3>
-                    {evt.description && (
-                      <p className="text-xs text-zinc-600 leading-relaxed line-clamp-3">
-                        {evt.description}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-3 border-t border-zinc-100 space-y-2">
-                    <div className="flex items-center justify-between text-xs text-zinc-600">
-                      <span className="flex items-center gap-1 font-semibold text-zinc-800">
-                        <Calendar size={14} className="text-[#3d5934]" />
-                        {evt.date} • {evt.startTime} hs {evt.endTime ? `- ${evt.endTime} hs` : ""}
-                      </span>
-                      {evt.priceLabel && (
-                        <span className="font-bold text-emerald-700">
-                          {evt.priceLabel}
+                    <div className="pt-3 border-t border-zinc-100 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5 font-bold text-zinc-900">
+                          <Calendar size={14} className="text-[#3d5934]" />
+                          <span>{formatFriendlyDate(evt.date)}</span>
+                          <span className="text-zinc-400">•</span>
+                          <span>{evt.startTime} hs {evt.endTime ? `- ${evt.endTime} hs` : ""}</span>
                         </span>
-                      )}
-                    </div>
+                        {evt.priceLabel && (
+                          <span className="font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                            {evt.priceLabel}
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="flex items-center justify-between text-xs text-zinc-500">
-                      <span>
-                        Cupo: <strong>{evt.confirmedReservationsCount ?? 0}</strong> / {evt.capacity} reservados
-                      </span>
-                      <span className="font-semibold text-zinc-700">
-                        Disponibles: {evt.remainingCapacity ?? evt.capacity}
-                      </span>
-                    </div>
+                      {/* Visual Capacity Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-500 font-medium">
+                            Ocupación de cupo ({percent}%):
+                          </span>
+                          <span className="font-bold text-zinc-900">
+                            {confirmedCount} / {capacity} lugares
+                          </span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-zinc-100 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              percent >= 100
+                                ? "bg-red-500"
+                                : percent >= 75
+                                  ? "bg-amber-500"
+                                  : "bg-emerald-600"
+                            }`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setViewingEventAttendees(evt)}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Users size={14} />
-                        Inscriptos ({data.reservations.filter((r) => r.eventId === evt.id && r.status !== "CANCELLED" && r.status !== "REJECTED").reduce((acc, curr) => acc + curr.partySize, 0)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingEvent(evt);
-                          setEventForm({
-                            title: evt.title,
-                            description: evt.description,
-                            date: evt.date,
-                            startTime: evt.startTime,
-                            endTime: evt.endTime,
-                            capacity: evt.capacity,
-                            priceLabel: evt.priceLabel,
-                            imageUrl: evt.imageUrl,
-                            blocksRegularReservations: evt.blocksRegularReservations,
-                            status: evt.status,
-                          });
-                          setIsEventModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingEvent(evt)}
-                        className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                        title="Eliminar evento"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {/* Bottom Action Strip */}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setViewingEventAttendees(evt)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Users size={14} />
+                          <span>Lista de Inscriptos ({confirmedCount})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEvent(evt);
+                            setEventForm({
+                              title: evt.title,
+                              description: evt.description,
+                              date: evt.date,
+                              startTime: evt.startTime,
+                              endTime: evt.endTime,
+                              capacity: evt.capacity,
+                              priceLabel: evt.priceLabel,
+                              imageUrl: evt.imageUrl,
+                              blocksRegularReservations: evt.blocksRegularReservations,
+                              status: evt.status,
+                            });
+                            setIsEventModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-xl text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingEvent(evt)}
+                          className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                          title="Eliminar evento"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </AdminCard>
-              ))}
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* =================================================================== */}
       {/* TAB 3: HORARIOS DE ATENCIÓN (TURNOS)                                */}
       {/* =================================================================== */}
       {activeTab === "shifts" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <section aria-label="Horarios de atención" className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-2xs">
             <div>
               <h2 className="text-base font-bold text-zinc-950">
-                Turnos disponibles por día
+                Franjas Horarias Disponibles
               </h2>
-              <p className="text-xs text-zinc-500">
-                Los clientes podrán elegir entre estos horarios para reservar una mesa. Al ocuparse un horario en una fecha, se bloquea automáticamente.
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Definí los turnos en los que tu restaurante acepta reservas regulares. Los comensales elegirán entre estos horarios.
               </p>
             </div>
             <button
@@ -1127,14 +1884,14 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               <Plus size={16} />
-              Agregar Turno
+              <span>Agregar Turno</span>
             </button>
           </div>
 
           {data.timeSlots.length === 0 ? (
             <AdminEmptyState
               title="No hay turnos configurados"
-              description="Agregá los horarios en los que tu restaurante acepta reservas de mesas."
+              description="Para que los comensales puedan reservar en la web, configurá tus horarios de servicio."
               action={
                 <button
                   type="button"
@@ -1147,141 +1904,194 @@ export function ReservationCmsScreen({
               }
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {data.timeSlots.map((slot) => (
-                <AdminCard
-                  key={slot.id}
-                  className={`p-4 transition ${
-                    slot.active
-                      ? "border-zinc-200"
-                      : "border-zinc-200/50 bg-zinc-50/70 opacity-70"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <Clock size={16} className="text-[#3d5934]" />
-                        <span className="text-xl font-bold font-mono text-zinc-950">
-                          {slot.time}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs font-medium text-zinc-500">
-                        {slot.label || "Sin etiqueta"}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => handleToggleSlotActive(slot)}
-                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full border transition cursor-pointer ${
-                        slot.active
-                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          : "bg-zinc-200 text-zinc-600 border-zinc-300"
-                      }`}
-                    >
-                      {slot.active ? "Activo" : "Pausado"}
-                    </button>
+            <div className="space-y-6">
+              {/* Turno Almuerzo / Mediodía */}
+              {lunchSlots.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+                      <Sun size={14} />
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                      Turno Mediodía / Almuerzo ({lunchSlots.length})
+                    </h3>
                   </div>
-
-                  <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-end gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSlot(slot);
-                        setSlotForm({
-                          time: slot.time,
-                          label: slot.label,
-                          active: slot.active,
-                          sortOrder: slot.sortOrder,
-                        });
-                        setIsSlotModalOpen(true);
-                      }}
-                      className="p-1 text-zinc-500 hover:text-zinc-900 rounded hover:bg-zinc-100 cursor-pointer"
-                      title="Editar"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSlot(slot.id)}
-                      className="p-1 text-zinc-400 hover:text-red-700 rounded hover:bg-red-50 cursor-pointer"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {lunchSlots.map((slot) => (
+                      <SlotCard
+                        key={slot.id}
+                        slot={slot}
+                        isPending={isPending}
+                        onToggleActive={() => handleToggleSlotActive(slot)}
+                        onEdit={() => {
+                          setEditingSlot(slot);
+                          setSlotForm({
+                            time: slot.time,
+                            label: slot.label,
+                            active: slot.active,
+                            sortOrder: slot.sortOrder,
+                          });
+                          setIsSlotModalOpen(true);
+                        }}
+                        onDelete={() => handleDeleteSlot(slot.id)}
+                      />
+                    ))}
                   </div>
-                </AdminCard>
-              ))}
+                </div>
+              )}
+
+              {/* Turno Cena / Noche */}
+              {dinnerSlots.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                      <Moon size={14} />
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                      Turno Noche / Cena ({dinnerSlots.length})
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {dinnerSlots.map((slot) => (
+                      <SlotCard
+                        key={slot.id}
+                        slot={slot}
+                        isPending={isPending}
+                        onToggleActive={() => handleToggleSlotActive(slot)}
+                        onEdit={() => {
+                          setEditingSlot(slot);
+                          setSlotForm({
+                            time: slot.time,
+                            label: slot.label,
+                            active: slot.active,
+                            sortOrder: slot.sortOrder,
+                          });
+                          setIsSlotModalOpen(true);
+                        }}
+                        onDelete={() => handleDeleteSlot(slot.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Otros Horarios */}
+              {otherSlots.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                    Otros Horarios ({otherSlots.length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {otherSlots.map((slot) => (
+                      <SlotCard
+                        key={slot.id}
+                        slot={slot}
+                        isPending={isPending}
+                        onToggleActive={() => handleToggleSlotActive(slot)}
+                        onEdit={() => {
+                          setEditingSlot(slot);
+                          setSlotForm({
+                            time: slot.time,
+                            label: slot.label,
+                            active: slot.active,
+                            sortOrder: slot.sortOrder,
+                          });
+                          setIsSlotModalOpen(true);
+                        }}
+                        onDelete={() => handleDeleteSlot(slot.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </section>
       )}
 
       {/* =================================================================== */}
       {/* TAB 4: CIERRES Y EXCEPCIONES                                        */}
       {/* =================================================================== */}
       {activeTab === "closures" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Section A: Recurring Weekly Closures */}
-          <AdminCard className="p-5 space-y-4">
+        <section aria-label="Cierres y descansos" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Card A: Descanso Semanal Recurrente */}
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs space-y-4">
             <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                  Descanso Semanal Fijo
+                </span>
+              </div>
               <h2 className="text-base font-bold text-zinc-950">
-                Días de Cierre Semanal Recurrente
+                Días de Cierre Recurrente
               </h2>
-              <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                Marcá los días fijos de la semana en los que el restaurante está cerrado de forma permanente. El calendario de la landing bloqueará automáticamente estos días.
+              <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                Tocá los días en los que el restaurante está cerrado permanentemente. El calendario público bloqueará automáticamente estos días.
               </p>
             </div>
 
-            <div className="space-y-2 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               {DAYS_OF_WEEK.map(({ day, label }) => {
                 const isClosed = data.recurringClosures.some(
                   (c) => c.dayOfWeek === day,
                 );
+
                 return (
                   <button
                     key={day}
                     type="button"
                     disabled={isPending}
                     onClick={() => handleToggleRecurringDay(day)}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-semibold transition cursor-pointer ${
+                    className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer text-left ${
                       isClosed
-                        ? "bg-red-50/70 text-red-900 border-red-200"
-                        : "bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50"
+                        ? "bg-red-50/80 border-red-200 text-red-950"
+                        : "bg-white border-zinc-200 hover:border-zinc-300 text-zinc-800"
                     }`}
                   >
-                    <span>{label}</span>
+                    <div>
+                      <span className="font-bold text-sm block">{label}</span>
+                      <span className="text-[11px] text-zinc-400">
+                        {isClosed ? "Descanso programado" : "Servicio normal"}
+                      </span>
+                    </div>
+
                     <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                      className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition ${
                         isClosed
-                          ? "bg-red-200/80 text-red-900"
-                          : "bg-emerald-100 text-emerald-800"
+                          ? "bg-red-100 text-red-800 border-red-300"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
                       }`}
                     >
-                      {isClosed ? "Cerrado fijo" : "Abierto"}
+                      {isClosed ? "Cerrado" : "Abierto"}
                     </span>
                   </button>
                 );
               })}
             </div>
-          </AdminCard>
+          </div>
 
-          {/* Section B: Blocked Dates Exceptions */}
-          <AdminCard className="p-5 space-y-4">
+          {/* Card B: Bloqueo de Fechas Específicas / Feriados */}
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs space-y-4">
             <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-red-800">
+                  Excepciones y Feriados
+                </span>
+              </div>
               <h2 className="text-base font-bold text-zinc-950">
-                Bloqueo de Fechas Específicas
+                Bloquear Fecha Específica
               </h2>
-              <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                Baneá fechas puntuales (feriados, eventos privados o refacciones) sin alterar los días de cierre semanal.
+              <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                Cerrá días puntuales (feriados, eventos privados o reformas) sin alterar tu horario semanal.
               </p>
             </div>
 
-            <form onSubmit={handleAddBlockedDate} className="space-y-3 pt-2">
+            <form onSubmit={handleAddBlockedDate} className="space-y-3 pt-1">
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                  Seleccionar Fecha a Bloquear
+                  Fecha a Bloquear *
                 </label>
                 <input
                   type="date"
@@ -1290,13 +2100,13 @@ export function ReservationCmsScreen({
                   onChange={(e) =>
                     setNewBlockedDate((prev) => ({ ...prev, date: e.target.value }))
                   }
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                  Motivo del Cierre
+                  Motivo
                 </label>
                 <input
                   type="text"
@@ -1305,56 +2115,79 @@ export function ReservationCmsScreen({
                   onChange={(e) =>
                     setNewBlockedDate((prev) => ({ ...prev, reason: e.target.value }))
                   }
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
                 />
+
+                {/* Quick Presets for Reason */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                  <span className="text-[10px] text-zinc-400 font-medium">Motivos rápidos:</span>
+                  {[
+                    "Feriado Nacional",
+                    "Evento Privado",
+                    "Mantenimiento",
+                    "Vacaciones",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setNewBlockedDate((prev) => ({ ...prev, reason: preset }))
+                      }
+                      className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium transition cursor-pointer"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isPending || !newBlockedDate.date}
-                className={`w-full ${adminSecondaryButtonClass}`}
+                className={`w-full ${adminPrimaryButtonClass}`}
               >
                 <CalendarX2 size={16} />
-                Bloquear Fecha
+                <span>Bloquear Esta Fecha</span>
               </button>
             </form>
 
             <div className="pt-4 border-t border-zinc-100 space-y-2">
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                Fechas Bloqueadas ({data.blockedDates.length})
+                Fechas Bloqueadas Activas ({data.blockedDates.length})
               </h3>
+
               {data.blockedDates.length === 0 ? (
                 <p className="text-xs text-zinc-400 italic">
                   No hay fechas específicas bloqueadas.
                 </p>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {data.blockedDates.map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs"
+                      className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 text-xs hover:border-zinc-300 transition"
                     >
                       <div>
-                        <span className="font-bold text-zinc-900 block">
-                          {b.date}
+                        <span className="font-bold text-zinc-900 block text-sm">
+                          {formatFriendlyDate(b.date)}
                         </span>
                         <span className="text-zinc-500">{b.reason}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveBlockedDate(b.id)}
-                        className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 cursor-pointer"
+                        className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer"
                         title="Desbloquear fecha"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          </AdminCard>
-        </div>
+          </div>
+        </section>
       )}
 
       {/* =================================================================== */}
@@ -1362,11 +2195,11 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       <AdminModal
         open={isCreateResModalOpen || Boolean(editingReservation)}
-        title={editingReservation ? "Editar Reserva" : "Nueva Reserva"}
+        title={editingReservation ? "Modificar Reserva" : "Nueva Reserva Manual"}
         description={
           editingReservation
-            ? `Modificá los datos de la reserva ${editingReservation.code}`
-            : "Creá una reserva manual directamente desde el panel."
+            ? `Editando los datos de la reserva ${editingReservation.code}`
+            : "Registrá una reserva telefónica o presencial directamente en el sistema."
         }
         onClose={() => {
           setIsCreateResModalOpen(false);
@@ -1381,11 +2214,12 @@ export function ReservationCmsScreen({
             <input
               type="text"
               required
+              placeholder="Ej. Martín Pérez"
               value={resForm.customerName}
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, customerName: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1397,11 +2231,12 @@ export function ReservationCmsScreen({
               <input
                 type="tel"
                 required
+                placeholder="Ej. +54 9 11 1234-5678"
                 value={resForm.customerPhone}
                 onChange={(e) =>
                   setResForm((prev) => ({ ...prev, customerPhone: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
             <div>
@@ -1420,22 +2255,23 @@ export function ReservationCmsScreen({
                     partySize: Number(e.target.value),
                   }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Correo Electrónico (opcional)
+              Email (opcional)
             </label>
             <input
               type="email"
+              placeholder="ejemplo@correo.com"
               value={resForm.customerEmail || ""}
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, customerEmail: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1451,7 +2287,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setResForm((prev) => ({ ...prev, date: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
             <div>
@@ -1464,7 +2300,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setResForm((prev) => ({ ...prev, time: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               >
                 {data.timeSlots.map((slot) => (
                   <option key={slot.id} value={slot.time}>
@@ -1477,7 +2313,7 @@ export function ReservationCmsScreen({
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Tipo de Reserva / Evento Asociado
+              Tipo de Reserva / Evento
             </label>
             <select
               value={resForm.eventId || ""}
@@ -1491,12 +2327,12 @@ export function ReservationCmsScreen({
                   time: targetEvt ? targetEvt.startTime : prev.time,
                 }));
               }}
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-medium"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium"
             >
-              <option value="">🍽️ Mesa regular (sin evento)</option>
+              <option value="">🍽️ Mesa Regular en Salón</option>
               {data.events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  🎉 Evento: {ev.title} ({ev.date} - {ev.startTime} hs)
+                  🎉 Evento: {ev.title} ({formatShortDate(ev.date)} - {ev.startTime} hs)
                 </option>
               ))}
             </select>
@@ -1504,7 +2340,7 @@ export function ReservationCmsScreen({
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Estado de la Reserva
+              Estado Inicial
             </label>
             <select
               value={resForm.status}
@@ -1514,7 +2350,7 @@ export function ReservationCmsScreen({
                   status: e.target.value as ReservationStatus,
                 }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-medium"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium"
             >
               <option value="CONFIRMED">Confirmada</option>
               <option value="PENDING">Pendiente</option>
@@ -1526,15 +2362,16 @@ export function ReservationCmsScreen({
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Notas del Cliente (Alergias, preferencia de mesa)
+              Notas del Cliente (Alergias, cumpleaños, mesa preferida)
             </label>
             <textarea
               rows={2}
+              placeholder="Ej. Celíaco, festejan aniversario, mesa afuera..."
               value={resForm.notes || ""}
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, notes: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1544,12 +2381,12 @@ export function ReservationCmsScreen({
             </label>
             <input
               type="text"
-              placeholder="Ej. Mesa 4 asignada, cliente VIP"
+              placeholder="Ej. Mesa 4 asignada, cliente frecuente"
               value={resForm.adminNotes || ""}
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, adminNotes: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1570,7 +2407,7 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
-              {editingReservation ? "Guardar Cambios" : "Crear Reserva"}
+              <span>{editingReservation ? "Guardar Cambios" : "Crear Reserva"}</span>
             </button>
           </div>
         </form>
@@ -1582,7 +2419,7 @@ export function ReservationCmsScreen({
       <AdminModal
         open={isEventModalOpen}
         title={editingEvent ? "Editar Evento" : "Nuevo Evento Especial"}
-        description="Configurá las fechas, horarios y cupos de tu evento especial."
+        description="Publicá catas de vinos, noches con menú especial o celebraciones en la landing."
         onClose={() => {
           setIsEventModalOpen(false);
           setEditingEvent(null);
@@ -1596,12 +2433,12 @@ export function ReservationCmsScreen({
             <input
               type="text"
               required
-              placeholder="Ej. Noche de Jazz & Vino"
+              placeholder="Ej. Noche de Jazz & Maridaje"
               value={eventForm.title}
               onChange={(e) =>
                 setEventForm((prev) => ({ ...prev, title: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1611,12 +2448,12 @@ export function ReservationCmsScreen({
             </label>
             <textarea
               rows={3}
-              placeholder="Detalles del menú, artistas invitados o información relevante..."
+              placeholder="Detalles de la velada, maridaje o menú por pasos..."
               value={eventForm.description}
               onChange={(e) =>
                 setEventForm((prev) => ({ ...prev, description: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
@@ -1632,7 +2469,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setEventForm((prev) => ({ ...prev, date: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
             <div>
@@ -1647,7 +2484,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setEventForm((prev) => ({ ...prev, startTime: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-mono"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono"
               />
             </div>
             <div>
@@ -1661,7 +2498,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setEventForm((prev) => ({ ...prev, endTime: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-mono"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono"
               />
             </div>
           </div>
@@ -1683,7 +2520,7 @@ export function ReservationCmsScreen({
                     capacity: Number(e.target.value),
                   }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
             <div>
@@ -1697,15 +2534,15 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setEventForm((prev) => ({ ...prev, priceLabel: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
             <input
               type="checkbox"
-              id="blocksRegular"
+              id="blocksRegularEvent"
               checked={eventForm.blocksRegularReservations}
               onChange={(e) =>
                 setEventForm((prev) => ({
@@ -1715,8 +2552,11 @@ export function ReservationCmsScreen({
               }
               className="rounded text-[#182618] focus:ring-[#182618]/20 h-4 w-4"
             />
-            <label htmlFor="blocksRegular" className="text-xs text-amber-900 font-medium">
-              Bloquear reservas regulares este día (el restaurante solo funcionará para el evento)
+            <label
+              htmlFor="blocksRegularEvent"
+              className="text-xs text-amber-950 font-medium"
+            >
+              Salón exclusivo para el evento (bloquea reservas de salón regulares para esa fecha)
             </label>
           </div>
 
@@ -1737,7 +2577,7 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
-              {editingEvent ? "Guardar Cambios" : "Publicar Evento"}
+              <span>{editingEvent ? "Guardar Cambios" : "Publicar Evento"}</span>
             </button>
           </div>
         </form>
@@ -1749,10 +2589,14 @@ export function ReservationCmsScreen({
       <AdminModal
         open={Boolean(viewingEventAttendees)}
         onClose={() => setViewingEventAttendees(null)}
-        title={viewingEventAttendees ? `Inscriptos: ${viewingEventAttendees.title}` : "Inscriptos al Evento"}
+        title={
+          viewingEventAttendees
+            ? `Inscriptos: ${viewingEventAttendees.title}`
+            : "Inscriptos al Evento"
+        }
         description={
           viewingEventAttendees
-            ? `Fecha: ${viewingEventAttendees.date} • ${viewingEventAttendees.startTime} hs | Capacidad: ${viewingEventAttendees.capacity} cupos`
+            ? `Fecha: ${formatFriendlyDate(viewingEventAttendees.date)} • ${viewingEventAttendees.startTime} hs | Capacidad: ${viewingEventAttendees.capacity} cupos`
             : ""
         }
         wide
@@ -1769,27 +2613,41 @@ export function ReservationCmsScreen({
 
               if (attendees.length === 0) {
                 return (
-                  <div className="py-8 text-center text-zinc-500 text-sm">
-                    No hay personas inscriptas registradas para este evento todavía.
+                  <div className="py-10 text-center text-zinc-500 text-sm">
+                    No hay personas inscriptas para este evento todavía.
                   </div>
                 );
               }
 
               return (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs font-semibold text-zinc-700 bg-zinc-50 p-2.5 rounded-xl border border-zinc-200">
+                  <div className="flex items-center justify-between text-xs font-semibold text-zinc-700 bg-zinc-50 p-3 rounded-xl border border-zinc-200">
                     <span>
-                      Total cupos ocupados: <strong className="text-zinc-950">{totalConfirmedSpots}</strong> de {viewingEventAttendees.capacity}
+                      Total ocupado:{" "}
+                      <strong className="text-zinc-950 font-mono text-sm">
+                        {totalConfirmedSpots}
+                      </strong>{" "}
+                      de {viewingEventAttendees.capacity} lugares
                     </span>
                     <span>
-                      Cupos restantes: <strong className="text-emerald-700">{Math.max(0, viewingEventAttendees.capacity - totalConfirmedSpots)}</strong>
+                      Restantes:{" "}
+                      <strong className="text-emerald-700 font-mono text-sm">
+                        {Math.max(0, viewingEventAttendees.capacity - totalConfirmedSpots)}
+                      </strong>
                     </span>
                   </div>
 
                   <div className="divide-y divide-zinc-100 max-h-[60vh] overflow-y-auto pr-1">
                     {attendees.map((att) => {
-                      const cleanPhone = att.customerPhone.replace(/[^0-9]/g, "");
-                      const waLink = cleanPhone ? `https://wa.me/${cleanPhone}` : null;
+                      const waLink = buildWhatsAppLink(
+                        att.customerPhone,
+                        att.customerName,
+                        data.restaurantName,
+                        att.date,
+                        att.time,
+                        att.code,
+                        att.partySize,
+                      );
 
                       return (
                         <div
@@ -1815,9 +2673,13 @@ export function ReservationCmsScreen({
                             </div>
 
                             <div className="flex items-center gap-3 text-xs text-zinc-500 flex-wrap">
-                              <span className="font-medium text-zinc-700">📞 {att.customerPhone}</span>
+                              <span className="font-medium text-zinc-700">
+                                📞 {att.customerPhone}
+                              </span>
                               {att.customerEmail && <span>✉️ {att.customerEmail}</span>}
-                              <span className="font-mono text-[11px] text-zinc-400">({att.code})</span>
+                              <span className="font-mono text-[11px] text-zinc-400">
+                                ({att.code})
+                              </span>
                             </div>
 
                             {att.notes && (
@@ -1876,6 +2738,8 @@ export function ReservationCmsScreen({
                                   source: att.source === "LANDING" ? "LANDING" : "ADMIN",
                                   eventId: att.eventId,
                                 });
+                                setViewingEventAttendees(null);
+                                setIsCreateResModalOpen(true);
                               }}
                               className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition"
                               title="Editar reserva"
@@ -1900,7 +2764,7 @@ export function ReservationCmsScreen({
       <AdminModal
         open={isSlotModalOpen}
         title={editingSlot ? "Editar Turno" : "Nuevo Turno de Atención"}
-        description="Definí el horario disponible para que los clientes puedan reservar."
+        description="Definí el horario disponible para que los clientes puedan reservar mesa."
         onClose={() => {
           setIsSlotModalOpen(false);
           setEditingSlot(null);
@@ -1919,7 +2783,7 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, time: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20 font-mono text-base font-bold"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono text-base font-bold"
             />
           </div>
 
@@ -1934,22 +2798,22 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, label: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/20"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 border border-zinc-200">
             <input
               type="checkbox"
-              id="activeSlot"
+              id="activeSlotModal"
               checked={slotForm.active}
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, active: e.target.checked }))
               }
               className="rounded text-[#182618] focus:ring-[#182618]/20 h-4 w-4"
             />
-            <label htmlFor="activeSlot" className="text-xs text-zinc-700 font-medium">
-              Turno activo (disponible para ser seleccionado en reservas)
+            <label htmlFor="activeSlotModal" className="text-xs text-zinc-700 font-medium">
+              Turno activo (disponible para ser seleccionado en la web)
             </label>
           </div>
 
@@ -1970,13 +2834,13 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
-              Guardar Turno
+              <span>Guardar Turno</span>
             </button>
           </div>
         </form>
       </AdminModal>
 
-      {/* Confirm Modals */}
+      {/* Confirm Delete Modals */}
       <AdminConfirmModal
         open={Boolean(deletingReservation)}
         title="Eliminar Reserva"
@@ -1996,6 +2860,79 @@ export function ReservationCmsScreen({
         loading={isPending}
         confirmLabel="Eliminar Evento"
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component: SlotCard
+// ---------------------------------------------------------------------------
+function SlotCard({
+  slot,
+  isPending,
+  onToggleActive,
+  onEdit,
+  onDelete,
+}: {
+  slot: TimeSlotView;
+  isPending: boolean;
+  onToggleActive: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 shadow-2xs transition-all flex flex-col justify-between ${
+        slot.active
+          ? "border-zinc-200/90 bg-white"
+          : "border-zinc-200/50 bg-zinc-50/70 opacity-60"
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <Clock size={16} className="text-[#3d5934]" />
+            <span className="text-xl font-bold font-mono text-zinc-950">
+              {slot.time} hs
+            </span>
+          </div>
+          <p className="mt-1 text-xs font-medium text-zinc-500">
+            {slot.label || "Sin etiqueta"}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={onToggleActive}
+          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
+            slot.active
+              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+              : "bg-zinc-200 text-zinc-600 border-zinc-300"
+          }`}
+        >
+          {slot.active ? "Activo" : "Pausado"}
+        </button>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+          title="Editar"
+        >
+          <Edit2 size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1.5 text-zinc-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
+          title="Eliminar"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }
