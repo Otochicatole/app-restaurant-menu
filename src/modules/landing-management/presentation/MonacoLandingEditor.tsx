@@ -11043,45 +11043,73 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                 return (
                   <div
                     key={tpl.id}
-                    className="flex flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 hover:border-zinc-300 hover:shadow-xs transition-all"
+                    className="flex flex-col justify-between rounded-xl border border-zinc-200/90 bg-white p-4 hover:border-zinc-300 hover:shadow-xs transition-all group"
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badge.cls}`}
-                        >
-                          {badge.text}
-                        </span>
-                        <div className="flex items-center gap-1">
+                      {/* Mini Preview Banner representing the theme */}
+                      <div
+                        className="h-16 rounded-lg mb-3 p-3 flex flex-col justify-between relative overflow-hidden border border-black/5"
+                        style={{
+                          backgroundColor: tpl.document.theme.bgColor,
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
                           <span
-                            className="h-3.5 w-3.5 rounded-full border border-black/10"
+                            className="text-[11px] font-bold"
                             style={{
-                              backgroundColor: tpl.document.theme.primaryColor,
+                              color: tpl.document.theme.primaryColor,
+                              fontFamily: tpl.document.theme.fontHeading.split(",")[0].replace(/['"]/g, ""),
                             }}
-                          />
+                          >
+                            {tpl.name.split(" ")[0]}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: tpl.document.theme.primaryColor }}
+                            />
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: tpl.document.theme.accentColor }}
+                            />
+                            <span
+                              className="h-2.5 w-2.5 rounded-full border border-black/10"
+                              style={{ backgroundColor: tpl.document.theme.cardBgColor }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
                           <span
-                            className="h-3.5 w-3.5 rounded-full border border-black/10"
-                            style={{
-                              backgroundColor: tpl.document.theme.accentColor,
-                            }}
-                          />
+                            className="text-[9px] font-medium"
+                            style={{ color: tpl.document.theme.mutedTextColor }}
+                          >
+                            {tpl.document.theme.fontHeading.split(",")[0].replace(/['"]/g, "")}
+                          </span>
                           <span
-                            className="h-3.5 w-3.5 rounded-full border border-black/10"
+                            className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow-2xs"
                             style={{
-                              backgroundColor: tpl.document.theme.bgColor,
+                              backgroundColor: tpl.document.theme.cardBgColor,
+                              color: tpl.document.theme.primaryColor,
                             }}
-                          />
+                          >
+                            {tpl.document.blocks.length} Bloques
+                          </span>
                         </div>
                       </div>
 
-                      <h4 className="text-sm font-bold text-zinc-900">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badge.cls}`}
+                        >
+                          {badge.text}
+                        </span>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-zinc-900 group-hover:text-emerald-700 transition-colors">
                         {tpl.name}
                       </h4>
-                      <p className="text-xs text-zinc-600 mt-1 line-clamp-2">
+                      <p className="text-xs text-zinc-600 mt-1 line-clamp-2 leading-relaxed">
                         {tpl.description || "Sin descripción"}
-                      </p>
-                      <p className="text-[11px] text-zinc-400 mt-2">
-                        {tpl.document.blocks.length} bloques incluidos
                       </p>
                     </div>
 
@@ -11089,14 +11117,14 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       <button
                         type="button"
                         onClick={() => handleApplyTemplate(tpl)}
-                        className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors"
+                        className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
                       >
                         Usar plantilla
                       </button>
                       <button
                         type="button"
                         onClick={() => handleExportTemplate(tpl.id)}
-                        className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 transition-colors"
+                        className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 transition-colors cursor-pointer"
                         title="Descargar archivo .landingtemplate"
                       >
                         <Download className="h-3.5 w-3.5" />
@@ -11105,7 +11133,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                         <button
                           type="button"
                           onClick={() => handleDeleteTemplate(tpl.id)}
-                          className="p-1.5 rounded-lg bg-zinc-100 hover:bg-red-50 text-zinc-500 hover:text-red-600 transition-colors"
+                          className="p-1.5 rounded-lg bg-zinc-100 hover:bg-red-50 text-zinc-500 hover:text-red-600 transition-colors cursor-pointer"
                           title="Eliminar plantilla"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

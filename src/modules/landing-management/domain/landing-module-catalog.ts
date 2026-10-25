@@ -133,18 +133,18 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "header",
     name: "Barra de Navegación",
-    description: "Encabezado fijo con nombre del restaurante, enlaces de ancla y botón directo a la carta digital.",
+    description: "Encabezado sticky con marca editorial, enlaces de sección y botón de acceso a la carta digital.",
     category: "estructura",
     fields: [
-      { key: "brandIcon", label: "Ícono / Emoji de marca", type: "text", defaultValue: "🍽️" },
+      { key: "brandIcon", label: "Marca o monograma", type: "text", defaultValue: "✦" },
       { key: "brandTitle", label: "Nombre visible", type: "text", defaultValue: "{{restaurantName}}" },
       { key: "link1Text", label: "Texto enlace 1", type: "text", defaultValue: "Inicio" },
       { key: "link1Href", label: "Destino enlace 1", type: "url", defaultValue: "#inicio" },
       { key: "link2Text", label: "Texto enlace 2", type: "text", defaultValue: "Especialidades" },
       { key: "link2Href", label: "Destino enlace 2", type: "url", defaultValue: "#destacados" },
-      { key: "link3Text", label: "Texto enlace 3", type: "text", defaultValue: "Experiencia" },
+      { key: "link3Text", label: "Texto enlace 3", type: "text", defaultValue: "Filosofía" },
       { key: "link3Href", label: "Destino enlace 3", type: "url", defaultValue: "#experiencia" },
-      { key: "link4Text", label: "Texto enlace 4", type: "text", defaultValue: "Ubicación" },
+      { key: "link4Text", label: "Texto enlace 4", type: "text", defaultValue: "Horarios & Contacto" },
       { key: "link4Href", label: "Destino enlace 4", type: "url", defaultValue: "#contacto" },
       { key: "ctaText", label: "Texto botón principal", type: "text", defaultValue: "Ver Carta Digital" },
       { key: "ctaUrl", label: "URL botón principal", type: "url", defaultValue: "{{menuUrl}}" },
@@ -178,7 +178,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   z-index: 100;
   background-color: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
-  padding: 14px 0;
+  padding: 16px 0;
+  transition: var(--transition);
 }
 .nav-container {
   display: flex;
@@ -194,21 +195,31 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--color-primary);
+  letter-spacing: -0.01em;
 }
-.brand-icon { font-size: 1.5rem; }
+.brand-icon {
+  font-size: 1.15rem;
+  color: var(--color-accent);
+}
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 28px;
 }
 .nav-link {
   color: var(--color-text-main);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 500;
+  letter-spacing: 0.01em;
   transition: var(--transition);
 }
 .nav-link:hover { color: var(--color-accent); }
+.nav-cta {
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
 .nav-toggle {
   display: none;
   flex-direction: column;
@@ -220,7 +231,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 }
 .nav-toggle span {
   display: block;
-  width: 24px;
+  width: 22px;
   height: 2px;
   background-color: var(--color-primary);
   transition: var(--transition);
@@ -283,15 +294,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "hero",
     name: "Hero / Portada Principal",
-    description: "Sección de bienvenida con insignia superior, titular destacado, bajada descriptiva y dos botones de acción.",
+    description: "Portada editorial con titular gastronómico de alto impacto, bajada sensorial y botones de acción directos.",
     category: "estructura",
     fields: [
-      { key: "badge", label: "Insignia superior", type: "text", defaultValue: "Sabor & Tradición Gastronómica" },
-      { key: "title", label: "Título principal", type: "text", defaultValue: "Una experiencia culinaria que despierta tus sentidos" },
-      { key: "subtitle", label: "Subtítulo descriptivo", type: "textarea", defaultValue: "Descubrí ingredientes frescos, recetas de autor y una ambientación pensada para compartir momentos inolvidables en {{restaurantName}}." },
-      { key: "primaryBtnText", label: "Texto botón principal", type: "text", defaultValue: "📖 Ver Menú Digital" },
+      { key: "badge", label: "Insignia superior", type: "text", defaultValue: "Fuego de Quebracho · Cortes Madurados · Cava" },
+      { key: "title", label: "Título principal", type: "text", defaultValue: "El ritual de la brasa viva y los grandes vinos" },
+      { key: "subtitle", label: "Subtítulo descriptivo", type: "textarea", defaultValue: "Cortes seleccionados madurados en cámara seca, pesca artesanal del día y cava subterránea de guarda en un ambiente pensado para disfrutar sin prisa." },
+      { key: "primaryBtnText", label: "Texto botón principal", type: "text", defaultValue: "Explorar Carta Digital →" },
       { key: "primaryBtnUrl", label: "URL botón principal", type: "url", defaultValue: "{{menuUrl}}" },
-      { key: "secondaryBtnText", label: "Texto botón secundario", type: "text", defaultValue: "📍 Cómo Llegar" },
+      { key: "secondaryBtnText", label: "Texto botón secundario", type: "text", defaultValue: "Reservar Mesa" },
       { key: "secondaryBtnUrl", label: "URL botón secundario", type: "url", defaultValue: "#contacto" },
     ],
     htmlTemplate: `<!-- Hero Section -->
@@ -314,7 +325,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 </section>`,
     cssTemplate: `.hero-section {
   position: relative;
-  padding: 100px 0 110px;
+  padding: 110px 0 120px;
   overflow: hidden;
   border-bottom: 1px solid var(--color-border);
 }
@@ -322,29 +333,34 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   position: relative;
   z-index: 2;
 }
-.hero-content { max-width: 700px; }
+.hero-content {
+  max-width: 740px;
+}
 .hero-badge {
   display: inline-block;
   padding: 6px 14px;
   background-color: var(--color-card-bg);
   border: 1px solid var(--color-border);
   color: var(--color-accent);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
   border-radius: 9999px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 20px;
+  letter-spacing: 0.12em;
+  margin-bottom: 22px;
 }
 .hero-title {
-  font-size: 3.2rem;
-  letter-spacing: -0.02em;
-  margin-bottom: 20px;
+  font-size: clamp(2.8rem, 5.2vw, 4.2rem);
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  margin-bottom: 22px;
 }
 .hero-subtitle {
-  font-size: 1.18rem;
+  font-size: 1.15rem;
+  line-height: 1.6;
   color: var(--color-text-muted);
-  margin-bottom: 34px;
+  max-width: 620px;
+  margin-bottom: 36px;
 }
 .hero-actions {
   display: flex;
@@ -352,30 +368,32 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   gap: 16px;
 }
 @media (max-width: 868px) {
+  .hero-section { padding: 72px 0 84px; }
   .hero-title { font-size: 2.35rem; }
+  .hero-subtitle { font-size: 1.02rem; margin-bottom: 28px; }
 }`,
     jsTemplate: "",
   },
   {
     moduleKey: "specialties-grid",
     name: "Grilla de Especialidades (3 Cards)",
-    description: "Sección con encabezado y 3 tarjetas de especialidades gastronómicas con ícono, etiqueta y botón inferior.",
+    description: "Tres tarjetas gastronómicas editoriales con categoría, plato insignia, descripción sensorial y llamada a la carta.",
     category: "tarjetas",
     fields: [
-      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Nuestra Propuesta" },
+      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "PROPUESTA GASTRONÓMICA" },
       { key: "sectionTitle", label: "Título de sección", type: "text", defaultValue: "Especialidades de la Casa" },
-      { key: "sectionDescription", label: "Descripción de sección", type: "textarea", defaultValue: "Platos elaborados con dedicación, cuidando cada detalle y selección de materia prima." },
-      { key: "card1Icon", label: "Card 1 · Ícono", type: "text", defaultValue: "🥩" },
-      { key: "card1Title", label: "Card 1 · Título", type: "text", defaultValue: "Cortes Seleccionados" },
-      { key: "card1Text", label: "Card 1 · Descripción", type: "textarea", defaultValue: "Cocción a fuego lento con madera de quebracho y sazonado con sales aromáticas exclusivas." },
-      { key: "card2Icon", label: "Card 2 · Ícono", type: "text", defaultValue: "🍝" },
-      { key: "card2Badge", label: "Card 2 · Etiqueta destacada", type: "text", defaultValue: "Favorito" },
-      { key: "card2Title", label: "Card 2 · Título", type: "text", defaultValue: "Pastas Artesanales" },
-      { key: "card2Text", label: "Card 2 · Descripción", type: "textarea", defaultValue: "Amasadas a diario con sémola de trigo candeal, salsas reducidas por horas y quesos madurados." },
-      { key: "card3Icon", label: "Card 3 · Ícono", type: "text", defaultValue: "🍷" },
-      { key: "card3Title", label: "Card 3 · Título", type: "text", defaultValue: "Cava & Coctelería" },
-      { key: "card3Text", label: "Card 3 · Descripción", type: "textarea", defaultValue: "Maridajes recomendados por sommeliers y cócteles clásicos reversionados por nuestro bartender." },
-      { key: "ctaText", label: "Texto botón inferior", type: "text", defaultValue: "Explorar toda la carta interactiva →" },
+      { key: "sectionDescription", label: "Descripción de sección", type: "textarea", defaultValue: "Platos concebidos a partir de productos nobles de estación, técnicas de cocción lenta y respeto absoluto por el origen." },
+      { key: "card1Icon", label: "Card 1 · Categoría", type: "text", defaultValue: "Fuegos & Brasas" },
+      { key: "card1Title", label: "Card 1 · Título", type: "text", defaultValue: "Ojo de Bife Madurado 45 Días" },
+      { key: "card1Text", label: "Card 1 · Descripción", type: "textarea", defaultValue: "Cocción a la leña de quebracho colorado, milhojas de papa al romero, manteca de tuétano y sal marina en escamas." },
+      { key: "card2Icon", label: "Card 2 · Categoría", type: "text", defaultValue: "Pasta Fatta a Mano" },
+      { key: "card2Badge", label: "Card 2 · Etiqueta destacada", type: "text", defaultValue: "Insignia" },
+      { key: "card2Title", label: "Card 2 · Título", type: "text", defaultValue: "Tagliolini al Tartufo Nero & Parmigiano" },
+      { key: "card2Text", label: "Card 2 · Descripción", type: "textarea", defaultValue: "Pasta fresca elaborada a diario con sémola candeal, manteca de pastura clarificada, trufa negra y queso reggiano 24 meses." },
+      { key: "card3Icon", label: "Card 3 · Categoría", type: "text", defaultValue: "Pesca & Cava" },
+      { key: "card3Title", label: "Card 3 · Título", type: "text", defaultValue: "Pesca Salvaje del Atlántico Sur" },
+      { key: "card3Text", label: "Card 3 · Descripción", type: "textarea", defaultValue: "Pesca de anzuelo sellada a la plancha sobre puré sedoso de coliflor asada, brotes de huerta y reducción de sauvignon blanc." },
+      { key: "ctaText", label: "Texto botón inferior", type: "text", defaultValue: "Ver toda la carta con precios y maridajes →" },
       { key: "ctaUrl", label: "URL botón inferior", type: "url", defaultValue: "{{menuUrl}}" },
     ],
     htmlTemplate: `<!-- Especialidades Destacadas -->
@@ -409,27 +427,26 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     </div>
 
     <div class="section-cta-wrap">
-      <a href="{{ctaUrl}}" target="_top" class="btn btn-outline">{{ctaText}}</a>
+      <a href="{{ctaUrl}}" target="_top" class="btn btn-secondary">{{ctaText}}</a>
     </div>
   </div>
 </section>`,
     cssTemplate: `.cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 28px;
+  gap: 24px;
 }
 .card {
   position: relative;
   background-color: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 36px 30px;
-  box-shadow: var(--shadow-soft);
+  padding: 34px 28px;
   transition: var(--transition);
 }
 .card:hover {
-  transform: translateY(-5px);
-  box-shadow: var(--shadow-hover);
+  transform: translateY(-4px);
+  border-color: var(--color-accent);
 }
 .featured-card {
   border-color: var(--color-accent);
@@ -440,23 +457,30 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   right: 18px;
   background-color: var(--color-accent);
   color: #ffffff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 9999px;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .card-icon {
-  font-size: 2.4rem;
-  margin-bottom: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+  margin-bottom: 14px;
 }
 .card-title {
-  font-size: 1.4rem;
+  font-size: 1.35rem;
+  line-height: 1.25;
   margin-bottom: 12px;
 }
 .card-text {
   color: var(--color-text-muted);
-  font-size: 0.98rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
 }
 .section-cta-wrap {
   text-align: center;
@@ -467,15 +491,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "custom-card",
     name: "Card Destacada (Plato / Promo)",
-    description: "Módulo de tarjeta individual con imagen/ícono, precio o etiqueta, descripción y botón. Ideal para personalizar o guardar en tu biblioteca.",
+    description: "Módulo de tarjeta individual con categoría, precio o maridaje, descripción sensorial y llamada a la acción.",
     category: "tarjetas",
     fields: [
-      { key: "badge", label: "Etiqueta superior", type: "text", defaultValue: "Sugerencia del Chef" },
-      { key: "icon", label: "Ícono o Emoji", type: "text", defaultValue: "🔥" },
-      { key: "title", label: "Título de la Card", type: "text", defaultValue: "Menú Degustación de Estación" },
-      { key: "priceTag", label: "Precio / Destacado", type: "text", defaultValue: "4 Pasos + Maridaje" },
-      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Un recorrido por nuestros sabores insignia acompañado de etiquetas seleccionadas de nuestra cava." },
-      { key: "buttonText", label: "Texto del botón", type: "text", defaultValue: "Ver en la Carta Digital" },
+      { key: "badge", label: "Etiqueta superior", type: "text", defaultValue: "SUGERENCIA DE TEMPORADA" },
+      { key: "icon", label: "Ícono o distintivo", type: "text", defaultValue: "✦" },
+      { key: "title", label: "Título de la Card", type: "text", defaultValue: "Menú Degustación 5 Pasos & Cava" },
+      { key: "priceTag", label: "Precio / Destacado", type: "text", defaultValue: "$ 48.000 por persona" },
+      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Recorrido sensorial guiado por el chef ejecutivo maridado con 3 etiquetas de bodegas boutique del Valle de Uco." },
+      { key: "buttonText", label: "Texto del botón", type: "text", defaultValue: "Ver Detalles del Menú" },
       { key: "buttonUrl", label: "Enlace del botón", type: "url", defaultValue: "{{menuUrl}}" },
     ],
     htmlTemplate: `<!-- Card Destacada -->
@@ -506,14 +530,26 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   justify-content: space-between;
   gap: 28px;
   background-color: var(--color-card-bg);
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 36px;
-  box-shadow: var(--shadow-soft);
+  transition: var(--transition);
+}
+.spotlight-card:hover {
+  border-color: var(--color-accent);
 }
 .spotlight-icon {
-  font-size: 3rem;
+  font-size: 1.8rem;
+  color: var(--color-accent);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
 }
 .spotlight-body {
   flex: 1;
@@ -522,30 +558,33 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 10px;
 }
 .spotlight-badge {
   background-color: var(--color-accent);
   color: #ffffff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: 9999px;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .spotlight-price {
-  font-size: 0.88rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-primary);
 }
 .spotlight-title {
-  font-size: 1.6rem;
+  font-size: 1.55rem;
+  line-height: 1.25;
   margin-bottom: 8px;
 }
 .spotlight-desc {
   color: var(--color-text-muted);
-  font-size: 0.98rem;
+  font-size: 0.96rem;
+  line-height: 1.55;
 }
 @media (max-width: 768px) {
   .spotlight-card {
@@ -558,21 +597,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "experience-split",
     name: "Historia & Filosofía (2 Columnas)",
-    description: "Bloque editorial dividido en dos columnas con cita destacada, insignia porcentual y puntos diferenciales.",
+    description: "Bloque editorial dividido en dos columnas con cita gastronómica, métrica de maduración y compromisos de cocina.",
     category: "contenido",
     fields: [
-      { key: "metricNumber", label: "Número / Métrica insignia", type: "text", defaultValue: "100%" },
-      { key: "metricLabel", label: "Texto insignia", type: "text", defaultValue: "Pasión Artesanal" },
-      { key: "quote", label: "Cita destacada", type: "textarea", defaultValue: "\"La cocina no es solo alimentar, es generar recuerdos que perduran en cada bocado.\"" },
-      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Filosofía" },
-      { key: "title", label: "Título de sección", type: "text", defaultValue: "Pasión por el detalle" },
-      { key: "description", label: "Párrafo principal", type: "textarea", defaultValue: "En {{restaurantName}} creemos que cada comida debe ser una celebración. Por eso trabajamos junto a productores locales para garantizar frescura, sustentabilidad y sabor genuino." },
-      { key: "feature1Title", label: "Punto 1 · Título", type: "text", defaultValue: "Ingredientes Locales:" },
-      { key: "feature1Text", label: "Punto 1 · Detalle", type: "text", defaultValue: "Priorizamos productores regionales de primera calidad." },
-      { key: "feature2Title", label: "Punto 2 · Título", type: "text", defaultValue: "Ambiente Cálido:" },
-      { key: "feature2Text", label: "Punto 2 · Detalle", type: "text", defaultValue: "Espacios diseñados para encuentros relajados y ocasiones especiales." },
-      { key: "feature3Title", label: "Punto 3 · Título", type: "text", defaultValue: "Menú Digital Siempre al Día:" },
-      { key: "feature3Text", label: "Punto 3 · Detalle", type: "text", defaultValue: "Consultá opciones y sugerencias en tiempo real desde tu móvil." },
+      { key: "metricNumber", label: "Número / Métrica insignia", type: "text", defaultValue: "45 Días" },
+      { key: "metricLabel", label: "Texto insignia", type: "text", defaultValue: "Maduración Propia" },
+      { key: "quote", label: "Cita destacada", type: "textarea", defaultValue: "\"La verdadera cocina comienza con el respeto al productor y la paciencia del fuego lento.\"" },
+      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "FILOSOFÍA & ORIGEN" },
+      { key: "title", label: "Título de sección", type: "text", defaultValue: "El valor del tiempo y la materia prima" },
+      { key: "description", label: "Párrafo principal", type: "textarea", defaultValue: "En {{restaurantName}} cada preparación honra la tradición de los fuegos y el trabajo de pequeños productores agroecológicos. Sin atajos, con fuego real y masa madre viva." },
+      { key: "feature1Title", label: "Punto 1 · Título", type: "text", defaultValue: "Maduración en Cámara Seca:" },
+      { key: "feature1Text", label: "Punto 1 · Detalle", type: "text", defaultValue: "Temperatura y humedad controladas para cortes vacunos y pesca artesanal." },
+      { key: "feature2Title", label: "Punto 2 · Título", type: "text", defaultValue: "Leña de Quebracho Colorado:" },
+      { key: "feature2Text", label: "Punto 2 · Detalle", type: "text", defaultValue: "Aroma ahumado limpio y brasa sostenida para un sellado perfecto." },
+      { key: "feature3Title", label: "Punto 3 · Título", type: "text", defaultValue: "Cava de Pequeños Productores:" },
+      { key: "feature3Text", label: "Punto 3 · Detalle", type: "text", defaultValue: "Selección curada de vinos de altura, baja intervención y cepas autóctonas." },
     ],
     htmlTemplate: `<!-- Experiencia / Historia -->
 <section class="section experience-section" id="experiencia">
@@ -614,14 +653,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 .experience-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 60px;
+  gap: 56px;
   align-items: center;
 }
 .experience-visual {
   position: relative;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  background-color: var(--color-primary);
   border-radius: var(--radius-lg);
-  padding: 60px 40px;
+  padding: 56px 40px;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -639,20 +678,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   display: inline-block;
   background: var(--color-accent);
   color: #ffffff;
-  padding: 10px 18px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   margin-bottom: 24px;
   align-self: flex-start;
 }
 .experience-badge-float .exp-number {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 800;
   margin-right: 6px;
 }
 .section-text {
   font-size: 1.05rem;
+  line-height: 1.6;
   color: var(--color-text-muted);
-  margin-bottom: 24px;
+  margin-bottom: 26px;
 }
 .features-list {
   display: flex;
@@ -668,12 +708,12 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background-color: var(--color-primary);
   color: #ffffff;
   border-radius: 50%;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 800;
   flex-shrink: 0;
   margin-top: 2px;
@@ -689,12 +729,12 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "promo-banner",
     name: "Franja Promocional / Evento",
-    description: "Banner de alto impacto para anunciar Happy Hour, eventos en vivo o promociones de temporada.",
+    description: "Banner editorial de alto impacto para anunciar noches especiales, degustaciones maridadas o eventos exclusivos.",
     category: "contenido",
     fields: [
-      { key: "tag", label: "Etiqueta", type: "text", defaultValue: "Jueves a Sábados · 19 a 21 hs" },
-      { key: "title", label: "Título de promoción", type: "text", defaultValue: "Sunset & Coctelería de Autor 2x1" },
-      { key: "subtitle", label: "Descripción breve", type: "textarea", defaultValue: "Música en vivo, tapas seleccionadas y nuestra barra de coctelería clásica y de autor." },
+      { key: "tag", label: "Etiqueta", type: "text", defaultValue: "JUEVES A SÁBADOS · 19 A 21 HS" },
+      { key: "title", label: "Título de promoción", type: "text", defaultValue: "Aperitivo, Tapas & Coctelería de Autor" },
+      { key: "subtitle", label: "Descripción breve", type: "textarea", defaultValue: "Cócteles de autor con botánicos propios, tablas de charcutería artesanal y quesos madurados en nuestro salón." },
       { key: "ctaText", label: "Texto del botón", type: "text", defaultValue: "Ver Carta de Cócteles" },
       { key: "ctaUrl", label: "URL del botón", type: "url", defaultValue: "{{menuUrl}}" },
     ],
@@ -706,7 +746,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       <p class="promo-subtitle">{{subtitle}}</p>
     </div>
     <div class="promo-banner-cta">
-      <a href="{{ctaUrl}}" target="_top" class="btn btn-primary btn-lg">{{ctaText}}</a>
+      <a href="{{ctaUrl}}" target="_top" class="btn btn-secondary btn-lg">{{ctaText}}</a>
     </div>
   </div>
 </section>`,
@@ -718,20 +758,19 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   align-items: center;
   justify-content: space-between;
   gap: 32px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  background-color: var(--color-primary);
   color: #ffffff;
   border-radius: var(--radius-lg);
   padding: 48px 44px;
-  box-shadow: var(--shadow-hover);
 }
 .promo-tag {
   display: inline-block;
   background-color: var(--color-accent);
   color: #ffffff;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   padding: 5px 12px;
   border-radius: 9999px;
   margin-bottom: 14px;
@@ -739,12 +778,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 .promo-title {
   color: #ffffff;
   font-size: 2rem;
+  line-height: 1.2;
   margin-bottom: 10px;
 }
 .promo-subtitle {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.88);
   max-width: 580px;
   font-size: 1.02rem;
+  line-height: 1.5;
 }
 @media (max-width: 768px) {
   .promo-banner-box {
@@ -758,17 +799,17 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "testimonials",
     name: "Reseñas de Comensales",
-    description: "Grilla de 3 testimonios con calificación de estrellas y nombre del cliente.",
+    description: "Grilla de 3 testimonios con calificación, medio o comensal verificado y estilo editorial.",
     category: "tarjetas",
     fields: [
-      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Experiencias Reales" },
-      { key: "title", label: "Título de sección", type: "text", defaultValue: "Lo que dicen nuestros comensales" },
-      { key: "review1Text", label: "Reseña 1 · Comentario", type: "textarea", defaultValue: "\"Excelente atención y cada plato supera al anterior. La carta digital es súper clara y rápida.\"" },
-      { key: "review1Author", label: "Reseña 1 · Autor", type: "text", defaultValue: "Lucía Fernández" },
-      { key: "review2Text", label: "Reseña 2 · Comentario", type: "textarea", defaultValue: "\"El punto de la carne perfecto y una cava de vinos increíble. Lugar ideal para celebrar.\"" },
-      { key: "review2Author", label: "Reseña 2 · Autor", type: "text", defaultValue: "Martín Gómez" },
-      { key: "review3Text", label: "Reseña 3 · Comentario", type: "textarea", defaultValue: "\"Ambiente cálido, música suave y postres caseros inolvidables. Volveremos sin dudas.\"" },
-      { key: "review3Author", label: "Reseña 3 · Autor", type: "text", defaultValue: "Sofía & Andrés" },
+      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "PRENSA & COMENSALES" },
+      { key: "title", label: "Título de sección", type: "text", defaultValue: "Elogios de la mesa y la crítica" },
+      { key: "review1Text", label: "Reseña 1 · Comentario", type: "textarea", defaultValue: "\"Uno de los puntos de brasa más precisos de la gastronomía contemporánea. El maridaje de cava subterránea es impecable.\"" },
+      { key: "review1Author", label: "Reseña 1 · Autor", type: "text", defaultValue: "Guía Gastronómica de Autor" },
+      { key: "review2Text", label: "Reseña 2 · Comentario", type: "textarea", defaultValue: "\"Atmósfera cuidada, servicio con un ritmo exacto y una carta digital clara que detalla cada productor y origen de la materia prima.\"" },
+      { key: "review2Author", label: "Reseña 2 · Autor", type: "text", defaultValue: "Revista Epicúreo · Crítica Independiente" },
+      { key: "review3Text", label: "Reseña 3 · Comentario", type: "textarea", defaultValue: "\"La pesca salvaje del día y el postre de cacao al 72% justifican por sí solos la visita. Un restaurante donde el detalle manda.\"" },
+      { key: "review3Author", label: "Reseña 3 · Autor", type: "text", defaultValue: "Federico M. · Comensal Verificado" },
     ],
     htmlTemplate: `<section class="section testimonials-section">
   <div class="container">
@@ -804,32 +845,33 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 .review-author {
   margin-top: 18px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--color-primary);
+  letter-spacing: 0.02em;
 }`,
     jsTemplate: "",
   },
   {
     moduleKey: "contact-hours",
     name: "Horarios, Ubicación y WhatsApp",
-    description: "Sección de 3 tarjetas informativas con horarios de apertura, dirección y contacto directo por WhatsApp.",
+    description: "Tres tarjetas de servicio: turnos de salón, dirección con notas de acceso y concierge de reservas.",
     category: "contacto",
     fields: [
-      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Visitános" },
-      { key: "title", label: "Título de sección", type: "text", defaultValue: "Horarios y Ubicación" },
-      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Te esperamos con las puertas abiertas para compartir un momento único." },
-      { key: "hoursTitle", label: "Tarjeta 1 · Título", type: "text", defaultValue: "Horarios de Atención" },
-      { key: "hoursLine1", label: "Horario principal", type: "text", defaultValue: "Martes a Sábado: 12:00 a 16:00 | 20:00 a 00:30" },
-      { key: "hoursLine2", label: "Horario secundario", type: "text", defaultValue: "Domingos: 12:30 a 17:00" },
-      { key: "hoursNote", label: "Nota de horario", type: "text", defaultValue: "Lunes cerrado por descanso del equipo." },
-      { key: "addressTitle", label: "Tarjeta 2 · Título", type: "text", defaultValue: "Ubicación" },
-      { key: "addressLine1", label: "Dirección", type: "text", defaultValue: "Avenida Principal 1234, Centro Histórico" },
-      { key: "addressLine2", label: "Detalle de ubicación", type: "text", defaultValue: "Estacionamiento exclusivo para clientes." },
-      { key: "contactTitle", label: "Tarjeta 3 · Título", type: "text", defaultValue: "Reservas & Consultas" },
-      { key: "phoneText", label: "Teléfono", type: "text", defaultValue: "Teléfono: +54 9 11 0000-0000" },
-      { key: "whatsappText", label: "WhatsApp visible", type: "text", defaultValue: "WhatsApp: +54 9 11 9999-9999" },
+      { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "ENCUENTRO & RESERVAS" },
+      { key: "title", label: "Título de sección", type: "text", defaultValue: "Horarios, Ubicación y Concierge" },
+      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Atención personalizada para reservas individuales, mesas corporativas y celebraciones especiales." },
+      { key: "hoursTitle", label: "Tarjeta 1 · Título", type: "text", defaultValue: "Turnos de Salón" },
+      { key: "hoursLine1", label: "Horario principal", type: "text", defaultValue: "Almuerzos: Mar a Dom · 12:00 a 16:00 hs" },
+      { key: "hoursLine2", label: "Horario secundario", type: "text", defaultValue: "Cenas: Mar a Sáb · 20:00 a 00:30 hs" },
+      { key: "hoursNote", label: "Nota de horario", type: "text", defaultValue: "Lunes cerrado por recepción de producto fresco." },
+      { key: "addressTitle", label: "Tarjeta 2 · Título", type: "text", defaultValue: "Dirección & Cava" },
+      { key: "addressLine1", label: "Dirección", type: "text", defaultValue: "Av. de los Patricios 1420, Barrio Histórico" },
+      { key: "addressLine2", label: "Detalle de ubicación", type: "text", defaultValue: "Valet parking sin cargo en puerta del restaurante." },
+      { key: "contactTitle", label: "Tarjeta 3 · Título", type: "text", defaultValue: "Concierge & Consultas" },
+      { key: "phoneText", label: "Teléfono", type: "text", defaultValue: "Salón: +54 9 11 4820-9900" },
+      { key: "whatsappText", label: "WhatsApp visible", type: "text", defaultValue: "WhatsApp: +54 9 11 5500-1122" },
       { key: "whatsappUrl", label: "Enlace de WhatsApp", type: "url", defaultValue: "https://wa.me/" },
-      { key: "whatsappBtnLabel", label: "Texto botón WhatsApp", type: "text", defaultValue: "Escribinos por WhatsApp" },
+      { key: "whatsappBtnLabel", label: "Texto botón WhatsApp", type: "text", defaultValue: "Escribir a Concierge por WhatsApp" },
     ],
     htmlTemplate: `<!-- Información y Contacto -->
 <section class="section contact-section" id="contacto">
@@ -842,7 +884,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
     <div class="info-grid">
       <article class="info-card">
-        <span class="info-icon">🕒</span>
+        <span class="info-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
         <h3>{{hoursTitle}}</h3>
         <p>{{hoursLine1}}</p>
         <p>{{hoursLine2}}</p>
@@ -850,14 +892,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       </article>
 
       <article class="info-card">
-        <span class="info-icon">📍</span>
+        <span class="info-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></span>
         <h3>{{addressTitle}}</h3>
         <p>{{addressLine1}}</p>
         <p>{{addressLine2}}</p>
       </article>
 
       <article class="info-card">
-        <span class="info-icon">📞</span>
+        <span class="info-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
         <h3>{{contactTitle}}</h3>
         <p>{{phoneText}}</p>
         <p>{{whatsappText}}</p>
@@ -875,32 +917,43 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   background-color: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 32px;
-  box-shadow: var(--shadow-soft);
+  padding: 34px 28px;
+  transition: var(--transition);
+}
+.info-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-3px);
 }
 .info-icon {
-  font-size: 2rem;
-  margin-bottom: 16px;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  margin-bottom: 20px;
 }
 .info-card h3 {
   font-size: 1.25rem;
   margin-bottom: 12px;
 }
 .info-note {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 0.85rem;
   color: var(--color-text-muted);
   font-style: italic;
 }
 .btn-whatsapp {
-  background-color: #25d366;
+  background-color: #128c7e;
   color: #ffffff;
 }
 .btn-whatsapp:hover {
-  background-color: #20ba5a;
+  background-color: #075e54;
 }
-.mt-3 { margin-top: 14px; }`,
+.mt-3 { margin-top: 16px; }`,
     jsTemplate: "",
   },
   {
@@ -4703,13 +4756,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "footer",
     name: "Pie de Página (Footer)",
-    description: "Footer oscuro con nombre del local, año dinámico y accesos rápidos.",
+    description: "Cierre editorial sobrio con nombre completo de la marca, derechos de autor y accesos rápidos.",
     category: "estructura",
     fields: [
       { key: "brandTitle", label: "Nombre del local", type: "text", defaultValue: "{{restaurantName}}" },
-      { key: "copyrightText", label: "Texto de derechos", type: "text", defaultValue: "Todos los derechos reservados." },
-      { key: "menuLinkText", label: "Texto enlace carta", type: "text", defaultValue: "Carta Digital" },
-      { key: "topLinkText", label: "Texto enlace subir", type: "text", defaultValue: "Subir" },
+      { key: "copyrightText", label: "Texto de derechos", type: "text", defaultValue: "Cocina de estación y cava. Todos los derechos reservados." },
+      { key: "menuLinkText", label: "Texto enlace carta", type: "text", defaultValue: "Ver Carta Digital" },
+      { key: "topLinkText", label: "Texto enlace subir", type: "text", defaultValue: "Volver arriba ↑" },
     ],
     htmlTemplate: `<!-- Footer -->
 <footer class="site-footer">
@@ -4725,9 +4778,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   </div>
 </footer>`,
     cssTemplate: `.site-footer {
-  background-color: #121912;
-  color: #a2aba1;
-  padding: 40px 0;
+  background-color: var(--color-primary);
+  color: rgba(255, 255, 255, 0.75);
+  padding: 48px 0;
   font-size: 0.9rem;
 }
 .footer-container {
@@ -4735,23 +4788,29 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
 }
 .footer-brand .brand-name {
   color: #ffffff;
   font-family: var(--font-serif);
-  font-size: 1.2rem;
+  font-size: 1.35rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+}
+.footer-copy {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.88rem;
 }
 .footer-links {
   display: flex;
-  gap: 20px;
+  gap: 24px;
 }
 .footer-link {
-  color: #a2aba1;
+  color: rgba(255, 255, 255, 0.8);
   text-decoration: none;
+  font-weight: 500;
   transition: var(--transition);
 }
 .footer-link:hover { color: #ffffff; }`,
@@ -4795,17 +4854,17 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "stats-strip",
     name: "Métricas & Logros (Stats)",
-    description: "Franja de 4 indicadores numéricos para destacar trayectoria, reseñas y especialidades.",
+    description: "Franja de 4 indicadores gastronómicos numéricos con tipografía display cuidada.",
     category: "contenido",
     fields: [
-      { key: "stat1Value", label: "Métrica 1 (Valor)", type: "text", defaultValue: "+15 Años" },
-      { key: "stat1Label", label: "Métrica 1 (Etiqueta)", type: "text", defaultValue: "Tradición gastronómica" },
+      { key: "stat1Value", label: "Métrica 1 (Valor)", type: "text", defaultValue: "45 Días" },
+      { key: "stat1Label", label: "Métrica 1 (Etiqueta)", type: "text", defaultValue: "Maduración en cámara seca" },
       { key: "stat2Value", label: "Métrica 2 (Valor)", type: "text", defaultValue: "4.9 ★" },
-      { key: "stat2Label", label: "Métrica 2 (Etiqueta)", type: "text", defaultValue: "Calificación de clientes" },
+      { key: "stat2Label", label: "Métrica 2 (Etiqueta)", type: "text", defaultValue: "Calificación comensales" },
       { key: "stat3Value", label: "Métrica 3 (Valor)", type: "text", defaultValue: "100%" },
-      { key: "stat3Label", label: "Métrica 3 (Etiqueta)", type: "text", defaultValue: "Ingredientes frescos" },
-      { key: "stat4Value", label: "Métrica 4 (Valor)", type: "text", defaultValue: "+40" },
-      { key: "stat4Label", label: "Métrica 4 (Etiqueta)", type: "text", defaultValue: "Etiquetas en cava" },
+      { key: "stat3Label", label: "Métrica 3 (Etiqueta)", type: "text", defaultValue: "Masa madre & leña viva" },
+      { key: "stat4Value", label: "Métrica 4 (Valor)", type: "text", defaultValue: "+350" },
+      { key: "stat4Label", label: "Métrica 4 (Etiqueta)", type: "text", defaultValue: "Etiquetas en cava subterránea" },
     ],
     htmlTemplate: `<section class="section stats-strip-section">
   <div class="container stats-strip-grid">
@@ -4828,14 +4887,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   </div>
 </section>`,
     cssTemplate: `.stats-strip-section {
-  padding: 48px 0;
+  padding: 56px 0;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-card-bg);
 }
 .stats-strip-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 24px;
   text-align: center;
 }
@@ -4845,32 +4904,34 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 .stat-val {
   display: block;
   font-family: var(--font-serif);
-  font-size: 2.25rem;
+  font-size: 2.5rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--color-primary);
   margin-bottom: 6px;
 }
 .stat-lbl {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--color-text-muted);
   font-weight: 500;
+  letter-spacing: 0.02em;
 }`,
     jsTemplate: "",
   },
   {
     moduleKey: "gallery-grid",
     name: "Galería de Fotos",
-    description: "Mosaico visual de 3 fotografías destacadas del salón y platos.",
+    description: "Mosaico visual de 3 fotografías gastronómicas destacadas con aspecto editorial y pie de imagen.",
     category: "tarjetas",
     fields: [
-      { key: "tag", label: "Etiqueta superior", type: "text", defaultValue: "Galería" },
-      { key: "title", label: "Título de sección", type: "text", defaultValue: "Nuestra atmósfera y cocina" },
-      { key: "img1Url", label: "Foto 1", type: "image", defaultValue: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=80" },
-      { key: "img1Caption", label: "Pie de foto 1", type: "text", defaultValue: "Salón Principal" },
-      { key: "img2Url", label: "Foto 2", type: "image", defaultValue: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=900&q=80" },
-      { key: "img2Caption", label: "Pie de foto 2", type: "text", defaultValue: "Cocina de Autor" },
-      { key: "img3Url", label: "Foto 3", type: "image", defaultValue: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80" },
-      { key: "img3Caption", label: "Pie de foto 3", type: "text", defaultValue: "Barra & Coctelería" },
+      { key: "tag", label: "Etiqueta superior", type: "text", defaultValue: "ATMÓSFERA & COCINA" },
+      { key: "title", label: "Título de sección", type: "text", defaultValue: "La experiencia en imágenes" },
+      { key: "img1Url", label: "Foto 1", type: "image", defaultValue: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85" },
+      { key: "img1Caption", label: "Pie de foto 1", type: "text", defaultValue: "Cortes a la Leña de Quebracho" },
+      { key: "img2Url", label: "Foto 2", type: "image", defaultValue: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=85" },
+      { key: "img2Caption", label: "Pie de foto 2", type: "text", defaultValue: "Pastas Amasadas a Mano" },
+      { key: "img3Url", label: "Foto 3", type: "image", defaultValue: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=1200&q=85" },
+      { key: "img3Caption", label: "Pie de foto 3", type: "text", defaultValue: "Cava de Vinos Subterránea" },
     ],
     htmlTemplate: `<section class="section">
   <div class="container">
@@ -4896,8 +4957,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 </section>`,
     cssTemplate: `.gallery-mosaic {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
 }
 .gallery-item {
   position: relative;
@@ -4913,31 +4974,32 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   transition: transform 0.4s ease;
 }
 .gallery-item:hover img {
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 .gallery-item figcaption {
   position: absolute;
   inset: auto 0 0 0;
-  padding: 16px;
-  background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
+  padding: 16px 20px;
+  background: rgba(14, 18, 15, 0.82);
+  backdrop-filter: blur(8px);
   color: #ffffff;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }`,
     jsTemplate: "",
   },
   {
     moduleKey: "image-spotlight",
     name: "Sección con Imagen Destacada",
-    description: "Bloque visual de dos columnas con fotografía protagonista, texto editorial y botón de acción.",
+    description: "Bloque visual de dos columnas con fotografía protagonista, texto editorial y llamada a la carta.",
     category: "contenido",
     fields: [
-      { key: "kicker", label: "Etiqueta superior", type: "text", defaultValue: "Especialidad de Temporada" },
-      { key: "title", label: "Título principal", type: "text", defaultValue: "Sabores auténticos pensados para compartir" },
-      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Cada plato combina técnicas contemporáneas con productos frescos de estación seleccionados cada mañana." },
-      { key: "photoUrl", label: "Fotografía destacada", type: "image", defaultValue: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1000&q=80" },
-      { key: "photoCaption", label: "Etiqueta sobre la foto", type: "text", defaultValue: "Elaboración propia todos los días" },
-      { key: "ctaText", label: "Texto del botón", type: "text", defaultValue: "Ver en la Carta Digital" },
+      { key: "kicker", label: "Etiqueta superior", type: "text", defaultValue: "PLATO INSIGNIA" },
+      { key: "title", label: "Título principal", type: "text", defaultValue: "Ojo de bife madurado 45 días a la leña viva" },
+      { key: "description", label: "Descripción", type: "textarea", defaultValue: "Seleccionamos novillos Angus de pastura y maduramos los cortes en nuestras propias cámaras con ventilación y humedad controlada para concentrar aromas terrosos y terneza absoluta." },
+      { key: "photoUrl", label: "Fotografía destacada", type: "image", defaultValue: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85" },
+      { key: "photoCaption", label: "Etiqueta sobre la foto", type: "text", defaultValue: "45 días de maduración en cámara seca" },
+      { key: "ctaText", label: "Texto del botón", type: "text", defaultValue: "Ver Guía de Cortes & Carta" },
       { key: "ctaUrl", label: "URL del botón", type: "url", defaultValue: "{{menuUrl}}" },
     ],
     htmlTemplate: `<section class="section image-spotlight-section">
@@ -4967,7 +5029,6 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-soft);
   aspect-ratio: 4 / 3;
 }
 .image-spotlight-media img {
@@ -4980,13 +5041,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   position: absolute;
   bottom: 16px;
   left: 16px;
-  background: rgba(18, 25, 18, 0.82);
+  background: rgba(18, 25, 18, 0.85);
   backdrop-filter: blur(8px);
   color: #ffffff;
   padding: 6px 14px;
   border-radius: 9999px;
   font-size: 0.8rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .image-spotlight-actions {
   margin-top: 28px;
@@ -5002,16 +5064,16 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "faq-accordion",
     name: "Preguntas Frecuentes (FAQ)",
-    description: "Acordeón interactivo para dudas sobre reservas, opciones sin TACC/veganas y eventos.",
+    description: "Acordeón interactivo para resolver consultas sobre reservas, alérgenos, descorche y eventos.",
     category: "contenido",
     fields: [
-      { key: "title", label: "Título FAQ", type: "text", defaultValue: "Preguntas Frecuentes" },
-      { key: "q1", label: "Pregunta 1", type: "text", defaultValue: "¿Contamos con opciones sin TACC y vegetarianas?" },
-      { key: "a1", label: "Respuesta 1", type: "textarea", defaultValue: "Sí, nuestra carta digital identifica todos los platos aptos celíacos, vegetarianos y veganos." },
-      { key: "q2", label: "Pregunta 2", type: "text", defaultValue: "¿Es necesario reservar mesa con anticipación?" },
-      { key: "a2", label: "Respuesta 2", type: "textarea", defaultValue: "Para cenas de viernes y sábados recomendamos reservar por WhatsApp. También recibimos clientes sin reserva por orden de llegada." },
-      { key: "q3", label: "Pregunta 3", type: "text", defaultValue: "¿Realizan eventos privados o menús para grupos?" },
-      { key: "a3", label: "Respuesta 3", type: "textarea", defaultValue: "Sí, diseñamos menús por pasos personalizados para celebraciones, cumpleaños y eventos corporativos." },
+      { key: "title", label: "Título FAQ", type: "text", defaultValue: "Preguntas Frecuentes sobre el Servicio" },
+      { key: "q1", label: "Pregunta 1", type: "text", defaultValue: "¿Es necesario reservar mesa con anticipación?" },
+      { key: "a1", label: "Respuesta 1", type: "textarea", defaultValue: "Recomendamos reservar con 24 a 48 hs de antelación para turnos nocturnos y fines de semana. Las reservas cuentan con una tolerancia de 15 minutos." },
+      { key: "q2", label: "Pregunta 2", type: "text", defaultValue: "¿Cuentan con opciones aptas celíacos (sin TACC) o vegetarianas?" },
+      { key: "a2", label: "Respuesta 2", type: "textarea", defaultValue: "Sí. Toda nuestra carta digital identifica alérgenos, opciones sin TACC elaboradas con vajilla dedicada y platos vegetarianos de estación." },
+      { key: "q3", label: "Pregunta 3", type: "text", defaultValue: "¿Disponen de servicio de descorche y valet parking?" },
+      { key: "a3", label: "Respuesta 3", type: "textarea", defaultValue: "Contamos con valet parking sin cargo en puerta y servicio de descorche para botellas especiales que no figuren en nuestra cava subterránea." },
     ],
     htmlTemplate: `<section class="section">
   <div class="container faq-container">
@@ -5035,23 +5097,29 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   </div>
 </section>`,
     cssTemplate: `.faq-container { max-width: 780px; }
-.faq-list { display: flex; flex-direction: column; gap: 12px; }
+.faq-list { display: flex; flex-direction: column; gap: 14px; }
 .faq-item {
   background-color: var(--color-card-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 18px 22px;
+  padding: 20px 24px;
+  transition: var(--transition);
+}
+.faq-item[open] {
+  border-color: var(--color-accent);
 }
 .faq-item summary {
   font-weight: 600;
   cursor: pointer;
   color: var(--color-text-main);
-  font-size: 1.02rem;
+  font-size: 1.05rem;
+  line-height: 1.4;
 }
 .faq-item p {
-  margin-top: 10px;
+  margin-top: 12px;
   color: var(--color-text-muted);
-  font-size: 0.95rem;
+  font-size: 0.96rem;
+  line-height: 1.6;
 }`,
     jsTemplate: "",
   },

@@ -129,8 +129,8 @@ function createCafePresetDocument(): LandingDocumentV1 {
   const base = createDefaultLandingDocument("Café de Especialidad", "restaurante");
   const cardModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "custom-card")!;
   const spotlightBlock = createBlockFromBuiltinModule(cardModule, "preset-card");
-  spotlightBlock.values.badge = "Brunch de Fin de Semana";
-  spotlightBlock.values.icon = "🥐";
+  spotlightBlock.values.badge = "BRUNCH DE FIN DE SEMANA";
+  spotlightBlock.values.icon = "✦";
   spotlightBlock.values.title = "Brunch Artesanal para Compartir";
   spotlightBlock.values.priceTag = "Sábados y Domingos · 9 a 15 hs";
   spotlightBlock.values.description =
@@ -147,15 +147,15 @@ function createCafePresetDocument(): LandingDocumentV1 {
 
   const gridBlock = blocks.find((b) => b.moduleKey === "specialties-grid");
   if (gridBlock) {
-    gridBlock.values.card1Icon = "☕";
+    gridBlock.values.card1Icon = "Filtrados Manuales";
     gridBlock.values.card1Title = "Espresso & Filtrados";
     gridBlock.values.card1Text =
       "Perfiles de tueste propios y métodos V60, Chemex y Aeropress calibrados al detalle.";
-    gridBlock.values.card2Icon = "🥐";
+    gridBlock.values.card2Icon = "Laminados & Viennoiserie";
     gridBlock.values.card2Title = "Laminados & Viennoiserie";
     gridBlock.values.card2Text =
       "Croissants, pain au chocolat y danesas horneadas cada mañana con manteca extra.";
-    gridBlock.values.card3Icon = "🥑";
+    gridBlock.values.card3Icon = "Tostones de Masa Madre";
     gridBlock.values.card3Title = "Brunch & Tostones";
     gridBlock.values.card3Text =
       "Hogazas de fermentación natural de 36 horas con ingredientes frescos de estación.";
@@ -217,14 +217,14 @@ function createBurgerPresetDocument(): LandingDocumentV1 {
   if (gridBlock) {
     gridBlock.values.kicker = "Nuestros Favoritos";
     gridBlock.values.sectionTitle = "Las Más Pedidas del Menú";
-    gridBlock.values.card1Icon = "🍔";
+    gridBlock.values.card1Icon = "Smash Doble Angus";
     gridBlock.values.card1Title = "Double Oklahoma Smash";
     gridBlock.values.card1Text = "Doble medallón smasheado con cebolla ultrafina caramelizada en su propio jugo, cheddar fundido y alioli casero.";
-    gridBlock.values.card2Icon = "🥓";
+    gridBlock.values.card2Icon = "Smoked Bacon & BBQ";
     gridBlock.values.card2Badge = "Best Seller";
     gridBlock.values.card2Title = "Bacon & Crispy Onion";
     gridBlock.values.card2Text = "Triple panceta ahumada crujiente, cebolla frita crocante, salsa BBQ ahumada al bourbon y doble queso.";
-    gridBlock.values.card3Icon = "🍟";
+    gridBlock.values.card3Icon = "Papas Rústicas Loaded";
     gridBlock.values.card3Title = "Papas Loaded Especiales";
     gridBlock.values.card3Text = "Papas rústicas con doble fritura, bañadas en fondue de cheddar, bacon picado y ciboulette fresco.";
   }
@@ -286,14 +286,14 @@ function createSushiPresetDocument(): LandingDocumentV1 {
   if (gridBlock) {
     gridBlock.values.kicker = "Propuesta";
     gridBlock.values.sectionTitle = "Cortes & Rolls de Autor";
-    gridBlock.values.card1Icon = "🍣";
+    gridBlock.values.card1Icon = "Niguiris Trufados";
     gridBlock.values.card1Title = "Niguiris Trufados";
     gridBlock.values.card1Text = "Pesca blanca del día flambeada con manteca trufada y zest de lima sobre arroz Koshihikari templado.";
-    gridBlock.values.card2Icon = "🥢";
+    gridBlock.values.card2Icon = "Tiradito Nikkei";
     gridBlock.values.card2Badge = "Exclusivo";
     gridBlock.values.card2Title = "Tiradito de Pulpo & Ají Amarillo";
     gridBlock.values.card2Text = "Láminas finas de pulpo macerado en leche de tigre al ají amarillo, maíz cancha y batata glaseada.";
-    gridBlock.values.card3Icon = "🍶";
+    gridBlock.values.card3Icon = "Cava de Sakes";
     gridBlock.values.card3Title = "Cava de Sakes & Whisky Japonés";
     gridBlock.values.card3Text = "Selección importada de sakes Junmai Daiginjo y destilados de malta pura para maridar cada paso.";
   }
@@ -345,14 +345,14 @@ function createPizzeriaPresetDocument(): LandingDocumentV1 {
   if (gridBlock) {
     gridBlock.values.kicker = "Especialidades";
     gridBlock.values.sectionTitle = "Nuestras Pizzas Insignia";
-    gridBlock.values.card1Icon = "🍕";
+    gridBlock.values.card1Icon = "San Marzano D.O.P.";
     gridBlock.values.card1Title = "Margherita D.O.P.";
     gridBlock.values.card1Text = "Tomate San Marzano, mozzarella fior di latte, albahaca fresca de huerta propia y aceite de oliva extra virgen.";
-    gridBlock.values.card2Icon = "🔥";
+    gridBlock.values.card2Icon = "Calabrese Piccante";
     gridBlock.values.card2Badge = "Piccante";
     gridBlock.values.card2Title = "Diavola Napolitana";
     gridBlock.values.card2Text = "Salame piccante artesanal de Calabria, fior di latte, peperoncino fresco y un toque de miel infusionada.";
-    gridBlock.values.card3Icon = "🧀";
+    gridBlock.values.card3Icon = "Burrata & Pesto";
     gridBlock.values.card3Title = "Burrata & Pesto di Pistacchio";
     gridBlock.values.card3Text = "Base blanca con burrata cremosa entera al centro, mortadela con pistacho y lluvia de pistachos tostados.";
   }
@@ -383,7 +383,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-clasico-editorial",
     name: "Clásico Gastronómico (Editorial)",
     description:
-      "Diseño cálido con tipografía serif, verde bosque y acentos dorados. Incluye navegación, hero, especialidades, filosofía, horarios y WhatsApp.",
+      "Bistró francés y cocina de autor con tipografía serif refinada, tonos oliva y verde bosque, citas de filosofía y carta digital integrada.",
     document: createDefaultLandingDocument("Restaurante", "restaurante"),
     updatedAt: "2026-10-01T00:00:00.000Z",
   },
@@ -391,7 +391,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-nocturno-brasa",
     name: "Nocturno & Brasa (Parrilla / Bar)",
     description:
-      "Estética oscura y elegante con acentos fuego/ámbar, banner de Happy Hour, reseñas de comensales y grilla de especialidades.",
+      "Atmósfera noir con ámbar fuego, cortes de 45 días de maduración a la leña viva, aperitivos y elogios de la crítica gastronómica.",
     document: createSteakhousePresetDocument(),
     updatedAt: "2026-10-02T00:00:00.000Z",
   },
@@ -399,7 +399,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-cafeteria-brunch",
     name: "Cafetería & Brunch Minimal",
     description:
-      "Paleta luminosa en crema y terracota con Card destacada de Brunch, métodos de café, pastelería artesanal y contacto rápido.",
+      "Estética nórdica y cálida en tonos crema y café tostado con spotlight de brunch de fin de semana, filtrados manuales y viennoiserie.",
     document: createCafePresetDocument(),
     updatedAt: "2026-10-03T00:00:00.000Z",
   },
@@ -407,7 +407,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-burger-craft",
     name: "Burger & Street Food (Casual Moderno)",
     description:
-      "Estilo dinámico y oscuro con tipografía sans moderna, métricas destacadas, combos de Happy Hour, grilla de smash burgers y FAQ interactivo.",
+      "Taproom contemporáneo con smash burgers artesanales de novillo Angus, métricas de calidad, happy hour de canillas y FAQ de pedidos.",
     document: createBurgerPresetDocument(),
     updatedAt: "2026-10-04T00:00:00.000Z",
   },
@@ -415,7 +415,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-sushi-fusion",
     name: "Sushi & Asian Fusion (Minimal Dark)",
     description:
-      "Atmósfera elegante en obsidiana y esmeralda, spotlight de plato Omakase, galería fotográfica en mosaico y reseñas de barra.",
+      "Experiencia Omakase de 14 comensales en obsidiana y jade esmeralda, pesca madurada del día, mosaico de barra y maridaje de sakes.",
     document: createSushiPresetDocument(),
     updatedAt: "2026-10-05T00:00:00.000Z",
   },
@@ -423,7 +423,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-pizzeria-napoli",
     name: "Pizzería Napolitana & Trattoria",
     description:
-      "Calidez italiana con masa fermentada 48hs a la leña, promociones de fin de semana, historia gastronómica y preguntas frecuentes.",
+      "Trattoria verace napoletana con fermentación de 48 horas a 450°C, tomate San Marzano D.O.P., mozzarella fresca y dudas de comensales.",
     document: createPizzeriaPresetDocument(),
     updatedAt: "2026-10-06T00:00:00.000Z",
   },
