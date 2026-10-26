@@ -2646,10 +2646,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         return;
       }
 
-      if (dayInfo.status === 'CLOSED_RECURRING' || dayInfo.status === 'BLOCKED_DATE' || dayInfo.status === 'FULLY_BOOKED') {
-        var msg = (dayInfo.status === 'FULLY_BOOKED')
-          ? '⏳ Todos los turnos de este día se encuentran completos. Por favor elegí otra fecha.'
-          : '🚫 ' + (dayInfo.reason || 'El restaurante se encuentra cerrado en esta fecha.');
+      if (dayInfo.status === 'CLOSED_RECURRING' || dayInfo.status === 'BLOCKED_DATE') {
+        var msg = '🚫 ' + (dayInfo.reason || 'El restaurante se encuentra cerrado en esta fecha.');
         slotsGrid.innerHTML = '<div class="res-slots-alert" style="display:block; grid-column: 1 / -1;">' + msg + '</div>';
         if (selectedTimeInput) selectedTimeInput.value = '';
         if (papResumenHora) papResumenHora.textContent = '—';
@@ -2658,24 +2656,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       }
 
       var availableSlots = dayInfo.availableSlots || [];
-      var occupiedTimes = dayInfo.occupiedTimes || [];
       var allTimes = [];
       var seenTimes = {};
 
       availableSlots.forEach(function(s) {
         if (!seenTimes[s.time]) {
           seenTimes[s.time] = true;
-          allTimes.push({ time: s.time, label: s.label, occupied: false });
-        }
-      });
-      occupiedTimes.forEach(function(t) {
-        if (!seenTimes[t]) {
-          seenTimes[t] = true;
-          allTimes.push({ time: t, label: t, occupied: true });
-        } else {
-          for (var i = 0; i < allTimes.length; i++) {
-            if (allTimes[i].time === t) allTimes[i].occupied = true;
-          }
+          allTimes.push({ time: s.time, label: s.label || s.time });
         }
       });
 
@@ -2687,13 +2674,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       }
 
       var html = [];
-      var firstFreeSelected = false;
+      var firstSelected = false;
+      var currentSelected = selectedTimeInput ? (selectedTimeInput.value || selectedTimeVal) : selectedTimeVal;
 
-      allTimes.forEach(function(slot) {
-        var isOccupied = slot.occupied;
-        var isSelected = !isOccupied && !firstFreeSelected;
-        if (isSelected) {
-          firstFreeSelected = true;
+      allTimes.forEach(function(slot, idx) {
+        var isSelected = (slot.time === currentSelected) || (!currentSelected && idx === 0);
+        if (isSelected && !firstSelected) {
+          firstSelected = true;
           selectedTimeVal = slot.time;
           if (selectedTimeInput) selectedTimeInput.value = slot.time;
           if (papResumenHora) papResumenHora.textContent = slot.time + ' hs';
@@ -2701,10 +2688,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
         var classes = 'pap__hora res-slot-pill';
         if (isSelected) classes += ' active es-elegida';
-        if (isOccupied) classes += ' res-slot-busy';
 
-        var disabledAttr = isOccupied ? ' disabled title="Turno ocupado"' : '';
-        html.push('<button type="button" class="' + classes + '" data-time="' + slot.time + '"' + disabledAttr + '>' + slot.time + '</button>');
+        html.push('<button type="button" class="' + classes + '" data-time="' + slot.time + '">' + slot.time + '</button>');
       });
 
       slotsGrid.innerHTML = html.join('');
@@ -2712,7 +2697,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     }
 
     function bindSlotButtons() {
-      var slotBtns = slotsGrid ? slotsGrid.querySelectorAll('.pap__hora:not(:disabled), .res-slot-pill:not(:disabled)') : [];
+      var slotBtns = slotsGrid ? slotsGrid.querySelectorAll('.pap__hora, .res-slot-pill') : [];
       slotBtns.forEach(function(btn) {
         btn.addEventListener('click', function(e) {
           e.preventDefault();
@@ -4189,17 +4174,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       var firstFreeSlot = '';
 
       slots.forEach(function(s) {
-        if (s.available) {
-          if (!firstFreeSlot) firstFreeSlot = s.time;
-          gridHtml += '<button type="button" class="res-slot-pill" data-time="' + s.time + '">' + s.time + ' hs</button>';
-        } else {
-          gridHtml += '<button type="button" class="res-slot-pill res-slot-busy" disabled data-time="' + s.time + '" title="Horario ya reservado">' + s.time + ' hs <span class="slot-badge-busy">Ocupado</span></button>';
-        }
+        if (!firstFreeSlot) firstFreeSlot = s.time;
+        gridHtml += '<button type="button" class="res-slot-pill" data-time="' + s.time + '">' + s.time + ' hs</button>';
       });
       gridHtml += '</div>';
       slotsContainer.innerHTML = gridHtml;
 
-      var slotPills = slotsContainer.querySelectorAll('.res-slot-pill:not(.res-slot-busy)');
+      var slotPills = slotsContainer.querySelectorAll('.res-slot-pill');
       slotPills.forEach(function(btn) {
         btn.addEventListener('click', function(e) {
           e.preventDefault();

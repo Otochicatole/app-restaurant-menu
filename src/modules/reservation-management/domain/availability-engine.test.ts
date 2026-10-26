@@ -34,7 +34,7 @@ describe("availability-engine", () => {
     expect(isOccupyingReservation("REJECTED")).toBe(false);
   });
 
-  it("blocks only the booked slot if others are free (1 of 3 booked)", () => {
+  it("keeps regular table reservation slots available even when reservations exist", () => {
     const reservations: DomainReservation[] = [
       {
         id: "r1",
@@ -58,14 +58,16 @@ describe("availability-engine", () => {
     expect(day.available).toBe(true);
     expect(day.status).toBe("AVAILABLE");
     expect(day.totalSlots).toBe(3);
-    expect(day.occupiedTimes).toEqual(["20:00"]);
+    // Time slots do NOT get blocked because restaurants seat multiple parties at the same hour
+    expect(day.occupiedTimes).toEqual([]);
     expect(day.availableSlots).toEqual([
       { id: "slot-1", time: "13:00", label: "Almuerzo" },
+      { id: "slot-2", time: "20:00", label: "Cena 1" },
       { id: "slot-3", time: "22:00", label: "Cena 2" },
     ]);
   });
 
-  it("blocks the entire date when all configured slots are booked (3 of 3 booked)", () => {
+  it("keeps the date available when multiple reservations exist at all slots", () => {
     const reservations: DomainReservation[] = [
       { id: "r1", date: "2026-10-24", time: "13:00", status: "PENDING", partySize: 2 },
       { id: "r2", date: "2026-10-24", time: "20:00", status: "CONFIRMED", partySize: 4 },
@@ -82,10 +84,10 @@ describe("availability-engine", () => {
     });
 
     const day = result.dates[0];
-    expect(day.available).toBe(false);
-    expect(day.status).toBe("FULLY_BOOKED");
-    expect(day.availableSlots).toEqual([]);
-    expect(day.occupiedTimes.sort()).toEqual(["13:00", "20:00", "22:00"]);
+    expect(day.available).toBe(true);
+    expect(day.status).toBe("AVAILABLE");
+    expect(day.availableSlots.length).toBe(3);
+    expect(day.occupiedTimes).toEqual([]);
   });
 
   it("releases the slot immediately if reservation is CANCELLED or REJECTED", () => {

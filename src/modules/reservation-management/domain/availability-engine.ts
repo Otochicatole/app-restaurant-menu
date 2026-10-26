@@ -154,8 +154,7 @@ export function computeAvailability({
     publishedEventsByDate.set(pe.date, list);
   }
 
-  // Group active reservations by date
-  const activeRegularReservationsByDate = new Map<string, Set<string>>();
+  // Group active reservations by event (events have limited capacity)
   const activeEventReservationsByEvent = new Map<string, number>();
 
   for (const r of reservations) {
@@ -164,11 +163,9 @@ export function computeAvailability({
     if (r.eventId) {
       const count = activeEventReservationsByEvent.get(r.eventId) ?? 0;
       activeEventReservationsByEvent.set(r.eventId, count + 1);
-    } else {
-      const occupied = activeRegularReservationsByDate.get(r.date) ?? new Set<string>();
-      occupied.add(r.time);
-      activeRegularReservationsByDate.set(r.date, occupied);
     }
+    // Note: Regular table reservations do NOT block time slots because
+    // restaurants seat multiple parties and tables at the same hour.
   }
 
   // 1. Process Dates
@@ -242,29 +239,12 @@ export function computeAvailability({
       };
     }
 
-    const occupiedTimesSet = activeRegularReservationsByDate.get(dateStr) ?? new Set<string>();
-    const occupiedTimes = Array.from(occupiedTimesSet);
-
-    const availableSlots: AvailableSlotView[] = sortedSlots
-      .filter((slot) => !occupiedTimesSet.has(slot.time))
-      .map((slot) => ({
-        id: slot.id,
-        time: slot.time,
-        label: slot.label || slot.time,
-      }));
-
-    if (availableSlots.length === 0) {
-      return {
-        date: dateStr,
-        dayOfWeek,
-        available: false,
-        status: "FULLY_BOOKED",
-        reason: "Todos los horarios de este día están reservados",
-        totalSlots: sortedSlots.length,
-        availableSlots: [],
-        occupiedTimes,
-      };
-    }
+    // Regular time slots remain available for all customers to book simultaneously
+    const availableSlots: AvailableSlotView[] = sortedSlots.map((slot) => ({
+      id: slot.id,
+      time: slot.time,
+      label: slot.label || slot.time,
+    }));
 
     return {
       date: dateStr,
@@ -274,7 +254,7 @@ export function computeAvailability({
       reason: null,
       totalSlots: sortedSlots.length,
       availableSlots,
-      occupiedTimes,
+      occupiedTimes: [],
     };
   });
 

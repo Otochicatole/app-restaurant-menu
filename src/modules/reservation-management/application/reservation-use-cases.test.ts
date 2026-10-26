@@ -112,7 +112,7 @@ describe("ReservationManagementService", () => {
     expect(repo.createReservation).toHaveBeenCalled();
   });
 
-  it("throws ConflictError if the requested slot is already booked", async () => {
+  it("allows multiple reservations at the same time slot and rejects unconfigured time slots", async () => {
     const existingReservations: ReservationView[] = [
       {
         id: "r1",
@@ -139,14 +139,28 @@ describe("ReservationManagementService", () => {
     });
     const service = new ReservationManagementService(repo);
 
+    // Another client booking the same time slot (13:00) succeeds!
+    const secondBooking = await service.createPublicReservation("bistro-test", {
+      customerName: "Otro Cliente",
+      customerEmail: "",
+      customerPhone: "+5491112345678",
+      partySize: 2,
+      date: "2099-01-01",
+      time: "13:00",
+      notes: "",
+    });
+    expect(secondBooking.customerName).toBe("Otro Cliente");
+    expect(secondBooking.time).toBe("13:00");
+
+    // Requesting an unconfigured slot (e.g. 04:00) throws ConflictError
     await expect(
       service.createPublicReservation("bistro-test", {
-        customerName: "Otro Cliente",
+        customerName: "Cliente Horario Invalido",
         customerEmail: "",
         customerPhone: "+5491112345678",
         partySize: 2,
         date: "2099-01-01",
-        time: "13:00",
+        time: "04:00",
         notes: "",
       }),
     ).rejects.toThrow("El horario seleccionado ya no está disponible");
