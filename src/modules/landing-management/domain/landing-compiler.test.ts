@@ -975,8 +975,8 @@ describe("landing-compiler", () => {
       expect(h1Idx).toBeLessThan(btnIdx);
     });
 
-    it("compiles all 6 landing template presets successfully", () => {
-      expect(LANDING_TEMPLATE_PRESETS.length).toBe(6);
+    it("compiles all landing template presets successfully including arco-bar", () => {
+      expect(LANDING_TEMPLATE_PRESETS.length).toBeGreaterThanOrEqual(7);
 
       for (const preset of LANDING_TEMPLATE_PRESETS) {
         const compiled = compileLandingFromDocument(preset.document, {
@@ -986,6 +986,22 @@ describe("landing-compiler", () => {
         expect(compiled.htmlContent.length).toBeGreaterThan(100);
         expect(compiled.cssContent.length).toBeGreaterThan(50);
       }
+
+      const arcoPreset = LANDING_TEMPLATE_PRESETS.find((p) => p.id === "landing-preset-arco-bar");
+      expect(arcoPreset).toBeDefined();
+      const compiledArco = compileLandingFromDocument(arcoPreset!.document, {
+        restaurantName: "Arco",
+        restaurantSlug: "arco",
+      });
+      expect(compiledArco.fullHtml).toContain("reservas-mesa");
+      expect(compiledArco.fullHtml).toContain("pap");
+      expect(compiledArco.fullHtml).toContain("panel-navegacion");
+      expect(compiledArco.fullHtml).toContain("bb-izq");
+      expect(compiledArco.fullHtml).toContain("Cumpleaños en Arco");
+      expect(compiledArco.fullHtml).toContain("Chili Power");
+      expect(compiledArco.fullHtml).toContain("Papas Arco");
+      expect(compiledArco.cssContent).toContain("--violeta");
+      expect(compiledArco.jsContent).toContain("initReviewsCarousel");
     });
 
     it("injects responsive navigation toggle and runtime handlers into preview and document", () => {

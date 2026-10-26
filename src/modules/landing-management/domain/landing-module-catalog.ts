@@ -959,13 +959,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "reservations-table",
     name: "Reserva de Mesas (Turnos)",
-    description: "Módulo de reserva de mesas con calendario mensual interactivo, turnos en tiempo real y confirmación WhatsApp.",
+    description: "Módulo oficial estilo MISE: wizard paso a paso con barra de progreso, calendario interactivo con disponibilidad por puntos, selector de comensales, turnos por horario y espacios, y ticket en vivo.",
     category: "contacto",
     fields: [
       { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Reservas Online" },
       { key: "title", label: "Título de sección", type: "text", defaultValue: "Asegurá tu Mesa" },
       { key: "description", label: "Descripción", type: "textarea", defaultValue: "Elegí el día, turno y cantidad de comensales. Confirmación inmediata y recordatorio por WhatsApp." },
-      { key: "partyLabel", label: "Etiqueta: Comensales", type: "text", defaultValue: "¿Cuántas personas?" },
+      { key: "venueName", label: "Nombre del local", type: "text", defaultValue: "Arco" },
+      { key: "venueAddress", label: "Dirección del local", type: "text", defaultValue: "Olavarría 3132" },
+      { key: "venueCity", label: "Ciudad / Ubicación", type: "text", defaultValue: "Mar del Plata · Argentina" },
+      { key: "venueImage", label: "Foto / Logo del local", type: "image", defaultValue: "https://arco.mise.ar/api/foto/img.ficha?v=1791861570" },
+      { key: "step1Title", label: "Título Paso 1 (Fecha)", type: "text", defaultValue: "¿Cuándo te esperamos?" },
+      { key: "step2Title", label: "Título Paso 2 (Comensales)", type: "text", defaultValue: "¿Cuántos son?" },
+      { key: "step3Title", label: "Título Paso 3 (Turno)", type: "text", defaultValue: "¿En qué horario?" },
+      { key: "step4Title", label: "Título Paso 4 (Contacto)", type: "text", defaultValue: "Tus datos" },
+      { key: "partyLabel", label: "Etiqueta: Comensales", type: "text", defaultValue: "¿Cuántos son?" },
       { key: "dateLabel", label: "Etiqueta: Fecha", type: "text", defaultValue: "Fecha de reserva" },
       { key: "slotsLabel", label: "Etiqueta: Horarios", type: "text", defaultValue: "Turnos disponibles" },
       { key: "nameLabel", label: "Etiqueta: Nombre", type: "text", defaultValue: "Nombre y Apellido" },
@@ -973,713 +981,906 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "emailLabel", label: "Etiqueta: Email", type: "text", defaultValue: "Email (opcional)" },
       { key: "notesLabel", label: "Etiqueta: Comentarios", type: "text", defaultValue: "Aclaraciones o Preferencias" },
       { key: "notesPlaceholder", label: "Placeholder notas", type: "text", defaultValue: "Alergias, cumpleaños, mesa interior o terraza..." },
-      { key: "btnSubmitLabel", label: "Texto botón confirmar", type: "text", defaultValue: "Confirmar Reserva de Mesa" },
-      { key: "policyNotice", label: "Texto aviso / política", type: "text", defaultValue: "Tolerancia máxima de 15 minutos. Ante cancelaciones o modificaciones, por favor contactanos con anticipación." },
-      { key: "restaurantPhone", label: "WhatsApp para comprobante", type: "text", defaultValue: "+5491100000000" },
+      { key: "btnSubmitLabel", label: "Texto botón confirmar", type: "text", defaultValue: "Confirmar reserva" },
+      { key: "policyNotice", label: "Texto aviso / política", type: "text", defaultValue: "Tolerancia máxima de 15 minutos. Pasado ese tiempo la mesa se libera." },
+      { key: "depositNotice", label: "Texto garantía lateral", type: "text", defaultValue: "Tu mesa, confirmada con la seña." },
+      { key: "restaurantPhone", label: "WhatsApp para comprobante", type: "text", defaultValue: "+5492233482402" },
       { key: "successTitle", label: "Título al confirmar", type: "text", defaultValue: "¡Mesa Reservada con Éxito!" },
       { key: "successMessage", label: "Mensaje de éxito", type: "textarea", defaultValue: "Hemos registrado tu turno exitosamente. Podés guardar este comprobante o enviárnoslo por WhatsApp." },
     ],
-    htmlTemplate: `<!-- Reserva de Mesas (Turnos) -->
-<section class="section reservation-section res-table-section" id="reservas-mesa" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}">
-  <div class="container reservation-container">
-    <div class="section-header text-center">
-      <span class="section-kicker">{{kicker}}</span>
-      <h2 class="section-title">{{title}}</h2>
-      <p class="section-description">{{description}}</p>
-    </div>
-
-    <div class="res-card">
-      <form class="res-form" id="resTableForm" autocomplete="off">
-        <input type="hidden" name="time" id="resSelectedTime" value="" />
-        <input type="hidden" name="partySize" id="resSelectedPartySize" value="2" />
-
-        <!-- Paso 1: Comensales -->
-        <div class="res-form-step">
-          <label class="res-step-label">
-            <span class="res-step-num">1</span>
-            <span>{{partyLabel}}</span>
-          </label>
-          <div class="res-party-selector" id="resPartyPills">
-            <button type="button" class="res-party-pill" data-party="1">1</button>
-            <button type="button" class="res-party-pill active" data-party="2">2</button>
-            <button type="button" class="res-party-pill" data-party="3">3</button>
-            <button type="button" class="res-party-pill" data-party="4">4</button>
-            <button type="button" class="res-party-pill" data-party="5">5</button>
-            <button type="button" class="res-party-pill" data-party="6">6</button>
-            <button type="button" class="res-party-pill" data-party="8">8</button>
-            <div class="res-party-custom">
-              <input type="number" id="resCustomPartyInput" min="1" max="40" placeholder="+8" aria-label="Otra cantidad de comensales" />
-            </div>
-          </div>
+    htmlTemplate: `<!-- Reserva de Mesas (Turnos - MISE Arco Style) -->
+<section class="section reservation-section res-table-section pap-section" id="reservas-mesa" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}">
+  <div class="container reservation-container pap-wrapper">
+    <div class="pap" id="resPapWidget" aria-label="Reservar una mesa">
+      <header class="pap__barra">
+        <button type="button" class="pap__atras" id="papBackBtn" disabled aria-label="Volver al paso anterior">‹</button>
+        <div class="pap__centro">
+          <p class="pap__titulo" id="papStepTitle">{{step1Title}}</p>
+          <p class="pap__cuenta" id="papStepCounter">Paso 1 de 4</p>
         </div>
+        <span class="pap__hueco" aria-hidden="true"></span>
+      </header>
 
-        <!-- Paso 2: Calendario Completo Mensual (Grid D L M M J V S) -->
-        <div class="res-form-step">
-          <div class="res-step-header">
-            <label class="res-step-label">
-              <span class="res-step-num">2</span>
-              <span>{{dateLabel}}</span>
-            </label>
-            <input type="hidden" id="resDateInput" value="" />
-          </div>
+      <div class="pap__avance" aria-hidden="true">
+        <i id="papProgressBar" style="width: 25%"></i>
+      </div>
 
-          <div class="res-calendar-card" id="resCalendarCard">
-            <div class="res-cal-header">
-              <button type="button" class="res-cal-nav-btn" id="resCalPrevBtn" aria-label="Mes anterior">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <div class="res-cal-month-title" id="resCalMonthTitle">Octubre 2026</div>
-              <button type="button" class="res-cal-nav-btn" id="resCalNextBtn" aria-label="Mes siguiente">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
+      <div class="pap__migas" id="papBreadcrumbs" style="display: none;"></div>
 
-            <div class="res-cal-weekdays">
-              <span>D</span>
-              <span>L</span>
-              <span>M</span>
-              <span>M</span>
-              <span>J</span>
-              <span>V</span>
-              <span>S</span>
-            </div>
+      <div class="pap__cuerpo">
+        <!-- Contenedor del Wizard de Pasos (Columna Izquierda en Desktop) -->
+        <div class="pap__paso">
+          <form class="res-form" id="resTableForm" autocomplete="off">
+            <input type="hidden" name="date" id="resDateInput" value="2026-10-25" />
+            <input type="hidden" name="partySize" id="resSelectedPartySize" value="2" />
+            <input type="hidden" name="time" id="resSelectedTime" value="" />
+            <input type="hidden" name="zone" id="resSelectedZone" value="Salón Principal" />
 
-            <div class="res-cal-grid res-days-row" id="resDaysRow" role="grid" aria-label="Calendario de reservas">
-              <div class="res-cal-empty"></div>
-              <div class="res-cal-empty"></div>
-              <div class="res-cal-empty"></div>
-              <div class="res-cal-empty"></div>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-01"><span class="res-cal-day-num">1</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-02"><span class="res-cal-day-num">2</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-03"><span class="res-cal-day-num">3</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip res-day-closed" data-date="2026-10-04"><span class="res-cal-day-num">4</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-05"><span class="res-cal-day-num">5</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-06"><span class="res-cal-day-num">6</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-07"><span class="res-cal-day-num">7</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-08"><span class="res-cal-day-num">8</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-09"><span class="res-cal-day-num">9</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-10"><span class="res-cal-day-num">10</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip res-day-closed" data-date="2026-10-11"><span class="res-cal-day-num">11</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-12"><span class="res-cal-day-num">12</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-13"><span class="res-cal-day-num">13</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-14"><span class="res-cal-day-num">14</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-15"><span class="res-cal-day-num">15</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-16"><span class="res-cal-day-num">16</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-17"><span class="res-cal-day-num">17</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip res-day-closed" data-date="2026-10-18"><span class="res-cal-day-num">18</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-19"><span class="res-cal-day-num">19</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-20"><span class="res-cal-day-num">20</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-21"><span class="res-cal-day-num">21</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-22"><span class="res-cal-day-num">22</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip active" data-date="2026-10-23"><span class="res-cal-day-num">23</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-24"><span class="res-cal-day-num">24</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip res-day-closed" data-date="2026-10-25"><span class="res-cal-day-num">25</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-26"><span class="res-cal-day-num">26</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-27"><span class="res-cal-day-num">27</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-28"><span class="res-cal-day-num">28</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-29"><span class="res-cal-day-num">29</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-30"><span class="res-cal-day-num">30</span><span class="res-cal-day-dot"></span></button>
-              <button type="button" class="res-cal-day res-day-chip" data-date="2026-10-31"><span class="res-cal-day-num">31</span><span class="res-cal-day-dot"></span></button>
-            </div>
-
-            <div class="res-cal-footer">
-              <div class="res-cal-selected-badge" id="resSelectedDateIndicator">
-                <span class="res-cal-badge-dot"></span>
-                <span id="resSelectedDateText">Viernes 23 de Octubre de 2026</span>
+            <!-- PASO 1: Calendario Mensual Interactivo -->
+            <div class="pap__paso-view" id="papStep1View" data-step="1">
+              <div class="pap__mes">
+                <button type="button" class="pap__mesBoton" id="resCalPrevBtn" aria-label="Mes anterior">‹</button>
+                <span class="pap__mesNombre" id="resCalMonthTitle">octubre de 2026</span>
+                <button type="button" class="pap__mesBoton" id="resCalNextBtn" aria-label="Mes siguiente">›</button>
               </div>
-              <div class="res-cal-legend">
-                <span class="res-cal-legend-item"><span class="legend-dot available"></span> Libre</span>
-                <span class="res-cal-legend-item"><span class="legend-dot closed"></span> Cerrado</span>
+
+              <div class="pap__cal-weekdays">
+                <span>D</span><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span>
+              </div>
+
+              <div class="pap__cal res-cal-grid" id="resDaysRow" role="grid" aria-label="Calendario de reservas">
+                <div class="pap__cal-empty res-cal-empty"></div>
+                <div class="pap__cal-empty res-cal-empty"></div>
+                <div class="pap__cal-empty res-cal-empty"></div>
+                <div class="pap__cal-empty res-cal-empty"></div>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-01" role="gridcell" disabled><span>1</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-02" role="gridcell" disabled><span>2</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-03" role="gridcell" disabled><span>3</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-04" role="gridcell" disabled><span>4</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-05" role="gridcell" disabled><span>5</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-06" role="gridcell" disabled><span>6</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-07" role="gridcell" disabled><span>7</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-08" role="gridcell" disabled><span>8</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-09" role="gridcell" disabled><span>9</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-10" role="gridcell" disabled><span>10</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-11" role="gridcell" disabled><span>11</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-12" role="gridcell" disabled><span>12</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-13" role="gridcell" disabled><span>13</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-14" role="gridcell" disabled><span>14</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-15" role="gridcell" disabled><span>15</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-16" role="gridcell" disabled><span>16</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-17" role="gridcell" disabled><span>17</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-18" role="gridcell" disabled><span>18</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-19" role="gridcell" disabled><span>19</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-20" role="gridcell" disabled><span>20</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-21" role="gridcell" disabled><span>21</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-22" role="gridcell" disabled><span>22</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-23" role="gridcell" disabled><span>23</span></button>
+                <button type="button" class="pap__celda res-day-chip es-bloqueada" data-date="2026-10-24" role="gridcell" disabled><span>24</span></button>
+                <button type="button" class="pap__celda res-day-chip es-elegida active" data-date="2026-10-25" role="gridcell"><span>25</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-26" role="gridcell"><span>26</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-27" role="gridcell"><span>27</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-28" role="gridcell"><span>28</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-29" role="gridcell"><span>29</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-30" role="gridcell"><span>30</span><span class="pap__punto res-cal-day-dot"></span></button>
+                <button type="button" class="pap__celda res-day-chip" data-date="2026-10-31" role="gridcell"><span>31</span><span class="pap__punto res-cal-day-dot"></span></button>
+              </div>
+
+              <p class="pap__ayuda">Los días con punto tienen lugar. Los apagados están cerrados o completos.</p>
+            </div>
+
+            <!-- PASO 2: Cantidad de Comensales -->
+            <div class="pap__paso-view" id="papStep2View" data-step="2" style="display: none;">
+              <div class="pap__gente">
+                <span class="pap__avatar" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"></circle><path d="M4.8 20c0-3.6 3.2-6.2 7.2-6.2s7.2 2.6 7.2 6.2"></path></svg>
+                </span>
+                <div class="pap__contador">
+                  <button type="button" class="pap__mas" id="papPartyMinusBtn" aria-label="Uno menos">−</button>
+                  <b class="pap__numero" id="papPartyDisplay">2</b>
+                  <button type="button" class="pap__mas" id="papPartyPlusBtn" aria-label="Uno más">+</button>
+                </div>
+                <p class="pap__ayuda pap__ayuda--centro">Hasta 14 personas se reserva desde acá.</p>
               </div>
             </div>
+
+            <!-- PASO 3: Horarios / Turnos y Espacios -->
+            <div class="pap__paso-view" id="papStep3View" data-step="3" style="display: none;">
+              <div class="pap__horas-block">
+                <p class="pap__rotulo">{{slotsLabel}}</p>
+                <div class="res-slots-container" id="resSlotsContainer">
+                  <div class="pap__horas res-slots-grid" id="resSlotsGrid">
+                    <button type="button" class="pap__hora res-slot-pill active" data-time="20:00">20:00</button>
+                    <button type="button" class="pap__hora res-slot-pill" data-time="21:00">21:00</button>
+                    <button type="button" class="pap__hora res-slot-pill" data-time="22:00">22:00</button>
+                  </div>
+                </div>
+                <div class="res-slots-alert" id="resSlotsAlert" style="display: none;"></div>
+
+                <p class="pap__rotulo" style="margin-top: 24px;">Elegí el espacio</p>
+                <div class="pap__sectores" id="resSectoresGrid">
+                  <button type="button" class="pap__sector es-elegido" data-zone="Salón Principal">
+                    <b>Salón Principal</b>
+                    <small>Adentro frente a la barra y cerca de la música</small>
+                  </button>
+                  <button type="button" class="pap__sector" data-zone="Deck">
+                    <b>Deck al aire libre</b>
+                    <small>Afuera sobre la vereda con calefacción</small>
+                  </button>
+                  <button type="button" class="pap__sector" data-zone="Salón Fondo">
+                    <b>Salón Fondo</b>
+                    <small>Al fondo, techado y cerrado, donde pasa el DJ</small>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- PASO 4: Datos de Contacto -->
+            <div class="pap__paso-view" id="papStep4View" data-step="4" style="display: none;">
+              <div class="pap__form">
+                <label class="pap__marco">
+                  <span>{{nameLabel}} *</span>
+                  <input type="text" id="resNameInput" class="pap__campo res-input" placeholder="Ej: Valentina Morales" required />
+                </label>
+                <label class="pap__marco">
+                  <span>{{phoneLabel}} *</span>
+                  <input type="tel" id="resPhoneInput" class="pap__campo res-input" placeholder="Ej: +54 9 11 1234-5678" required />
+                </label>
+                <label class="pap__marco">
+                  <span>{{emailLabel}}</span>
+                  <input type="email" id="resEmailInput" class="pap__campo res-input" placeholder="tuemail@ejemplo.com" />
+                </label>
+                <div class="pap__cumple">
+                  <label class="pap__marco">
+                    <span>Cumpleaños</span>
+                    <select id="resBirthdaySelect" class="pap__campo pap__sel res-input">
+                      <option value="no">No festejo</option>
+                      <option value="mes">Cumplo este mes</option>
+                      <option value="hoy">Festejo hoy</option>
+                    </select>
+                  </label>
+                  <label class="pap__marco">
+                    <span>{{notesLabel}}</span>
+                    <input type="text" id="resNotesInput" class="pap__campo res-input" placeholder="{{notesPlaceholder}}" />
+                  </label>
+                </div>
+                <p class="pap__nota">ℹ️ {{policyNotice}}</p>
+              </div>
+            </div>
+
+            <div class="res-error-box" id="resErrorBox" style="display: none;"></div>
+
+            <!-- Barra inferior con acción -->
+            <div class="pap__pie es-pegado">
+              <button type="button" class="pap__seguir" id="papNextBtn">
+                <span>Continuar</span>
+              </button>
+              <button type="submit" class="pap__seguir pap__seguir--confirmar res-submit-btn" id="resSubmitBtn" style="display: none;">
+                <span class="pap__seguir-cuerpo">
+                  <svg class="pap__campana" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path class="pap__campana-vapor" d="M13.4 20.6c-.9-1.1.9-2 0-3.1M18.6 20.6c-.9-1.1.9-2 0-3.1"></path>
+                    <path d="M3.5 25.5h25"></path>
+                    <g class="pap__campana-tapa">
+                      <path d="M6.5 22.5a9.5 9.5 0 0 1 19 0z"></path>
+                      <path d="M16 13v-1.5"></path>
+                      <circle cx="16" cy="10.3" r="1.2"></circle>
+                    </g>
+                  </svg>
+                  <span class="res-btn-text">{{btnSubmitLabel}}</span>
+                </span>
+                <span class="res-btn-spinner" style="display: none;">⏳ Confirmando reserva de mesa...</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- Comprobante / Voucher de Éxito -->
+          <div class="res-success-view pap__voucher-card" id="resSuccessView" style="display: none;">
+            <div class="res-success-header">
+              <div class="res-success-icon-badge">✓</div>
+              <h3 class="res-success-title">{{successTitle}}</h3>
+              <p class="res-success-desc">{{successMessage}}</p>
+            </div>
+
+            <div class="res-voucher-card">
+              <div class="res-voucher-kicker">Comprobante de Reserva Confirmada</div>
+              <div class="res-voucher-code" id="resVoucherCode">#RES-0000</div>
+
+              <div class="res-voucher-details">
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Fecha</span>
+                  <strong class="voucher-value" id="resVoucherDate">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Turno / Horario</span>
+                  <strong class="voucher-value" id="resVoucherTime">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Comensales</span>
+                  <strong class="voucher-value" id="resVoucherGuests">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Espacio</span>
+                  <strong class="voucher-value" id="resVoucherZone">-</strong>
+                </div>
+                <div class="res-voucher-item" style="grid-column: span 2;">
+                  <span class="voucher-label">Titular</span>
+                  <strong class="voucher-value" id="resVoucherName">-</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="res-success-actions">
+              <a href="#" target="_blank" rel="noreferrer" class="btn btn-whatsapp res-voucher-wa-btn" id="resVoucherWaBtn">
+                <span>Enviar Comprobante por WhatsApp</span>
+              </a>
+              <button type="button" class="btn btn-outline res-new-booking-btn" id="resNewBookingBtn">
+                Realizar otra reserva
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Paso 3: Horarios / Turnos -->
-        <div class="res-form-step">
-          <div class="res-step-header">
-            <label class="res-step-label">
-              <span class="res-step-num">3</span>
-              <span>{{slotsLabel}}</span>
-            </label>
-            <span class="res-slots-status-badge" id="resSlotsStatusBadge"></span>
-          </div>
-
-          <div class="res-slots-container" id="resSlotsContainer">
-            <div class="res-slots-grid" id="resSlotsGrid">
-              <button type="button" class="res-slot-pill active" data-time="20:00">20:00</button>
-              <button type="button" class="res-slot-pill" data-time="21:00">21:00</button>
-              <button type="button" class="res-slot-pill" data-time="22:00">22:00</button>
+        <!-- Lateral / Resumen del Ticket en Vivo (Columna Derecha en Desktop) -->
+        <aside class="pap__lateral" aria-label="Tu reserva">
+          <div class="pap__ficha">
+            <img class="pap__fichaFoto" src="{{venueImage}}" alt="{{venueName}}" width="204" height="116" loading="lazy" />
+            <div class="pap__fichaTexto">
+              <b>{{venueName}}</b>
+              <small>{{venueAddress}}</small>
+              <small>{{venueCity}}</small>
             </div>
           </div>
-          <div class="res-slots-alert" id="resSlotsAlert" style="display: none;"></div>
-        </div>
-
-        <!-- Paso 4: Datos de Contacto -->
-        <div class="res-form-step">
-          <label class="res-step-label">
-            <span class="res-step-num">4</span>
-            <span>Datos del Titular</span>
-          </label>
-          <div class="res-grid-fields">
-            <div class="res-field-group">
-              <label for="resNameInput">{{nameLabel}} *</label>
-              <input type="text" id="resNameInput" class="res-input" placeholder="Ej: Valentina Morales" required />
+          <dl class="pap__resumen">
+            <div>
+              <dt>Noche</dt>
+              <dd id="papResumenNoche">domingo 25 de octubre</dd>
             </div>
-            <div class="res-field-group">
-              <label for="resPhoneInput">{{phoneLabel}} *</label>
-              <input type="tel" id="resPhoneInput" class="res-input" placeholder="Ej: +54 9 11 1234-5678" required />
+            <div>
+              <dt>Personas</dt>
+              <dd id="papResumenPersonas">2</dd>
             </div>
+            <div>
+              <dt>Hora</dt>
+              <dd id="papResumenHora">—</dd>
+            </div>
+            <div>
+              <dt>Dónde</dt>
+              <dd id="papResumenDonde">Salón Principal</dd>
+            </div>
+          </dl>
+          <div class="pap__lateralPie">
+            <p class="pap__lateralTitulo">{{depositNotice}}</p>
           </div>
-          <div class="res-field-group mt-3">
-            <label for="resEmailInput">{{emailLabel}}</label>
-            <input type="email" id="resEmailInput" class="res-input" placeholder="tuemail@ejemplo.com" />
-          </div>
-          <div class="res-field-group mt-3">
-            <label for="resNotesInput">{{notesLabel}}</label>
-            <textarea id="resNotesInput" class="res-input res-textarea" rows="2" placeholder="{{notesPlaceholder}}"></textarea>
-          </div>
-        </div>
-
-        <div class="res-error-box" id="resErrorBox" style="display: none;"></div>
-
-        <div class="res-form-actions">
-          <p class="res-policy-text">ℹ️ {{policyNotice}}</p>
-          <button type="submit" class="btn btn-primary res-submit-btn" id="resSubmitBtn">
-            <span class="res-btn-text">{{btnSubmitLabel}}</span>
-            <span class="res-btn-spinner" style="display: none;">⏳ Confirmando reserva de mesa...</span>
-          </button>
-        </div>
-      </form>
-
-      <div class="res-success-view" id="resSuccessView" style="display: none;">
-        <div class="res-success-header">
-          <div class="res-success-icon-badge">✓</div>
-          <h3 class="res-success-title">{{successTitle}}</h3>
-          <p class="res-success-desc">{{successMessage}}</p>
-        </div>
-
-        <div class="res-voucher-card">
-          <div class="res-voucher-kicker">Comprobante de Mesa Confirmada</div>
-          <div class="res-voucher-code" id="resVoucherCode">#RES-0000</div>
-
-          <div class="res-voucher-details">
-            <div class="res-voucher-item">
-              <span class="voucher-label">Fecha</span>
-              <strong class="voucher-value" id="resVoucherDate">-</strong>
-            </div>
-            <div class="res-voucher-item">
-              <span class="voucher-label">Turno / Horario</span>
-              <strong class="voucher-value" id="resVoucherTime">-</strong>
-            </div>
-            <div class="res-voucher-item">
-              <span class="voucher-label">Comensales</span>
-              <strong class="voucher-value" id="resVoucherGuests">-</strong>
-            </div>
-            <div class="res-voucher-item">
-              <span class="voucher-label">Titular</span>
-              <strong class="voucher-value" id="resVoucherName">-</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="res-success-actions">
-          <a href="#" target="_blank" rel="noreferrer" class="btn btn-whatsapp res-voucher-wa-btn" id="resVoucherWaBtn">
-            <span>Compartir por WhatsApp</span>
-          </a>
-          <button type="button" class="btn btn-outline res-new-booking-btn" id="resNewBookingBtn">
-            Realizar otra reserva
-          </button>
-        </div>
+        </aside>
       </div>
     </div>
   </div>
 </section>`,
-    cssTemplate: `.reservation-container {
-  max-width: 760px;
-  margin: 0 auto;
+    cssTemplate: `.res-table-section {
+  --acento: var(--color-primary, #E5392C);
+  --violeta: var(--color-primary, #E5392C);
+  --violeta-claro: var(--color-primary-light, #FF6B5E);
+  --violeta-rgb: 229, 57, 44;
+  --fondo-0: var(--color-bg, #0A0807);
+  --fondo-1: var(--color-card-bg, #141210);
+  --fondo-2: #1c1917;
+  --linea: var(--color-border, rgba(255, 255, 255, 0.08));
+  --linea-viva: rgba(255, 255, 255, 0.22);
+  --texto: var(--color-text-main, #F4EFEA);
+  --texto-2: #D0C9C0;
+  --texto-3: var(--color-text-muted, #8C847B);
+  --r-factor: 1;
+  padding: 0 0 24px;
+  background: transparent;
+  color: var(--texto);
 }
-.res-card {
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 16px);
-  padding: 36px 32px;
-  box-shadow: var(--shadow-soft);
+.pap-wrapper {
+  max-width: 100%;
+  margin: 0;
 }
-.res-form-step {
-  margin-bottom: 28px;
+.pap-outer-header {
+  margin-bottom: 24px;
 }
-.res-step-header {
+.pap {
+  background: var(--fondo-1);
+  border: 1px solid var(--linea);
+  border-radius: calc(24px * var(--r-factor, 1));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
 }
-.res-step-label {
-  display: flex;
+.pap__barra {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 1.05rem;
-  color: var(--color-text-main);
-  margin-bottom: 0;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--linea);
 }
-.res-step-num {
-  width: 26px;
-  height: 26px;
+.pap__atras {
+  border: 1px solid var(--linea);
   border-radius: 50%;
-  background: var(--color-primary);
-  color: #ffffff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.82rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-/* Calendario Completo Mensual (Estilo Dark Grid con Navegación) */
-.res-calendar-card {
-  background: #101014;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  padding: 22px 18px 18px 18px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  color: #f3f4f6;
-  user-select: none;
-  margin-top: 8px;
-}
-.res-cal-header {
+  width: 38px;
+  height: 38px;
+  color: var(--texto-2);
+  cursor: pointer;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  padding: 0 4px;
-}
-.res-cal-month-title {
-  font-size: 1.15rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: #ffffff;
-  text-transform: capitalize;
-}
-.res-cal-nav-btn {
-  background: #1b1b22;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.16s ease;
 }
-.res-cal-nav-btn:hover:not(:disabled) {
-  background: #272732;
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
+.pap__atras:hover:not(:disabled) {
+  border-color: var(--texto-2);
+  color: #ffffff;
+  transform: translateX(-2px);
 }
-.res-cal-nav-btn:disabled {
+.pap__atras:disabled {
   opacity: 0.25;
   cursor: not-allowed;
   pointer-events: none;
 }
-.res-cal-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+.pap__centro {
   text-align: center;
-  margin-bottom: 12px;
 }
-.res-cal-weekdays span {
-  font-size: 0.82rem;
+.pap__titulo {
+  letter-spacing: -0.02em;
+  color: var(--texto);
+  margin: 0;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.55);
+}
+.pap__cuenta {
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--texto-3);
+  margin: 3px 0 0;
+  font-size: 0.65rem;
+  font-weight: 600;
 }
-.res-cal-grid {
-  display: grid !important;
-  grid-template-columns: repeat(7, 1fr) !important;
-  gap: 8px !important;
-  margin-bottom: 16px;
+.pap__hueco {
+  width: 38px;
+  height: 38px;
 }
-.res-cal-empty {
-  min-height: 52px;
-  visibility: hidden;
+.pap__avance {
+  background: rgba(255, 255, 255, 0.06);
+  height: 3px;
+  width: 100%;
+  overflow: hidden;
 }
-.res-cal-day,
-.res-day-chip {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 52px !important;
-  padding: 8px 4px !important;
-  border-radius: 14px !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  background: #19191d !important;
-  color: #ffffff !important;
-  cursor: pointer !important;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  position: relative !important;
-  user-select: none !important;
-}
-.res-cal-day:hover:not(:disabled),
-.res-day-chip:hover:not(:disabled) {
-  background: #25252c !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  transform: translateY(-2px);
-}
-.res-cal-day-num,
-.res-day-num {
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 3px;
-  color: #ffffff;
-}
-.res-cal-day-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #ea384c;
+.pap__avance i {
+  background: var(--violeta);
+  height: 100%;
   display: block;
-  transition: background 0.15s ease;
+  transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1);
 }
-/* Día Seleccionado (Estilo Imagen 2: Rojo/Coral Sólido) */
-.res-cal-day.active,
-.res-day-chip.active {
-  background: #ea384c !important;
-  color: #ffffff !important;
-  border-color: #ea384c !important;
-  box-shadow: 0 4px 14px rgba(234, 56, 76, 0.45) !important;
-  transform: scale(1.03) !important;
+.pap__cuerpo {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 236px !important;
+  align-items: start !important;
+  gap: 26px !important;
+  padding: 24px 26px 26px !important;
 }
-.res-cal-day.active .res-cal-day-num,
-.res-day-chip.active .res-day-num {
-  color: #ffffff !important;
-  font-weight: 800;
+.pap__lateral {
+  display: grid !important;
+  background: rgba(229, 57, 44, 0.07);
+  border: 1px solid rgba(229, 57, 44, 0.22);
+  border-radius: calc(18px * var(--r-factor, 1));
+  padding: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
+  width: 236px;
+  box-sizing: border-box;
 }
-.res-cal-day.active .res-cal-day-dot {
-  background: #ffffff !important;
+@media (max-width: 760px) {
+  .pap__cuerpo {
+    display: block !important;
+    padding: 18px 16px 20px !important;
+  }
+  .pap__lateral {
+    display: none !important;
+  }
 }
-/* Días Pasados */
-.res-cal-day.res-day-past,
-.res-day-chip.res-day-past {
-  opacity: 0.18 !important;
-  cursor: not-allowed !important;
-  pointer-events: none !important;
-  background: transparent !important;
-  border-color: transparent !important;
+.pap__lateral .pap__ficha {
+  background: transparent;
+  border: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 0;
 }
-.res-cal-day.res-day-past .res-cal-day-dot {
-  display: none !important;
+.pap__lateral .pap__fichaFoto {
+  border-radius: calc(14px * var(--r-factor, 1));
+  width: 100%;
+  height: 116px;
+  object-fit: cover;
+  display: block;
+  border: 0;
 }
-/* Días Cerrados (Descanso semanal o Bloqueado) */
-.res-cal-day.res-day-closed,
-.res-day-chip.res-day-closed {
-  opacity: 0.35 !important;
-  cursor: not-allowed !important;
-  background: #141416 !important;
-  text-decoration: line-through !important;
+.pap__lateral .pap__fichaTexto {
+  gap: 0;
+  display: grid;
 }
-.res-cal-day.res-day-closed .res-cal-day-dot {
-  background: #64748b !important;
+.pap__lateral .pap__fichaTexto b {
+  color: var(--texto);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 3px;
 }
-/* Días Agotados */
-.res-cal-day.res-day-busy,
-.res-day-chip.res-day-busy {
-  opacity: 0.4 !important;
-  cursor: not-allowed !important;
-  background: #141416 !important;
+.pap__lateral .pap__fichaTexto small {
+  color: var(--texto-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
-.res-cal-day.res-day-busy .res-cal-day-dot {
-  background: #ef4444 !important;
+.pap__lateral .pap__resumen {
+  border-top: 1px solid rgba(229, 57, 44, 0.2);
+  margin: 0;
+  display: grid;
 }
-
-/* Footer del Calendario */
-.res-cal-footer {
+.pap__lateral .pap__resumen > div {
+  border-bottom: 1px solid rgba(229, 57, 44, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 0;
+}
+.pap__lateral .pap__resumen dt {
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--violeta-claro);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+.pap__lateral .pap__resumen dd {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--texto);
+}
+.pap__lateralPie {
+  text-align: center;
+  padding-top: 2px;
+}
+.pap__lateralTitulo {
+  text-align: center;
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+  margin: 0;
+  font-size: 0.71875rem;
+  color: var(--texto-3);
+  line-height: 1.45;
+}
+.pap__paso {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pap__paso-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.pap__mes {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-.res-cal-selected-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #f3f4f6;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 6px 14px;
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-.res-cal-badge-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ea384c;
-}
-.res-cal-legend {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-}
-.res-cal-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.legend-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.legend-dot.available {
-  background: #ea384c;
-}
-.legend-dot.closed {
-  background: #64748b;
-}
-
-@media (max-width: 480px) {
-  .res-calendar-card {
-    padding: 14px 10px 14px 10px;
-  }
-  .res-cal-grid {
-    gap: 5px !important;
-  }
-  .res-cal-day,
-  .res-day-chip {
-    min-height: 46px !important;
-    border-radius: 10px !important;
-  }
-  .res-cal-day-num,
-  .res-day-num {
-    font-size: 0.95rem;
-  }
-  .res-cal-footer {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-.res-selected-date-indicator {
-  margin-top: 6px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-.res-party-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-.res-party-pill {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text-main);
-  padding: 8px 18px;
-  border-radius: 9999px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 44px;
-  text-align: center;
-}
-.res-party-pill:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.res-party-pill.active {
-  background: var(--color-primary);
-  color: #ffffff;
-  border-color: var(--color-primary);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
-}
-.res-party-custom input {
-  width: 72px;
-  border: 1px solid var(--color-border);
-  border-radius: 9999px;
-  padding: 8px 12px;
-  text-align: center;
-  font-size: 0.95rem;
-  font-weight: 600;
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text-main);
-}
-.res-slots-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
-}
-.res-slot-pill {
-  border: 1.5px solid var(--color-border);
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text-main);
-  padding: 10px 22px;
-  border-radius: var(--radius-md, 10px);
-  font-weight: 700;
-  font-size: 0.95rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.15s ease;
-}
-.res-slot-pill:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.res-slot-pill.active {
-  background: var(--color-primary);
-  color: #ffffff;
-  border-color: var(--color-primary);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-}
-.res-slot-pill.res-slot-busy {
-  opacity: 0.45;
-  cursor: not-allowed;
-  text-decoration: line-through;
-  background: rgba(0, 0, 0, 0.03);
-  border-color: transparent;
-}
-.slot-badge-busy {
-  font-size: 0.68rem;
-  text-decoration: none;
-  background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.res-slots-alert {
-  padding: 14px 18px;
-  border-radius: var(--radius-md, 10px);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #b91c1c;
-  font-size: 0.92rem;
-  font-weight: 600;
-  margin-top: 10px;
-}
-.res-grid-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.res-field-group label {
-  display: block;
-  font-size: 0.88rem;
-  font-weight: 600;
-  margin-bottom: 6px;
-  color: var(--color-text-main);
-}
-.res-input {
-  width: 100%;
-  padding: 11px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 10px);
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text-main);
-  font-size: 0.95rem;
-  font-family: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.res-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
-}
-.res-textarea {
-  resize: vertical;
-}
-.res-error-box {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #991b1b;
-  padding: 12px 16px;
-  border-radius: var(--radius-md, 10px);
-  font-size: 0.92rem;
-  font-weight: 600;
-  margin-bottom: 20px;
-}
-.res-form-actions {
-  margin-top: 24px;
-}
-.res-policy-text {
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
   margin-bottom: 16px;
 }
-.res-submit-btn {
-  width: 100%;
-  padding: 14px 24px;
+.pap__mesNombre {
   font-size: 1.05rem;
   font-weight: 700;
-  border-radius: var(--radius-md, 10px);
+  text-transform: capitalize;
+  color: var(--texto);
+}
+.pap__mesBoton {
+  border: 1px solid var(--linea);
+  border-radius: calc(10px * var(--r-factor, 1));
+  width: 36px;
+  height: 36px;
+  color: var(--texto-2);
   cursor: pointer;
+  background: var(--fondo-2);
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.pap__mesBoton:hover:not(:disabled) {
+  border-color: var(--texto-2);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+.pap__mesBoton:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.pap__cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.pap__cal-weekdays span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--texto-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.pap__cal, .res-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.pap__cal-empty, .res-cal-empty {
+  aspect-ratio: 1.25;
+  min-height: 48px;
+  visibility: hidden;
+}
+.pap__celda, .res-day-chip {
+  aspect-ratio: 1.25;
+  min-height: 48px;
+  border-radius: calc(12px * var(--r-factor, 1));
+  background: var(--fondo-2);
+  color: var(--texto);
+  cursor: pointer;
+  border: 1px solid var(--linea);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  position: relative;
+  transition: border-color 0.16s, background 0.16s, transform 0.16s;
+  user-select: none;
+}
+.pap__celda:hover:not(:disabled):not(.es-bloqueada),
+.res-day-chip:hover:not(:disabled):not(.es-bloqueada) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+}
+.pap__celda.es-elegida,
+.res-day-chip.active {
+  background: var(--violeta) !important;
+  border-color: var(--violeta) !important;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 4px 16px rgba(var(--violeta-rgb), 0.4);
+}
+.pap__celda.es-bloqueada,
+.res-day-chip.res-day-closed,
+.res-day-chip.res-day-past {
+  color: var(--texto-3);
+  opacity: 0.28;
+  cursor: not-allowed;
+  background: transparent;
+  border-color: transparent;
+  text-decoration: line-through;
+}
+.pap__punto, .res-cal-day-dot {
+  background: var(--violeta-claro);
+  border-radius: 50%;
+  width: 5px;
+  height: 5px;
+  position: absolute;
+  bottom: 6px;
+}
+.pap__celda.es-elegida .pap__punto,
+.res-day-chip.active .res-cal-day-dot {
+  background: #ffffff;
+}
+.pap__ayuda {
+  color: var(--texto-3);
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.pap__ayuda--centro {
+  text-align: center;
+}
+.pap__gente {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  text-align: center;
+}
+.pap__rotulo {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+.pap__contador {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin: 16px 0 24px;
+}
+.pap__mas {
+  border: 1px solid var(--linea-viva);
+  width: 52px;
+  height: 52px;
+  color: var(--texto);
+  cursor: pointer;
+  background: var(--fondo-2);
+  border-radius: 50%;
+  font-size: 1.6rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+.pap__mas:hover:not(:disabled) {
+  border-color: var(--violeta);
+  color: var(--violeta);
+  transform: scale(1.08);
+}
+.pap__mas:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.pap__numero {
+  text-align: center;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  font-size: 4rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--texto);
+}
+.pap__pills-personas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.pap__persona-pill, .res-party-pill {
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: var(--fondo-2);
+  color: var(--texto);
+  padding: 8px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pap__persona-pill:hover, .res-party-pill:hover {
+  border-color: var(--violeta);
+  color: var(--violeta);
+}
+.pap__persona-pill.es-activa, .res-party-pill.active {
+  background: var(--violeta);
+  border-color: var(--violeta);
+  color: #ffffff;
+  font-weight: 700;
+}
+.pap__horas, .res-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+}
+.pap__hora, .res-slot-pill {
+  border: 1px solid var(--linea);
+  border-radius: calc(12px * var(--r-factor, 1));
+  background: var(--fondo-2);
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 14px 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  transition: all 0.16s ease;
+}
+.pap__hora:hover:not(:disabled), .res-slot-pill:hover:not(:disabled) {
+  border-color: var(--violeta);
+  color: var(--violeta);
+  transform: translateY(-1px);
+}
+.pap__hora.es-elegida, .res-slot-pill.active {
+  background: var(--violeta) !important;
+  border-color: var(--violeta) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(var(--violeta-rgb), 0.35);
+}
+.pap__hora:disabled, .res-slot-pill.res-slot-busy {
+  opacity: 0.35;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.res-slots-alert {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 12px;
+}
+.pap__sectores {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.pap__sector {
+  border: 1px solid var(--linea);
+  border-radius: calc(14px * var(--r-factor, 1));
+  background: var(--fondo-2);
+  text-align: left;
+  cursor: pointer;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.16s ease;
+}
+.pap__sector:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.pap__sector.es-elegido {
+  border-color: var(--violeta);
+  background: rgba(var(--violeta-rgb), 0.14);
+}
+.pap__sector b {
+  color: var(--texto);
+  font-size: 0.95rem;
+}
+.pap__sector small {
+  color: var(--texto-3);
+  font-size: 0.8rem;
+}
+.pap__form {
+  display: grid;
+  gap: 16px;
+}
+.pap__marco {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pap__marco > span {
+  color: var(--texto-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pap__campo, .res-input {
+  box-sizing: border-box;
+  border: 1px solid var(--linea);
+  border-radius: calc(12px * var(--r-factor, 1));
+  background: var(--fondo-2);
+  width: 100%;
+  color: var(--texto);
+  padding: 13px 16px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.pap__campo:focus, .res-input:focus {
+  outline: none;
+  border-color: var(--violeta);
+  box-shadow: 0 0 0 3px rgba(var(--violeta-rgb), 0.2);
+}
+.pap__nota {
+  color: var(--texto-3);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+.res-error-box {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-top: 14px;
+}
+.pap__pie {
+  margin-top: 24px;
+  position: sticky;
+  bottom: 0;
+  background: var(--fondo-1);
+  padding: 16px 0 4px;
+}
+.pap__seguir, .res-submit-btn {
+  border-radius: calc(14px * var(--r-factor, 1));
+  background: var(--violeta);
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border: 0;
+  width: 100%;
+  padding: 16px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  transition: all 0.16s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.pap__seguir:hover:not(:disabled), .res-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+.pap__seguir:disabled, .res-submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pap__seguir--confirmar {
+  background: linear-gradient(135deg, #E5392C, #c02a1f);
+  box-shadow: 0 6px 20px rgba(229, 57, 44, 0.4);
 }
 .res-success-view {
   text-align: center;
   padding: 20px 0;
 }
 .res-success-icon-badge {
-  width: 64px;
-  height: 64px;
+  width: 60px;
+  height: 60px;
   background: #10b981;
   color: #ffffff;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 800;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .res-success-title {
-  font-size: 1.8rem;
-  margin-bottom: 8px;
+  font-size: 1.6rem;
+  margin-bottom: 6px;
+  color: var(--texto);
 }
 .res-success-desc {
-  color: var(--color-text-muted);
-  font-size: 0.98rem;
+  color: var(--texto-3);
+  font-size: 0.95rem;
   max-width: 500px;
-  margin: 0 auto 24px auto;
+  margin: 0 auto 20px auto;
 }
 .res-voucher-card {
-  background: var(--color-bg, #fafafa);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-lg, 16px);
+  background: var(--fondo-2);
+  border: 1px dashed var(--linea-viva);
+  border-radius: 16px;
   padding: 24px;
-  max-width: 460px;
-  margin: 0 auto 28px auto;
+  margin: 16px 0 24px;
   text-align: left;
 }
 .res-voucher-kicker {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   font-weight: 800;
-  color: var(--color-text-muted);
-  letter-spacing: 0.05em;
+  color: var(--texto-3);
+  letter-spacing: 0.08em;
 }
 .res-voucher-code {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 800;
-  color: var(--color-primary);
-  margin: 4px 0 16px 0;
+  color: var(--violeta-claro);
+  margin: 4px 0 16px;
 }
 .res-voucher-details {
   display: grid;
@@ -1691,38 +1892,50 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   flex-direction: column;
 }
 .voucher-label {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  color: var(--texto-3);
   text-transform: uppercase;
+  font-weight: 600;
 }
 .voucher-value {
   font-size: 0.95rem;
-  color: var(--color-text-main);
+  color: var(--texto);
 }
 .res-success-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
-  flex-wrap: wrap;
 }
 .btn-whatsapp {
-  background-color: #25d366;
+  background: #25d366;
   color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.16s ease;
 }
 .btn-whatsapp:hover {
-  background-color: #20ba5a;
+  background: #20ba5a;
+  transform: translateY(-1px);
 }
-.mt-3 { margin-top: 14px; }
-@media (max-width: 640px) {
-  .res-card {
-    padding: 24px 18px;
-  }
-  .res-grid-fields {
-    grid-template-columns: 1fr;
-  }
-  .res-voucher-details {
-    grid-template-columns: 1fr;
-  }
+.res-new-booking-btn {
+  background: transparent;
+  border: 1px solid var(--linea);
+  color: var(--texto);
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.16s ease;
+}
+.res-new-booking-btn:hover {
+  background: var(--fondo-2);
+  border-color: var(--texto-2);
 }`,
     jsTemplate: `(function() {
   function isEditorMode() {
@@ -1734,65 +1947,106 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     if (root.__resTableMounted) return;
     root.__resTableMounted = true;
 
-  function resolveRestaurantSlug(root) {
-    var slug = root ? (root.getAttribute('data-restaurant-slug') || '') : '';
-    if (slug && slug.indexOf('{{') === -1) return slug;
+    function resolveRestaurantSlug(rootEl) {
+      var slug = rootEl ? (rootEl.getAttribute('data-restaurant-slug') || '') : '';
+      if (slug && slug.indexOf('{{') === -1) return slug;
 
-    var elWithSlug = document.querySelector('[data-restaurant-slug]');
-    if (elWithSlug) {
-      var s = elWithSlug.getAttribute('data-restaurant-slug');
-      if (s && s.indexOf('{{') === -1) return s;
-    }
-
-    var pathParts = window.location.pathname.split('/');
-    var lIdx = pathParts.indexOf('l');
-    if (lIdx !== -1 && pathParts[lIdx + 1]) {
-      return pathParts[lIdx + 1];
-    }
-
-    try {
-      if (window.parent && window.parent !== window && window.parent.location) {
-        var pParts = window.parent.location.pathname.split('/');
-        var pIdx = pParts.indexOf('l');
-        if (pIdx !== -1 && pParts[pIdx + 1]) {
-          return pParts[pIdx + 1];
-        }
+      var elWithSlug = document.querySelector('[data-restaurant-slug]');
+      if (elWithSlug) {
+        var s = elWithSlug.getAttribute('data-restaurant-slug');
+        if (s && s.indexOf('{{') === -1) return s;
       }
-    } catch (_) {}
 
-    return '';
-  }
+      var pathParts = window.location.pathname.split('/');
+      var lIdx = pathParts.indexOf('l');
+      if (lIdx !== -1 && pathParts[lIdx + 1]) {
+        return pathParts[lIdx + 1];
+      }
+
+      try {
+        if (window.parent && window.parent !== window && window.parent.location) {
+          var pParts = window.parent.location.pathname.split('/');
+          var pIdx = pParts.indexOf('l');
+          if (pIdx !== -1 && pParts[pIdx + 1]) {
+            return pParts[pIdx + 1];
+          }
+        }
+      } catch (_) {}
+
+      return '';
+    }
+
     var slug = resolveRestaurantSlug(root);
 
-    var form = root.querySelector('#resTableForm') || root.querySelector('#resBookingForm');
+    // Wizard navigation controls
+    var currentStep = 1;
+    var papBackBtn = root.querySelector('#papBackBtn');
+    var papStepTitle = root.querySelector('#papStepTitle');
+    var papStepCounter = root.querySelector('#papStepCounter');
+    var papProgressBar = root.querySelector('#papProgressBar');
+    var papNextBtn = root.querySelector('#papNextBtn');
+    var submitBtn = root.querySelector('#resSubmitBtn');
+    var btnText = root.querySelector('.res-btn-text');
+    var btnSpinner = root.querySelector('.res-btn-spinner');
+
+    var step1View = root.querySelector('#papStep1View');
+    var step2View = root.querySelector('#papStep2View');
+    var step3View = root.querySelector('#papStep3View');
+    var step4View = root.querySelector('#papStep4View');
+
+    // Live Sidebar Summary Elements
+    var papResumenNoche = root.querySelector('#papResumenNoche');
+    var papResumenPersonas = root.querySelector('#papResumenPersonas');
+    var papResumenHora = root.querySelector('#papResumenHora');
+    var papResumenDonde = root.querySelector('#papResumenDonde');
+
+    // Calendar Elements
+    var form = root.querySelector('#resTableForm');
     var daysRow = root.querySelector('#resDaysRow');
     var dateInput = root.querySelector('#resDateInput');
-    var slotsContainer = root.querySelector('#resSlotsContainer');
-    var slotsAlert = root.querySelector('#resSlotsAlert');
-    var slotsStatusBadge = root.querySelector('#resSlotsStatusBadge');
-    var selectedDateIndicator = root.querySelector('#resSelectedDateIndicator');
-    var partyPills = root.querySelectorAll('.res-party-pill');
-    var customPartyInput = root.querySelector('#resCustomPartyInput');
-    var selectedPartySizeInput = root.querySelector('#resSelectedPartySize');
-    var selectedTimeInput = root.querySelector('#resSelectedTime');
+    var resCalPrevBtn = root.querySelector('#resCalPrevBtn');
+    var resCalNextBtn = root.querySelector('#resCalNextBtn');
+    var resCalMonthTitle = root.querySelector('#resCalMonthTitle');
 
+    // Party elements
+    var partyDisplay = root.querySelector('#papPartyDisplay');
+    var partyMinusBtn = root.querySelector('#papPartyMinusBtn');
+    var partyPlusBtn = root.querySelector('#papPartyPlusBtn');
+    var partyPills = root.querySelectorAll('.pap__persona-pill, .res-party-pill');
+    var selectedPartySizeInput = root.querySelector('#resSelectedPartySize');
+
+    // Slots & Sectors
+    var slotsContainer = root.querySelector('#resSlotsContainer');
+    var slotsGrid = root.querySelector('#resSlotsGrid');
+    var slotsAlert = root.querySelector('#resSlotsAlert');
+    var selectedTimeInput = root.querySelector('#resSelectedTime');
+    var selectedZoneInput = root.querySelector('#resSelectedZone');
+    var sectorBtns = root.querySelectorAll('.pap__sector');
+
+    // Form inputs
     var nameInput = root.querySelector('#resNameInput');
     var phoneInput = root.querySelector('#resPhoneInput');
     var emailInput = root.querySelector('#resEmailInput');
     var notesInput = root.querySelector('#resNotesInput');
-    var submitBtn = root.querySelector('#resSubmitBtn');
-    var btnText = root.querySelector('.res-btn-text');
-    var btnSpinner = root.querySelector('.res-btn-spinner');
     var errorBox = root.querySelector('#resErrorBox');
     var successView = root.querySelector('#resSuccessView');
 
+    // Voucher elements
     var voucherCode = root.querySelector('#resVoucherCode');
     var voucherDate = root.querySelector('#resVoucherDate');
     var voucherTime = root.querySelector('#resVoucherTime');
     var voucherGuests = root.querySelector('#resVoucherGuests');
+    var voucherZone = root.querySelector('#resVoucherZone');
     var voucherName = root.querySelector('#resVoucherName');
     var voucherWaBtn = root.querySelector('#resVoucherWaBtn');
     var newBookingBtn = root.querySelector('#resNewBookingBtn');
+
+    var stepTitles = {
+      1: '¿Cuándo te esperamos?',
+      2: '¿Cuántos son?',
+      3: '¿En qué horario?',
+      4: 'Completá tus datos'
+    };
 
     var todayObj = new Date();
     var yyyy = todayObj.getFullYear();
@@ -1805,30 +2059,110 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var recurringClosedDays = [];
     var datesCache = {};
 
-    var resCalPrevBtn = root.querySelector('#resCalPrevBtn');
-    var resCalNextBtn = root.querySelector('#resCalNextBtn');
-    var resCalMonthTitle = root.querySelector('#resCalMonthTitle');
-    var resSelectedDateText = root.querySelector('#resSelectedDateText');
-
-    if (dateInput) {
-      dateInput.value = todayStr;
-    }
-
     var dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     var monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-    function formatReadableDate(isoStr) {
-      if (!isoStr) return '';
+    function formatReadableDateShort(isoStr) {
+      if (!isoStr) return '—';
       var parts = isoStr.split('-');
       if (parts.length !== 3) return isoStr;
       var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-      return dayNames[d.getDay()] + ' ' + parseInt(parts[2], 10) + ' de ' + monthNames[d.getMonth()] + ' de ' + parts[0];
+      return parseInt(parts[2], 10) + ' de ' + monthNames[d.getMonth()].toLowerCase();
+    }
+
+    var papBreadcrumbs = root.querySelector('#papBreadcrumbs');
+    function updateBreadcrumbs() {
+      if (!papBreadcrumbs) return;
+      if (currentStep === 1) {
+        papBreadcrumbs.style.display = 'none';
+        papBreadcrumbs.innerHTML = '';
+      } else {
+        papBreadcrumbs.style.display = 'flex';
+        var chips = [];
+        if (selectedDateVal) {
+          chips.push('<span class="pap__miga">' + formatReadableDateShort(selectedDateVal) + '</span>');
+        }
+        if (currentStep > 2) {
+          var p = selectedPartySizeInput ? selectedPartySizeInput.value : '2';
+          chips.push('<span class="pap__miga">' + p + ' personas</span>');
+        }
+        if (currentStep > 3 && selectedTimeInput && selectedTimeInput.value) {
+          chips.push('<span class="pap__miga">' + selectedTimeInput.value + ' hs</span>');
+        }
+        papBreadcrumbs.innerHTML = chips.join('');
+      }
+    }
+
+    function goToStep(step) {
+      currentStep = step;
+      if (step1View) step1View.style.display = (step === 1) ? 'flex' : 'none';
+      if (step2View) step2View.style.display = (step === 2) ? 'flex' : 'none';
+      if (step3View) step3View.style.display = (step === 3) ? 'flex' : 'none';
+      if (step4View) step4View.style.display = (step === 4) ? 'flex' : 'none';
+
+      if (papBackBtn) papBackBtn.disabled = (step === 1);
+      if (papStepCounter) papStepCounter.textContent = 'Paso ' + step + ' de 4';
+      if (papStepTitle) papStepTitle.textContent = stepTitles[step] || 'Reservar Mesa';
+
+      var progressPercentages = { 1: '25%', 2: '50%', 3: '75%', 4: '100%' };
+      if (papProgressBar) papProgressBar.style.width = progressPercentages[step] || '25%';
+
+      updateBreadcrumbs();
+
+      if (step === 4) {
+        if (papNextBtn) papNextBtn.style.display = 'none';
+        if (submitBtn) submitBtn.style.display = 'flex';
+      } else {
+        if (papNextBtn) papNextBtn.style.display = 'flex';
+        if (submitBtn) submitBtn.style.display = 'none';
+      }
+
+      // Check button enablement
+      if (step === 1 && papNextBtn) {
+        papNextBtn.disabled = !selectedDateVal;
+      } else if (step === 2 && papNextBtn) {
+        papNextBtn.disabled = false;
+      } else if (step === 3 && papNextBtn) {
+        papNextBtn.disabled = !selectedTimeInput.value;
+      }
+    }
+
+    if (papBackBtn) {
+      papBackBtn.addEventListener('click', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        if (currentStep > 1) {
+          goToStep(currentStep - 1);
+        }
+      });
+    }
+
+    if (papNextBtn) {
+      papNextBtn.addEventListener('click', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        if (currentStep === 1) {
+          if (!selectedDateVal) return;
+          goToStep(2);
+        } else if (currentStep === 2) {
+          goToStep(3);
+        } else if (currentStep === 3) {
+          if (!selectedTimeInput || !selectedTimeInput.value) {
+            if (slotsAlert) {
+              slotsAlert.textContent = 'Por favor seleccioná un turno antes de continuar.';
+              slotsAlert.style.display = 'block';
+            }
+            return;
+          }
+          goToStep(4);
+        }
+      });
     }
 
     function renderCalendar(year, month) {
       if (!daysRow) return;
       if (resCalMonthTitle) {
-        resCalMonthTitle.textContent = monthNames[month] + ' ' + year;
+        resCalMonthTitle.textContent = monthNames[month].toLowerCase() + ' de ' + year;
       }
       if (resCalPrevBtn) {
         resCalPrevBtn.disabled = (year < todayObj.getFullYear() || (year === todayObj.getFullYear() && month <= todayObj.getMonth()));
@@ -1841,7 +2175,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
       for (var i = 0; i < firstDay; i++) {
         var empty = document.createElement('div');
-        empty.className = 'res-cal-empty';
+        empty.className = 'pap__cal-empty res-cal-empty';
         daysRow.appendChild(empty);
       }
 
@@ -1865,19 +2199,19 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'res-cal-day res-day-chip';
+        btn.className = 'pap__celda res-day-chip';
         btn.setAttribute('data-date', iso);
         btn.setAttribute('role', 'gridcell');
 
-        if (isSelected && !isPast && !isClosed) btn.classList.add('active');
-        if (isPast) btn.classList.add('res-day-past');
-        else if (isClosed) btn.classList.add('res-day-closed');
-        else if (isFullyBooked) btn.classList.add('res-day-busy');
+        if (isSelected && !isPast && !isClosed) btn.classList.add('es-elegida', 'active');
+        if (isPast) btn.classList.add('es-bloqueada', 'res-day-past');
+        else if (isClosed) btn.classList.add('es-bloqueada', 'res-day-closed');
+        else if (isFullyBooked) btn.classList.add('es-bloqueada', 'res-day-busy');
 
         btn.disabled = (isPast || isClosed || isFullyBooked);
 
-        btn.innerHTML = '<span class="res-cal-day-num">' + d + '</span>' +
-          (!isPast ? '<span class="res-cal-day-dot"></span>' : '');
+        btn.innerHTML = '<span>' + d + '</span>' +
+          (!isPast && !isClosed ? '<span class="pap__punto res-cal-day-dot"></span>' : '');
 
         (function(targetIso, targetDisabled) {
           btn.addEventListener('click', function(e) {
@@ -1896,16 +2230,18 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       selectedDateVal = dateVal;
       if (dateInput) dateInput.value = dateVal;
       if (daysRow) {
-        var chips = daysRow.querySelectorAll('.res-cal-day');
+        var chips = daysRow.querySelectorAll('.pap__celda, .res-day-chip');
         chips.forEach(function(c) {
-          c.classList.toggle('active', c.getAttribute('data-date') === dateVal);
+          var isMatch = c.getAttribute('data-date') === dateVal;
+          c.classList.toggle('es-elegida', isMatch);
+          c.classList.toggle('active', isMatch);
         });
       }
-      if (resSelectedDateText) {
-        resSelectedDateText.textContent = formatReadableDate(dateVal);
+      if (papResumenNoche) {
+        papResumenNoche.textContent = formatReadableDateShort(dateVal);
       }
-      if (selectedDateIndicator) {
-        selectedDateIndicator.style.display = 'inline-flex';
+      if (papNextBtn && currentStep === 1) {
+        papNextBtn.disabled = false;
       }
       if (datesCache[dateVal]) {
         renderDaySlots(datesCache[dateVal]);
@@ -1969,8 +2305,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           }
           var datesList = payload.dates || (payload.availability && payload.availability.dates) || [];
           datesList.forEach(function(d) {
-            var norm = normalizeDateObject(d);
-            datesCache[norm.date] = norm;
+            datesCache[d.date] = d;
           });
           renderCalendar(viewYear, viewMonth);
           if (datesCache[selectedDateVal]) {
@@ -1982,38 +2317,72 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         });
     }
 
+    // Party size counter
+    function updatePartySize(val) {
+      var n = Math.max(1, Math.min(val, 20));
+      if (partyDisplay) partyDisplay.textContent = String(n);
+      if (selectedPartySizeInput) selectedPartySizeInput.value = String(n);
+      if (papResumenPersonas) {
+        papResumenPersonas.textContent = n + (n === 1 ? ' persona' : ' personas');
+      }
+      partyPills.forEach(function(p) {
+        var pVal = parseInt(p.getAttribute('data-party'), 10);
+        var match = (pVal === n) || (n >= 8 && p.getAttribute('data-party') === '8');
+        p.classList.toggle('es-activa', match);
+        p.classList.toggle('active', match);
+      });
+      if (partyMinusBtn) partyMinusBtn.disabled = (n <= 1);
+    }
+
+    if (partyMinusBtn) {
+      partyMinusBtn.addEventListener('click', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        var current = parseInt(selectedPartySizeInput ? selectedPartySizeInput.value : '2', 10) || 2;
+        updatePartySize(current - 1);
+      });
+    }
+
+    if (partyPlusBtn) {
+      partyPlusBtn.addEventListener('click', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        var current = parseInt(selectedPartySizeInput ? selectedPartySizeInput.value : '2', 10) || 2;
+        updatePartySize(current + 1);
+      });
+    }
+
     partyPills.forEach(function(pill) {
       pill.addEventListener('click', function(e) {
         if (isEditorMode()) return;
         e.preventDefault();
-        partyPills.forEach(function(p) { p.classList.remove('active'); });
-        pill.classList.add('active');
-        if (selectedPartySizeInput) selectedPartySizeInput.value = pill.getAttribute('data-party');
-        if (customPartyInput) customPartyInput.value = '';
+        var n = parseInt(pill.getAttribute('data-party'), 10) || 2;
+        updatePartySize(n);
       });
     });
 
-    if (customPartyInput) {
-      customPartyInput.addEventListener('input', function() {
+    // Sectors / Espacios
+    sectorBtns.forEach(function(secBtn) {
+      secBtn.addEventListener('click', function(e) {
         if (isEditorMode()) return;
-        var val = parseInt(customPartyInput.value, 10);
-        if (val > 0) {
-          partyPills.forEach(function(p) { p.classList.remove('active'); });
-          if (selectedPartySizeInput) selectedPartySizeInput.value = String(val);
-        }
+        e.preventDefault();
+        sectorBtns.forEach(function(b) { b.classList.remove('es-elegido'); });
+        secBtn.classList.add('es-elegido');
+        var zone = secBtn.getAttribute('data-zone') || 'Salón Principal';
+        if (selectedZoneInput) selectedZoneInput.value = zone;
+        if (papResumenDonde) papResumenDonde.textContent = zone;
       });
-    }
+    });
 
     function fetchAvailability(date) {
       if (!slug) return;
       var dateVal = date || selectedDateVal || todayStr;
       if (!dateVal) return;
 
-      if (slotsContainer) {
-        slotsContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--color-text-muted); font-size: 0.9rem;">⏳ Consultando turnos disponibles...</div>';
+      if (slotsGrid) {
+        slotsGrid.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--texto-3); font-size: 0.9rem; grid-column: 1 / -1;">⏳ Consultando turnos...</div>';
       }
       if (slotsAlert) slotsAlert.style.display = 'none';
-      if (slotsStatusBadge) slotsStatusBadge.textContent = '';
 
       var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateVal);
 
@@ -2031,12 +2400,10 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
             return;
           }
           var payload = data.data;
-
           if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
             recurringClosedDays = payload.recurringClosedDays;
             renderCalendar(viewYear, viewMonth);
           }
-
           var datesList = payload.dates || (payload.availability && payload.availability.dates) || [];
           var dayInfo = datesList.find(function(d) { return d.date === dateVal; }) || datesList[0] || null;
           renderDaySlots(dayInfo);
@@ -2048,54 +2415,34 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     }
 
     function renderSlotsFallback() {
-      if (slotsContainer) {
-        slotsContainer.innerHTML = [
-          '<div class="res-slots-grid">',
-          '  <button type="button" class="res-slot-pill active" data-time="20:00">20:00</button>',
-          '  <button type="button" class="res-slot-pill" data-time="21:00">21:00</button>',
-          '  <button type="button" class="res-slot-pill" data-time="22:00">22:00</button>',
-          '</div>'
+      if (slotsGrid) {
+        slotsGrid.innerHTML = [
+          '<button type="button" class="pap__hora res-slot-pill active es-elegida" data-time="20:00">20:00</button>',
+          '<button type="button" class="pap__hora res-slot-pill" data-time="21:00">21:00</button>',
+          '<button type="button" class="pap__hora res-slot-pill" data-time="22:00">22:00</button>'
         ].join('\n');
         if (selectedTimeInput) selectedTimeInput.value = '20:00';
+        if (papResumenHora) papResumenHora.textContent = '20:00 hs';
         bindSlotButtons();
       }
     }
 
     function renderDaySlots(dayInfo) {
-      if (!slotsContainer) return;
+      if (!slotsGrid) return;
       if (!dayInfo) {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">No se encontró configuración para la fecha seleccionada.</div>';
+        slotsGrid.innerHTML = '<div class="res-slots-alert" style="display:block; grid-column: 1 / -1;">No se encontró configuración para la fecha seleccionada.</div>';
         if (selectedTimeInput) selectedTimeInput.value = '';
+        if (papResumenHora) papResumenHora.textContent = '—';
         return;
       }
 
-      if (dayInfo.status === 'CLOSED_RECURRING') {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">🚫 ' + (dayInfo.reason || 'El restaurante se encuentra cerrado en esta fecha por descanso.') + '</div>';
+      if (dayInfo.status === 'CLOSED_RECURRING' || dayInfo.status === 'BLOCKED_DATE' || dayInfo.status === 'FULLY_BOOKED') {
+        var msg = (dayInfo.status === 'FULLY_BOOKED')
+          ? '⏳ Todos los turnos de este día se encuentran completos. Por favor elegí otra fecha.'
+          : '🚫 ' + (dayInfo.reason || 'El restaurante se encuentra cerrado en esta fecha.');
+        slotsGrid.innerHTML = '<div class="res-slots-alert" style="display:block; grid-column: 1 / -1;">' + msg + '</div>';
         if (selectedTimeInput) selectedTimeInput.value = '';
-        return;
-      }
-
-      if (dayInfo.status === 'BLOCKED_DATE') {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">🚫 ' + (dayInfo.reason || 'Fecha no disponible para reservas.') + '</div>';
-        if (selectedTimeInput) selectedTimeInput.value = '';
-        return;
-      }
-
-      if (dayInfo.status === 'EVENT_EXCLUSIVE') {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">🎟️ Esta fecha está reservada para un evento especial exclusivo. Consultá la sección de eventos.</div>';
-        if (selectedTimeInput) selectedTimeInput.value = '';
-        return;
-      }
-
-      if (dayInfo.status === 'FULLY_BOOKED') {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">⏳ Todos los turnos de este día se encuentran completos. Por favor seleccioná otra fecha.</div>';
-        if (selectedTimeInput) selectedTimeInput.value = '';
-        return;
-      }
-
-      if (dayInfo.status === 'NO_SHIFTS_CONFIGURED') {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">No hay turnos disponibles para esta fecha. Contactanos para consultas directas.</div>';
-        if (selectedTimeInput) selectedTimeInput.value = '';
+        if (papResumenHora) papResumenHora.textContent = '—';
         return;
       }
 
@@ -2124,12 +2471,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       allTimes.sort(function(a, b) { return a.time.localeCompare(b.time); });
 
       if (allTimes.length === 0) {
-        slotsContainer.innerHTML = '<div class="res-slots-alert" style="display:block;">No hay turnos configurados para este día.</div>';
+        slotsGrid.innerHTML = '<div class="res-slots-alert" style="display:block; grid-column: 1 / -1;">No hay turnos disponibles para esta fecha.</div>';
         if (selectedTimeInput) selectedTimeInput.value = '';
+        if (papResumenHora) papResumenHora.textContent = '—';
         return;
       }
 
-      var html = ['<div class="res-slots-grid">'];
+      var html = [];
       var firstFreeSelected = false;
 
       allTimes.forEach(function(slot) {
@@ -2138,32 +2486,35 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         if (isSelected) {
           firstFreeSelected = true;
           if (selectedTimeInput) selectedTimeInput.value = slot.time;
+          if (papResumenHora) papResumenHora.textContent = slot.time + ' hs';
         }
 
-        var classes = 'res-slot-pill';
-        if (isSelected) classes += ' active';
+        var classes = 'pap__hora res-slot-pill';
+        if (isSelected) classes += ' active es-elegida';
         if (isOccupied) classes += ' res-slot-busy';
 
-        var disabledAttr = isOccupied ? ' disabled title="Turno ya ocupado"' : '';
-        var badge = isOccupied ? ' <span class="slot-badge-busy">Ocupado</span>' : '';
-
-        html.push('  <button type="button" class="' + classes + '" data-time="' + slot.time + '"' + disabledAttr + '>' + slot.time + badge + '</button>');
+        var disabledAttr = isOccupied ? ' disabled title="Turno ocupado"' : '';
+        html.push('<button type="button" class="' + classes + '" data-time="' + slot.time + '"' + disabledAttr + '>' + slot.time + '</button>');
       });
-      html.push('</div>');
 
-      slotsContainer.innerHTML = html.join('\n');
+      slotsGrid.innerHTML = html.join('\n');
       bindSlotButtons();
     }
 
     function bindSlotButtons() {
-      var slotBtns = slotsContainer ? slotsContainer.querySelectorAll('.res-slot-pill:not(:disabled)') : [];
+      var slotBtns = slotsGrid ? slotsGrid.querySelectorAll('.pap__hora:not(:disabled), .res-slot-pill:not(:disabled)') : [];
       slotBtns.forEach(function(btn) {
         btn.addEventListener('click', function(e) {
           if (isEditorMode()) return;
           e.preventDefault();
-          slotsContainer.querySelectorAll('.res-slot-pill').forEach(function(b) { b.classList.remove('active'); });
-          btn.classList.add('active');
-          if (selectedTimeInput) selectedTimeInput.value = btn.getAttribute('data-time') || '';
+          slotsGrid.querySelectorAll('.pap__hora, .res-slot-pill').forEach(function(b) {
+            b.classList.remove('active', 'es-elegida');
+          });
+          btn.classList.add('active', 'es-elegida');
+          var timeVal = btn.getAttribute('data-time') || '';
+          if (selectedTimeInput) selectedTimeInput.value = timeVal;
+          if (papResumenHora) papResumenHora.textContent = timeVal ? (timeVal + ' hs') : '—';
+          if (papNextBtn && currentStep === 3) papNextBtn.disabled = false;
         });
       });
     }
@@ -2182,13 +2533,16 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         var date = selectedDateVal || (dateInput ? dateInput.value : '');
         var time = selectedTimeInput ? selectedTimeInput.value : '';
         var partySize = selectedPartySizeInput ? parseInt(selectedPartySizeInput.value, 10) : 2;
+        var zone = selectedZoneInput ? selectedZoneInput.value : 'Salón Principal';
 
         if (!date) {
           showError('Por favor seleccioná una fecha para tu reserva.');
+          goToStep(1);
           return;
         }
         if (!time) {
           showError('Por favor seleccioná un turno u horario disponible.');
+          goToStep(3);
           return;
         }
         if (!customerName) {
@@ -2209,7 +2563,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           partySize: partySize,
           date: date,
           time: time,
-          notes: notes || undefined
+          notes: (zone ? ('[Espacio: ' + zone + '] ') : '') + (notes || '')
         };
 
         fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables', {
@@ -2231,12 +2585,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
               showError(errMsg);
               if (resObj.status === 409) {
                 fetchAvailability(date);
+                goToStep(3);
               }
               return;
             }
 
             var resData = resObj.data.data.reservation;
-            showSuccess(resData);
+            showSuccess(resData, zone);
           })
           .catch(function() {
             setLoading(false);
@@ -2261,8 +2616,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       if (btnSpinner) btnSpinner.style.display = isLoading ? 'inline' : 'none';
     }
 
-    function showSuccess(reservation) {
+    function showSuccess(reservation, zone) {
       if (form) form.style.display = 'none';
+      var widget = root.querySelector('#resPapWidget');
+      if (widget) {
+        var headerBar = widget.querySelector('.pap__barra');
+        var progressBar = widget.querySelector('.pap__avance');
+        if (headerBar) headerBar.style.display = 'none';
+        if (progressBar) progressBar.style.display = 'none';
+      }
 
       if (successView) {
         successView.style.display = 'block';
@@ -2270,12 +2632,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         if (voucherDate) voucherDate.textContent = reservation.date;
         if (voucherTime) voucherTime.textContent = reservation.time + ' hs';
         if (voucherGuests) voucherGuests.textContent = reservation.partySize + ' personas';
+        if (voucherZone) voucherZone.textContent = zone || 'Salón Principal';
         if (voucherName) voucherName.textContent = reservation.customerName;
 
         var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
         var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
         var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
-        var waMsg = encodeURIComponent('¡Hola! Tengo una reserva confirmada en ' + restaurantName + '.\\nCódigo: ' + (reservation.code || '') + '\\nFecha: ' + reservation.date + ' ' + reservation.time + ' hs\\nComensales: ' + reservation.partySize + '\\nA nombre de: ' + reservation.customerName);
+        var waMsg = encodeURIComponent('¡Hola! Tengo una reserva confirmada en ' + restaurantName + '.\\nCódigo: ' + (reservation.code || '') + '\\nFecha: ' + reservation.date + ' ' + reservation.time + ' hs\\nComensales: ' + reservation.partySize + '\\nEspacio: ' + (zone || 'Salón Principal') + '\\nA nombre de: ' + reservation.customerName);
         var waUrl = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
         if (voucherWaBtn) voucherWaBtn.href = waUrl;
 
@@ -2288,24 +2651,32 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         if (isEditorMode()) return;
         e.preventDefault();
         if (successView) successView.style.display = 'none';
+        var widget = root.querySelector('#resPapWidget');
+        if (widget) {
+          var headerBar = widget.querySelector('.pap__barra');
+          var progressBar = widget.querySelector('.pap__avance');
+          if (headerBar) headerBar.style.display = 'grid';
+          if (progressBar) progressBar.style.display = 'block';
+        }
         if (form) {
           form.reset();
           form.style.display = 'block';
         }
         selectedDateVal = todayStr;
         if (dateInput) dateInput.value = todayStr;
-        if (selectedPartySizeInput) selectedPartySizeInput.value = '2';
-        partyPills.forEach(function(p) {
-          p.classList.toggle('active', p.getAttribute('data-party') === '2');
-        });
+        updatePartySize(2);
         renderCalendar(viewYear, viewMonth);
         selectDate(todayStr);
+        goToStep(1);
         fetchMonthAvailability(viewYear, viewMonth);
       });
     }
 
     renderCalendar(viewYear, viewMonth);
     selectDate(todayStr);
+    updatePartySize(2);
+    goToStep(1);
+
     if (!isEditorMode()) {
       fetchMonthAvailability(viewYear, viewMonth);
     }
@@ -3392,7 +3763,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     function renderCalendar(year, month) {
       if (!daysRow) return;
       if (resCalMonthTitle) {
-        resCalMonthTitle.textContent = monthNames[month] + ' ' + year;
+        resCalMonthTitle.textContent = monthNames[month].toLowerCase() + ' de ' + year;
       }
       if (resCalPrevBtn) {
         resCalPrevBtn.disabled = (year < todayObj.getFullYear() || (year === todayObj.getFullYear() && month <= todayObj.getMonth()));
