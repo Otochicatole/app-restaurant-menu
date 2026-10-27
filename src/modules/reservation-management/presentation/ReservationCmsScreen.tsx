@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   AlertCircle,
+  Building2,
   Calendar,
   CalendarDays,
   CalendarX2,
@@ -15,21 +16,28 @@ import {
   Edit2,
   ExternalLink,
   Eye,
+  Globe,
+  Heart,
   LayoutGrid,
+  Leaf,
   List,
   Loader2,
   Mail,
   MessageCircle,
+  MessageSquare,
   Moon,
-  PartyPopper,
   Phone,
   Plus,
   Printer,
   Search,
+  Shield,
+  Sparkles,
   Sun,
   Trash2,
+  UserCheck,
   Users,
   Utensils,
+  WheatOff,
   X,
 } from "lucide-react";
 import {
@@ -77,10 +85,10 @@ const DAYS_OF_WEEK = [
 ];
 
 const STATUS_BADGE_CLASSES: Record<ReservationStatus, string> = {
-  PENDING: "bg-amber-50 text-amber-900 border-amber-300 font-bold",
-  CONFIRMED: "bg-emerald-50 text-emerald-900 border-emerald-300 font-bold",
+  PENDING: "bg-amber-50 text-amber-900 border-amber-200/90 font-semibold",
+  CONFIRMED: "bg-emerald-50 text-emerald-900 border-emerald-200/90 font-semibold",
   COMPLETED: "bg-zinc-100 text-zinc-700 border-zinc-200 font-medium",
-  CANCELLED: "bg-red-50 text-red-700 border-red-200 line-through font-medium",
+  CANCELLED: "bg-red-50 text-red-700 border-red-200/80 line-through font-medium",
   REJECTED: "bg-zinc-100 text-zinc-500 border-zinc-200 line-through font-medium",
 };
 
@@ -164,14 +172,14 @@ function buildWhatsAppLink(
   const clean = phone.replace(/[^0-9]/g, "");
   if (!clean || clean.length < 8) return null;
   const friendly = formatFriendlyDate(date);
-  const text = `Hola ${customerName}! 👋 Te escribimos desde *${restaurantName}* sobre tu reserva (${code}) para *${partySize} ${partySize === 1 ? "persona" : "personas"}* el día *${friendly}* a las *${time} hs*. ¿Nos confirmás tu asistencia? ¡Muchas gracias!`;
+  const text = `Hola ${customerName}! Te escribimos desde *${restaurantName}* sobre tu reserva (${code}) para *${partySize} ${partySize === 1 ? "persona" : "personas"}* el día *${friendly}* a las *${time} hs*. ¿Nos confirmás tu asistencia? ¡Muchas gracias!`;
   return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`;
 }
 
 type NoteTag = {
   id: string;
   label: string;
-  emoji: string;
+  iconType: "wheat" | "leaf" | "heart" | "sun" | "users" | "shield";
   color: string;
 };
 
@@ -188,37 +196,30 @@ function extractNoteTags(notes: string): NoteTag[] {
   ) {
     tags.push({
       id: "celiac",
-      label: "Sin TACC",
-      emoji: "🌾",
-      color: "bg-amber-50 text-amber-900 border-amber-200",
+      label: "Sin TACC / Celíaco",
+      iconType: "wheat",
+      color: "bg-amber-50 text-amber-900 border-amber-200/90",
     });
   }
   if (lower.includes("vegan") || lower.includes("vegetar")) {
     tags.push({
       id: "veg",
       label: "Veg / Vegetariano",
-      emoji: "🌱",
-      color: "bg-emerald-50 text-emerald-900 border-emerald-200",
-    });
-  }
-  if (lower.includes("cumple") || lower.includes("cumpleaños")) {
-    tags.push({
-      id: "bday",
-      label: "Cumpleaños",
-      emoji: "🎂",
-      color: "bg-pink-50 text-pink-900 border-pink-200",
+      iconType: "leaf",
+      color: "bg-emerald-50 text-emerald-900 border-emerald-200/90",
     });
   }
   if (
+    lower.includes("cumple") ||
     lower.includes("aniversario") ||
-    lower.includes("romant") ||
-    lower.includes("románt")
+    lower.includes("festejo") ||
+    lower.includes("romant")
   ) {
     tags.push({
-      id: "anniversary",
-      label: "Aniversario",
-      emoji: "💍",
-      color: "bg-rose-50 text-rose-900 border-rose-200",
+      id: "celebration",
+      label: "Celebración especial",
+      iconType: "heart",
+      color: "bg-rose-50 text-rose-900 border-rose-200/90",
     });
   }
   if (
@@ -229,38 +230,38 @@ function extractNoteTags(notes: string): NoteTag[] {
   ) {
     tags.push({
       id: "patio",
-      label: "Terraza / Exterior",
-      emoji: "☀️",
-      color: "bg-sky-50 text-sky-900 border-sky-200",
+      label: "Mesa en Exterior / Terraza",
+      iconType: "sun",
+      color: "bg-sky-50 text-sky-900 border-sky-200/90",
     });
   }
-  if (
-    lower.includes("bebe") ||
-    lower.includes("bebé") ||
-    lower.includes("silla") ||
-    lower.includes("niño")
-  ) {
-    tags.push({
-      id: "baby",
-      label: "Silla alta / Niños",
-      emoji: "👶",
-      color: "bg-purple-50 text-purple-900 border-purple-200",
-    });
-  }
-  if (
-    lower.includes("vip") ||
-    lower.includes("urgente") ||
-    lower.includes("importante")
-  ) {
+  if (lower.includes("vip") || lower.includes("urgente") || lower.includes("importante")) {
     tags.push({
       id: "vip",
-      label: "Atención Especial",
-      emoji: "⭐",
-      color: "bg-yellow-50 text-yellow-900 border-yellow-200",
+      label: "Atención prioritaria",
+      iconType: "shield",
+      color: "bg-indigo-50 text-indigo-900 border-indigo-200/90",
     });
   }
 
   return tags;
+}
+
+function renderTagIcon(type: NoteTag["iconType"]) {
+  switch (type) {
+    case "wheat":
+      return <WheatOff size={11} className="shrink-0" />;
+    case "leaf":
+      return <Leaf size={11} className="shrink-0" />;
+    case "heart":
+      return <Heart size={11} className="shrink-0" />;
+    case "sun":
+      return <Sun size={11} className="shrink-0" />;
+    case "shield":
+      return <Shield size={11} className="shrink-0" />;
+    default:
+      return null;
+  }
 }
 
 export function ReservationCmsScreen({
@@ -297,12 +298,8 @@ export function ReservationCmsScreen({
     useState<ReservationView | null>(null);
 
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<RestaurantEventView | null>(
-    null,
-  );
-  const [deletingEvent, setDeletingEvent] = useState<RestaurantEventView | null>(
-    null,
-  );
+  const [editingEvent, setEditingEvent] = useState<RestaurantEventView | null>(null);
+  const [deletingEvent, setDeletingEvent] = useState<RestaurantEventView | null>(null);
   const [viewingEventAttendees, setViewingEventAttendees] =
     useState<RestaurantEventView | null>(null);
 
@@ -723,16 +720,17 @@ export function ReservationCmsScreen({
   };
 
   // ---------------------------------------------------------------------------
-  // Calculations & Filtered Data
+  // Computed & Filtered Data
   // ---------------------------------------------------------------------------
   const todayIso = useMemo(() => getTodayIso(), []);
 
   const filteredReservations = useMemo(() => {
     return data.reservations.filter((r) => {
       if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
-      if (dateFilter && r.date !== dateFilter) return false;
-      if (typeFilter === "TABLE" && r.eventId) return false;
+      if (typeFilter === "TABLE" && Boolean(r.eventId)) return false;
       if (typeFilter === "EVENT" && !r.eventId) return false;
+      if (dateFilter && r.date !== dateFilter) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchName = r.customerName.toLowerCase().includes(q);
@@ -743,9 +741,8 @@ export function ReservationCmsScreen({
       }
       return true;
     });
-  }, [data.reservations, statusFilter, dateFilter, typeFilter, searchQuery]);
+  }, [data.reservations, statusFilter, typeFilter, dateFilter, searchQuery]);
 
-  // Operational metrics for today
   const todayStats = useMemo(() => {
     const todayRes = data.reservations.filter(
       (r) =>
@@ -760,7 +757,6 @@ export function ReservationCmsScreen({
     };
   }, [data.reservations, todayIso]);
 
-  // Group shifts by time of day
   const { lunchSlots, dinnerSlots, otherSlots } = useMemo(() => {
     const lunch: TimeSlotView[] = [];
     const dinner: TimeSlotView[] = [];
@@ -768,9 +764,9 @@ export function ReservationCmsScreen({
 
     data.timeSlots.forEach((slot) => {
       const hour = parseInt(slot.time.split(":")[0] || "0", 10);
-      if (hour >= 11 && hour < 17) {
+      if (hour >= 11 && hour <= 16) {
         lunch.push(slot);
-      } else if (hour >= 18 && hour <= 23) {
+      } else if (hour >= 19 && hour <= 23) {
         dinner.push(slot);
       } else {
         others.push(slot);
@@ -780,24 +776,22 @@ export function ReservationCmsScreen({
     return { lunchSlots: lunch, dinnerSlots: dinner, otherSlots: others };
   }, [data.timeSlots]);
 
+  const isAnyFilterActive = Boolean(
+    searchQuery || statusFilter !== "ALL" || dateFilter || typeFilter !== "ALL",
+  );
+
   return (
     <div className="space-y-6 pb-12">
       {/* =================================================================== */}
-      {/* 1. HEADER & LIVE OPERATIONAL BAR                                   */}
+      {/* 1. HEADER                                                           */}
       {/* =================================================================== */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200/80 pb-5">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] font-semibold tracking-wider uppercase text-[#3d5934]">
-              {data.restaurantName} • Reservas en Vivo
-            </span>
-          </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
-            Gestión de Mesas y Turnos
+            Gestión de Reservas y Mesas
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-zinc-500 max-w-2xl leading-relaxed">
-            Supervisá comensales, confirmaciones inmediatas por WhatsApp, eventos y disponibilidad de tu restaurante.
+            Supervisá comensales, turnos de servicio, confirmaciones instantáneas por WhatsApp y disponibilidad del salón en tiempo real.
           </p>
         </div>
 
@@ -829,10 +823,10 @@ export function ReservationCmsScreen({
       {feedback && (
         <div
           role="status"
-          className={`flex items-center justify-between gap-3 rounded-2xl p-4 text-sm font-medium transition-all shadow-sm ${
+          className={`flex items-center justify-between gap-3 rounded-2xl p-4 text-sm font-medium transition-all shadow-xs ${
             feedback.type === "success"
-              ? "bg-emerald-50/90 text-emerald-950 border border-emerald-300"
-              : "bg-red-50/90 text-red-950 border border-red-300"
+              ? "bg-emerald-50 text-emerald-950 border border-emerald-300"
+              : "bg-red-50 text-red-950 border border-red-300"
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -846,7 +840,8 @@ export function ReservationCmsScreen({
           <button
             type="button"
             onClick={() => setFeedback(null)}
-            className="text-zinc-500 hover:text-zinc-800 p-1"
+            className="text-zinc-500 hover:text-zinc-800 p-1 cursor-pointer"
+            aria-label="Cerrar notificación"
           >
             <X size={14} />
           </button>
@@ -854,11 +849,22 @@ export function ReservationCmsScreen({
       )}
 
       {/* =================================================================== */}
-      {/* 2. OPERATIONAL METRICS COMMAND STRIP                               */}
+      {/* 2. OPERATIONAL KPI STRIP                                            */}
       {/* =================================================================== */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Servicio Hoy */}
-        <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-emerald-300 transition-colors">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("reservations");
+            setDateFilter(todayIso);
+          }}
+          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-xs transition cursor-pointer ${
+            dateFilter === todayIso
+              ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/10"
+              : "border-zinc-200/90 bg-white hover:border-zinc-300"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Servicio Hoy
@@ -877,19 +883,21 @@ export function ReservationCmsScreen({
             {todayStats.reservationsCount}{" "}
             {todayStats.reservationsCount === 1 ? "mesa reservada" : "mesas reservadas"} hoy
           </p>
-        </div>
+        </button>
 
-        {/* Card 2: Pendientes */}
+        {/* Card 2: Por Confirmar */}
         <button
           type="button"
           onClick={() => {
             setActiveTab("reservations");
             setStatusFilter("PENDING");
           }}
-          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-2xs transition-all cursor-pointer ${
-            data.summary.pendingReservationsCount > 0
-              ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50 text-amber-950"
-              : "border-zinc-200/90 bg-white hover:border-zinc-300"
+          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-xs transition cursor-pointer ${
+            statusFilter === "PENDING"
+              ? "border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/15"
+              : data.summary.pendingReservationsCount > 0
+                ? "border-amber-200 bg-amber-50/30 hover:border-amber-300"
+                : "border-zinc-200/90 bg-white hover:border-zinc-300"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -926,13 +934,17 @@ export function ReservationCmsScreen({
             setActiveTab("reservations");
             setStatusFilter("CONFIRMED");
           }}
-          className="text-left rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-colors cursor-pointer"
+          className={`text-left rounded-2xl border p-4 sm:p-5 shadow-xs transition cursor-pointer ${
+            statusFilter === "CONFIRMED"
+              ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/10"
+              : "border-zinc-200/90 bg-white hover:border-zinc-300"
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Confirmadas
             </span>
-            <span className="h-7 w-7 rounded-xl bg-[#e8efe6] text-[#2b4226] flex items-center justify-center">
+            <span className="h-7 w-7 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
               <CheckCircle2 size={15} />
             </span>
           </div>
@@ -945,14 +957,18 @@ export function ReservationCmsScreen({
           <p className="mt-1 text-xs text-zinc-500">Listas para el salón</p>
         </button>
 
-        {/* Card 4: Turnos & Eventos */}
-        <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-colors">
+        {/* Card 4: Disponibilidad */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("shifts")}
+          className="text-left rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-xs hover:border-zinc-300 transition cursor-pointer"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Disponibilidad
             </span>
             <span className="h-7 w-7 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
-              <PartyPopper size={15} />
+              <CalendarDays size={15} />
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -965,7 +981,7 @@ export function ReservationCmsScreen({
             {data.summary.activeEventsCount}{" "}
             {data.summary.activeEventsCount === 1 ? "evento publicado" : "eventos publicados"}
           </p>
-        </div>
+        </button>
       </div>
 
       {/* =================================================================== */}
@@ -973,24 +989,24 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       <nav
         aria-label="Pestañas de reservas"
-        className="flex items-center gap-1.5 p-1.5 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 overflow-x-auto"
+        className="flex items-center gap-1.5 p-1.5 bg-zinc-200/60 rounded-2xl border border-zinc-200/70 overflow-x-auto scrollbar-none"
       >
         <button
           type="button"
           onClick={() => setActiveTab("reservations")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "reservations"
-              ? "bg-[#182618] text-white shadow-2xs"
+              ? "bg-[#182618] text-white shadow-xs"
               : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
-          <CalendarDays size={16} />
+          <CalendarDays size={15} />
           <span>Reservas de Mesas</span>
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "reservations"
                 ? "bg-white/20 text-white"
-                : "bg-zinc-200 text-zinc-700"
+                : "bg-zinc-300/70 text-zinc-700"
             }`}
           >
             {data.reservations.length}
@@ -1002,17 +1018,17 @@ export function ReservationCmsScreen({
           onClick={() => setActiveTab("events")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "events"
-              ? "bg-[#182618] text-white shadow-2xs"
+              ? "bg-[#182618] text-white shadow-xs"
               : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
-          <PartyPopper size={16} />
+          <Sparkles size={15} />
           <span>Eventos Especiales</span>
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "events"
                 ? "bg-white/20 text-white"
-                : "bg-zinc-200 text-zinc-700"
+                : "bg-zinc-300/70 text-zinc-700"
             }`}
           >
             {data.events.length}
@@ -1024,17 +1040,17 @@ export function ReservationCmsScreen({
           onClick={() => setActiveTab("shifts")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "shifts"
-              ? "bg-[#182618] text-white shadow-2xs"
+              ? "bg-[#182618] text-white shadow-xs"
               : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
-          <Clock size={16} />
+          <Clock size={15} />
           <span>Horarios y Turnos</span>
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
               activeTab === "shifts"
                 ? "bg-white/20 text-white"
-                : "bg-zinc-200 text-zinc-700"
+                : "bg-zinc-300/70 text-zinc-700"
             }`}
           >
             {data.timeSlots.length}
@@ -1046,11 +1062,11 @@ export function ReservationCmsScreen({
           onClick={() => setActiveTab("closures")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
             activeTab === "closures"
-              ? "bg-[#182618] text-white shadow-2xs"
+              ? "bg-[#182618] text-white shadow-xs"
               : "text-zinc-600 hover:text-zinc-950 hover:bg-white/60"
           }`}
         >
-          <CalendarX2 size={16} />
+          <CalendarX2 size={15} />
           <span>Cierres y Descansos</span>
           {(data.recurringClosures.length > 0 || data.blockedDates.length > 0) && (
             <span
@@ -1071,102 +1087,127 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       {activeTab === "reservations" && (
         <section aria-label="Listado de reservas" className="space-y-4">
-          {/* Day Stepper & Quick Date Navigator */}
-          <div className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-semibold text-zinc-500 mr-1">Fecha:</span>
-              <button
-                type="button"
-                onClick={() => setDateFilter("")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  dateFilter === ""
-                    ? "bg-[#182618] text-white shadow-2xs"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
-              >
-                Todas
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateFilter(todayIso)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  dateFilter === todayIso
-                    ? "bg-emerald-700 text-white shadow-2xs"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
-              >
-                Hoy ({formatShortDate(todayIso)})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateFilter(addDaysToIso(todayIso, 1))}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  dateFilter === addDaysToIso(todayIso, 1)
-                    ? "bg-emerald-700 text-white shadow-2xs"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
-              >
-                Mañana
-              </button>
-
-              {/* Day stepper arrows when date is selected */}
-              <div className="flex items-center gap-1 pl-2 border-l border-zinc-200">
-                <button
-                  type="button"
-                  title="Día anterior"
-                  onClick={() =>
-                    setDateFilter((prev) => addDaysToIso(prev || todayIso, -1))
-                  }
-                  className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <input
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="px-2.5 py-1 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-800 focus:bg-white focus:outline-none focus:border-[#182618]"
+          {/* Unified Command Toolbar */}
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 sm:p-4 shadow-xs space-y-3">
+            {/* Main Control Row */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Search box */}
+              <div className="relative flex-1 min-w-[220px]">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
                 />
-                <button
-                  type="button"
-                  title="Día siguiente"
-                  onClick={() =>
-                    setDateFilter((prev) => addDaysToIso(prev || todayIso, 1))
-                  }
-                  className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition"
-                >
-                  <ChevronRight size={16} />
-                </button>
+                <input
+                  type="text"
+                  placeholder="Buscar por cliente, teléfono o código (ej. RES-)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618] transition text-zinc-800 placeholder:text-zinc-400"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer p-0.5"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
-            </div>
 
-            {/* Context date badge or summary */}
-            <div className="flex items-center justify-between md:justify-end gap-3 text-xs text-zinc-600">
-              {dateFilter ? (
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Calendar size={14} className="text-[#3d5934]" />
-                  <span>{formatFriendlyDate(dateFilter)}</span>
-                  <span className="font-bold text-zinc-900 ml-1">
-                    ({filteredReservations.length} reservas •{" "}
-                    {filteredReservations.reduce((acc, r) => acc + r.partySize, 0)}{" "}
-                    comensales)
-                  </span>
+              {/* Date Quick Selector */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="inline-flex rounded-xl bg-zinc-100 p-0.5 border border-zinc-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter("")}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      dateFilter === ""
+                        ? "bg-white text-zinc-950 shadow-2xs"
+                        : "text-zinc-600 hover:text-zinc-950"
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter(todayIso)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      dateFilter === todayIso
+                        ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                        : "text-zinc-600 hover:text-zinc-950"
+                    }`}
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter(addDaysToIso(todayIso, 1))}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      dateFilter === addDaysToIso(todayIso, 1)
+                        ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                        : "text-zinc-600 hover:text-zinc-950"
+                    }`}
+                  >
+                    Mañana
+                  </button>
                 </div>
-              ) : (
-                <span className="text-zinc-500 font-medium">
-                  Mostrando todas las fechas registradas
-                </span>
-              )}
+
+                {/* Day stepper with date input */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Día anterior"
+                    onClick={() =>
+                      setDateFilter((prev) => addDaysToIso(prev || todayIso, -1))
+                    }
+                    className="p-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="px-2.5 py-1.5 text-xs font-medium bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-800 focus:bg-white focus:outline-none focus:border-[#182618]"
+                  />
+                  <button
+                    type="button"
+                    title="Día siguiente"
+                    onClick={() =>
+                      setDateFilter((prev) => addDaysToIso(prev || todayIso, 1))
+                    }
+                    className="p-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Status filter dropdown */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium text-zinc-800 cursor-pointer"
+              >
+                <option value="ALL">Todos los estados</option>
+                <option value="PENDING">Pendientes de confirmar</option>
+                <option value="CONFIRMED">Confirmadas</option>
+                <option value="COMPLETED">Asistieron</option>
+                <option value="CANCELLED">Canceladas</option>
+                <option value="REJECTED">Rechazadas</option>
+              </select>
 
               {/* View mode toggle */}
-              <div className="flex items-center gap-1 p-1 bg-zinc-100 rounded-xl">
+              <div className="inline-flex items-center p-0.5 bg-zinc-100 rounded-xl border border-zinc-200/80 shrink-0">
                 <button
                   type="button"
                   title="Vista tarjetas"
                   onClick={() => setViewMode("cards")}
-                  className={`p-1.5 rounded-lg transition ${
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
                     viewMode === "cards"
-                      ? "bg-white text-zinc-950 shadow-2xs"
+                      ? "bg-white text-zinc-950 shadow-2xs font-bold"
                       : "text-zinc-500 hover:text-zinc-800"
                   }`}
                 >
@@ -1176,9 +1217,9 @@ export function ReservationCmsScreen({
                   type="button"
                   title="Vista tabla de servicio"
                   onClick={() => setViewMode("table")}
-                  className={`p-1.5 rounded-lg transition ${
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
                     viewMode === "table"
-                      ? "bg-white text-zinc-950 shadow-2xs"
+                      ? "bg-white text-zinc-950 shadow-2xs font-bold"
                       : "text-zinc-500 hover:text-zinc-800"
                   }`}
                 >
@@ -1186,61 +1227,16 @@ export function ReservationCmsScreen({
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Search and Secondary Filter Bar */}
-          <div className="rounded-2xl border border-zinc-200/90 bg-white p-3.5 shadow-2xs space-y-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              {/* Search box */}
-              <div className="relative flex-1">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por cliente, teléfono o código (ej. RES-)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-zinc-50/80 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] transition text-zinc-800 placeholder:text-zinc-400"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-
-              {/* Status filter dropdown */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium text-zinc-800 cursor-pointer"
-                >
-                  <option value="ALL">Todos los estados</option>
-                  <option value="PENDING">Pendientes de confirmar</option>
-                  <option value="CONFIRMED">Confirmadas</option>
-                  <option value="COMPLETED">Asistieron</option>
-                  <option value="CANCELLED">Canceladas</option>
-                  <option value="REJECTED">Rechazadas</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Type Filter Buttons */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100 flex-wrap">
-              <div className="flex items-center gap-1.5 overflow-x-auto">
+            {/* Sub-bar: Type Segments & Active Filter Summary */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 border-t border-zinc-100 text-xs">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setTypeFilter("ALL")}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
                     typeFilter === "ALL"
-                      ? "bg-zinc-900 text-white shadow-2xs"
+                      ? "bg-[#182618] text-white"
                       : "bg-zinc-100 text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
@@ -1249,48 +1245,65 @@ export function ReservationCmsScreen({
                 <button
                   type="button"
                   onClick={() => setTypeFilter("TABLE")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
                     typeFilter === "TABLE"
-                      ? "bg-zinc-900 text-white shadow-2xs"
+                      ? "bg-[#182618] text-white"
                       : "bg-zinc-100 text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
-                  <span>🍽️ Mesas Regulares</span>
-                  <span className="text-[11px] opacity-80">
+                  <Utensils size={12} />
+                  <span>Mesas</span>
+                  <span className="opacity-80">
                     ({data.reservations.filter((r) => !r.eventId).length})
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTypeFilter("EVENT")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
                     typeFilter === "EVENT"
-                      ? "bg-purple-900 text-white shadow-2xs"
-                      : "bg-purple-50 text-purple-800 hover:bg-purple-100"
+                      ? "bg-purple-900 text-white"
+                      : "bg-purple-50 text-purple-900 hover:bg-purple-100"
                   }`}
                 >
-                  <PartyPopper size={13} />
-                  <span>Eventos Especiales</span>
-                  <span className="text-[11px] opacity-80">
+                  <Sparkles size={12} />
+                  <span>Eventos</span>
+                  <span className="opacity-80">
                     ({data.reservations.filter((r) => Boolean(r.eventId)).length})
                   </span>
                 </button>
               </div>
 
-              {(searchQuery || statusFilter !== "ALL" || dateFilter || typeFilter !== "ALL") && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setStatusFilter("ALL");
-                    setDateFilter("");
-                    setTypeFilter("ALL");
-                  }}
-                  className="text-xs text-zinc-500 hover:text-red-700 font-medium transition cursor-pointer"
-                >
-                  Limpiar filtros
-                </button>
-              )}
+              <div className="flex items-center gap-3 justify-between sm:justify-end">
+                {dateFilter ? (
+                  <span className="text-zinc-600 font-medium">
+                    {formatFriendlyDate(dateFilter)} ·{" "}
+                    <strong className="text-zinc-950">
+                      {filteredReservations.length} reservas
+                    </strong>{" "}
+                    ({filteredReservations.reduce((acc, r) => acc + r.partySize, 0)} pers.)
+                  </span>
+                ) : (
+                  <span className="text-zinc-500 font-medium">
+                    {filteredReservations.length} de {data.reservations.length} reservas
+                  </span>
+                )}
+
+                {isAnyFilterActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("ALL");
+                      setDateFilter("");
+                      setTypeFilter("ALL");
+                    }}
+                    className="text-zinc-500 hover:text-red-700 font-medium transition cursor-pointer"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1299,8 +1312,8 @@ export function ReservationCmsScreen({
             <AdminEmptyState
               title="No se encontraron reservas"
               description={
-                searchQuery || statusFilter !== "ALL" || dateFilter
-                  ? "No hay reservas que coincidan con los criterios de búsqueda seleccionados."
+                isAnyFilterActive
+                  ? "No hay reservas que coincidan con los criterios de búsqueda o fecha seleccionados."
                   : "Tu restaurante aún no tiene reservas registradas. Podés agregar la primera manualmente."
               }
               action={
@@ -1332,57 +1345,63 @@ export function ReservationCmsScreen({
                 return (
                   <div
                     key={res.id}
-                    className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs hover:border-zinc-300 transition-all space-y-3"
+                    className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-xs hover:border-zinc-300 transition-all space-y-3.5"
                   >
+                    {/* Header Row: Meta Badges + Action Buttons */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      {/* Left Block: Time Badge, Code, Status */}
-                      <div className="space-y-2 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Time & Date Pill */}
-                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-900 text-white text-xs font-mono font-bold">
-                            <Clock size={13} />
-                            <span>{res.time} hs</span>
-                            <span className="opacity-60">•</span>
-                            <span className="font-sans font-medium text-[11px] opacity-90">
-                              {formatShortDate(res.date)}
-                            </span>
-                          </div>
-
-                          {/* Party Size */}
-                          <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-800 text-xs font-bold border border-zinc-200">
-                            <Users size={13} className="text-zinc-600" />
-                            <span>{res.partySize} {res.partySize === 1 ? "persona" : "personas"}</span>
-                          </div>
-
-                          {/* Status Badge */}
-                          <span
-                            className={`text-xs px-2.5 py-1 rounded-xl border ${
-                              STATUS_BADGE_CLASSES[res.status]
-                            }`}
-                          >
-                            {STATUS_LABEL[res.status]}
+                      {/* Left Block: Time Badge, Code, Status, Party */}
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        {/* Time & Date Pill */}
+                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-950 text-white text-xs font-mono font-bold shadow-2xs">
+                          <Clock size={12} className="text-zinc-300" />
+                          <span>{res.time} hs</span>
+                          <span className="opacity-50">•</span>
+                          <span className="font-sans font-medium text-[11px] opacity-90">
+                            {formatShortDate(res.date)}
                           </span>
+                        </div>
 
-                          {/* Event / Regular Tag */}
-                          {res.eventId ? (
-                            <span className="text-xs px-2.5 py-1 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-semibold flex items-center gap-1">
-                              <PartyPopper size={12} />
-                              <span className="truncate max-w-44">{res.eventTitle || "Evento Especial"}</span>
-                            </span>
-                          ) : (
-                            <span className="text-xs px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-700 font-medium">
-                              🍽️ Salón
-                            </span>
-                          )}
+                        {/* Party Size */}
+                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-800 text-xs font-semibold">
+                          <Users size={12} className="text-zinc-500" />
+                          <span>
+                            {res.partySize} {res.partySize === 1 ? "persona" : "personas"}
+                          </span>
+                        </div>
 
-                          {/* Code Pill with 1-click copy */}
+                        {/* Status Badge */}
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded-xl border ${
+                            STATUS_BADGE_CLASSES[res.status]
+                          }`}
+                        >
+                          {STATUS_LABEL[res.status]}
+                        </span>
+
+                        {/* Event or Salon Tag */}
+                        {res.eventId ? (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-purple-900 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200/90">
+                            <Sparkles size={11} className="text-purple-700" />
+                            <span>{res.eventTitle || "Evento Especial"}</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-1 rounded-xl">
+                            <Utensils size={11} className="text-zinc-400" />
+                            <span>Salón</span>
+                          </span>
+                        )}
+
+                        {/* Reservation Code with Fast Copy */}
+                        <div className="flex items-center gap-1 pl-1">
+                          <span className="font-mono text-xs font-bold text-zinc-500">
+                            {res.code}
+                          </span>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(res.code, res.id)}
-                            className="flex items-center gap-1 font-mono text-[11px] text-zinc-500 hover:text-zinc-900 px-2 py-0.5 rounded-md hover:bg-zinc-100 transition"
+                            className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition cursor-pointer"
                             title="Copiar código de reserva"
                           >
-                            <span>{res.code}</span>
                             {copiedCode === res.id ? (
                               <Check size={12} className="text-emerald-600" />
                             ) : (
@@ -1390,194 +1409,217 @@ export function ReservationCmsScreen({
                             )}
                           </button>
                         </div>
-
-                        {/* Customer Identity & Contact */}
-                        <div className="flex items-center gap-3 flex-wrap pt-0.5">
-                          <h3 className="text-base font-bold text-zinc-950 tracking-tight">
-                            {res.customerName}
-                          </h3>
-                          <div className="flex items-center gap-3 text-xs text-zinc-600 flex-wrap">
-                            <span className="flex items-center gap-1 font-semibold text-zinc-800">
-                              <Phone size={13} className="text-zinc-400" />
-                              {res.customerPhone}
-                            </span>
-                            {res.customerEmail && (
-                              <span className="flex items-center gap-1 text-zinc-500">
-                                <Mail size={13} className="text-zinc-400" />
-                                {res.customerEmail}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-zinc-400 font-mono">
-                              Vía {res.source === "LANDING" ? "Landing Web" : "Carga Manual"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Smart Tags Extracted from Notes */}
-                        {noteTags.length > 0 && (
-                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                            {noteTags.map((tag) => (
-                              <span
-                                key={tag.id}
-                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${tag.color}`}
-                              >
-                                <span>{tag.emoji}</span>
-                                <span>{tag.label}</span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Customer Note */}
-                        {res.notes && (
-                          <div className="text-xs text-zinc-700 bg-zinc-50 p-2.5 rounded-xl border border-zinc-200/80 leading-relaxed">
-                            <span className="font-bold text-zinc-800">Nota del comensal: </span>
-                            {res.notes}
-                          </div>
-                        )}
-
-                        {/* Admin Internal Note */}
-                        {res.adminNotes && (
-                          <div className="text-xs text-blue-950 bg-blue-50/70 p-2.5 rounded-xl border border-blue-200 leading-relaxed">
-                            <span className="font-bold text-blue-900">Nota interna: </span>
-                            {res.adminNotes}
-                          </div>
-                        )}
                       </div>
 
                       {/* Right Block: Instant Operational Actions */}
-                      <div className="flex items-center sm:flex-col sm:items-end justify-between sm:justify-start gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
-                        {/* Preview & WhatsApp Direct Actions */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewReservation(res)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition shadow-2xs cursor-pointer"
-                            title="Previsualizar comprobante y ticket oficial de la reserva"
-                          >
-                            <Eye size={14} className="text-zinc-600" />
-                            <span>Ver Comprobante</span>
-                          </button>
-
-                          {/* WhatsApp Direct Action */}
-                          {waLink && (
-                            <a
-                              href={waLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs"
-                              title="Abrir chat de WhatsApp con plantilla de confirmación"
+                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                        {/* Primary Workflow Status Actions */}
+                        {res.status === "PENDING" && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
+                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                             >
-                              <MessageCircle size={14} className="text-emerald-700" />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
-                        </div>
+                              <Check size={13} />
+                              <span>Confirmar</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => handleQuickStatusChange(res.id, "REJECTED")}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
+                            >
+                              Rechazar
+                            </button>
+                          </>
+                        )}
 
-                        {/* Primary Workflow State Transitions */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {res.status === "PENDING" && (
-                            <>
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
-                                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
-                              >
-                                <Check size={14} />
-                                Confirmar
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(res.id, "REJECTED")}
-                                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
-                              >
-                                Rechazar
-                              </button>
-                            </>
-                          )}
+                        {res.status === "CONFIRMED" && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
+                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
+                            >
+                              <Utensils size={12} />
+                              <span>Asistió</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => handleQuickStatusChange(res.id, "CANCELLED")}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        )}
 
-                          {res.status === "CONFIRMED" && (
-                            <>
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
-                                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
-                              >
-                                <Utensils size={13} />
-                                Asistió
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(res.id, "CANCELLED")}
-                                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
-                            </>
-                          )}
-
-                          {/* Secondary: Edit & Delete buttons */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingReservation(res);
-                              setResForm({
-                                customerName: res.customerName,
-                                customerEmail: res.customerEmail,
-                                customerPhone: res.customerPhone,
-                                partySize: res.partySize,
-                                date: res.date,
-                                time: res.time,
-                                notes: res.notes,
-                                adminNotes: res.adminNotes,
-                                status: res.status,
-                                source: res.source === "LANDING" ? "LANDING" : "ADMIN",
-                                eventId: res.eventId,
-                              });
-                              setIsCreateResModalOpen(true);
-                            }}
-                            className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
-                            title="Editar reserva"
+                        {/* WhatsApp Direct Action */}
+                        {waLink && (
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-300/80 hover:bg-emerald-100 transition shadow-2xs"
+                            title="Abrir chat de WhatsApp con plantilla de confirmación"
                           >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingReservation(res)}
-                            className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer"
-                            title="Eliminar reserva"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
+                            <MessageCircle size={13} className="text-emerald-700" />
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
+
+                        {/* Preview Voucher Action */}
+                        <button
+                          type="button"
+                          onClick={() => setPreviewReservation(res)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition shadow-2xs cursor-pointer"
+                          title="Previsualizar comprobante y ticket oficial de la reserva"
+                        >
+                          <Eye size={13} className="text-zinc-600" />
+                          <span>Comprobante</span>
+                        </button>
+
+                        {/* Secondary: Edit & Delete buttons */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingReservation(res);
+                            setResForm({
+                              customerName: res.customerName,
+                              customerEmail: res.customerEmail,
+                              customerPhone: res.customerPhone,
+                              partySize: res.partySize,
+                              date: res.date,
+                              time: res.time,
+                              notes: res.notes,
+                              adminNotes: res.adminNotes,
+                              status: res.status,
+                              source: res.source === "LANDING" ? "LANDING" : "ADMIN",
+                              eventId: res.eventId,
+                            });
+                            setIsCreateResModalOpen(true);
+                          }}
+                          className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
+                          title="Editar reserva"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingReservation(res)}
+                          className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                          title="Eliminar reserva"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
+
+                    {/* Middle Block: Customer Identity, Contact, Channel */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-zinc-100">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <strong className="text-base font-bold text-zinc-950">
+                          {res.customerName}
+                        </strong>
+
+                        <a
+                          href={`tel:${res.customerPhone}`}
+                          className="flex items-center gap-1 text-xs font-semibold text-zinc-800 hover:text-emerald-700 transition"
+                        >
+                          <Phone size={12} className="text-zinc-400" />
+                          <span>{res.customerPhone}</span>
+                        </a>
+
+                        {res.customerEmail && (
+                          <a
+                            href={`mailto:${res.customerEmail}`}
+                            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 transition"
+                          >
+                            <Mail size={12} className="text-zinc-400" />
+                            <span>{res.customerEmail}</span>
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
+                        {res.source === "LANDING" ? (
+                          <span className="flex items-center gap-1">
+                            <Globe size={11} className="text-zinc-400" />
+                            <span>Landing web</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <UserCheck size={11} className="text-zinc-400" />
+                            <span>Manual (Admin)</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dietary & Preference Tags */}
+                    {noteTags.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        {noteTags.map((tag) => (
+                          <span
+                            key={tag.id}
+                            className={`text-[11px] font-semibold px-2 py-0.5 rounded-lg border flex items-center gap-1 ${tag.color}`}
+                          >
+                            {renderTagIcon(tag.iconType)}
+                            <span>{tag.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Customer Notes */}
+                    {res.notes && (
+                      <div className="text-xs text-zinc-700 bg-zinc-50 p-3 rounded-xl border border-zinc-200/80 leading-relaxed flex items-start gap-2">
+                        <MessageSquare size={13} className="text-zinc-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-semibold text-zinc-900">Nota del comensal: </strong>
+                          <span>{res.notes}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Admin Internal Note */}
+                    {res.adminNotes && (
+                      <div className="text-xs text-blue-950 bg-blue-50/70 p-3 rounded-xl border border-blue-200/90 leading-relaxed flex items-start gap-2">
+                        <Shield size={13} className="text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-semibold text-blue-900">Nota interna: </strong>
+                          <span>{res.adminNotes}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           ) : (
             /* Table View (High Density Host Service Table) */
-            <div className="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs">
+            <div className="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-semibold uppercase tracking-wider text-[10px]">
+                <table className="w-full text-left text-xs min-w-[980px]">
+                  <thead className="bg-zinc-50/90 border-b border-zinc-200 text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="py-3 px-4">Hora</th>
-                      <th className="py-3 px-4">Comensales</th>
-                      <th className="py-3 px-4">Cliente</th>
-                      <th className="py-3 px-4">Contacto</th>
-                      <th className="py-3 px-4">Tipo</th>
-                      <th className="py-3 px-4">Estado</th>
-                      <th className="py-3 px-4 text-right">Acciones</th>
+                      <th className="py-3 px-3">Hora</th>
+                      <th className="py-3 px-2 text-center">Lugares</th>
+                      <th className="py-3 px-3">Cliente</th>
+                      <th className="py-3 px-3">Contacto</th>
+                      <th className="py-3 px-2.5">Tipo</th>
+                      <th className="py-3 px-3">Notas / Alergias</th>
+                      <th className="py-3 px-2.5">Estado</th>
+                      <th className="py-3 px-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 font-medium">
                     {filteredReservations.map((res) => {
+                      const noteTags = extractNoteTags(res.notes);
                       const waLink = buildWhatsAppLink(
                         res.customerPhone,
                         res.customerName,
@@ -1593,45 +1635,68 @@ export function ReservationCmsScreen({
                           key={res.id}
                           className="hover:bg-zinc-50/80 transition-colors"
                         >
-                          <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-zinc-950">
+                          <td className="py-3 px-3 whitespace-nowrap font-mono font-bold text-zinc-950">
                             {res.time} hs
                             <span className="block text-[10px] font-sans font-normal text-zinc-500">
                               {formatShortDate(res.date)}
                             </span>
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap">
-                            <span className="font-bold text-zinc-900">
-                              {res.partySize} {res.partySize === 1 ? "pers." : "pers."}
+                          <td className="py-3 px-2 text-center whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md">
+                              <Users size={11} className="text-zinc-500" />
+                              <span>{res.partySize}</span>
                             </span>
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-zinc-900 truncate max-w-44">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-zinc-950 truncate max-w-44">
                               {res.customerName}
                             </div>
                             <span className="font-mono text-[10px] text-zinc-400">
                               {res.code}
                             </span>
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap">
-                            <div className="text-zinc-800">{res.customerPhone}</div>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <div className="text-zinc-800 font-semibold">{res.customerPhone}</div>
                             {res.customerEmail && (
                               <div className="text-[10px] text-zinc-400 truncate max-w-36">
                                 {res.customerEmail}
                               </div>
                             )}
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-3 px-2.5 whitespace-nowrap">
                             {res.eventId ? (
-                              <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200">
-                                🎉 {res.eventTitle || "Evento"}
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-900 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200">
+                                <Sparkles size={11} className="text-purple-700" />
+                                <span>{res.eventTitle || "Evento"}</span>
                               </span>
                             ) : (
-                              <span className="text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-lg">
-                                🍽️ Salón
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-lg">
+                                <Utensils size={10} className="text-zinc-400" />
+                                <span>Salón</span>
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-3 px-3 max-w-xs">
+                            {noteTags.length > 0 ? (
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {noteTags.map((t) => (
+                                  <span
+                                    key={t.id}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${t.color}`}
+                                  >
+                                    {t.label}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : res.notes ? (
+                              <span className="text-[11px] text-zinc-600 truncate block max-w-xs" title={res.notes}>
+                                {res.notes}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-2.5 whitespace-nowrap">
                             <span
                               className={`text-[11px] px-2.5 py-0.5 rounded-full border ${
                                 STATUS_BADGE_CLASSES[res.status]
@@ -1640,16 +1705,29 @@ export function ReservationCmsScreen({
                               {STATUS_LABEL[res.status]}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setPreviewReservation(res)}
-                                className="p-1.5 rounded-lg text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
-                                title="Previsualizar comprobante oficial"
-                              >
-                                <Eye size={14} />
-                              </button>
+                              {/* Quick status button */}
+                              {res.status === "PENDING" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer"
+                                >
+                                  Confirmar
+                                </button>
+                              )}
+                              {res.status === "CONFIRMED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#182618] text-white hover:bg-[#101c10] transition cursor-pointer"
+                                >
+                                  Asistió
+                                </button>
+                              )}
+
+                              {/* WhatsApp link */}
                               {waLink && (
                                 <a
                                   href={waLink}
@@ -1661,24 +1739,18 @@ export function ReservationCmsScreen({
                                   <MessageCircle size={14} />
                                 </a>
                               )}
-                              {res.status === "PENDING" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickStatusChange(res.id, "CONFIRMED")}
-                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition"
-                                >
-                                  Confirmar
-                                </button>
-                              )}
-                              {res.status === "CONFIRMED" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
-                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[#182618] text-white hover:bg-[#101c10] transition"
-                                >
-                                  Asistió
-                                </button>
-                              )}
+
+                              {/* Preview Voucher */}
+                              <button
+                                type="button"
+                                onClick={() => setPreviewReservation(res)}
+                                className="p-1.5 rounded-lg text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
+                                title="Previsualizar comprobante oficial"
+                              >
+                                <Eye size={14} />
+                              </button>
+
+                              {/* Edit */}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1698,7 +1770,8 @@ export function ReservationCmsScreen({
                                   });
                                   setIsCreateResModalOpen(true);
                                 }}
-                                className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100"
+                                className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 cursor-pointer"
+                                title="Editar"
                               >
                                 <Edit2 size={13} />
                               </button>
@@ -1720,13 +1793,13 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       {activeTab === "events" && (
         <section aria-label="Eventos especiales" className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-xs">
             <div>
               <h2 className="text-base font-bold text-zinc-950">
                 Cartelera de Eventos y Catas
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Publicá cenas temáticas, noches de música en vivo o degustaciones con cupos limitados en tu landing page.
+                Publicá cenas temáticas, degustaciones o noches de autor con cupos limitados en tu landing page.
               </p>
             </div>
             <button
@@ -1765,7 +1838,7 @@ export function ReservationCmsScreen({
                 return (
                   <div
                     key={evt.id}
-                    className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs flex flex-col justify-between space-y-4 hover:border-zinc-300 transition-all"
+                    className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-zinc-300 transition-all"
                   >
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -1781,7 +1854,7 @@ export function ReservationCmsScreen({
 
                         {isSoldOut ? (
                           <span className="text-[11px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-lg border border-red-200">
-                            Agotado (Sold Out)
+                            Agotado
                           </span>
                         ) : evt.blocksRegularReservations ? (
                           <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
@@ -1803,7 +1876,7 @@ export function ReservationCmsScreen({
                     <div className="pt-3 border-t border-zinc-100 space-y-3">
                       <div className="flex items-center justify-between text-xs">
                         <span className="flex items-center gap-1.5 font-bold text-zinc-900">
-                          <Calendar size={14} className="text-[#3d5934]" />
+                          <Calendar size={13} className="text-[#3d5934]" />
                           <span>{formatFriendlyDate(evt.date)}</span>
                           <span className="text-zinc-400">•</span>
                           <span>{evt.startTime} hs {evt.endTime ? `- ${evt.endTime} hs` : ""}</span>
@@ -1819,7 +1892,7 @@ export function ReservationCmsScreen({
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-zinc-500 font-medium">
-                            Ocupación de cupo ({percent}%):
+                            Ocupación ({percent}%):
                           </span>
                           <span className="font-bold text-zinc-900">
                             {confirmedCount} / {capacity} lugares
@@ -1846,7 +1919,7 @@ export function ReservationCmsScreen({
                           onClick={() => setViewingEventAttendees(evt)}
                           className="px-3 py-1.5 text-xs font-semibold rounded-xl text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition cursor-pointer flex items-center gap-1.5"
                         >
-                          <Users size={14} />
+                          <Users size={13} />
                           <span>Lista de Inscriptos ({confirmedCount})</span>
                         </button>
                         <button
@@ -1877,7 +1950,7 @@ export function ReservationCmsScreen({
                           className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer"
                           title="Eliminar evento"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
@@ -1894,7 +1967,7 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       {activeTab === "shifts" && (
         <section aria-label="Horarios de atención" className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-xs">
             <div>
               <h2 className="text-base font-bold text-zinc-950">
                 Franjas Horarias Disponibles
@@ -1937,7 +2010,7 @@ export function ReservationCmsScreen({
                     <span className="h-6 w-6 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
                       <Sun size={14} />
                     </span>
-                    <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                    <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                       Turno Mediodía / Almuerzo ({lunchSlots.length})
                     </h3>
                   </div>
@@ -1972,7 +2045,7 @@ export function ReservationCmsScreen({
                     <span className="h-6 w-6 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center">
                       <Moon size={14} />
                     </span>
-                    <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                    <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                       Turno Noche / Cena ({dinnerSlots.length})
                     </h3>
                   </div>
@@ -2003,7 +2076,7 @@ export function ReservationCmsScreen({
               {/* Otros Horarios */}
               {otherSlots.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">
+                  <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                     Otros Horarios ({otherSlots.length})
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -2035,24 +2108,18 @@ export function ReservationCmsScreen({
       )}
 
       {/* =================================================================== */}
-      {/* TAB 4: CIERRES Y EXCEPCIONES                                        */}
+      {/* TAB 4: CIERRES Y DESCANSOS                                          */}
       {/* =================================================================== */}
       {activeTab === "closures" && (
         <section aria-label="Cierres y descansos" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Card A: Descanso Semanal Recurrente */}
-          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs space-y-4">
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-xs space-y-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
-                  Descanso Semanal Fijo
-                </span>
-              </div>
               <h2 className="text-base font-bold text-zinc-950">
                 Días de Cierre Recurrente
               </h2>
               <p className="text-xs text-zinc-500 leading-relaxed mt-1">
-                Tocá los días en los que el restaurante está cerrado permanentemente. El calendario público bloqueará automáticamente estos días.
+                Indicá qué días el restaurante descansa de forma fija semanal. El calendario de reservas bloqueará estos días automáticamente.
               </p>
             </div>
 
@@ -2070,7 +2137,7 @@ export function ReservationCmsScreen({
                     onClick={() => handleToggleRecurringDay(day)}
                     className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer text-left ${
                       isClosed
-                        ? "bg-red-50/80 border-red-200 text-red-950"
+                        ? "bg-red-50/70 border-red-200 text-red-950"
                         : "bg-white border-zinc-200 hover:border-zinc-300 text-zinc-800"
                     }`}
                   >
@@ -2084,7 +2151,7 @@ export function ReservationCmsScreen({
                     <span
                       className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition ${
                         isClosed
-                          ? "bg-red-100 text-red-800 border-red-300"
+                          ? "bg-red-100 text-red-800 border-red-200"
                           : "bg-emerald-50 text-emerald-800 border-emerald-200"
                       }`}
                     >
@@ -2097,19 +2164,13 @@ export function ReservationCmsScreen({
           </div>
 
           {/* Card B: Bloqueo de Fechas Específicas / Feriados */}
-          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xs space-y-4">
+          <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-xs space-y-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                <span className="text-xs font-bold uppercase tracking-wider text-red-800">
-                  Excepciones y Feriados
-                </span>
-              </div>
               <h2 className="text-base font-bold text-zinc-950">
                 Bloquear Fecha Específica
               </h2>
               <p className="text-xs text-zinc-500 leading-relaxed mt-1">
-                Cerrá días puntuales (feriados, eventos privados o reformas) sin alterar tu horario semanal.
+                Cerrá días puntuales (feriados, reformas, mantenimiento o eventos privados) sin modificar tu cronograma semanal.
               </p>
             </div>
 
@@ -2125,7 +2186,7 @@ export function ReservationCmsScreen({
                   onChange={(e) =>
                     setNewBlockedDate((prev) => ({ ...prev, date: e.target.value }))
                   }
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
                 />
               </div>
 
@@ -2140,12 +2201,12 @@ export function ReservationCmsScreen({
                   onChange={(e) =>
                     setNewBlockedDate((prev) => ({ ...prev, reason: e.target.value }))
                   }
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
                 />
 
                 {/* Quick Presets for Reason */}
                 <div className="flex items-center gap-1.5 flex-wrap pt-2">
-                  <span className="text-[10px] text-zinc-400 font-medium">Motivos rápidos:</span>
+                  <span className="text-[10px] text-zinc-400 font-medium">Motivos frecuentes:</span>
                   {[
                     "Feriado Nacional",
                     "Evento Privado",
@@ -2171,7 +2232,7 @@ export function ReservationCmsScreen({
                 disabled={isPending || !newBlockedDate.date}
                 className={`w-full ${adminPrimaryButtonClass}`}
               >
-                <CalendarX2 size={16} />
+                <CalendarX2 size={15} />
                 <span>Bloquear Esta Fecha</span>
               </button>
             </form>
@@ -2183,7 +2244,7 @@ export function ReservationCmsScreen({
 
               {data.blockedDates.length === 0 ? (
                 <p className="text-xs text-zinc-400 italic">
-                  No hay fechas específicas bloqueadas.
+                  No hay fechas específicas bloqueadas actualmente.
                 </p>
               ) : (
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -2201,10 +2262,10 @@ export function ReservationCmsScreen({
                       <button
                         type="button"
                         onClick={() => handleRemoveBlockedDate(b.id)}
-                        className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                        className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
                         title="Desbloquear fecha"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
@@ -2227,7 +2288,7 @@ export function ReservationCmsScreen({
         >
           <div className="space-y-4">
             {/* Visual Ticket Voucher Card */}
-            <div className="relative rounded-2xl border-2 border-dashed border-zinc-200 bg-linear-to-b from-zinc-50/80 to-white p-5 sm:p-6 shadow-xs overflow-hidden">
+            <div className="relative rounded-2xl border border-zinc-200 bg-linear-to-b from-zinc-50/70 to-white p-5 sm:p-6 shadow-xs overflow-hidden">
               {/* Header with Code and Status */}
               <div className="flex items-start justify-between gap-3 border-b border-zinc-200/80 pb-4">
                 <div>
@@ -2260,8 +2321,18 @@ export function ReservationCmsScreen({
                   >
                     {STATUS_LABEL[previewReservation.status]}
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-medium">
-                    {previewReservation.source === "LANDING" ? "🌐 Landing pública" : "🏢 Registrada en Admin"}
+                  <span className="text-[10px] text-zinc-400 font-medium flex items-center gap-1">
+                    {previewReservation.source === "LANDING" ? (
+                      <>
+                        <Globe size={10} className="text-zinc-400" />
+                        <span>Landing pública</span>
+                      </>
+                    ) : (
+                      <>
+                        <Building2 size={10} className="text-zinc-400" />
+                        <span>Registrada en Admin</span>
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -2269,35 +2340,50 @@ export function ReservationCmsScreen({
               {/* Structured Grid of Reservation Details */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 text-xs">
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">📅 Fecha</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <Calendar size={11} className="text-zinc-400" />
+                    <span>Fecha</span>
+                  </span>
                   <strong className="text-zinc-900 font-bold text-sm block">
                     {formatFriendlyDate(previewReservation.date)}
                   </strong>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">⏰ Turno / Hora</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <Clock size={11} className="text-zinc-400" />
+                    <span>Turno / Hora</span>
+                  </span>
                   <strong className="text-zinc-900 font-bold text-sm block">
                     {previewReservation.time} hs
                   </strong>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">👥 Comensales</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <Users size={11} className="text-zinc-400" />
+                    <span>Comensales</span>
+                  </span>
                   <strong className="text-zinc-900 font-bold text-sm block">
                     {previewReservation.partySize} {previewReservation.partySize === 1 ? "persona" : "personas"}
                   </strong>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">👤 Titular</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <UserCheck size={11} className="text-zinc-400" />
+                    <span>Titular</span>
+                  </span>
                   <strong className="text-zinc-900 font-bold block truncate" title={previewReservation.customerName}>
                     {previewReservation.customerName}
                   </strong>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">📞 WhatsApp / Teléfono</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <Phone size={11} className="text-zinc-400" />
+                    <span>Teléfono / WhatsApp</span>
+                  </span>
                   <a
                     href={`tel:${previewReservation.customerPhone}`}
                     className="text-zinc-900 font-bold hover:text-emerald-700 block truncate"
@@ -2307,7 +2393,10 @@ export function ReservationCmsScreen({
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-0.5">✉️ Email</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
+                    <Mail size={11} className="text-zinc-400" />
+                    <span>Email</span>
+                  </span>
                   {previewReservation.customerEmail ? (
                     <a
                       href={`mailto:${previewReservation.customerEmail}`}
@@ -2325,7 +2414,7 @@ export function ReservationCmsScreen({
               {/* Event Banner if tied to an event */}
               {previewReservation.eventId && (
                 <div className="mt-3 p-3 rounded-xl bg-purple-50 border border-purple-200 flex items-center gap-2 text-xs text-purple-950">
-                  <PartyPopper size={16} className="text-purple-700 shrink-0" />
+                  <Sparkles size={15} className="text-purple-700 shrink-0" />
                   <div>
                     <span className="font-bold">Evento Especial: </span>
                     {previewReservation.eventTitle || "Evento Especial"}
@@ -2335,8 +2424,8 @@ export function ReservationCmsScreen({
 
               {/* Customer Notes */}
               {previewReservation.notes && (
-                <div className="mt-3 p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-950 leading-relaxed">
-                  <span className="font-bold text-amber-900 block mb-0.5">Aclaraciones del comensal:</span>
+                <div className="mt-3 p-3 rounded-xl bg-zinc-50 border border-zinc-200/90 text-xs text-zinc-800 leading-relaxed">
+                  <span className="font-bold text-zinc-900 block mb-0.5">Aclaraciones del comensal:</span>
                   {previewReservation.notes}
                 </div>
               )}
@@ -2452,34 +2541,31 @@ export function ReservationCmsScreen({
 
               <div className="flex items-center gap-2 justify-end">
                 {/* WhatsApp Action Button */}
-                {buildWhatsAppLink(
-                  previewReservation.customerPhone,
-                  previewReservation.customerName,
-                  data.restaurantName,
-                  previewReservation.date,
-                  previewReservation.time,
-                  previewReservation.code,
-                  previewReservation.partySize,
-                ) && (
-                  <a
-                    href={buildWhatsAppLink(
-                      previewReservation.customerPhone,
-                      previewReservation.customerName,
-                      data.restaurantName,
-                      previewReservation.date,
-                      previewReservation.time,
-                      previewReservation.code,
-                      previewReservation.partySize,
-                    )!}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs flex items-center gap-1.5"
-                    title="Abrir WhatsApp con datos de reserva"
-                  >
-                    <MessageCircle size={14} />
-                    <span>WhatsApp</span>
-                  </a>
-                )}
+                {(() => {
+                  const link = buildWhatsAppLink(
+                    previewReservation.customerPhone,
+                    previewReservation.customerName,
+                    data.restaurantName,
+                    previewReservation.date,
+                    previewReservation.time,
+                    previewReservation.code,
+                    previewReservation.partySize,
+                  );
+                  if (!link) return null;
+                  return (
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs flex items-center gap-1.5"
+                      title="Abrir WhatsApp con datos de reserva"
+                    >
+                      <MessageCircle size={14} />
+                      <span>WhatsApp</span>
+                    </a>
+                  );
+                })()}
+
                 <button
                   type="button"
                   className={adminSecondaryButtonClass}
@@ -2522,7 +2608,7 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, customerName: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
@@ -2539,7 +2625,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setResForm((prev) => ({ ...prev, customerPhone: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
               />
             </div>
             <div>
@@ -2558,7 +2644,7 @@ export function ReservationCmsScreen({
                     partySize: Number(e.target.value),
                   }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
               />
             </div>
           </div>
@@ -2574,7 +2660,7 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, customerEmail: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
@@ -2590,7 +2676,7 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setResForm((prev) => ({ ...prev, date: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
               />
             </div>
             <div>
@@ -2632,10 +2718,10 @@ export function ReservationCmsScreen({
               }}
               className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium"
             >
-              <option value="">🍽️ Mesa Regular en Salón</option>
+              <option value="">Mesa Regular en Salón</option>
               {data.events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  🎉 Evento: {ev.title} ({formatShortDate(ev.date)} - {ev.startTime} hs)
+                  Evento: {ev.title} ({formatShortDate(ev.date)} - {ev.startTime} hs)
                 </option>
               ))}
             </select>
@@ -2665,7 +2751,7 @@ export function ReservationCmsScreen({
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Notas del Cliente (Alergias, cumpleaños, mesa preferida)
+              Notas del Cliente (Alergias, cumpleaños, preferencias)
             </label>
             <textarea
               rows={2}
@@ -2674,7 +2760,7 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, notes: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
@@ -2689,7 +2775,7 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setResForm((prev) => ({ ...prev, adminNotes: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
@@ -2721,8 +2807,8 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       <AdminModal
         open={isEventModalOpen}
-        title={editingEvent ? "Editar Evento" : "Nuevo Evento Especial"}
-        description="Publicá catas de vinos, noches con menú especial o celebraciones en la landing."
+        title={editingEvent ? "Modificar Evento" : "Crear Evento Especial"}
+        description="Publicá una experiencia especial con aforo limitado en tu menú y landing page."
         onClose={() => {
           setIsEventModalOpen(false);
           setEditingEvent(null);
@@ -2736,12 +2822,12 @@ export function ReservationCmsScreen({
             <input
               type="text"
               required
-              placeholder="Ej. Noche de Jazz & Maridaje"
+              placeholder="Ej. Cata de Vinos & Maridaje"
               value={eventForm.title}
               onChange={(e) =>
                 setEventForm((prev) => ({ ...prev, title: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
@@ -2751,16 +2837,16 @@ export function ReservationCmsScreen({
             </label>
             <textarea
               rows={3}
-              placeholder="Detalles de la velada, maridaje o menú por pasos..."
-              value={eventForm.description}
+              placeholder="Explicá en qué consiste la velada, qué incluye y detalles importantes."
+              value={eventForm.description || ""}
               onChange={(e) =>
                 setEventForm((prev) => ({ ...prev, description: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-zinc-700 mb-1">
                 Fecha *
@@ -2772,49 +2858,17 @@ export function ReservationCmsScreen({
                 onChange={(e) =>
                   setEventForm((prev) => ({ ...prev, date: e.target.value }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                Inicio (HH:mm) *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="21:00"
-                value={eventForm.startTime}
-                onChange={(e) =>
-                  setEventForm((prev) => ({ ...prev, startTime: e.target.value }))
-                }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                Fin (opcional)
-              </label>
-              <input
-                type="text"
-                placeholder="23:30"
-                value={eventForm.endTime}
-                onChange={(e) =>
-                  setEventForm((prev) => ({ ...prev, endTime: e.target.value }))
-                }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                Cupo Máximo *
+                Cupo Máximo (Aforo) *
               </label>
               <input
                 type="number"
                 min={1}
-                max={500}
                 required
                 value={eventForm.capacity}
                 onChange={(e) =>
@@ -2823,29 +2877,83 @@ export function ReservationCmsScreen({
                     capacity: Number(e.target.value),
                   }))
                 }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                Precio o Entrada
-              </label>
-              <input
-                type="text"
-                placeholder="Ej. $25.000 / Entrada libre"
-                value={eventForm.priceLabel}
-                onChange={(e) =>
-                  setEventForm((prev) => ({ ...prev, priceLabel: e.target.value }))
-                }
-                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                Hora Inicio *
+              </label>
+              <input
+                type="time"
+                required
+                value={eventForm.startTime}
+                onChange={(e) =>
+                  setEventForm((prev) => ({ ...prev, startTime: e.target.value }))
+                }
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                Hora Fin (Opcional)
+              </label>
+              <input
+                type="time"
+                value={eventForm.endTime || ""}
+                onChange={(e) =>
+                  setEventForm((prev) => ({ ...prev, endTime: e.target.value }))
+                }
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                Etiqueta de Precio
+              </label>
+              <input
+                type="text"
+                placeholder="Ej. $18.000 / $25.000 p/p"
+                value={eventForm.priceLabel || ""}
+                onChange={(e) =>
+                  setEventForm((prev) => ({ ...prev, priceLabel: e.target.value }))
+                }
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                Estado de Publicación
+              </label>
+              <select
+                value={eventForm.status}
+                onChange={(e) =>
+                  setEventForm((prev) => ({
+                    ...prev,
+                    status: e.target.value as "DRAFT" | "PUBLISHED" | "CANCELLED",
+                  }))
+                }
+                className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-medium"
+              >
+                <option value="PUBLISHED">Publicado (Visible en Web)</option>
+                <option value="DRAFT">Borrador (Oculto)</option>
+                <option value="CANCELLED">Cancelado</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
-              id="blocksRegularEvent"
+              id="blocksRegular"
               checked={eventForm.blocksRegularReservations}
               onChange={(e) =>
                 setEventForm((prev) => ({
@@ -2853,13 +2961,10 @@ export function ReservationCmsScreen({
                   blocksRegularReservations: e.target.checked,
                 }))
               }
-              className="rounded text-[#182618] focus:ring-[#182618]/20 h-4 w-4"
+              className="h-4 w-4 rounded text-[#182618] focus:ring-[#182618]"
             />
-            <label
-              htmlFor="blocksRegularEvent"
-              className="text-xs text-amber-950 font-medium"
-            >
-              Salón exclusivo para el evento (bloquea reservas de salón regulares para esa fecha)
+            <label htmlFor="blocksRegular" className="text-xs text-zinc-700 font-medium">
+              Salón Exclusivo (bloquea las reservas regulares en esta fecha)
             </label>
           </div>
 
@@ -2880,7 +2985,7 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
-              <span>{editingEvent ? "Guardar Cambios" : "Publicar Evento"}</span>
+              <span>{editingEvent ? "Guardar Evento" : "Crear Evento"}</span>
             </button>
           </div>
         </form>
@@ -2976,10 +3081,16 @@ export function ReservationCmsScreen({
                             </div>
 
                             <div className="flex items-center gap-3 text-xs text-zinc-500 flex-wrap">
-                              <span className="font-medium text-zinc-700">
-                                📞 {att.customerPhone}
+                              <span className="font-medium text-zinc-700 flex items-center gap-1">
+                                <Phone size={11} className="text-zinc-400" />
+                                <span>{att.customerPhone}</span>
                               </span>
-                              {att.customerEmail && <span>✉️ {att.customerEmail}</span>}
+                              {att.customerEmail && (
+                                <span className="flex items-center gap-1">
+                                  <Mail size={11} className="text-zinc-400" />
+                                  <span>{att.customerEmail}</span>
+                                </span>
+                              )}
                               <span className="font-mono text-[11px] text-zinc-400">
                                 ({att.code})
                               </span>
@@ -2999,55 +3110,22 @@ export function ReservationCmsScreen({
                                 href={waLink}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
+                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 transition flex items-center gap-1"
                               >
-                                WhatsApp
+                                <MessageCircle size={13} className="text-emerald-700" />
+                                <span>WhatsApp</span>
                               </a>
-                            )}
-                            {att.status === "PENDING" && (
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(att.id, "CONFIRMED")}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition"
-                              >
-                                Confirmar
-                              </button>
-                            )}
-                            {att.status === "CONFIRMED" && (
-                              <button
-                                type="button"
-                                disabled={isPending}
-                                onClick={() => handleQuickStatusChange(att.id, "COMPLETED")}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[#182618] text-white hover:bg-[#101c10] transition"
-                              >
-                                Asistió
-                              </button>
                             )}
                             <button
                               type="button"
                               onClick={() => {
-                                setEditingReservation(att);
-                                setResForm({
-                                  customerName: att.customerName,
-                                  customerEmail: att.customerEmail,
-                                  customerPhone: att.customerPhone,
-                                  partySize: att.partySize,
-                                  date: att.date,
-                                  time: att.time,
-                                  notes: att.notes,
-                                  adminNotes: att.adminNotes,
-                                  status: att.status,
-                                  source: att.source === "LANDING" ? "LANDING" : "ADMIN",
-                                  eventId: att.eventId,
-                                });
                                 setViewingEventAttendees(null);
-                                setIsCreateResModalOpen(true);
+                                setPreviewReservation(att);
                               }}
-                              className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition"
-                              title="Editar reserva"
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition cursor-pointer flex items-center gap-1"
                             >
-                              <Edit2 size={14} />
+                              <Eye size={13} />
+                              <span>Comprobante</span>
                             </button>
                           </div>
                         </div>
@@ -3057,6 +3135,42 @@ export function ReservationCmsScreen({
                 </div>
               );
             })()}
+
+            <div className="flex justify-between items-center pt-3 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetEvt = viewingEventAttendees;
+                  setViewingEventAttendees(null);
+                  setResForm({
+                    customerName: "",
+                    customerEmail: "",
+                    customerPhone: "",
+                    partySize: 2,
+                    date: targetEvt.date,
+                    time: targetEvt.startTime,
+                    notes: "",
+                    adminNotes: "",
+                    status: "CONFIRMED",
+                    source: "ADMIN",
+                    eventId: targetEvt.id,
+                  });
+                  setIsCreateResModalOpen(true);
+                }}
+                className={adminSecondaryButtonClass}
+              >
+                <Plus size={15} />
+                <span>Agregar Inscripción Manual</span>
+              </button>
+
+              <button
+                type="button"
+                className={adminSecondaryButtonClass}
+                onClick={() => setViewingEventAttendees(null)}
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         )}
       </AdminModal>
@@ -3066,8 +3180,8 @@ export function ReservationCmsScreen({
       {/* =================================================================== */}
       <AdminModal
         open={isSlotModalOpen}
-        title={editingSlot ? "Editar Turno" : "Nuevo Turno de Atención"}
-        description="Definí el horario disponible para que los clientes puedan reservar mesa."
+        title={editingSlot ? "Editar Turno" : "Nuevo Turno de Reserva"}
+        description="Configurá las horas en las que los comensales pueden reservar mesas."
         onClose={() => {
           setIsSlotModalOpen(false);
           setEditingSlot(null);
@@ -3076,36 +3190,35 @@ export function ReservationCmsScreen({
         <form onSubmit={handleSaveSlot} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Horario (HH:mm) *
+              Hora del Turno *
             </label>
             <input
-              type="text"
+              type="time"
               required
-              placeholder="20:30"
               value={slotForm.time}
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, time: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618] font-mono text-base font-bold"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618] font-mono text-base font-bold"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
-              Etiqueta descriptiva (opcional)
+              Etiqueta Descriptiva (Opcional)
             </label>
             <input
               type="text"
-              placeholder="Ej. Almuerzo, Cena 1° Turno, Terraza"
-              value={slotForm.label}
+              placeholder="Ej. Almuerzo, Cena 1er Turno, After Office"
+              value={slotForm.label || ""}
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, label: e.target.value }))
               }
-              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#182618]"
+              className="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
             />
           </div>
 
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 border border-zinc-200">
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
               id="activeSlotModal"
@@ -3113,10 +3226,10 @@ export function ReservationCmsScreen({
               onChange={(e) =>
                 setSlotForm((prev) => ({ ...prev, active: e.target.checked }))
               }
-              className="rounded text-[#182618] focus:ring-[#182618]/20 h-4 w-4"
+              className="h-4 w-4 rounded text-[#182618] focus:ring-[#182618]"
             />
             <label htmlFor="activeSlotModal" className="text-xs text-zinc-700 font-medium">
-              Turno activo (disponible para ser seleccionado en la web)
+              Turno Activo (visible para reservas regulares)
             </label>
           </div>
 
@@ -3137,7 +3250,7 @@ export function ReservationCmsScreen({
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
-              <span>Guardar Turno</span>
+              <span>{editingSlot ? "Guardar Turno" : "Crear Turno"}</span>
             </button>
           </div>
         </form>
@@ -3146,22 +3259,28 @@ export function ReservationCmsScreen({
       {/* Confirm Delete Modals */}
       <AdminConfirmModal
         open={Boolean(deletingReservation)}
-        title="Eliminar Reserva"
-        description={`¿Estás seguro de que querés eliminar la reserva de ${deletingReservation?.customerName} (${deletingReservation?.code})?`}
-        onClose={() => setDeletingReservation(null)}
-        onConfirm={handleDeleteReservation}
-        loading={isPending}
+        title="¿Eliminar esta reserva?"
+        description={
+          deletingReservation
+            ? `Se eliminará la reserva ${deletingReservation.code} a nombre de ${deletingReservation.customerName}. Esta acción no se puede deshacer.`
+            : ""
+        }
         confirmLabel="Eliminar Reserva"
+        onConfirm={handleDeleteReservation}
+        onClose={() => setDeletingReservation(null)}
       />
 
       <AdminConfirmModal
         open={Boolean(deletingEvent)}
-        title="Eliminar Evento"
-        description={`¿Estás seguro de que querés eliminar el evento "${deletingEvent?.title}"?`}
-        onClose={() => setDeletingEvent(null)}
-        onConfirm={handleDeleteEvent}
-        loading={isPending}
+        title="¿Eliminar este evento?"
+        description={
+          deletingEvent
+            ? `Se eliminará "${deletingEvent.title}". No afectará a las reservas que ya fueron confirmadas.`
+            : ""
+        }
         confirmLabel="Eliminar Evento"
+        onConfirm={handleDeleteEvent}
+        onClose={() => setDeletingEvent(null)}
       />
     </div>
   );
@@ -3185,16 +3304,16 @@ function SlotCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-2xs transition-all flex flex-col justify-between ${
+      className={`rounded-2xl border p-4 shadow-xs transition-all flex flex-col justify-between ${
         slot.active
-          ? "border-zinc-200/90 bg-white"
+          ? "border-zinc-200/90 bg-white hover:border-zinc-300"
           : "border-zinc-200/50 bg-zinc-50/70 opacity-60"
       }`}
     >
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-1.5">
-            <Clock size={16} className="text-[#3d5934]" />
+            <Clock size={15} className="text-[#3d5934]" />
             <span className="text-xl font-bold font-mono text-zinc-950">
               {slot.time} hs
             </span>
@@ -3210,7 +3329,7 @@ function SlotCard({
           onClick={onToggleActive}
           className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
             slot.active
-              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
               : "bg-zinc-200 text-zinc-600 border-zinc-300"
           }`}
         >
@@ -3225,7 +3344,7 @@ function SlotCard({
           className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
           title="Editar"
         >
-          <Edit2 size={14} />
+          <Edit2 size={13} />
         </button>
         <button
           type="button"
@@ -3233,7 +3352,7 @@ function SlotCard({
           className="p-1.5 text-zinc-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
           title="Eliminar"
         >
-          <Trash2 size={14} />
+          <Trash2 size={13} />
         </button>
       </div>
     </div>
