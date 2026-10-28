@@ -70,10 +70,16 @@ acquire_deploy_lock
 assert_local_database_filesystem
 prepare_shared_environment
 validate_shared_environment
+install_schema_guard
 release="$(resolve_release "$requested_release")"
 
 if [[ -L "$CURRENT_LINK" ]]; then
   current_release="$(resolve_release "$CURRENT_LINK")"
+fi
+
+if [[ -n "$current_release" && "$(release_schema_generation "$current_release")" != "$(release_schema_generation "$release")" ]]; then
+  echo "ERROR: este cambio de generacion requiere redeploy.sh para coordinar esquema y codigo. No se modifico la base." >&2
+  exit 1
 fi
 
 if service_is_active; then

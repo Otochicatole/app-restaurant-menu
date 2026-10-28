@@ -7,7 +7,7 @@ import {
   toLoginView,
   toSessionView,
 } from "@/modules/identity-access/server";
-import { clearActiveMenuCookie } from "@/modules/menu-editor/server";
+import { clearActiveRestaurantCookie } from "@/modules/restaurant-management/server";
 import { errorResponse, handleApiError, successResponse } from "@/platform/http/api-response";
 import { validateOrigin } from "@/platform/security/csrf";
 import { getServerEnv } from "@/platform/config/server-env";
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const command = loginCommandSchema.parse(await req.json());
     const throttleKey = `${clientAddress(req)}\0${command.email}`;
     const actor = await login(command, { throttleKey });
-    await clearActiveMenuCookie();
+    await clearActiveRestaurantCookie();
     return successResponse(toLoginView(actor));
   } catch (error) {
     return handleApiError(error);
@@ -41,7 +41,7 @@ export async function DELETE(req: NextRequest) {
     if (!validateOrigin(req)) return errorResponse("CSRF_ERROR", "Invalid origin", 403);
 
     await logout();
-    await clearActiveMenuCookie();
+    await clearActiveRestaurantCookie();
     return successResponse(null, 200);
   } catch (error) {
     return handleApiError(error);

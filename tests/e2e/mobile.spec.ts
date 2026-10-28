@@ -94,6 +94,6 @@ test("forced-password account cannot enter the editor before changing its passwo
   await page.getByLabel("Repetí la nueva contraseña").fill(E2E.forcedPasswordAdmin.replacementPassword);
   await page.getByRole("button", { name: "Guardar contraseña" }).click();
 
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/restaurantes\/e2e-restaurant-[^/]+$/);
   await expect(page.getByRole("heading", { name: "Editor de carta" })).toBeVisible();
 });

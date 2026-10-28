@@ -1,44 +1,53 @@
 import { expect, test } from "@playwright/test";
 import { E2E, loginAs } from "./fixtures";
 
-test("superadmin manages the complete tenant lifecycle", async ({ page }, testInfo) => {
-  const tenantName = `E2E Creado ${testInfo.retry}`;
-  const slug = `e2e-created-${testInfo.retry}`;
-  const email = `e2e-created-${testInfo.retry}@example.test`;
-
-  await loginAs(page, E2E.superAdmin);
-  await expect(page).toHaveURL(/\/superadmin$/);
-  await page.getByLabel("Nombre del negocio").fill(tenantName);
-  await page.getByLabel("Correo de acceso").fill(email);
-  await page.getByLabel("Slug público").fill(slug);
-  await page.getByRole("button", { name: "Crear cuenta" }).click();
-
-  const nameInput = page.getByLabel(`Nombre de ${tenantName}`);
-  await expect(nameInput).toBeVisible();
-  await expect(page.getByText("Contraseña temporal (guardala ahora)").first()).toBeVisible();
-  const tenantRow = nameInput.locator("xpath=ancestor::div[@aria-busy][1]");
-
-  await tenantRow.getByRole("button", { name: "Suspender" }).click();
-  let dialog = page.getByRole("dialog", { name: `¿Suspender ${tenantName}?` });
-  await dialog.getByRole("button", { name: "Suspender cuenta" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(tenantRow.getByText("Suspendido", { exact: true })).toBeVisible();
-
-  await tenantRow.getByRole("button", { name: "Reactivar" }).click();
-  dialog = page.getByRole("dialog", { name: `¿Reactivar ${tenantName}?` });
-  await dialog.getByRole("button", { name: "Reactivar cuenta" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(tenantRow.getByText("Activo", { exact: true })).toBeVisible();
-
-  await tenantRow.getByRole("button", { name: "Restablecer clave" }).click();
-  dialog = page.getByRole("dialog", { name: `¿Restablecer la clave de ${tenantName}?` });
-  await dialog.getByRole("button", { name: "Restablecer clave" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(tenantRow.getByText("Contraseña temporal (guardala ahora)")).toBeVisible();
-
-  await tenantRow.getByRole("button", { name: "Borrar" }).click();
-  dialog = page.getByRole("dialog", { name: `¿Borrar ${tenantName}?` });
-  await dialog.getByRole("button", { name: "Borrar cuenta" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(nameInput).toHaveCount(0);
+test("superadmin manages an organization and the independent options of its restaurant", async ({ page }, testInfo) => {
+ const name = "E2E Organización " + testInfo.retry;
+ const slug = "e2e-created-" + testInfo.retry;
+ await loginAs(page, E2E.superAdmin);
+ await page.goto("/superadmin/clientes");
+ await expect(page.getByRole("heading", { name: "Organizaciones", exact: true })).toBeVisible();
+ await page.getByRole("button", { name: "Nueva organización", exact: true }).click();
+ let dialog = page.getByRole("dialog", { name: "Nueva organización", exact: true });
+ await dialog.getByLabel("Nombre de la organización").fill(name);
+ await dialog.getByLabel("Correo de acceso").fill("e2e-created-" + testInfo.retry + "@example.test");
+ await dialog.getByLabel("Primer restaurante").fill("E2E Nuevo restaurante");
+ await dialog.getByLabel("Slug público inicial").fill(slug);
+ await dialog.getByRole("button", { name: "Crear organización", exact: true }).click();
+ dialog = page.getByRole("dialog", { name: "Contraseña temporal", exact: true });
+ await expect(dialog).toBeVisible();
+ await dialog.getByRole("button", { name: "Cerrar", exact: true }).click();
+ const organization = page.locator("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
+ await expect(organization).toBeVisible();
+ await organization.getByRole("button", { name: "Administrar cuenta", exact: true }).click();
+ dialog = page.getByRole("dialog", { name: "Administrar cuenta", exact: true });
+ await dialog.getByLabel("Cupo de restaurantes").fill("3");
+ await dialog.getByRole("button", { name: "Guardar cuenta", exact: true }).click();
+ await expect(dialog).toBeHidden();
+ await expect(organization).toContainText("1/3 restaurantes");
+ await organization.locator("summary").click();
+ await page.screenshot({ path: "test-results/ui-qa/superadmin-organization-restaurants.png", fullPage: true });
+ await organization.getByLabel("Landing y reservas").selectOption("true");
+ await organization.getByLabel("Cuota de archivos (bytes)").fill("524288000");
+ await organization.getByRole("button", { name: "Guardar restaurante", exact: true }).click();
+ await expect(organization.getByLabel("Landing y reservas")).toHaveValue("true");
+ await organization.getByRole("button", { name: "Suspender", exact: true }).click();
+ dialog = page.getByRole("dialog", { name: "Cambiar estado de la organización" });
+ await dialog.getByRole("button", { name: "Confirmar", exact: true }).click();
+ await expect(dialog).toBeHidden();
+ await expect(organization).toContainText("Suspendida");
+ await organization.getByRole("button", { name: "Reactivar", exact: true }).click();
+ await page.getByRole("dialog", { name: "Cambiar estado de la organización" }).getByRole("button", { name: "Confirmar", exact: true }).click();
+ await expect(organization).toContainText("Activa");
+ await organization.getByRole("button", { name: "Restablecer clave", exact: true }).click();
+ await page.getByRole("dialog", { name: "Restablecer contraseña" }).getByRole("button", { name: "Confirmar", exact: true }).click();
+ dialog = page.getByRole("dialog", { name: "Contraseña temporal", exact: true });
+ await expect(dialog).toBeVisible();
+ await dialog.getByRole("button", { name: "Cerrar", exact: true }).click();
+ await organization.getByRole("button", { name: "Eliminar organización", exact: true }).click();
+ dialog = page.getByRole("dialog", { name: "Eliminar organización", exact: true });
+ await dialog.getByLabel("Escribí " + slug + " para confirmar").fill(slug);
+ await dialog.getByRole("button", { name: "Confirmar", exact: true }).click();
+ await expect(dialog).toBeHidden();
+ await expect(organization).toHaveCount(0);
 });

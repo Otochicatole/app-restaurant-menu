@@ -2,12 +2,14 @@ import { spawn } from "node:child_process";
 import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { configureSqliteWal } from "./configure-sqlite-wal";
 
 const DISPOSABLE_NAME = /(?:^|[-_.])(test|tests|testing|ci|e2e)(?:[-_.]|$)/i;
 const PROTECTED_NAME = /(?:^|[-_.])(prod|production|live|staging)(?:[-_.]|$)/i;
 const SQLITE_EXTENSION = /\.(?:db|sqlite)$/i;
 const OWNER_MARKER_SUFFIX = ".test-owner";
 const OWNER_MARKER_CONTENT = "app-restaurant-menu:sqlite-test-database:v1\n";
+const bunExecutable = process.versions.bun ? process.execPath : "bun";
 
 export interface DisposableTestDatabase {
   connectionString: string;
@@ -98,10 +100,19 @@ export async function prepareDisposableTestDatabase(
 ): Promise<DisposableTestDatabase> {
   const database = await resetDisposableTestDatabase(value);
   await createEmptySqliteDatabase(database.connectionString);
+  await configureSqliteWal(database.connectionString);
   const exitCode = await runPrismaMigration(database);
   if (exitCode !== 0) {
     throw new Error(`Prisma migrate deploy failed for disposable SQLite database (exit ${exitCode ?? "unknown"}).`);
   }
+  const cutoverExit = await new Promise<number | null>((resolve, reject) => {
+    const child = spawn(bunExecutable, ["run", "scripts/cutover-organizations.ts"], {
+      cwd: process.cwd(), env: { ...process.env, DATABASE_URL: database.connectionString }, stdio: "inherit",
+    });
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  if (cutoverExit !== 0) throw new Error("Organization cutover failed for disposable database.");
   return database;
 }
 
@@ -220,7 +231,7 @@ async function runPrismaMigration(database: DisposableTestDatabase): Promise<num
   try {
     return await new Promise((resolve, reject) => {
       const child = spawn(
-        process.execPath,
+        bunExecutable,
         ["x", "prisma", "migrate", "deploy", "--config", configPath],
         {
           cwd: process.cwd(),

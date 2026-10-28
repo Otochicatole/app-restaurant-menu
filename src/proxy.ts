@@ -3,14 +3,17 @@ import { verifySessionToken } from "@/modules/identity-access/server";
 import { getServerEnv } from "@/platform/config/server-env";
 
 function buildCSP(): string {
-  const scriptSrc = "'self' 'unsafe-inline'" + (getServerEnv().NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
+  const scriptSrc =
+    "'self' 'unsafe-inline' blob:" +
+    (getServerEnv().NODE_ENV !== "production" ? " 'unsafe-eval'" : "");
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
-    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
     "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",

@@ -32,7 +32,9 @@ import { LUCIDE_ICON_NAMES } from "../domain/lucide-icon-catalog";
 
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
-export function CanvasEditor({ project, initialAssets, initialTemplates, restaurantName, restaurantSlug, publicMenuUrl }: { project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string; publicMenuUrl: string }) {
+export function CanvasEditor({ restaurantId, project, initialAssets, initialTemplates, restaurantName, restaurantSlug, publicMenuUrl }: { restaurantId: string; project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string; publicMenuUrl: string }) {
+  const editorApi = `/api/restaurants/${encodeURIComponent(restaurantId)}/editor`;
+  const saveRequestRef = useRef<AbortController | null>(null);
   const [document, setDocument] = useState(() => normalizeDocument(project.document));
   const [revision, setRevision] = useState(project.draftRevision);
   const [publishedRevision, setPublishedRevision] = useState(project.publishedRevision);
@@ -179,17 +181,21 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
 
   useEffect(() => () => {
     if (clipboardNoticeTimerRef.current !== null) window.clearTimeout(clipboardNoticeTimerRef.current);
+    saveRequestRef.current?.abort();
   }, []);
 
   useEffect(() => {
     if (!dirty || saving || publishing || conflict) return;
     const timer = window.setTimeout(async () => {
       if (publishingRef.current) return;
+      const controller = new AbortController();
+      saveRequestRef.current = controller;
       const savedEditVersion = editVersionRef.current;
       setSaving(true); setStatus("Guardando...");
       try {
-        const response = await fetch("/api/editor/project", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
+        const response = await fetch(`${editorApi}/project`, { signal: controller.signal, method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
         const payload = await response.json();
+        if (controller.signal.aborted) return;
         if (!response.ok || !payload.success) {
           if (response.status === 409) setConflict(true);
           throw new Error(payload.error?.message ?? "No se pudo guardar");
@@ -197,26 +203,40 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         setRevision(payload.data.draftRevision);
         if (editVersionRef.current === savedEditVersion) { setDirty(false); setStatus("Guardado"); }
         else { setDirty(true); setStatus("Cambios pendientes"); }
-      } catch (error) { setStatus(error instanceof Error ? error.message : "No se pudo guardar"); }
-      finally { setSaving(false); }
+      } catch (error) { if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "No se pudo guardar"); }
+      finally { if (!controller.signal.aborted) setSaving(false); }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [dirty, document, revision, saving, publishing, conflict]);
+  }, [dirty, document, revision, saving, publishing, conflict, editorApi]);
+
+  useEffect(() => {
+    if (!dirty && !saving && !publishing) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    const pendingNavigation = (event: MouseEvent) => {
+      const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.origin !== window.location.origin || !anchor.pathname.startsWith("/admin")) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      setStatus("Esperá a que se guarden los cambios antes de cambiar de restaurante.");
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.document.addEventListener("click", pendingNavigation, true);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); window.document.removeEventListener("click", pendingNavigation, true); };
+  }, [dirty, saving, publishing]);
 
   const reloadServerVersion = async () => {
-    const response = await fetch("/api/editor/project");
+    const response = await fetch(`${editorApi}/project`);
     const payload = await response.json();
     if (!response.ok || !payload.success) return;
     setDocument(payload.data.document); setRevision(payload.data.draftRevision); setPublishedRevision(payload.data.publishedRevision); setHistory([]); setFuture([]); setDirty(false); setConflict(false); setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds([]); setStatus("Versión del servidor cargada");
   };
   const overwriteServerVersion = async () => {
-    const response = await fetch("/api/editor/project");
+    const response = await fetch(`${editorApi}/project`);
     const payload = await response.json();
     if (!response.ok || !payload.success) return;
     setModal({ kind: "overwrite", serverRevision: payload.data.draftRevision });
   };
   const confirmOverwrite = async (serverRevision: number) => {
-    const save = await fetch("/api/editor/project", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: serverRevision, document }) });
+    const save = await fetch(`${editorApi}/project`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: serverRevision, document }) });
     const saved = await save.json();
     if (save.ok && saved.success) { setRevision(saved.data.draftRevision); setDirty(false); setConflict(false); setStatus("Guardado"); }
   };
@@ -305,7 +325,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const addIcon = (iconKey: string, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "icon", iconKey, accessibleLabel: iconKey.replaceAll("-", " "), ...newNodeFrame(80, 80, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder, link: null, fill: "#B8790A", strokeWidth: 2 });
   const addImage = (asset: MenuAssetView, point?: { x: number; y: number }) => addNode({ id: crypto.randomUUID(), type: "image", assetId: asset.id, ...newNodeFrame(280, 180, point), rotation: 0, opacity: 1, visible: true, locked: false, groupId: null, layerOrder, link: null, fit: "contain", cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, cornerRadius: 12, alt: asset.name });
   const handleCanvasDrop = (item: CanvasDropItem, point: { x: number; y: number }) => { if (item.kind === "text") addText(point); if (item.kind === "shape" && item.shape) addShape(item.shape, point); if (item.kind === "icon" && item.iconKey) addIcon(item.iconKey, point); if (item.kind === "image" && item.assetId) { const asset = assets.find((candidate) => candidate.id === item.assetId); if (asset) addImage(asset, point); } };
-  const uploadAsset = async (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch("/api/editor/assets", { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
+  const uploadAsset = async (kind: "IMAGE" | "VIDEO" | "FONT", file: File) => { const form = new FormData(); form.set("kind", kind); form.set("file", file); if (kind === "FONT") form.set("name", file.name.replace(/\.[^.]+$/, "")); const response = await fetch(`${editorApi}/assets`, { method: "POST", body: form }); const payload = await response.json(); if (response.ok && payload.success) setAssets((items) => [payload.data, ...items]); };
   const openModalMediaPicker = () => {
     if (!selected) return;
     const displayName = selected.name?.trim() || (selected.type === "text" ? `"${selected.text.slice(0, 30).trim()}${selected.text.length > 30 ? "…" : ""}"` : "Texto");
@@ -384,7 +404,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     const form = new FormData();
     form.set("kind", kind);
     form.set("file", file);
-    const response = await fetch("/api/editor/assets", { method: "POST", body: form });
+    const response = await fetch(`${editorApi}/assets`, { method: "POST", body: form });
     const payload = await response.json();
     if (!response.ok || !payload.success) {
       throw new Error(payload?.error?.message ?? "No se pudo subir el archivo");
@@ -416,7 +436,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   const selectMedia = (asset: MenuAssetView) => {
     if (asset.kind === "IMAGE") addImage(asset);
   };
-  const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`/api/editor/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
+  const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`${editorApi}/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
   const publish = async () => {
     if (saving || publishingRef.current || conflict) return;
     const publishedEditVersion = editVersionRef.current;
@@ -424,7 +444,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     setPublishing(true);
     setStatus("Publicando...");
     try {
-      const response = await fetch("/api/editor/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
+      const response = await fetch(`${editorApi}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
       const payload = await response.json();
       if (!response.ok || !payload.success) {
         if (response.status === 409) setConflict(true);
@@ -447,7 +467,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   };
   const performApplyTemplate = async (template: MenuTemplateView) => {
     setStatus("Aplicando plantilla...");
-    const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision }) });
+    const response = await fetch(`${editorApi}/templates/${encodeURIComponent(template.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision }) });
     const payload = await response.json();
     if (!response.ok || !payload.success) { setStatus(payload.error?.message ?? "No se pudo aplicar la plantilla"); return; }
     const nextProject = payload.data as MenuProjectView;
@@ -455,7 +475,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   };
   const saveTemplate = async (submitPublic: boolean) => { setModalName(""); setModalDescription(""); setModal({ kind: "save", submitPublic }); };
   const performSaveTemplate = async (submitPublic: boolean, name: string, description: string) => {
-    const response = await fetch("/api/editor/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, submitPublic, document }) });
+    const response = await fetch(`${editorApi}/templates`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, submitPublic, document }) });
     const payload = await response.json();
     if (response.ok && payload.success) { setTemplates((items) => [payload.data, ...items]); setStatus(submitPublic ? "Enviada a revisión" : "Plantilla guardada"); } else setStatus(payload.error?.message ?? "No se pudo guardar la plantilla");
   };
@@ -463,7 +483,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     setStatus("Importando plantilla...");
     const form = new FormData();
     form.set("file", file);
-    const response = await fetch("/api/editor/templates/import", { method: "POST", body: form });
+    const response = await fetch(`${editorApi}/templates/import`, { method: "POST", body: form });
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload?.success) {
       const message = payload?.error?.message ?? "No se pudo importar la plantilla";
@@ -476,7 +496,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
   };
   const deleteTemplate = async (template: MenuTemplateView) => { setModal({ kind: "delete", template }); };
   const performDeleteTemplate = async (template: MenuTemplateView) => {
-    const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
+    const response = await fetch(`${editorApi}/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
     const payload = await response.json();
     if (response.ok && payload.success) { setTemplates((items) => items.filter((item) => item.id !== template.id)); setStatus("Plantilla eliminada"); } else setStatus(payload.error?.message ?? "No se pudo eliminar la plantilla");
   };
@@ -497,9 +517,9 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     <div className="flex min-h-[70dvh] flex-col justify-center gap-4 p-6 md:hidden">
       <h1 className="text-2xl font-semibold">Editor de carta</h1>
       <p className="text-sm leading-6 text-zinc-600">Para diseñar con precisión necesitás una pantalla más grande. Desde acá podés abrir la configuración o ver la carta pública.</p>
-      <div className="flex flex-wrap gap-2"><a className="rounded-xl bg-[#182618] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253621]" href="/admin/settings">Configuración</a><a className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank">Ver carta pública</a><button type="button" className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={16} aria-hidden="true" />Descargar QR</button></div>
+      <div className="flex flex-wrap gap-2"><a className="rounded-xl bg-[#182618] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253621]" href={`/admin/restaurantes/${encodeURIComponent(restaurantId)}/settings`}>Configuración</a><a className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank">Ver carta pública</a><button type="button" className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={16} aria-hidden="true" />Descargar QR</button></div>
     </div>
-    <div className="fixed inset-y-0 right-0 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
+    <div className="fixed bottom-0 right-0 top-14 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-zinc-200 bg-white/95 px-4 shadow-2xs backdrop-blur-md z-20">
       {/* Lado izquierdo: Información del Menú y Estado */}
@@ -689,7 +709,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
         onAddShape={addShape}
       />
       {layersOpen && (
-        <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantSlug}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />
+        <LayersPanel key={restaurantSlug} document={document} layerIndex={layerIndex} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} renameGroupId={renameGroupId} storageKey={`menu-editor:collapsed-groups:${restaurantId}`} onCreateGroup={createGroup} onGroupSelection={groupSelection} onSelectNode={selectLayerNode} onSelectGroup={selectGroup} onChangeNode={(id, patch) => patchNode(id, patch)} onChangeGroup={(id, patch) => patchGroup(id, patch)} onRenameGroup={(id, name) => patchGroup(id, { name })} onUngroup={ungroup} onMove={moveLayerRef} onRenameFinished={() => setRenameGroupId(null)} />
       )}
       <main className="relative min-w-0 flex-1 bg-zinc-100"><KonvaCanvas document={document} layerIndex={layerIndex} assets={assetMap} selectedIds={selectedNodeIds} selectedGroupId={selectedGroup?.id ?? null} deepSelectedId={deepSelectedId} showGrid={gridEnabled} toolMode={toolMode} onToolModeChange={setToolMode} onSelect={selectCanvasNode} onSelectMany={(ids) => { setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds(ids.filter((id) => !layerIndex.nodeStates.get(id)?.effectiveLocked)); }} onDropItem={handleCanvasDrop} onChange={patchNode} onChangeMany={moveSelected} viewport={viewport} onViewportChange={setViewport} /></main>
       <aside aria-label="Propiedades del objeto" className="w-80 shrink-0 overflow-hidden border-l border-zinc-200 bg-white"><CanvasInspector key={selectedGroup ? `group:${selectedGroup.id}` : selectedNodeIds.length > 1 ? "multiple" : selected?.id ?? "canvas"} node={selected} group={selectedGroup} selectedCount={selectedNodeIds.length} document={document} assets={assets} onCanvasSizeChange={setCanvasSize} onBackgroundChange={(background) => commit({ ...document, background })} onOpenModalMedia={openModalMediaPicker} onOpenBackgroundImage={openBackgroundImagePicker} onOpenImageMedia={openImageMediaPicker} onChange={(patch) => selected && (!layerIndex.nodeStates.get(selected.id)?.effectiveLocked || Object.keys(patch).every((key) => key === "locked")) && patchNode(selected.id, patch)} onChangeSelected={patchSelected} onDuplicate={duplicate} onMoveLayer={moveLayer} onDelete={deleteSelected} onRename={(name) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { name })} onOpacityChange={(opacity) => selected && !layerIndex.nodeStates.get(selected.id)?.effectiveLocked && patchNode(selected.id, { opacity })} onGroupChange={(patch) => selectedGroup && patchGroup(selectedGroup.id, patch)} onUngroup={() => selectedGroup && ungroup(selectedGroup.id)} /></aside>
@@ -754,6 +774,7 @@ export function CanvasEditor({ project, initialAssets, initialTemplates, restaur
     >
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <TemplateLibrary
+          editorApi={editorApi}
           templates={templates}
           assets={assets}
           onApply={applyTemplate}

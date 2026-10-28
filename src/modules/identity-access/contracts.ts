@@ -34,7 +34,7 @@ export type AdminRole = "SUPER_ADMIN" | "TENANT_ADMIN";
 export type LoginView = {
   email: string;
   role: AdminRole;
-  tenantSlug: string | null;
+  organizationSlug: string | null;
   mustChangePassword: boolean;
 };
 

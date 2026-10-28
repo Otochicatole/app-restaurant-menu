@@ -1,8 +1,11 @@
 const businessModules = [
   "identity-access",
+  "landing-management",
   "menu-editor",
   "public-menu",
-  "tenant-management",
+  "reservation-management",
+  "organization-management",
+  "restaurant-management",
 ];
 
 /** @type {import('dependency-cruiser').IConfiguration} */

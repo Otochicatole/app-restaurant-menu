@@ -6,9 +6,9 @@ export type AccountRecord = {
   email: string;
   passwordHash: string;
   role: AdminRole;
-  tenantId: string | null;
-  tenantSlug: string | null;
-  tenantStatus: "ACTIVE" | "SUSPENDED" | null;
+  organizationId: string | null;
+  organizationSlug: string | null;
+  organizationStatus: "ACTIVE" | "SUSPENDED" | null;
   mustChangePassword: boolean;
 };
 

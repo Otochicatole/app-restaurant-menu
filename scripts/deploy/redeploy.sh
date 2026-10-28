@@ -62,8 +62,10 @@ rollback_after_error() {
 
   if (( activated == 1 )); then
     if [[ -n "$previous_release" ]]; then
-      echo "Restaurando el release de codigo anterior: $previous_release" >&2
-      if ! replace_link "$previous_release" "$CURRENT_LINK"; then
+      if ! assert_release_schema_compatible "$previous_release"; then
+        echo "El release anterior no soporta la base actual; el servicio queda detenido y se conserva el release nuevo." >&2
+        recovery_ok=0
+      elif ! replace_link "$previous_release" "$CURRENT_LINK"; then
         recovery_ok=0
       fi
     else
@@ -72,8 +74,12 @@ rollback_after_error() {
   fi
 
   if (( recovery_ok == 1 && service_was_active == 1 )) && [[ -n "$previous_release" || -L "$CURRENT_LINK" ]]; then
-    sudo systemctl start "$SERVICE"
-    "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    if assert_release_schema_compatible "$(resolve_release "$CURRENT_LINK")"; then
+      sudo systemctl start "$SERVICE"
+      "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    else
+      echo "El servicio permanece detenido por incompatibilidad de esquema; no se restauraron datos despues de habilitar trafico." >&2
+    fi
   elif (( recovery_ok == 0 )); then
     echo "ERROR: la recuperacion no pudo verificarse; $SERVICE queda detenido para evitar dano adicional." >&2
   fi
@@ -100,6 +106,7 @@ if ! git -C "$DEPLOY_PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>
 fi
 
 validate_shared_environment
+install_schema_guard
 
 echo "Actualizando referencias remotas sin modificar el checkout..."
 git -C "$DEPLOY_PROJECT_ROOT" fetch --prune origin

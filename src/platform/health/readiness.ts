@@ -37,12 +37,14 @@ async function checkDatabase(): Promise<void> {
   const tables = await prisma.$queryRaw<Array<{ name: string }>>`
     SELECT name
     FROM sqlite_schema
-    WHERE type = 'table' AND name IN ('Tenant', 'MenuProject', 'MenuAsset', 'MenuAssetReference', '_prisma_migrations')
+    WHERE type = 'table' AND name IN ('Organization', 'Restaurant', 'AppSchemaState', 'MenuProject', 'MenuAsset', 'MenuAssetReference', '_prisma_migrations')
   `;
   const names = new Set(tables.map(({ name }) => name));
-  if (!["Tenant", "MenuProject", "MenuAsset", "MenuAssetReference", "_prisma_migrations"].every((name) => names.has(name))) {
+  if (!["Organization", "Restaurant", "AppSchemaState", "MenuProject", "MenuAsset", "MenuAssetReference", "_prisma_migrations"].every((name) => names.has(name))) {
     throw new Error("SQLite schema is incomplete");
   }
+  const state = await prisma.appSchemaState.findUnique({ where: { id: "singleton" }, select: { generation: true, state: true } });
+  if (state?.generation !== 2 || state.state !== "READY") throw new Error("Organization cutover is incomplete");
 }
 
 async function checkWritableStorage(): Promise<void> {

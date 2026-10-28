@@ -48,6 +48,10 @@ if [[ "${DEPLOY_MODE:-auto}" == "manual" || ! -L "$CURRENT_LINK" ]]; then
     exit 1
   fi
 
+  manual_database_path="${manual_database_url#file:}"
+  if [[ "$manual_database_path" != /* ]]; then manual_database_path="$DEPLOY_PROJECT_ROOT/$manual_database_path"; fi
+  bash "$SCRIPT_DIR/assert-schema-compatibility.sh" "$DEPLOY_PROJECT_ROOT" "$manual_database_path"
+
   echo "Iniciando la aplicacion manual en 0.0.0.0:8201..."
   (
     # The long-lived server must not inherit the deployment lock. Otherwise
@@ -82,6 +86,8 @@ prepare_shared_environment
 validate_shared_environment
 require_commands systemctl
 resolve_release "$CURRENT_LINK" >/dev/null
+install_schema_guard
+assert_release_schema_compatible "$(resolve_release "$CURRENT_LINK")"
 
 echo "Iniciando y habilitando $SERVICE..."
 sudo systemctl enable --now "$SERVICE"

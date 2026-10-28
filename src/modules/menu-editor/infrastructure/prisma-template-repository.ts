@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import type { BlobStore } from "@/platform/storage/blob-store";
+import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
+import { assertAssetQuota, assetContentKey } from "./asset-quota";
+import { ConflictError, NotFoundError } from "@/platform/application/errors";
 import { prisma } from "@/platform/database/prisma";
 import { blobStore } from "@/platform/storage";
 import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
@@ -10,8 +14,13 @@ import type { CanvasDocumentV1, MenuAssetKind, MenuTemplateView, SuperadminTempl
 import type { TemplateCreateInput, TemplateRepository } from "../application/template-ports";
 
 export class PrismaTemplateRepository implements TemplateRepository {
-  async list(tenantId: string): Promise<MenuTemplateView[]> {
-    const rows = await prisma.menuTemplate.findMany({ where: { OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { tenantId }], }, orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }] });
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly storage: BlobStore = blobStore,
+  ) {}
+
+  async list(restaurantId: string): Promise<MenuTemplateView[]> {
+    const rows = await this.client.menuTemplate.findMany({ where: { OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { restaurantId }], }, orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }] });
     const views = rows.map(toView);
     const systemIds = new Set(views.map((view) => view.id));
     for (const preset of TEMPLATE_PRESETS) if (!systemIds.has(preset.id)) views.unshift(presetAsView(preset));
@@ -21,11 +30,11 @@ export class PrismaTemplateRepository implements TemplateRepository {
   async createPrivate(input: TemplateCreateInput): Promise<MenuTemplateView> {
     const document = validateCanvasDocument(input.document);
     const id = randomUUID();
-    const row = await prisma.$transaction(async (transaction) => {
-      await assertTenantAssets(transaction, input.tenantId, document);
-      const template = await transaction.menuTemplate.create({ data: { id, tenantId: input.tenantId, name: input.name, description: input.description, documentJson: JSON.stringify(document), schemaVersion: document.schemaVersion, visibility: "PRIVATE", status: "DRAFT" } });
+    const row = await this.client.$transaction(async (transaction) => {
+      await assertTenantAssets(transaction, input.restaurantId, document);
+      const template = await transaction.menuTemplate.create({ data: { id, restaurantId: input.restaurantId, name: input.name, description: input.description, documentJson: JSON.stringify(document), schemaVersion: document.schemaVersion, visibility: "PRIVATE", status: "DRAFT" } });
       const assetIds = [...documentAssetIds(document)];
-      if (assetIds.length) await transaction.menuTemplateAssetReference.createMany({ data: assetIds.map((assetId) => ({ tenantId: input.tenantId, templateId: template.id, assetId })) });
+      if (assetIds.length) await transaction.menuTemplateAssetReference.createMany({ data: assetIds.map((assetId) => ({ restaurantId: input.restaurantId, templateId: template.id, assetId })) });
       return template;
     });
     return toView(row);
@@ -33,19 +42,19 @@ export class PrismaTemplateRepository implements TemplateRepository {
 
   async submitPublic(input: TemplateCreateInput): Promise<MenuTemplateView> {
     const document = validateCanvasDocument(input.document);
-    const sourceAssets = await prisma.menuAsset.findMany({ where: { tenantId: input.tenantId, id: { in: [...documentAssetIds(document)] } } });
+    const sourceAssets = await this.client.menuAsset.findMany({ where: { restaurantId: input.restaurantId, id: { in: [...documentAssetIds(document)] } } });
     if (sourceAssets.length !== documentAssetIds(document).size) throw new NotFoundError("Asset");
     const templateId = randomUUID();
     const remap = new Map<string, string>();
     for (const asset of sourceAssets) {
-      const bytes = await blobStore.read(asset.storageKey);
+      const bytes = await this.storage.read(asset.storageKey);
       const targetKey = `templates/${templateId}/${asset.checksum}-${asset.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      await blobStore.put(targetKey, bytes);
+      await this.storage.put(targetKey, bytes);
       remap.set(asset.id, randomUUID());
     }
     const remappedDocument = remapDocumentAssets(document, remap);
-    const row = await prisma.$transaction(async (transaction) => {
-      const template = await transaction.menuTemplate.create({ data: { id: templateId, tenantId: input.tenantId, name: input.name, description: input.description, documentJson: JSON.stringify(remappedDocument), schemaVersion: remappedDocument.schemaVersion, visibility: "PUBLIC", status: "PENDING", submittedAt: new Date() } });
+    const row = await this.client.$transaction(async (transaction) => {
+      const template = await transaction.menuTemplate.create({ data: { id: templateId, restaurantId: input.restaurantId, name: input.name, description: input.description, documentJson: JSON.stringify(remappedDocument), schemaVersion: remappedDocument.schemaVersion, visibility: "PUBLIC", status: "PENDING", submittedAt: new Date() } });
       for (const asset of sourceAssets) {
         const id = remap.get(asset.id)!;
         await transaction.menuTemplateAsset.create({ data: { id, templateId, kind: asset.kind, name: asset.name, storageKey: `templates/${templateId}/${asset.checksum}-${asset.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`, mimeType: asset.mimeType, byteSize: asset.byteSize, checksum: asset.checksum, width: asset.width, height: asset.height, fontFamily: asset.fontFamily } });
@@ -55,7 +64,7 @@ export class PrismaTemplateRepository implements TemplateRepository {
     return toView(row);
   }
 
-  async exportPortable(tenantId: string, templateId: string): Promise<PortableTemplate> {
+  async exportPortable(restaurantId: string, templateId: string): Promise<PortableTemplate> {
     const preset = TEMPLATE_PRESETS.find((item) => item.id === templateId);
     if (preset) {
       const document = validateCanvasDocument(preset.document);
@@ -63,8 +72,8 @@ export class PrismaTemplateRepository implements TemplateRepository {
       return { name: preset.name, description: preset.description, document, assets: [] };
     }
 
-    const template = await prisma.menuTemplate.findFirst({
-      where: { id: templateId, OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { tenantId }] },
+    const template = await this.client.menuTemplate.findFirst({
+      where: { id: templateId, OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { restaurantId }] },
       include: { assets: true, references: { include: { asset: true } } },
     });
     if (!template) throw new NotFoundError("Plantilla");
@@ -75,7 +84,7 @@ export class PrismaTemplateRepository implements TemplateRepository {
     for (const assetId of documentAssetIds(document)) {
       const asset = assetsById.get(assetId);
       if (!asset) throw new ConflictError("La plantilla tiene referencias a assets inexistentes.");
-      const content = new Uint8Array(await blobStore.read(asset.storageKey));
+      const content = new Uint8Array(await this.storage.read(asset.storageKey));
       assets.push({
         id: asset.id,
         kind: asset.kind,
@@ -92,64 +101,16 @@ export class PrismaTemplateRepository implements TemplateRepository {
     return { name: template.name, description: template.description, document, assets };
   }
 
-  async importPortable(tenantId: string, template: PortableTemplate): Promise<MenuTemplateView> {
-    const [tenant, usage, existingAssets] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { assetQuotaBytes: true } }),
-      prisma.menuAsset.aggregate({ where: { tenantId }, _sum: { byteSize: true } }),
-      prisma.menuAsset.findMany({ where: { tenantId, checksum: { in: [...new Set(template.assets.map((asset) => asset.checksum))] } } }),
-    ]);
-    if (!tenant) throw new NotFoundError("Restaurante");
-
-    const existingByContent = new Map(existingAssets.map((asset) => [assetContentKey(asset), asset]));
-    const importedByContent = new Map<string, ImportedAsset>();
-    const remap = new Map<string, string>();
-    for (const asset of template.assets) {
-      const contentKey = assetContentKey(asset);
-      const existing = existingByContent.get(contentKey);
-      if (existing) { remap.set(asset.id, existing.id); continue; }
-      let imported = importedByContent.get(contentKey);
-      if (!imported) {
-        const id = randomUUID();
-        imported = {
-          ...asset,
-          id,
-          storageKey: `tenants/${tenantId}/template-imports/${randomUUID()}.${extensionForAsset(asset.mimeType, asset.name)}`,
-        };
-        importedByContent.set(contentKey, imported);
-      }
-      remap.set(asset.id, imported.id);
-    }
-
-    const assetsToCreate = [...importedByContent.values()];
-    const newBytes = assetsToCreate.reduce((total, asset) => total + asset.byteSize, 0);
-    if ((usage._sum.byteSize ?? 0) + newBytes > tenant.assetQuotaBytes) throw new BadRequestError("La plantilla supera la cuota de archivos del restaurante.");
-
-    const writtenKeys: string[] = [];
-    try {
-      for (const asset of assetsToCreate) {
-        await blobStore.put(asset.storageKey, Buffer.from(asset.content));
-        writtenKeys.push(asset.storageKey);
-      }
-      const document = validateCanvasDocument(remapDocumentAssets(template.document, remap));
-      const row = await prisma.$transaction(async (transaction) => {
-        for (const asset of assetsToCreate) {
-          await transaction.menuAsset.create({ data: {
-            id: asset.id,
-            tenantId,
-            kind: asset.kind,
-            name: asset.name.slice(0, 100),
-            storageKey: asset.storageKey,
-            mimeType: asset.mimeType,
-            byteSize: asset.byteSize,
-            checksum: asset.checksum,
-            width: asset.width,
-            height: asset.height,
-            fontFamily: asset.fontFamily,
-          } });
-        }
+  async importPortable(restaurantId: string, template: PortableTemplate): Promise<MenuTemplateView> {
+    const row = await this.withImportedAssets(
+      restaurantId,
+      template.assets,
+      (asset) => Promise.resolve(Buffer.from(asset.content)),
+      async (transaction, remap) => {
+        const document = validateCanvasDocument(remapDocumentAssets(template.document, remap));
         const created = await transaction.menuTemplate.create({ data: {
           id: randomUUID(),
-          tenantId,
+          restaurantId,
           name: template.name,
           description: template.description,
           documentJson: JSON.stringify(document),
@@ -157,72 +118,139 @@ export class PrismaTemplateRepository implements TemplateRepository {
           visibility: "PRIVATE",
           status: "DRAFT",
         } });
-        const assetIds = [...new Set(documentAssetIds(document))];
-        if (assetIds.length) await transaction.menuTemplateAssetReference.createMany({ data: assetIds.map((assetId) => ({ tenantId, templateId: created.id, assetId })) });
+        const assetIds = [...documentAssetIds(document)];
+        if (assetIds.length) await transaction.menuTemplateAssetReference.createMany({ data: assetIds.map((assetId) => ({ restaurantId, templateId: created.id, assetId })) });
         return created;
-      });
-      return toView(row);
-    } catch (error) {
-      await Promise.all(writtenKeys.map((key) => blobStore.delete(key).catch(() => undefined)));
-      throw error;
-    }
-  }
-
-  async apply(tenantId: string, templateId: string): Promise<CanvasDocumentV1> {
-    const preset = TEMPLATE_PRESETS.find((item) => item.id === templateId);
-    if (preset) return preset.document;
-    const template = await prisma.menuTemplate.findFirst({ where: { id: templateId, OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { tenantId }] }, include: { assets: true } });
-    if (!template) throw new NotFoundError("Plantilla");
-    let document = validateCanvasDocument(JSON.parse(template.documentJson));
-    if (template.visibility === "PUBLIC") {
-      const [tenant, usage] = await Promise.all([
-        prisma.tenant.findUnique({ where: { id: tenantId }, select: { assetQuotaBytes: true } }),
-        prisma.menuAsset.aggregate({ where: { tenantId }, _sum: { byteSize: true } }),
-      ]);
-      const newBytes = template.assets.reduce((total, asset) => total + asset.byteSize, 0);
-      if (tenant && (usage._sum.byteSize ?? 0) + newBytes > tenant.assetQuotaBytes) throw new BadRequestError("La plantilla supera la cuota de archivos del restaurante.");
-      const remap = new Map<string, string>();
-      for (const asset of template.assets) {
-        const existing = await prisma.menuAsset.findFirst({ where: { tenantId, checksum: asset.checksum } });
-        if (existing) { remap.set(asset.id, existing.id); continue; }
-        const bytes = await blobStore.read(asset.storageKey);
-        const created = await prisma.menuAsset.create({ data: { tenantId, kind: asset.kind, name: asset.name, storageKey: `tenants/${tenantId}/template-assets/${asset.checksum}-${asset.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`, mimeType: asset.mimeType, byteSize: asset.byteSize, checksum: asset.checksum, width: asset.width, height: asset.height, fontFamily: asset.fontFamily } });
-        await blobStore.put(created.storageKey, bytes);
-        remap.set(asset.id, created.id);
-      }
-      document = remapDocumentAssets(document, remap);
-    } else {
-      const refs = await prisma.menuTemplateAssetReference.findMany({ where: { tenantId, templateId }, select: { assetId: true } });
-      const allowed = new Set(refs.map((ref) => ref.assetId));
-      for (const assetId of documentAssetIds(document)) if (!allowed.has(assetId)) throw new ConflictError("La plantilla privada tiene assets inválidos.");
-    }
-    return validateCanvasDocument(document);
-  }
-
-  async updatePrivate(tenantId: string, templateId: string, input: { name?: string; description?: string }): Promise<MenuTemplateView> {
-    const row = await prisma.menuTemplate.update({ where: { id: templateId, tenantId }, data: input });
+      },
+    );
     return toView(row);
   }
 
-  async deletePrivate(tenantId: string, templateId: string): Promise<void> {
-    const result = await prisma.menuTemplate.deleteMany({ where: { id: templateId, tenantId, isSystem: false, visibility: "PRIVATE" } });
+  async apply(restaurantId: string, templateId: string): Promise<CanvasDocumentV1> {
+    const preset = TEMPLATE_PRESETS.find((item) => item.id === templateId);
+    if (preset) return preset.document;
+    const template = await this.client.menuTemplate.findFirst({ where: { id: templateId, OR: [{ isSystem: true, status: "PUBLISHED" }, { visibility: "PUBLIC", status: "PUBLISHED" }, { restaurantId }] }, include: { assets: true } });
+    if (!template) throw new NotFoundError("Plantilla");
+    const document = validateCanvasDocument(JSON.parse(template.documentJson));
+    if (template.visibility === "PUBLIC") {
+      return this.withImportedAssets(
+        restaurantId,
+        template.assets,
+        (asset) => this.storage.read(asset.storageKey),
+        async (_transaction, remap) => validateCanvasDocument(remapDocumentAssets(document, remap)),
+      );
+    }
+    const refs = await this.client.menuTemplateAssetReference.findMany({ where: { restaurantId, templateId }, select: { assetId: true } });
+    const allowed = new Set(refs.map((ref) => ref.assetId));
+    for (const assetId of documentAssetIds(document)) if (!allowed.has(assetId)) throw new ConflictError("La plantilla privada tiene assets inválidos.");
+    return document;
+  }
+
+  private async withImportedAssets<TAsset extends Omit<StoredTemplateAsset, "storageKey">, TResult>(
+    restaurantId: string,
+    assets: TAsset[],
+    readContent: (asset: TAsset) => Promise<Buffer>,
+    operation: (transaction: Prisma.TransactionClient, remap: Map<string, string>) => Promise<TResult>,
+  ): Promise<TResult> {
+    const existingBeforeStaging = assets.length ? await this.client.menuAsset.findMany({
+      where: { restaurantId, checksum: { in: [...new Set(assets.map((asset) => asset.checksum))] } },
+      select: { kind: true, mimeType: true, checksum: true },
+    }) : [];
+    const reusable = new Set(existingBeforeStaging.map(assetContentKey));
+    const staged: StagedTemplateAsset[] = [];
+    const byContent = new Map<string, StagedTemplateAsset>();
+    try {
+      for (const asset of assets) {
+        const key = assetContentKey(asset);
+        if (reusable.has(key) || byContent.has(key)) continue;
+        const content = await readContent(asset);
+        const copied = {
+          ...asset,
+          id: randomUUID(),
+          name: asset.name.slice(0, 100),
+          byteSize: content.byteLength,
+          storageKey: `restaurants/${restaurantId}/template-imports/${randomUUID()}.${extensionForAsset(asset.mimeType, asset.name)}`,
+        };
+        staged.push(copied);
+        byContent.set(key, copied);
+        await this.storage.put(copied.storageKey, content);
+      }
+    } catch (error) {
+      await this.cleanupStagedAssets(staged);
+      throw error;
+    }
+
+    let committed: { result: TResult; retainedKeys: Set<string> };
+    try {
+      committed = await withSqliteTransaction(this.client, async (transaction) => {
+        const existing = assets.length ? await transaction.menuAsset.findMany({
+          where: { restaurantId, checksum: { in: [...new Set(assets.map((asset) => asset.checksum))] } },
+          select: { id: true, kind: true, mimeType: true, checksum: true },
+        }) : [];
+        const existingByContent = new Map(existing.map((asset) => [assetContentKey(asset), asset.id]));
+        for (const asset of assets) {
+          const key = assetContentKey(asset);
+          if (!existingByContent.has(key) && !byContent.has(key)) {
+            throw new ConflictError("La biblioteca de archivos cambió. Volvé a intentar.");
+          }
+        }
+        const missing = staged.filter((asset) => !existingByContent.has(assetContentKey(asset)));
+        await assertAssetQuota(transaction, restaurantId, missing.reduce((total, asset) => total + asset.byteSize, 0));
+        if (missing.length) await transaction.menuAsset.createMany({ data: missing.map((asset) => ({
+          id: asset.id, restaurantId, kind: asset.kind, name: asset.name, storageKey: asset.storageKey,
+          mimeType: asset.mimeType, byteSize: asset.byteSize, checksum: asset.checksum,
+          width: asset.width, height: asset.height, fontFamily: asset.fontFamily,
+        })) });
+        const remap = new Map<string, string>();
+        for (const asset of assets) {
+          const key = assetContentKey(asset);
+          const id = existingByContent.get(key) ?? byContent.get(key)!.id;
+          remap.set(asset.id, id);
+        }
+        return { result: await operation(transaction, remap), retainedKeys: new Set(missing.map((asset) => asset.storageKey)) };
+      });
+    } catch (error) {
+      await this.cleanupStagedAssets(staged);
+      throw error;
+    }
+    await this.cleanupStagedAssets(staged.filter((asset) => !committed.retainedKeys.has(asset.storageKey)));
+    return committed.result;
+  }
+
+  private async cleanupStagedAssets(assets: StagedTemplateAsset[]): Promise<void> {
+    await Promise.all(assets.map(async (asset) => {
+      try { await this.storage.delete(asset.storageKey); }
+      catch {
+        // A failed immediate cleanup must not remove committed assets or repeat an import.
+        await enqueueAssetCleanup(asset.storageKey, this.client).catch(() => undefined);
+      }
+    }));
+  }
+
+  async updatePrivate(restaurantId: string, templateId: string, input: { name?: string; description?: string }): Promise<MenuTemplateView> {
+    const row = await this.client.menuTemplate.update({ where: { id: templateId, restaurantId, visibility: "PRIVATE", isSystem: false }, data: input });
+    return toView(row);
+  }
+
+  async deletePrivate(restaurantId: string, templateId: string): Promise<void> {
+    const result = await this.client.menuTemplate.deleteMany({ where: { id: templateId, restaurantId, isSystem: false, visibility: "PRIVATE" } });
     if (result.count !== 1) throw new NotFoundError("Plantilla");
   }
 
   async listPending(): Promise<MenuTemplateView[]> {
-    const rows = await prisma.menuTemplate.findMany({ where: { visibility: "PUBLIC", status: "PENDING" }, orderBy: { submittedAt: "asc" } });
+    const rows = await this.client.menuTemplate.findMany({ where: { visibility: "PUBLIC", status: "PENDING" }, orderBy: { submittedAt: "asc" } });
     return rows.map(toView);
   }
 
   async listForSuperadmin(input: SuperadminTemplateQuery): Promise<SuperadminTemplateList> {
     const status: "PUBLISHED" | "PENDING" | "REJECTED" | "ARCHIVED" | undefined = input.tab === "published" ? "PUBLISHED" : input.tab === "pending" ? "PENDING" : input.tab === "rejected" ? "REJECTED" : input.tab === "archived" ? "ARCHIVED" : undefined;
     const scope = input.tab === "system" ? { isSystem: true } : input.tab === "all" ? { OR: [{ isSystem: true }, { visibility: "PUBLIC" as const }] } : { isSystem: false, visibility: "PUBLIC" as const };
-    const rows = await prisma.menuTemplate.findMany({
-      where: { AND: [scope, ...(status ? [{ status }] : []), ...(input.query ? [{ OR: [{ name: { contains: input.query } }, { description: { contains: input.query } }, { tenant: { name: { contains: input.query } } }, { tenant: { slug: { contains: input.query } } }] }] : [])] },
-      include: { tenant: { select: { id: true, name: true, slug: true } } },
+    const rows = await this.client.menuTemplate.findMany({
+      where: { AND: [scope, ...(status ? [{ status }] : []), ...(input.query ? [{ OR: [{ name: { contains: input.query } }, { description: { contains: input.query } }, { restaurant: { name: { contains: input.query } } }, { restaurant: { slug: { contains: input.query } } }] }] : [])] },
+      include: { restaurant: { select: { id: true, name: true, slug: true } } },
       orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
     });
-    const items: SuperadminTemplateView[] = rows.map((row) => ({ ...toView(row), owner: row.tenant ? { tenantId: row.tenant.id, name: row.tenant.name, slug: row.tenant.slug } : null }));
+    const items: SuperadminTemplateView[] = rows.map((row) => ({ ...toView(row), owner: row.restaurant ? { restaurantId: row.restaurant.id, name: row.restaurant.name, slug: row.restaurant.slug } : null }));
     for (const preset of TEMPLATE_PRESETS) {
       if (input.tab !== "all" && input.tab !== "system") continue;
       if (input.query && !`${preset.name} ${preset.description}`.toLocaleLowerCase().includes(input.query.toLocaleLowerCase())) continue;
@@ -234,7 +262,7 @@ export class PrismaTemplateRepository implements TemplateRepository {
   }
 
   async deletePublic(templateId: string): Promise<void> {
-    await prisma.$transaction(async (transaction) => {
+    await this.client.$transaction(async (transaction) => {
       const template = await transaction.menuTemplate.findFirst({ where: { id: templateId, visibility: "PUBLIC", isSystem: false }, include: { assets: { select: { storageKey: true } } } });
       if (!template) throw new NotFoundError("Plantilla");
       for (const asset of template.assets) await enqueueAssetCleanup(asset.storageKey, transaction);
@@ -243,12 +271,12 @@ export class PrismaTemplateRepository implements TemplateRepository {
   }
 
   async moderate(templateId: string, action: "publish" | "reject" | "archive" | "restore", reason?: string): Promise<MenuTemplateView> {
-    const template = await prisma.menuTemplate.findUnique({ where: { id: templateId } });
+    const template = await this.client.menuTemplate.findUnique({ where: { id: templateId } });
     if (!template || template.visibility !== "PUBLIC" || template.isSystem) throw new NotFoundError("Plantilla");
     const validTransitions = { publish: "PENDING", reject: "PENDING", archive: "PUBLISHED", restore: "ARCHIVED" } as const;
     if (template.status !== validTransitions[action]) throw new ConflictError("La plantilla no está en un estado válido para esta acción.");
     const status = action === "publish" || action === "restore" ? "PUBLISHED" : action === "reject" ? "REJECTED" : "ARCHIVED";
-    const row = await prisma.menuTemplate.update({ where: { id: templateId }, data: { status, rejectionReason: action === "reject" ? reason ?? null : null, publishedAt: action === "publish" ? new Date() : null } });
+    const row = await this.client.menuTemplate.update({ where: { id: templateId }, data: { status, rejectionReason: action === "reject" ? reason ?? null : null, publishedAt: action === "publish" ? new Date() : null } });
     return toView(row);
   }
 }
@@ -266,11 +294,7 @@ type StoredTemplateAsset = {
   fontFamily: string | null;
 };
 
-type ImportedAsset = PortableTemplateAsset & { storageKey: string };
-
-function assetContentKey(asset: Pick<PortableTemplateAsset, "checksum" | "kind" | "mimeType">): string {
-  return `${asset.kind}:${asset.mimeType}:${asset.checksum}`;
-}
+type StagedTemplateAsset = StoredTemplateAsset;
 
 function hashAsset(content: Uint8Array): string {
   return createHash("sha256").update(content).digest("hex");
@@ -288,14 +312,14 @@ function extensionForAsset(mimeType: string, name: string): string {
   return known[mimeType] ?? (name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin");
 }
 
-function toView(row: { id: string; name: string; description: string; visibility: string; status: string; isSystem: boolean; tenantId: string | null; documentJson: string; rejectionReason: string | null; createdAt: Date; updatedAt: Date }): MenuTemplateView {
-  return { id: row.id, name: row.name, description: row.description, visibility: row.visibility as MenuTemplateView["visibility"], status: row.status as MenuTemplateView["status"], isSystem: row.isSystem, tenantId: row.tenantId, document: validateCanvasDocument(JSON.parse(row.documentJson)), rejectionReason: row.rejectionReason, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+function toView(row: { id: string; name: string; description: string; visibility: string; status: string; isSystem: boolean; restaurantId: string | null; documentJson: string; rejectionReason: string | null; createdAt: Date; updatedAt: Date }): MenuTemplateView {
+  return { id: row.id, name: row.name, description: row.description, visibility: row.visibility as MenuTemplateView["visibility"], status: row.status as MenuTemplateView["status"], isSystem: row.isSystem, restaurantId: row.restaurantId, document: validateCanvasDocument(JSON.parse(row.documentJson)), rejectionReason: row.rejectionReason, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
 }
 
-async function assertTenantAssets(transaction: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], tenantId: string, document: CanvasDocumentV1) {
+async function assertTenantAssets(transaction: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], restaurantId: string, document: CanvasDocumentV1) {
   const ids = [...documentAssetIds(document)];
   if (!ids.length) return;
-  const assets = await transaction.menuAsset.findMany({ where: { tenantId, id: { in: ids } }, select: { id: true } });
+  const assets = await transaction.menuAsset.findMany({ where: { restaurantId, id: { in: ids } }, select: { id: true } });
   if (assets.length !== ids.length) throw new NotFoundError("Asset");
 }
 

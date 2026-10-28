@@ -12,7 +12,7 @@ export type PublicCanvasAsset = {
 };
 
 export type PublicCanvasMenuView = {
-  tenant: { id: string; name: string; slug: string };
+  restaurant: { id: string; name: string; slug: string };
   profile: { name: string; description: string };
   document: CanvasDocumentV1;
   assets: Record<string, PublicCanvasAsset>;

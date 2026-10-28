@@ -48,6 +48,29 @@ ensure_deploy_layout() {
   chmod 750 -- "$SHARED_DIR" "$STORAGE_DIR" "$LOGS_DIR"
 }
 
+install_schema_guard() {
+  mkdir -p -- "$SHARED_DIR/ops"
+  install -m 755 -- "$DEPLOY_SCRIPT_DIR/assert-schema-compatibility.sh" "$SHARED_DIR/ops/assert-schema-compatibility.sh"
+  if command -v systemctl >/dev/null 2>&1 && systemctl cat "${SERVICE:-app-res.service}" >/dev/null 2>&1; then
+    local dropin="/etc/systemd/system/${SERVICE:-app-res.service}.d"
+    sudo mkdir -p -- "$dropin"
+    printf '[Service]\nExecStartPre=%s/ops/assert-schema-compatibility.sh %s %s\n' "$SHARED_DIR" "$CURRENT_LINK" "$DATABASE_FILE" | sudo tee "$dropin/schema-compatibility.conf" >/dev/null
+    sudo systemctl daemon-reload
+  fi
+}
+
+release_schema_generation() {
+  if [[ -f "$1/app-schema-generation" ]]; then
+    tr -d '[:space:]' < "$1/app-schema-generation"
+  else
+    printf '1'
+  fi
+}
+
+assert_release_schema_compatible() {
+  bash "$SHARED_DIR/ops/assert-schema-compatibility.sh" "$1" "$DATABASE_FILE"
+}
+
 acquire_deploy_lock() {
   exec 9>"$DEPLOY_LOCK"
   if ! flock -n 9; then
@@ -402,6 +425,8 @@ run_candidate_health() {
   local log_file="$LOGS_DIR/${label}.log"
   local status
 
+  assert_release_schema_compatible "$release" || return 1
+
   echo "Validando el release en loopback ($health_url)..."
   (
     cd -- "$release"
@@ -443,8 +468,11 @@ run_prisma_migrations() {
   echo "Ejecutando preflight y backfill Canvas de $release..."
   (
     cd -- "$release"
+    DATABASE_URL="$EXPECTED_DATABASE_URL" bun run scripts/schema-hardening-preflight.ts
     DATABASE_URL="$EXPECTED_DATABASE_URL" STORAGE_ROOT="$storage_root" bun run scripts/cutover-menu-editor.ts
+    DATABASE_URL="$EXPECTED_DATABASE_URL" STORAGE_ROOT="$storage_root" bun run scripts/cutover-organizations.ts --preflight
     DATABASE_URL="$EXPECTED_DATABASE_URL" bun x prisma migrate deploy
+    DATABASE_URL="$EXPECTED_DATABASE_URL" STORAGE_ROOT="$storage_root" bun run scripts/cutover-organizations.ts
     DATABASE_URL="$EXPECTED_DATABASE_URL" bun x prisma generate
   )
   configure_sqlite_wal_mode "$DATABASE_FILE"

@@ -16,9 +16,9 @@ const activeTenantAccount: AccountRecord = {
   email: "Admin@Restaurant.test",
   passwordHash: "stored-hash",
   role: "TENANT_ADMIN",
-  tenantId: "tenant-1",
-  tenantSlug: "restaurant",
-  tenantStatus: "ACTIVE",
+  organizationId: "tenant-1",
+  organizationSlug: "restaurant",
+  organizationStatus: "ACTIVE",
   mustChangePassword: false,
 };
 
@@ -27,9 +27,9 @@ const superAdminAccount: AccountRecord = {
   id: "super-admin-1",
   email: "super@example.test",
   role: "SUPER_ADMIN",
-  tenantId: null,
-  tenantSlug: null,
-  tenantStatus: null,
+  organizationId: null,
+  organizationSlug: null,
+  organizationStatus: null,
 };
 
 describe("identity access", () => {
@@ -53,8 +53,8 @@ describe("identity access", () => {
     expect(fixture.state.throttleResets).toEqual(["client-and-account"]);
     expect(actor).toMatchObject({
       kind: "tenant-admin",
-      tenantId: "tenant-1",
-      tenantSlug: "restaurant",
+      organizationId: "tenant-1",
+      organizationSlug: "restaurant",
       jti: "session-jti",
     });
   });
@@ -111,7 +111,7 @@ describe("identity access", () => {
 
   it("rejects suspended tenant accounts after checking their password", async () => {
     const fixture = createFixture({
-      account: { ...activeTenantAccount, tenantStatus: "SUSPENDED" },
+      account: { ...activeTenantAccount, organizationStatus: "SUSPENDED" },
     });
 
     await expect(
@@ -127,8 +127,8 @@ describe("identity access", () => {
       role: "TENANT_ADMIN" as const,
       adminId: activeTenantAccount.id,
       email: activeTenantAccount.email,
-      tenantId: "tenant-1",
-      tenantSlug: "restaurant",
+      organizationId: "tenant-1",
+      organizationSlug: "restaurant",
       mustChangePassword: true,
       jti: "current-jti",
     };
@@ -149,7 +149,7 @@ describe("identity access", () => {
 
   it("clears a session whose tenant is suspended", async () => {
     const fixture = createFixture({
-      account: { ...activeTenantAccount, tenantStatus: "SUSPENDED" },
+      account: { ...activeTenantAccount, organizationStatus: "SUSPENDED" },
       cookieToken: "signed-token",
     });
 
@@ -264,6 +264,55 @@ describe("identity access", () => {
       message: "La contraseña cambió durante la operación. Volvé a intentarlo",
     });
   });
+
+  it("requires the current password before destructive account operations", async () => {
+    const actor = tenantActor();
+    const valid = createFixture({ account: activeTenantAccount });
+    await expect(valid.service.verifyCurrentPassword(actor, { currentPassword: "actual" })).resolves.toBeUndefined();
+    expect(valid.state.comparedHash).toBe("stored-hash");
+    expect(valid.state.passwordChange).toBeNull();
+
+    const wrong = createFixture({ account: activeTenantAccount, passwordMatches: false });
+    await expect(wrong.service.verifyCurrentPassword(actor, { currentPassword: "incorrecta" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    const deletedAccount = createFixture({ account: null });
+    await expect(deletedAccount.service.verifyCurrentPassword(actor, { currentPassword: "actual" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(deletedAccount.state.comparedHash).toBeNull();
+  });
+
+  it("normalizes a changed email and keeps the update scoped to the authenticated account", async () => {
+    const fixture = createFixture({ account: activeTenantAccount, emailAccount: null });
+    await expect(fixture.service.updateAccountEmail(tenantActor(), { email: "  NUEVO@Example.TEST  " })).resolves.toBe("nuevo@example.test");
+    expect(fixture.state.lookedUpEmail).toBe("nuevo@example.test");
+    expect(fixture.state.emailUpdates).toEqual([{ adminId: "admin-1", email: "nuevo@example.test" }]);
+  });
+
+  it("does not write when the normalized email has not changed", async () => {
+    const fixture = createFixture({ account: activeTenantAccount });
+    const actor = { ...tenantActor(), email: "admin@restaurant.test" };
+    await expect(fixture.service.updateAccountEmail(actor, { email: " ADMIN@RESTAURANT.TEST " })).resolves.toBe(actor.email);
+    expect(fixture.state.emailUpdates).toEqual([]);
+    expect(fixture.state.lookedUpEmail).toBeNull();
+  });
+
+  it("rejects an email belonging to another account without changing either account", async () => {
+    const fixture = createFixture({ account: activeTenantAccount, emailAccount: { ...activeTenantAccount, id: "other-admin" } });
+    await expect(fixture.service.updateAccountEmail(tenantActor(), { email: "other@example.test" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(fixture.state.emailUpdates).toEqual([]);
+  });
+
+  it("translates a concurrent email collision but preserves unrelated database failures", async () => {
+    const duplicate = createFixture({ account: activeTenantAccount, emailAccount: null, updateEmailError: Object.assign(new Error("duplicate"), { code: "P2002" }) });
+    await expect(duplicate.service.updateAccountEmail(tenantActor(), { email: "new@example.test" })).rejects.toMatchObject({ code: "CONFLICT" });
+    const failure = new Error("database unavailable");
+    const unavailable = createFixture({ account: activeTenantAccount, emailAccount: null, updateEmailError: failure });
+    await expect(unavailable.service.updateAccountEmail(tenantActor(), { email: "new@example.test" })).rejects.toBe(failure);
+  });
+
+  it("prevents a superadmin from using the organization-account email operation", async () => {
+    const fixture = createFixture({ account: superAdminAccount });
+    await expect(fixture.service.updateAccountEmail({ ...tenantActor(), kind: "super-admin", role: "SUPER_ADMIN", organizationId: null, organizationSlug: null }, { email: "new@example.test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(fixture.state.emailUpdates).toEqual([]);
+  });
 });
 
 function createFixture(options: {
@@ -276,6 +325,8 @@ function createFixture(options: {
   cookieClearFails?: boolean;
   passwordMatches?: boolean;
   passwordChangeSucceeds?: boolean;
+  emailAccount?: AccountRecord | null;
+  updateEmailError?: Error;
 }) {
   const state: {
     lookedUpEmail: string | null;
@@ -287,6 +338,7 @@ function createFixture(options: {
     cookieCleared: boolean;
     throttleFailures: string[];
     throttleResets: string[];
+    emailUpdates: Parameters<IdentityRepository["updateEmail"]>[0][];
   } = {
     lookedUpEmail: null,
     comparedHash: null,
@@ -297,12 +349,13 @@ function createFixture(options: {
     cookieCleared: false,
     throttleFailures: [],
     throttleResets: [],
+    emailUpdates: [],
   };
 
   const repository: IdentityRepository = {
     async findAccountByEmail(email) {
       state.lookedUpEmail = email;
-      return options.account;
+      return options.emailAccount === undefined ? options.account : options.emailAccount;
     },
     async findAccountById() {
       return options.account;
@@ -321,6 +374,8 @@ function createFixture(options: {
       return options.passwordChangeSucceeds ?? true;
     },
     async updateEmail(input) {
+      state.emailUpdates.push(input);
+      if (options.updateEmailError) throw options.updateEmailError;
       return input.email;
     },
   };
@@ -393,8 +448,8 @@ function tenantActor() {
     role: "TENANT_ADMIN" as const,
     adminId: activeTenantAccount.id,
     email: activeTenantAccount.email,
-    tenantId: "tenant-1",
-    tenantSlug: "restaurant",
+    organizationId: "tenant-1",
+    organizationSlug: "restaurant",
     mustChangePassword: false,
     jti: "current-jti",
   };

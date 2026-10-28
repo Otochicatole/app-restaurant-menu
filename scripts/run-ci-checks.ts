@@ -7,7 +7,7 @@ if (!testDatabaseUrl) {
   process.exit(1);
 }
 
-const commands = ["check", "test:coverage", "test:integration", "test:e2e"] as const;
+const commands = ["check", "test:coverage", "test:integration", "test:migration-cutover", "test:migration-organizations", "test:migration-hardening", "test:schema-compatibility", "test:e2e"] as const;
 const testDatabase = await prepareDisposableTestDatabase(testDatabaseUrl);
 const environment = {
   ...process.env,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SYSTEM_FONT_FAMILIES, type MenuAssetView } from "../contracts";
 import { adminPrimaryButtonClass } from "@/ui/admin/AdminPrimitives";
 
-export function FontLibraryClient({ initialAssets }: { initialAssets: MenuAssetView[] }) {
+export function FontLibraryClient({ restaurantId, initialAssets }: { restaurantId: string; initialAssets: MenuAssetView[] }) {
   const [assets, setAssets] = useState(initialAssets);
   const [message, setMessage] = useState("");
   const fontFaces = assets
@@ -50,7 +50,7 @@ export function FontLibraryClient({ initialAssets }: { initialAssets: MenuAssetV
           if (!(file instanceof File)) return;
           form.set("kind", "FONT");
           setMessage("Subiendo...");
-          const response = await fetch("/api/editor/assets", { method: "POST", body: form });
+          const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/editor/assets`, { method: "POST", body: form });
           const payload = await response.json();
           if (response.ok && payload.success) {
             setAssets((items) => [payload.data, ...items]);
@@ -107,7 +107,7 @@ export function FontLibraryClient({ initialAssets }: { initialAssets: MenuAssetV
                 type="button"
                 className="text-xs font-semibold text-red-600 transition hover:text-red-800"
                 onClick={async () => {
-                  const response = await fetch(`/api/editor/assets/${asset.id}`, { method: "DELETE" });
+                  const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/editor/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" });
                   if (response.ok) {
                     setAssets((items) => items.filter((item) => item.id !== asset.id));
                   } else {

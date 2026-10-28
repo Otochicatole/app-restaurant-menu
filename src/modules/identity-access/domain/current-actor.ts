@@ -8,15 +8,15 @@ type ActorBase = {
 export type SuperAdminActor = ActorBase & {
   kind: "super-admin";
   role: "SUPER_ADMIN";
-  tenantId: null;
-  tenantSlug: null;
+  organizationId: null;
+  organizationSlug: null;
 };
 
 export type TenantAdminActor = ActorBase & {
   kind: "tenant-admin";
   role: "TENANT_ADMIN";
-  tenantId: string;
-  tenantSlug: string;
+  organizationId: string;
+  organizationSlug: string;
 };
 
 export type CurrentActor = SuperAdminActor | TenantAdminActor;

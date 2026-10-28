@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
+import type { PrismaClient } from "@/generated/prisma/client";
+import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
+import { assertAssetQuota } from "./asset-quota";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { prisma } from "@/platform/database/prisma";
 import { enqueueAssetCleanup } from "@/platform/storage/asset-cleanup-queue";
 import type {
   CanvasDocumentV1,
-  CreateMenuProjectCommand,
   MenuAssetKind,
   MenuAssetView,
   MenuProjectSummary,
@@ -15,9 +17,11 @@ import { documentAssetIds, normalizeLegacyCanvasDocument, validateCanvasDocument
 import type { MenuEditorRepository } from "../application/ports";
 
 export class PrismaMenuEditorRepository implements MenuEditorRepository {
-  async listProjects(tenantId: string): Promise<MenuProjectSummary[]> {
-    const projects = await prisma.menuProject.findMany({
-      where: { tenantId },
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listProjects(restaurantId: string): Promise<MenuProjectSummary[]> {
+    const projects = await this.client.menuProject.findMany({
+      where: { restaurantId },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -38,134 +42,43 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
     }));
   }
 
-  async getProject(tenantId: string, projectId: string): Promise<MenuProjectView | null> {
-    const project = await prisma.menuProject.findFirst({ where: { id: projectId, tenantId } });
+  async getProject(restaurantId: string, projectId: string): Promise<MenuProjectView | null> {
+    const project = await this.client.menuProject.findFirst({ where: { id: projectId, restaurantId } });
     return project ? toProjectView(project) : null;
   }
 
-  async getPrimaryProject(tenantId: string): Promise<MenuProjectView | null> {
-    const project = await prisma.menuProject.findFirst({ where: { tenantId, isPrimary: true } });
+  async getPrimaryProject(restaurantId: string): Promise<MenuProjectView | null> {
+    const project = await this.client.menuProject.findFirst({ where: { restaurantId } });
     return project ? toProjectView(project) : null;
   }
 
-  async ensurePrimaryProject(tenantId: string, document: CanvasDocumentV1): Promise<MenuProjectView> {
-    const existing = await prisma.menuProject.findFirst({ where: { tenantId, isPrimary: true } });
-    if (existing) return toProjectView(existing);
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true, slug: true, publicDescription: true },
-    });
-    if (!tenant) throw new NotFoundError("Tenant");
-
-    const project = await prisma.menuProject.create({
-      data: {
-        tenantId,
-        name: tenant.name,
-        slug: tenant.slug,
-        publicDescription: tenant.publicDescription,
-        isPrimary: true,
-        draftJson: JSON.stringify(document),
-        schemaVersion: document.schemaVersion,
-      },
-    });
-    return toProjectView(project);
-  }
-
-  async createProject(tenantId: string, input: CreateMenuProjectCommand, document: CanvasDocumentV1): Promise<MenuProjectView> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { multiMenuEnabled: true, maxMenus: true },
-    });
-    if (!tenant) throw new NotFoundError("Tenant");
-    if (!tenant.multiMenuEnabled) throw new BadRequestError("Esta cuenta no tiene habilitados varios menús.");
-    const currentMenus = await prisma.menuProject.count({ where: { tenantId } });
-    if (currentMenus >= tenant.maxMenus) {
-      throw new BadRequestError(`Esta cuenta ya alcanzó el cupo de ${tenant.maxMenus} menús.`);
-    }
-
-    try {
-      const project = await prisma.menuProject.create({
-        data: {
-          tenantId,
-          name: input.name,
-          slug: input.slug,
-          publicDescription: input.publicDescription,
-          isPrimary: false,
-          draftJson: JSON.stringify(document),
-          schemaVersion: document.schemaVersion,
-        },
-      });
-      return toProjectView(project);
-    } catch (error) {
-      if (isUniqueConstraintError(error)) throw new ConflictError("Ya existe un menú con ese slug.");
-      throw error;
-    }
-  }
-
-  async deleteProjects(tenantId: string, projectIds: string[]): Promise<{ deletedIds: string[]; remainingCount: number }> {
-    const uniqueIds = [...new Set(projectIds)];
-    if (uniqueIds.length === 0) return { deletedIds: [], remainingCount: await prisma.menuProject.count({ where: { tenantId } }) };
-
-    return prisma.$transaction(async (transaction) => {
-      const owned = await transaction.menuProject.findMany({
-        where: { tenantId, id: { in: uniqueIds } },
-        select: { id: true },
-      });
-      if (owned.length !== uniqueIds.length) throw new NotFoundError("Menu project");
-
-      const deletedIds = owned.map((project) => project.id);
-      await transaction.menuProject.deleteMany({ where: { tenantId, id: { in: deletedIds } } });
-
-      const remaining = await transaction.menuProject.findMany({
-        where: { tenantId },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, name: true, publicDescription: true, isPrimary: true },
-      });
-
-      if (remaining.length > 0 && !remaining.some((project) => project.isPrimary)) {
-        const nextPrimary = remaining[0]!;
-        await transaction.menuProject.update({
-          where: { id: nextPrimary.id },
-          data: { isPrimary: true },
-        });
-        await transaction.tenant.update({
-          where: { id: tenantId },
-          data: { name: nextPrimary.name, publicDescription: nextPrimary.publicDescription },
-        });
-      }
-
-      return { deletedIds, remainingCount: remaining.length };
-    });
-  }
-
-  async saveDraft(tenantId: string, projectId: string, baseRevision: number, document: CanvasDocumentV1): Promise<MenuProjectView> {
-    const project = await prisma.$transaction(async (transaction) => {
-      const current = await transaction.menuProject.findFirst({ where: { id: projectId, tenantId } });
+  async saveDraft(restaurantId: string, projectId: string, baseRevision: number, document: CanvasDocumentV1): Promise<MenuProjectView> {
+    const project = await this.client.$transaction(async (transaction) => {
+      const current = await transaction.menuProject.findFirst({ where: { id: projectId, restaurantId } });
       if (!current) throw new NotFoundError("Menu project");
       const updated = await transaction.menuProject.updateMany({
-        where: { id: projectId, tenantId, draftRevision: baseRevision },
+        where: { id: projectId, restaurantId, draftRevision: baseRevision },
         data: { draftJson: JSON.stringify(document), draftRevision: { increment: 1 }, schemaVersion: document.schemaVersion },
       });
       if (updated.count !== 1) throw new ConflictError("El documento cambió en otra pestaña.");
-      await replaceReferences(transaction, tenantId, current.id, document, "DRAFT");
-      return transaction.menuProject.findFirstOrThrow({ where: { id: projectId, tenantId } });
+      await replaceReferences(transaction, restaurantId, current.id, document, "DRAFT");
+      return transaction.menuProject.findFirstOrThrow({ where: { id: projectId, restaurantId } });
     });
     return toProjectView(project);
   }
 
-  async publish(tenantId: string, projectId: string, baseRevision: number, document: CanvasDocumentV1): Promise<MenuProjectView> {
-    const project = await prisma.$transaction(async (transaction) => {
-      const current = await transaction.menuProject.findFirst({ where: { id: projectId, tenantId } });
+  async publish(restaurantId: string, projectId: string, baseRevision: number, document: CanvasDocumentV1): Promise<MenuProjectView> {
+    const project = await this.client.$transaction(async (transaction) => {
+      const current = await transaction.menuProject.findFirst({ where: { id: projectId, restaurantId } });
       if (!current) throw new NotFoundError("Menu project");
       if (current.draftRevision !== baseRevision) throw new ConflictError("Guardá el borrador más reciente antes de publicar.");
       const draftJson = JSON.stringify(document);
       const draftChanged = current.draftJson !== draftJson;
       const nextRevision = current.draftRevision + (draftChanged ? 1 : 0);
-      await replaceReferences(transaction, tenantId, current.id, document, "DRAFT");
-      await replaceReferences(transaction, tenantId, current.id, document, "PUBLISHED");
+      await replaceReferences(transaction, restaurantId, current.id, document, "DRAFT");
+      await replaceReferences(transaction, restaurantId, current.id, document, "PUBLISHED");
       const updated = await transaction.menuProject.updateMany({
-        where: { id: projectId, tenantId, draftRevision: baseRevision },
+        where: { id: projectId, restaurantId, draftRevision: baseRevision },
         data: {
           ...(draftChanged ? { draftJson, draftRevision: { increment: 1 }, schemaVersion: document.schemaVersion } : {}),
           publishedJson: draftJson,
@@ -174,21 +87,21 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
         },
       });
       if (updated.count !== 1) throw new ConflictError("El documento cambió en otra pestaña.");
-      return transaction.menuProject.findFirstOrThrow({ where: { id: projectId, tenantId } });
+      return transaction.menuProject.findFirstOrThrow({ where: { id: projectId, restaurantId } });
     });
     return toProjectView(project);
   }
 
-  async listAssets(tenantId: string, kind?: MenuAssetKind): Promise<MenuAssetView[]> {
-    const assets = await prisma.menuAsset.findMany({
-      where: { tenantId, ...(kind ? { kind } : {}) },
+  async listAssets(restaurantId: string, kind?: MenuAssetKind): Promise<MenuAssetView[]> {
+    const assets = await this.client.menuAsset.findMany({
+      where: { restaurantId, ...(kind ? { kind } : {}) },
       orderBy: { createdAt: "desc" },
     });
     return assets.map(toAssetView);
   }
 
   async createAsset(input: {
-    tenantId: string;
+    restaurantId: string;
     kind: MenuAssetKind;
     name: string;
     mimeType: string;
@@ -198,103 +111,80 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
     width?: number;
     height?: number;
   }): Promise<MenuAssetView> {
-    const [tenant, usage] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: input.tenantId }, select: { assetQuotaBytes: true } }),
-      prisma.menuAsset.aggregate({ where: { tenantId: input.tenantId }, _sum: { byteSize: true } }),
-    ]);
-    if (!tenant) throw new NotFoundError("Tenant");
-    if ((usage._sum.byteSize ?? 0) + input.byteSize > tenant.assetQuotaBytes) throw new BadRequestError("Se alcanzó la cuota de archivos del restaurante.");
-    const asset = await prisma.menuAsset.create({ data: input });
+    const asset = await withSqliteTransaction(this.client, async (transaction) => {
+      await assertAssetQuota(transaction, input.restaurantId, input.byteSize);
+      return transaction.menuAsset.create({ data: input });
+    });
     return toAssetView(asset);
   }
 
-  async deleteAsset(tenantId: string, assetId: string): Promise<void> {
-    await prisma.$transaction(async (transaction) => {
-      const asset = await transaction.menuAsset.findFirst({ where: { id: assetId, tenantId } });
+  async deleteAsset(restaurantId: string, assetId: string): Promise<void> {
+    await this.client.$transaction(async (transaction) => {
+      const asset = await transaction.menuAsset.findFirst({ where: { id: assetId, restaurantId } });
       if (!asset) throw new NotFoundError("Asset");
-      const references = await transaction.menuAssetReference.count({ where: { tenantId, assetId } });
+      const references = await transaction.menuAssetReference.count({ where: { restaurantId, assetId } });
       if (references > 0) throw new ConflictError("No podés eliminar un asset que usa el menú.");
-      const templateReferences = await transaction.menuTemplateAssetReference.count({ where: { tenantId, assetId } });
+      const templateReferences = await transaction.menuTemplateAssetReference.count({ where: { restaurantId, assetId } });
       if (templateReferences > 0) throw new ConflictError("No podés eliminar un asset usado por una plantilla privada.");
       await enqueueAssetCleanup(asset.storageKey, transaction);
       await transaction.menuAsset.delete({ where: { id: asset.id } });
     });
   }
 
-  async getAsset(tenantId: string, assetId: string, scope: "private" | "published", projectId?: string) {
+  async getAsset(restaurantId: string, assetId: string, scope: "private" | "published", projectId?: string) {
     if (scope === "published") {
       if (!projectId) throw new BadRequestError("Menú requerido");
-      const project = await prisma.menuProject.findFirst({
-        where: { id: projectId, tenantId },
+      const project = await this.client.menuProject.findFirst({
+        where: { id: projectId, restaurantId },
         select: { publishedJson: true },
       });
       if (!project?.publishedJson) return null;
       const publishedDocument = validateCanvasDocument(normalizeLegacyCanvasDocument(JSON.parse(project.publishedJson)));
       if (!documentAssetIds(publishedDocument).has(assetId)) return null;
     }
-    const asset = await prisma.menuAsset.findFirst({
+    const asset = await this.client.menuAsset.findFirst({
       where: {
         id: assetId,
-        tenantId,
+        restaurantId,
       },
     });
     return asset ? { storageKey: asset.storageKey, mimeType: asset.mimeType, name: asset.name } : null;
   }
 
-  async getProfile(tenantId: string, projectId: string): Promise<RestaurantProfile> {
-    const project = await prisma.menuProject.findFirst({
-      where: { id: projectId, tenantId },
-      select: { name: true, publicDescription: true, slug: true },
-    });
-    if (!project) throw new NotFoundError("Menu project");
-    return project;
+  async getProfile(restaurantId: string, projectId: string): Promise<RestaurantProfile> {
+    const project = await this.client.menuProject.findFirst({ where: { id: projectId, restaurantId }, select: { restaurant: { select: { name: true, publicDescription: true, slug: true, landingSlug: true } } } });
+    if (!project) throw new NotFoundError("Carta");
+    return project.restaurant;
   }
 
-  async updateProfile(tenantId: string, projectId: string, profile: RestaurantProfile): Promise<RestaurantProfile> {
+  async updateProfile(restaurantId: string, projectId: string, profile: RestaurantProfile): Promise<RestaurantProfile> {
     try {
-      return await prisma.$transaction(async (transaction) => {
-        const current = await transaction.menuProject.findFirst({ where: { id: projectId, tenantId } });
-        if (!current) throw new NotFoundError("Menu project");
-        const project = await transaction.menuProject.update({
-          where: { id: current.id },
-          data: {
-            name: profile.name,
-            publicDescription: profile.publicDescription,
-            slug: profile.slug,
-          },
-          select: { name: true, publicDescription: true, slug: true, isPrimary: true },
-        });
-        if (project.isPrimary) {
-          await transaction.tenant.update({
-            where: { id: tenantId },
-            data: {
-              name: profile.name,
-              publicDescription: profile.publicDescription,
-              slug: profile.slug,
-            },
-          });
-        }
-        return { name: project.name, publicDescription: project.publicDescription, slug: project.slug };
+      return await this.client.$transaction(async (transaction) => {
+        const current = await transaction.menuProject.findFirst({ where: { id: projectId, restaurantId } });
+        if (!current) throw new NotFoundError("Carta");
+        const restaurant = await transaction.restaurant.update({ where: { id: restaurantId }, data: profile, select: { name: true, publicDescription: true, slug: true, landingSlug: true } });
+        await transaction.menuProject.update({ where: { id: current.id }, data: { name: profile.name, publicDescription: profile.publicDescription, slug: profile.slug } });
+        return restaurant;
       });
     } catch (error) {
-      if (isUniqueConstraintError(error)) throw new ConflictError("Ya existe un menú con ese slug.");
+      if (isUniqueConstraintError(error)) throw new ConflictError("Ya existe un restaurante con ese slug.");
       throw error;
     }
   }
 
-  async isSlugTaken(slug: string, excludeProjectId?: string, excludeTenantId?: string): Promise<boolean> {
+  async isSlugTaken(slug: string, excludeProjectId?: string, excludeRestaurantId?: string): Promise<boolean> {
     const [project, tenant] = await Promise.all([
-      prisma.menuProject.findFirst({
+      this.client.menuProject.findFirst({
         where: {
           slug,
           ...(excludeProjectId ? { NOT: { id: excludeProjectId } } : {}),
         },
         select: { id: true },
       }),
-      prisma.tenant.findFirst({
+      this.client.restaurant.findFirst({
         where: {
           slug,
-          ...(excludeTenantId ? { NOT: { id: excludeTenantId } } : {}),
+          ...(excludeRestaurantId ? { NOT: { id: excludeRestaurantId } } : {}),
         },
         select: { id: true },
       }),
@@ -302,25 +192,6 @@ export class PrismaMenuEditorRepository implements MenuEditorRepository {
     return Boolean(project || tenant);
   }
 
-  async getTenantMultiMenuEnabled(tenantId: string): Promise<boolean> {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { multiMenuEnabled: true } });
-    if (!tenant) throw new NotFoundError("Tenant");
-    return tenant.multiMenuEnabled;
-  }
-
-  async getTenantMenuQuota(tenantId: string): Promise<{ multiMenuEnabled: boolean; maxMenus: number; currentMenus: number }> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { multiMenuEnabled: true, maxMenus: true },
-    });
-    if (!tenant) throw new NotFoundError("Tenant");
-    const currentMenus = await prisma.menuProject.count({ where: { tenantId } });
-    return {
-      multiMenuEnabled: tenant.multiMenuEnabled,
-      maxMenus: tenant.multiMenuEnabled ? tenant.maxMenus : 1,
-      currentMenus,
-    };
-  }
 }
 
 function toProjectView(project: {
@@ -351,6 +222,7 @@ function toProjectView(project: {
 }
 
 function toAssetView(asset: {
+  restaurantId: string;
   id: string;
   kind: string;
   name: string;
@@ -369,28 +241,28 @@ function toAssetView(asset: {
     byteSize: asset.byteSize,
     width: asset.width,
     height: asset.height,
-    fontFamily: asset.fontFamily,
-    url: `/api/editor/assets/${encodeURIComponent(asset.id)}/file`,
+    fontFamily: asset.kind === "FONT" ? `editor-font-${asset.id}` : asset.fontFamily,
+    url: `/api/restaurants/${encodeURIComponent(asset.restaurantId)}/editor/assets/${encodeURIComponent(asset.id)}/file`,
     createdAt: asset.createdAt.toISOString(),
   };
 }
 
 async function replaceReferences(
   transaction: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  tenantId: string,
+  restaurantId: string,
   projectId: string,
   document: CanvasDocumentV1,
   scope: "DRAFT" | "PUBLISHED",
 ) {
   const ids = [...documentAssetIds(document)];
   if (ids.length) {
-    const assets = await transaction.menuAsset.findMany({ where: { tenantId, id: { in: ids } }, select: { id: true } });
+    const assets = await transaction.menuAsset.findMany({ where: { restaurantId, id: { in: ids } }, select: { id: true } });
     if (assets.length !== ids.length) throw new NotFoundError("Asset");
   }
-  await transaction.menuAssetReference.deleteMany({ where: { tenantId, projectId, scope } });
+  await transaction.menuAssetReference.deleteMany({ where: { restaurantId, projectId, scope } });
   if (ids.length) {
     await transaction.menuAssetReference.createMany({
-      data: ids.map((assetId) => ({ tenantId, projectId, assetId, scope })),
+      data: ids.map((assetId) => ({ restaurantId, projectId, assetId, scope })),
     });
   }
 }
