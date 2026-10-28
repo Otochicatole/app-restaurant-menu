@@ -63,8 +63,8 @@ const CURATED_STOCK_PHOTOS: CuratedStockPhoto[] = [
 
 interface LandingMediaModalProps {
   open: boolean;
-  tenantSlug: string;
-  tenantId?: string;
+  landingSlug: string;
+  restaurantId: string;
   currentUrl?: string;
   title?: string;
   onClose: () => void;
@@ -73,8 +73,8 @@ interface LandingMediaModalProps {
 
 export function LandingMediaModal({
   open,
-  tenantSlug,
-  tenantId,
+  landingSlug,
+  restaurantId,
   currentUrl = "",
   title = "Biblioteca de Imágenes",
   onClose,
@@ -91,8 +91,8 @@ export function LandingMediaModal({
 
   const buildPublicAssetUrl = useCallback(
     (assetId: string) =>
-      `/api/public/landing/${encodeURIComponent(tenantSlug)}/assets/${encodeURIComponent(assetId)}/file`,
-    [tenantSlug],
+      `/api/public/landing/${encodeURIComponent(landingSlug)}/assets/${encodeURIComponent(assetId)}/file`,
+    [landingSlug],
   );
 
   useEffect(() => {
@@ -101,9 +101,7 @@ export function LandingMediaModal({
     void (async () => {
       try {
         const query = new URLSearchParams({ kind: "IMAGE" });
-        if (tenantId) query.set("tenantId", tenantId);
-        if (tenantSlug) query.set("tenantSlug", tenantSlug);
-        const res = await fetch(`/api/editor/assets?${query.toString()}`, {
+        const res = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/editor/assets?${query.toString()}`, {
           credentials: "same-origin",
         });
         const payload = (await res.json()) as {
@@ -138,7 +136,7 @@ export function LandingMediaModal({
     return () => {
       cancelled = true;
     };
-  }, [open, tenantId, tenantSlug]);
+  }, [open, restaurantId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -152,10 +150,7 @@ export function LandingMediaModal({
       form.append("kind", "IMAGE");
       form.append("name", file.name.replace(/\.[^.]+$/, ""));
       form.append("file", file);
-      if (tenantId) form.append("tenantId", tenantId);
-      if (tenantSlug) form.append("tenantSlug", tenantSlug);
-
-      const res = await fetch("/api/editor/assets", {
+      const res = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/editor/assets`, {
         method: "POST",
         body: form,
         credentials: "same-origin",
@@ -358,7 +353,7 @@ export function LandingMediaModal({
                         <div className="relative aspect-4/3 w-full overflow-hidden bg-zinc-100">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={assetUrl}
+                            src={`/api/restaurants/${encodeURIComponent(restaurantId)}/editor/assets/${encodeURIComponent(asset.id)}/file`}
                             alt={asset.name}
                             loading="lazy"
                             className="h-full w-full object-cover transition duration-300 group-hover:scale-105"

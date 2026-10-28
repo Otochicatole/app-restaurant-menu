@@ -10,7 +10,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const { slug, id } = await params;
     const menu = await resolvePublishedMenuBySlug(slug);
     if (!menu) return new Response(null, { status: 404 });
-    const asset = await menuEditor.getAsset(menu.tenantId, id, "published", menu.projectId);
+    const asset = await menuEditor.getAsset(menu.restaurantId, id, "published", menu.projectId);
     if (!asset) return new Response(null, { status: 404 });
     const metadata = await blobStore.stat(asset.storageKey);
     if (!metadata) return new Response(null, { status: 404 });

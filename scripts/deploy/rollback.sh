@@ -64,6 +64,7 @@ acquire_deploy_lock
 assert_local_database_filesystem
 prepare_shared_environment
 validate_shared_environment
+install_schema_guard
 
 if [[ ! -L "$CURRENT_LINK" || ! -L "$PREVIOUS_LINK" ]]; then
   echo "ERROR: se necesitan los enlaces current y previous para hacer rollback." >&2
@@ -83,6 +84,10 @@ if service_is_active; then
 fi
 
 if [[ -z "$requested_backup" ]]; then
+  assert_release_schema_compatible "$previous_release" || {
+    echo "ERROR: el rollback code-only no puede cruzar generaciones de esquema. Conserva el release actual o restaura explicitamente un snapshot compatible." >&2
+    exit 1
+  }
   echo "Rollback code-only: la base SQLite no sera modificada."
   replace_link "$previous_release" "$CURRENT_LINK"
   if ! replace_link "$current_release" "$PREVIOUS_LINK"; then
@@ -148,8 +153,12 @@ recover_explicit_rollback() {
     fi
   fi
   if (( recovery_ok == 1 && service_was_active == 1 )); then
-    sudo systemctl start "$SERVICE"
-    "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    if assert_release_schema_compatible "$(resolve_release "$CURRENT_LINK")"; then
+      sudo systemctl start "$SERVICE"
+      "$SCRIPT_DIR/health-check.sh" "$HEALTH_URL" || true
+    else
+      echo "ERROR: el release actual no soporta el snapshot restaurado; el servicio queda detenido." >&2
+    fi
   elif (( recovery_ok == 0 )); then
     echo "ERROR: la recuperacion no pudo verificarse; $SERVICE queda detenido." >&2
   fi
@@ -174,10 +183,9 @@ fi
 database_changed=1
 restore_database_backup "$backup" "before-explicit-rollback"
 
-# Both releases are tested against the restored snapshot before public traffic
-# can resume. If either is incompatible, the rescue snapshot is restored.
+# Validate the destination release against its snapshot before public traffic
+# can resume. Different schema generations are intentionally incompatible.
 run_candidate_health "$previous_release" "$CANDIDATE_PORT" "rollback-previous-$(basename "$previous_release")"
-run_candidate_health "$current_release" "$CANDIDATE_PORT" "rollback-current-$(basename "$current_release")"
 
 links_swapped=1
 replace_link "$previous_release" "$CURRENT_LINK"

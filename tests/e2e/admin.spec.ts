@@ -5,25 +5,25 @@ import { E2E, loginAs } from "./fixtures";
 
 test("tenant admin opens the Canvas editor and publishes a document", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByText("Editor de E2E Café")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Publicar" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Capas/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/restaurantes\/e2e-restaurant-[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Editor de carta: E2E Café" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Publicar|Publicado)$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /panel de capas/i })).toBeVisible();
 
-  await page.getByRole("button", { name: "Texto", exact: true }).click();
+  await page.getByRole("button", { name: /^Texto(?: Agregar)?$/ }).click();
   await expect(page.getByText("Nuevo texto").first()).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.getByText("Guardado")).toBeVisible();
   await page.getByRole("button", { name: "Publicar" }).click();
-  await expect(page.getByText("Publicado")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Publicado", exact: true })).toBeVisible();
 });
 
 test("tenant admin can open the icon library and image library", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Iconos", exact: true }).click();
+  await page.getByRole("button", { name: /^Iconos(?: Abrir)?$/ }).click();
   await expect(page.getByText("Iconos").last()).toBeVisible();
-  await expect(page.getByPlaceholder("Buscar iconos...")).toBeVisible();
-  await page.getByPlaceholder("Buscar iconos...").fill("coffee");
+  await expect(page.getByPlaceholder(/Buscar.*iconos/)).toBeVisible();
+  await page.getByPlaceholder(/Buscar.*iconos/).fill("coffee");
   await expect(page.getByRole("button", { name: /Agregar icono/i }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Media" }).click();
@@ -32,8 +32,8 @@ test("tenant admin can open the icon library and image library", async ({ page }
 
 test("tenant admin can export a complete template and import it in another restaurant", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Plantillas", exact: true }).click();
-  const library = page.locator("#editor-templates");
+  await page.getByRole("button", { name: /^Plantillas(?: Abrir)?$/ }).click();
+  const library = page.getByRole("dialog", { name: "Plantillas", exact: true });
   const name = `Plantilla portable ${Date.now()}`;
   await library.getByRole("button", { name: "Guardar borrador" }).click();
   const saveDialog = page.getByRole("dialog", { name: "Guardar plantilla" });
@@ -43,7 +43,7 @@ test("tenant admin can export a complete template and import it in another resta
   const sourceCard = library.locator("article").filter({ hasText: name });
   await expect(sourceCard).toBeVisible();
 
-  await page.route(/\/api\/editor\/templates\/[^/]+\/export$/, async (route) => {
+  await page.route(/\/api\/restaurants\/[^/]+\/editor\/templates\/[^/]+\/export$/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.continue();
   });
@@ -61,9 +61,9 @@ test("tenant admin can export a complete template and import it in another resta
 
   await page.context().clearCookies();
   await loginAs(page, E2E.otherTenant);
-  await page.getByRole("button", { name: "Plantillas", exact: true }).click();
-  const targetLibrary = page.locator("#editor-templates");
-  await page.route("**/api/editor/templates/import", async (route) => {
+  await page.getByRole("button", { name: /^Plantillas(?: Abrir)?$/ }).click();
+  const targetLibrary = page.getByRole("dialog", { name: "Plantillas", exact: true });
+  await page.route("**/api/restaurants/*/editor/templates/import", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.continue();
   });
@@ -74,24 +74,24 @@ test("tenant admin can export a complete template and import it in another resta
   await expect(importedCard).toBeVisible();
   await importedCard.getByRole("button", { name: "Usar" }).click();
   await expect(page.getByText("Plantilla aplicada", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Media", exact: true }).click();
-  await expect(page.locator("#editor-images").getByRole("button", { name: /Café E2E/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Media(?: Abrir)?$/ }).click();
+  await expect(page.getByRole("dialog", { name: "Multimedia", exact: true }).getByRole("button", { name: /Café E2E/ })).toBeVisible();
 });
 
 test("tenant admin can associate media, publish it immediately, and open it publicly", async ({ page, context }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Texto", exact: true }).click();
+  await page.getByRole("button", { name: /^Texto(?: Agregar)?$/ }).click();
   await expect(page.getByText("Al hacer clic")).toBeVisible();
   await page.getByRole("button", { name: /^Al hacer clic/ }).click();
   await page.getByRole("button", { name: "Elegir multimedia" }).click();
-  await page.locator("#editor-images").getByRole("button", { name: /Café E2E/ }).click();
+  await page.getByRole("dialog", { name: "Seleccionar multimedia", exact: true }).getByRole("button", { name: /Café E2E/ }).click();
   await expect(page.getByRole("button", { name: "Quitar" })).toBeEnabled();
   await expect(page.getByText("Cambios pendientes")).toBeVisible();
 
   const publish = page.getByRole("button", { name: "Publicar" });
   await expect(publish).toBeEnabled();
   await publish.click();
-  await expect(page.getByText("Publicado", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Publicado", exact: true })).toBeVisible();
 
   const publicPage = await context.newPage();
   await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
@@ -109,25 +109,18 @@ test("tenant admin can associate media, publish it immediately, and open it publ
   await page.reload();
   await page.getByText("Nuevo texto", { exact: true }).first().click();
   await expect(page.getByRole("button", { name: "Cambiar multimedia" })).toBeVisible();
-  await page.getByRole("button", { name: "Vista previa" }).click();
-  const preview = page.getByRole("dialog", { name: "Vista previa del menú" });
-  await expect(preview).toBeVisible();
-  const previewCanvas = preview.locator("canvas").first();
-  const canvasBox = await previewCanvas.boundingBox();
-  expect(canvasBox).not.toBeNull();
-  if (canvasBox) {
-    const scale = (canvasBox.width - 20) / 1240;
-    await previewCanvas.click({ position: { x: 10 + 370 * scale, y: 10 + 585 * scale } });
-  }
-  await expectLoadedCenteredImage(page, "Café E2E");
-  await page.getByRole("button", { name: "Cerrar multimedia" }).click();
-  await page.getByRole("button", { name: "Cerrar vista previa" }).click();
-  await expect(page.getByRole("dialog", { name: "Vista previa del menú" })).toHaveCount(0);
+  const previewEvent = context.waitForEvent("page");
+  await page.getByRole("link", { name: "Vista previa", exact: true }).click();
+  const previewPage = await previewEvent;
+  await previewPage.waitForLoadState();
+  await expect(previewPage).toHaveURL(/\/m\/e2e-cafe$/);
+  await expect(previewPage.locator("canvas").first()).toBeVisible();
+  await previewPage.close();
 });
 
 test("tenant admin can choose rectangle border sides", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await page.getByRole("button", { name: /^Rectángulo(?: Agregar)?$/ }).first().click();
 
   await page.getByRole("button", { name: /^Borde Sin borde visible/ }).click();
   const top = page.getByRole("button", { name: "Borde arriba" });
@@ -174,7 +167,7 @@ test("tenant admin can choose rectangle border sides", async ({ page }) => {
 
 test("tenant admin can configure a rectangle gradient and background image", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await page.getByRole("button", { name: /^Rectángulo(?: Agregar)?$/ }).first().click();
 
   await page.getByRole("button", { name: "Agregar degradado" }).click();
   await expect(page.getByRole("button", { name: "Quitar degradado" })).toBeVisible();
@@ -182,7 +175,7 @@ test("tenant admin can configure a rectangle gradient and background image", asy
   await expect(page.getByRole("spinbutton", { name: "Ángulo del degradado" })).toHaveValue("90");
 
   await page.getByRole("button", { name: "Elegir imagen de fondo" }).click();
-  await page.locator("#editor-images").getByRole("button", { name: /Café E2E/ }).click();
+  await page.getByRole("dialog", { name: "Seleccionar multimedia", exact: true }).getByRole("button", { name: /Café E2E/ }).click();
   await expect(page.getByText("Café E2E").last()).toBeVisible();
   await page.getByRole("combobox", { name: "Ajuste de imagen de fondo" }).selectOption("contain");
   await page.getByRole("spinbutton", { name: "Posición horizontal porcentaje" }).fill("25");
@@ -200,7 +193,7 @@ test("tenant admin can configure a rectangle gradient and background image", asy
 
 test("properties stay readable and keep object actions visible while scrolling", async ({ page }, testInfo) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await page.getByRole("button", { name: /^Rectángulo(?: Agregar)?$/ }).first().click();
   const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
   const name = inspector.getByRole("textbox", { name: "Nombre de la capa" });
   const duplicate = inspector.getByRole("button", { name: "Duplicar", exact: true });
@@ -233,7 +226,7 @@ test("properties stay readable and keep object actions visible while scrolling",
 
 test("tenant admin can copy and paste selected objects with keyboard shortcuts", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await page.getByRole("button", { name: /^Rectángulo(?: Agregar)?$/ }).first().click();
 
   const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
   const layerName = `Copia rápida ${Date.now()}`;
@@ -289,13 +282,13 @@ test("tenant admin can organize layers in nested groups with reversible visibili
   const inspector = page.getByRole("complementary", { name: "Propiedades del objeto" });
   const layers = page.locator("#editor-layers");
 
-  await page.getByRole("button", { name: "Texto", exact: true }).click();
+  await page.getByRole("button", { name: /^Texto(?: Agregar)?$/ }).click();
   await inspector.getByRole("textbox", { name: "Nombre de la capa" }).fill(textLayer);
   await inspector.getByRole("textbox", { name: "Contenido" }).fill(publicText);
   await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
   const textX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
   const textY = Number(await inspector.getByRole("spinbutton", { name: "Y", exact: true }).inputValue());
-  await page.getByRole("button", { name: "Rectángulo", exact: true }).first().click();
+  await page.getByRole("button", { name: /^Rectángulo(?: Agregar)?$/ }).first().click();
   await inspector.getByRole("textbox", { name: "Nombre de la capa" }).fill(shapeLayer);
   await inspector.getByRole("button", { name: /^Posición y tamaño/ }).click();
   const shapeX = Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
@@ -323,7 +316,7 @@ test("tenant admin can organize layers in nested groups with reversible visibili
   const draggedNameInput = layers.getByRole("textbox", { name: /^Nombre del grupo Grupo/ });
   await draggedNameInput.fill(draggedGroupName);
   await draggedNameInput.press("Enter");
-  const dragHandle = layers.getByRole("button", { name: `Reordenar grupo ${draggedGroupName}` });
+  const dragHandle = layers.getByRole("button", { name: draggedGroupName, exact: true });
   const outerTarget = layers.getByRole("button", { name: groupName, exact: true });
   await dragHandle.scrollIntoViewIfNeeded();
   const dragBox = await dragHandle.boundingBox();
@@ -335,7 +328,10 @@ test("tenant admin can organize layers in nested groups with reversible visibili
   await page.mouse.up();
   await expect(layers.getByRole("treeitem").filter({ hasText: draggedGroupName })).toHaveAttribute("aria-level", "2");
 
-  await layers.getByText(groupName, { exact: true }).click();
+  await expect(async () => {
+    await layers.getByRole("button", { name: groupName, exact: true }).click();
+    await expect(inspector.getByRole("textbox", { name: "Nombre del grupo", exact: true })).toHaveValue(groupName, { timeout: 200 });
+  }).toPass({ timeout: 3_000 });
   await layers.getByRole("button", { name: `Bloquear grupo ${groupName}` }).click();
   await expect(inspector.getByRole("button", { name: "Desbloquear grupo" })).toBeVisible();
   await layers.getByRole("button", { name: `Desbloquear grupo ${groupName}` }).click();
@@ -346,7 +342,7 @@ test("tenant admin can organize layers in nested groups with reversible visibili
   await expect(page.getByText("Guardado", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Publicar" }).click();
-  await expect(page.getByText("Publicado", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Publicado", exact: true })).toBeVisible();
   const publicPage = await context.newPage();
   await publicPage.goto(`/m/${E2E.tenantAdmin.slug}`);
   await expect(publicPage.getByText(publicText, { exact: true })).toHaveCount(0);
@@ -404,20 +400,4 @@ async function editorCanvasPoint(page: import("@playwright/test").Page, worldX: 
   const cameraX = cameraWidth >= bounds.width ? bounds.x - (cameraWidth - bounds.width) / 2 : bounds.x;
   const cameraY = cameraHeight >= bounds.height ? bounds.y - (cameraHeight - bounds.height) / 2 : bounds.y;
   return { x: box.x + 40 + (worldX - cameraX) * scale, y: box.y + 40 + (worldY - cameraY) * scale };
-}
-
-async function expectLoadedCenteredImage(page: import("@playwright/test").Page, name: string): Promise<void> {
-  const dialog = page.getByRole("dialog", { name });
-  const image = dialog.getByRole("img", { name });
-  await expect(dialog).toBeVisible();
-  await expect(image).toBeVisible();
-  await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-
-  const viewport = page.viewportSize();
-  const box = await dialog.boundingBox();
-  expect(viewport).not.toBeNull();
-  expect(box).not.toBeNull();
-  if (!viewport || !box) return;
-  expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
-  expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
 }

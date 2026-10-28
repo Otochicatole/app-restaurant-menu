@@ -33,7 +33,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "bun run scripts/require-test-database.ts --prepare && bun run build:e2e && bun run start:e2e",
+    command: process.env.PLAYWRIGHT_SKIP_BUILD === "1"
+      ? "bun run scripts/require-test-database.ts --prepare && bun run start:e2e"
+      : "bun run scripts/require-test-database.ts --prepare && bun run build:e2e && bun run start:e2e",
     env: {
       ...process.env,
       APP_URL: baseURL,

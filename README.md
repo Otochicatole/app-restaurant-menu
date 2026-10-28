@@ -1,16 +1,20 @@
-# Menús digitales multiusuario
+# Organizaciones y restaurantes
 
-La aplicación usa SQLite en un único host y separa los datos por tenant. Cada cliente tiene una cuenta CMS y un menú público en `/m/[slug]`. El superadministrador gestiona cuentas desde `/superadmin`; el login único está en `/admin/login`.
+La aplicación usa SQLite en un único host. Cada cuenta CMS administra una organización con uno o varios restaurantes. Cada restaurante tiene una carta, landing, reservas, eventos, horarios y biblioteca de archivos independientes. El superadministrador gestiona organizaciones, cupos y habilitaciones por restaurante desde `/superadmin`; el login único está en `/admin/login`.
+
+El selector está en `/admin/restaurantes`. Todas las pantallas y APIs privadas incluyen el ID del restaurante: `/admin/restaurantes/[restaurantId]` y `/api/restaurants/[restaurantId]/editor/...`. La cookie recuerda la última selección, pero las operaciones siempre autorizan el restaurante explícito contra la organización autenticada. Cuenta, correo y contraseña se administran en `/admin/account`.
+
+Las URLs públicas siguen en `/m/[slug]` y `/l/[landingSlug]`; ambos slugs pueden ser distintos. Suspender una organización deshabilita todos sus restaurantes. Suspender uno de ellos no afecta a los demás.
 
 ## Arquitectura
 
-El código está organizado como monolito modular por capacidades en `src/modules`: `identity-access`, `tenant-management`, `menu-editor` y `public-menu`. El contenido gastronómico vive en documentos Canvas versionados; cada módulo publica solamente `contracts.ts`, `server.ts` y, cuando tiene interfaz, `ui.ts`; dominio, aplicación, infraestructura y presentación permanecen privados.
+El código está organizado como monolito modular por capacidades en `src/modules`: `identity-access`, `organization-management`, `restaurant-management`, `menu-editor`, `public-menu`, `landing-management` y `reservation-management`. El contenido gastronómico vive en documentos Canvas versionados; cada módulo publica solamente `contracts.ts`, `server.ts` y, cuando tiene interfaz, `ui.ts`; dominio, aplicación, infraestructura y presentación permanecen privados.
 
 `src/app` es el composition root HTTP/Next.js, `src/platform` contiene adaptadores técnicos y `src/ui` conserva únicamente UI realmente compartida. ESLint y dependency-cruiser bloquean imports profundos, ciclos, dependencias de frameworks en dominio/aplicación y dependencias de plataforma hacia negocio.
 
 ## Plantillas Canvas
 
-El editor incluye tres presets globales (Minimalista vertical, Cafetería y Gourmet) y permite guardar el borrador de cada restaurante como plantilla privada. Una plantilla puede enviarse a la comunidad para moderación desde `/superadmin`; sólo las plantillas públicas aprobadas aparecen para otros restaurantes. Las miniaturas se generan desde el documento Canvas y los assets públicos se clonan para mantener el aislamiento entre tenants. Aplicar una plantilla reemplaza únicamente el borrador y se puede deshacer; la publicación vigente sólo cambia al pulsar **Publicar**.
+El editor incluye tres presets globales (Minimalista vertical, Cafetería y Gourmet) y permite guardar el borrador de cada restaurante como plantilla privada. Una plantilla puede enviarse a la comunidad para moderación desde `/superadmin`; sólo las plantillas públicas aprobadas aparecen para otros restaurantes. Las miniaturas se generan desde el documento Canvas y los assets públicos se clonan para mantener el aislamiento entre restaurantes. Aplicar una plantilla reemplaza únicamente el borrador y se puede deshacer; la publicación vigente sólo cambia al pulsar **Publicar**.
 
 ## Configuración
 
@@ -22,7 +26,7 @@ SQLite y el storage usan rutas absolutas en producción. Para `APP_RELEASE_ROOT=
 
 ```bash
 bun install
-bun x prisma migrate deploy
+bun run db:cutover
 bun run db:seed
 bun run dev
 ```
@@ -50,7 +54,38 @@ bun run check:ci
 
 `check:ci` exige `TEST_DATABASE_URL`, fuerza que toda la aplicación use ese archivo durante la verificación y ejecuta lint, límites arquitectónicos, typecheck, unitarias, cobertura, integración SQLite, build y Playwright. Playwright usa build limpio, puerto, base y storage dedicados, sin reutilizar servidores.
 
-El almacenamiento actual es local y debe estar en un volumen persistente. Cada tenant tiene una cuota configurable y se mantienen los límites por archivo de imagen y fuente. Para escalar a varias instancias será necesario migrar a object storage.
+El almacenamiento actual es local y debe estar en un volumen persistente. Cada restaurante tiene una cuota configurable y sus archivos se guardan bajo `restaurants/[restaurantId]`. Las bibliotecas y plantillas privadas se aíslan por restaurante; el catálogo público aprobado y los presets son globales. Para escalar a varias instancias será necesario migrar a object storage.
+
+## Migración de cuentas existentes
+
+El cambio a organizaciones usa la generación de esquema **2**, registrada en `app-schema-generation` y en `AppSchemaState`. El despliegue coordinado detiene el servicio, crea un backup consistente, aplica SQL y ejecuta `scripts/cutover-organizations.ts` antes de validar el candidato y reabrir tráfico. `db:cutover` y `deploy:local` también respaldan la base existente con `VACUUM INTO` antes de modificarla, incluyendo los datos del WAL. `deploy:local` y la preparación de bases de prueba completan el backfill. En un entorno local, detené el servidor antes de ejecutar `bun run db:cutover` o `bun run deploy:local`; en producción usá el flujo coordinado de `redeploy.sh`.
+
+Cada menú anterior se convierte en restaurante dentro de la organización de su cuenta. El principal recibe la landing histórica, módulos y plantillas de landing, eventos, horarios y reservas; los demás comienzan con esos sistemas vacíos. Se conservan las credenciales, sesiones, documentos, revisiones y URLs públicas. La biblioteca y las plantillas privadas de carta se copian a cada restaurante y se remapean sus referencias, de modo que modificar o eliminar una copia no afecta a otra.
+
+El backfill es reanudable: mientras falta un archivo o una validación no termina, el esquema permanece en `MIGRATING` y readiness rechaza servir tráfico. Los archivos originales se conservan para recuperar el backup previo. No ejecutar limpieza manual de esos originales durante el cutover.
+
+Antes de reabrir tráfico, un fallo del despliegue restaura el snapshot. Después, no se restauran datos automáticamente. Los guards de arranque y rollback rechazan releases de generación 1 contra una base de generación 2. El rollback con restauración explícita conserva el consentimiento destructivo existente. Las migraciones que cambien de generación requieren el despliegue coordinado; `migrate.sh` no reiniciará un release incompatible.
+
+Verificaciones de migración en bases temporales:
+
+```bash
+bun run test:migration-cutover
+bun run test:migration-organizations
+bun run test:migration-hardening
+bun run test:schema-compatibility
+```
+
+## Integridad SQL y concurrencia
+
+La migración de endurecimiento conserva los datos y las claves foráneas compuestas entre restaurantes. Restablece emails únicos sin distinguir mayúsculas y valida roles, pertenencia a organización, estados, capacidades, tamaños, dimensiones y revisiones mediante restricciones SQL. Los códigos de reserva son únicos dentro de cada restaurante. Estas restricciones y la collation de email están escritas en SQL: deben conservarse cuando una migración futura reconstruya una tabla, aunque Prisma no las represente en su esquema.
+
+Los comandos `db:migrate`, `db:cutover` y los despliegues ejecutan un preflight que informa tablas e IDs incompatibles antes de migrar. No corrige ni elimina datos automáticamente. `db:migrate` también respalda la base existente; ejecutalo con el servidor detenido. Para comprobar solamente los datos usá `bun run scripts/schema-hardening-preflight.ts`. La preparación local y de pruebas habilita WAL, igual que el despliegue en Linux. El guard de arranque rechaza bases en otro modo para evitar bloqueos al convertir lecturas concurrentes en escrituras.
+
+Las cuotas se verifican en la misma transacción que registra los archivos, incluyendo importaciones y aplicación de plantillas. Las plantillas reutilizan contenido del mismo tipo, MIME y checksum antes de calcular los bytes nuevos. Los archivos se preparan fuera de la transacción y se limpian si ésta falla. Las transacciones de cuota y aforo reintentan hasta tres veces ante bloqueos transitorios de SQLite.
+
+El aforo de eventos cuenta personas en reservas pendientes, confirmadas y completadas. Crear, editar o reactivar una reserva debe respetarlo; cancelar o rechazar libera cupo. Varias reservas regulares pueden compartir horario. El campo `dailyReservationCapacity` se conserva sin aplicar todavía un límite diario.
+
+Seguimientos pendientes: las referencias de archivos usadas por landings requieren proteger conjuntamente el borrador SQL y la publicación en storage; el guard de borrado actual sólo cubre cartas y plantillas privadas de carta. La paginación SQL de plantillas también queda para un cambio independiente.
 
 Los reemplazos y borrados encolan la limpieza física después del commit de base. Ejecutá `./scripts/deploy/run-locked.sh bun run storage:cleanup` periódicamente desde un timer/cron; el wrapper comparte el lock de operación con los despliegues. El comando es idempotente, aplica lease entre workers y devuelve error si algún archivo debe reintentarse.
 
@@ -73,7 +108,7 @@ Preparación inicial:
 
 `redeploy.sh` obtiene `origin/main` sin modificar el checkout y compila el release mientras la versión actual sigue activa. Después entra en una ventana de mantenimiento: detiene el servicio, completa el checkpoint WAL, valida integridad y foreign keys, crea un backup consistente mediante la API de backup de SQLite y aplica las migraciones. El candidato se levanta primero en un puerto loopback privado y debe superar `/api/health` antes de activar `current`.
 
-Si la migración o ese health privado fallan, el script restaura automáticamente el snapshot y vuelve a iniciar el release anterior. Una vez validado el candidato, cualquier fallo posterior hace solamente rollback de código: nunca restaura una base antigua que pudiera descartar escrituras de usuarios.
+Si la migración o ese health privado fallan, el script restaura automáticamente el snapshot y vuelve a iniciar el release anterior. Una vez validado el candidato, cualquier fallo posterior permite solamente rollback de código compatible: nunca restaura una base antigua que pudiera descartar escrituras de usuarios. Si el release previo corresponde a otra generación, el servicio queda detenido y se conserva la base nueva para recuperar con código compatible.
 
 Para volver manualmente al release previo sin modificar datos:
 
@@ -81,7 +116,7 @@ Para volver manualmente al release previo sin modificar datos:
 ./scripts/deploy/rollback.sh
 ```
 
-El rollback normal siempre es code-only. Por eso las migraciones productivas deben ser compatibles con el release anterior. Restaurar datos es una operación distinta y destructiva que exige un snapshot administrado y confirmación explícita:
+El rollback normal es code-only y comprueba compatibilidad antes de cambiar los enlaces. Restaurar datos para volver a otra generación es una operación distinta y destructiva que exige un snapshot administrado y confirmación explícita:
 
 ```bash
 ./scripts/deploy/rollback.sh \

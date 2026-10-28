@@ -2,6 +2,9 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { assertLocalSqliteUrl } from "../src/platform/config/sqlite-url";
+import { backupSqliteDatabase } from "./sqlite-backup";
+import { assertSchemaHardeningPreflight } from "./schema-hardening-preflight";
+import { configureSqliteWal } from "./configure-sqlite-wal";
 
 const projectRoot = process.cwd();
 const storageRoot = path.resolve(process.env.STORAGE_ROOT?.trim() || path.join(projectRoot, "storage"));
@@ -21,9 +24,17 @@ await mkdir(storageRoot, { recursive: true });
 const databasePath = databaseUrl.slice("file:".length);
 const absoluteDatabasePath = path.isAbsolute(databasePath) ? databasePath : path.resolve(projectRoot, databasePath);
 await mkdir(path.dirname(absoluteDatabasePath), { recursive: true });
-await run("x", "prisma", "migrate", "deploy");
+await assertSchemaHardeningPreflight(databaseUrl);
+await run("run", "scripts/cutover-organizations.ts", "--preflight");
+const backupPath = await backupSqliteDatabase(databaseUrl);
+if (backupPath) console.log(`Backup SQLite consistente creado: ${backupPath}`);
 await run("x", "prisma", "generate");
 await run("run", "build");
+await run("run", "scripts/cutover-menu-editor.ts");
+await run("run", "scripts/cutover-organizations.ts", "--preflight");
+await run("x", "prisma", "migrate", "deploy");
+await run("run", "scripts/cutover-organizations.ts");
+await configureSqliteWal(databaseUrl);
 
 if (process.argv.includes("--serve")) await run("run", "start");
 else console.log(`Deploy local listo. SQLite: ${databaseUrl}. Servidor: bun run start (puerto 8201).`);

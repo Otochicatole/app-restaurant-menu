@@ -10,54 +10,64 @@ import type {
   UpsertRestaurantEventCommand,
   UpsertTimeSlotCommand,
 } from "../contracts";
+import type { DomainRestaurantEvent } from "../domain/availability-engine";
 
 export interface ReservationRepositoryPort {
-  isLandingEnabled(tenantId: string): Promise<boolean>;
-  getTenantPublicContext(slug: string): Promise<{
-    tenantId: string;
+  isLandingEnabled(restaurantId: string): Promise<boolean>;
+  getRestaurantInfo(restaurantId: string): Promise<{
+    name: string;
+    landingSlug: string;
+  } | null>;
+  getRestaurantPublicContext(slug: string): Promise<{
+    restaurantId: string;
     name: string;
     slug: string;
     landingEnabled: boolean;
   } | null>;
 
   // Time slots
-  getTimeSlots(tenantId: string): Promise<TimeSlotView[]>;
-  upsertTimeSlot(tenantId: string, cmd: UpsertTimeSlotCommand): Promise<TimeSlotView>;
-  deleteTimeSlot(tenantId: string, slotId: string): Promise<void>;
+  getTimeSlots(restaurantId: string): Promise<TimeSlotView[]>;
+  upsertTimeSlot(restaurantId: string, cmd: UpsertTimeSlotCommand): Promise<TimeSlotView>;
+  deleteTimeSlot(restaurantId: string, slotId: string): Promise<void>;
 
   // Recurring closures
-  getRecurringClosures(tenantId: string): Promise<RecurringClosureView[]>;
+  getRecurringClosures(restaurantId: string): Promise<RecurringClosureView[]>;
   setRecurringClosures(
-    tenantId: string,
+    restaurantId: string,
     closures: { dayOfWeek: number; reason: string }[],
   ): Promise<RecurringClosureView[]>;
 
   // Blocked dates
-  getBlockedDates(tenantId: string): Promise<BlockedDateView[]>;
-  addBlockedDate(tenantId: string, date: string, reason: string): Promise<BlockedDateView>;
-  removeBlockedDate(tenantId: string, id: string): Promise<void>;
+  getBlockedDates(restaurantId: string): Promise<BlockedDateView[]>;
+  addBlockedDate(restaurantId: string, date: string, reason: string): Promise<BlockedDateView>;
+  removeBlockedDate(restaurantId: string, id: string): Promise<void>;
 
   // Events
-  getEvents(tenantId: string): Promise<RestaurantEventView[]>;
-  upsertEvent(tenantId: string, cmd: UpsertRestaurantEventCommand): Promise<RestaurantEventView>;
-  deleteEvent(tenantId: string, eventId: string): Promise<void>;
+  getEvents(restaurantId: string): Promise<RestaurantEventView[]>;
+  getEventById(restaurantId: string, eventId: string): Promise<RestaurantEventView | null>;
+  getAvailabilityEvents(
+    restaurantId: string,
+    range: { from: string; to: string },
+  ): Promise<DomainRestaurantEvent[]>;
+  upsertEvent(restaurantId: string, cmd: UpsertRestaurantEventCommand): Promise<RestaurantEventView>;
+  deleteEvent(restaurantId: string, eventId: string): Promise<void>;
 
   // Reservations
   getReservations(
-    tenantId: string,
+    restaurantId: string,
     filter?: { date?: string; status?: ReservationStatus },
   ): Promise<ReservationView[]>;
-  getReservationById(tenantId: string, reservationId: string): Promise<ReservationView | null>;
+  getReservationById(restaurantId: string, reservationId: string): Promise<ReservationView | null>;
   createReservation(
-    tenantId: string,
+    restaurantId: string,
     cmd: AdminCreateReservationCommand,
     code: string,
   ): Promise<ReservationView>;
-  updateReservation(tenantId: string, cmd: UpdateReservationCommand): Promise<ReservationView>;
+  updateReservation(restaurantId: string, cmd: UpdateReservationCommand): Promise<ReservationView>;
   updateReservationStatus(
-    tenantId: string,
+    restaurantId: string,
     id: string,
     status: ReservationStatus,
   ): Promise<ReservationView>;
-  deleteReservation(tenantId: string, id: string): Promise<void>;
+  deleteReservation(restaurantId: string, id: string): Promise<void>;
 }

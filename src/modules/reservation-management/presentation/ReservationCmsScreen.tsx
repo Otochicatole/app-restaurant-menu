@@ -396,7 +396,7 @@ export function ReservationCmsScreen({
           adminNotes: resForm.adminNotes || "",
           status: resForm.status,
         };
-        const res = await updateReservationAction(data.tenantId, cmd);
+        const res = await updateReservationAction(data.restaurantId, cmd);
         if (res.success) {
           setData((prev) => ({
             ...prev,
@@ -410,7 +410,7 @@ export function ReservationCmsScreen({
           showFeedback("error", res.error.message);
         }
       } else {
-        const res = await createAdminReservationAction(data.tenantId, resForm);
+        const res = await createAdminReservationAction(data.restaurantId, resForm);
         if (res.success) {
           setData((prev) => ({
             ...prev,
@@ -446,7 +446,7 @@ export function ReservationCmsScreen({
   ) => {
     startTransition(async () => {
       const res = await updateReservationStatusAction(
-        data.tenantId,
+        data.restaurantId,
         reservationId,
         nextStatus,
       );
@@ -477,7 +477,7 @@ export function ReservationCmsScreen({
     if (!deletingReservation) return;
     startTransition(async () => {
       const res = await deleteReservationAction(
-        data.tenantId,
+        data.restaurantId,
         deletingReservation.id,
       );
       if (res.success) {
@@ -516,7 +516,7 @@ export function ReservationCmsScreen({
         ...slotForm,
         id: editingSlot?.id,
       };
-      const res = await upsertTimeSlotAction(data.tenantId, cmd);
+      const res = await upsertTimeSlotAction(data.restaurantId, cmd);
       if (res.success) {
         setData((prev) => {
           const exists = prev.timeSlots.some((s) => s.id === res.data.id);
@@ -539,7 +539,7 @@ export function ReservationCmsScreen({
 
   const handleToggleSlotActive = (slot: TimeSlotView) => {
     startTransition(async () => {
-      const res = await upsertTimeSlotAction(data.tenantId, {
+      const res = await upsertTimeSlotAction(data.restaurantId, {
         id: slot.id,
         time: slot.time,
         label: slot.label,
@@ -561,7 +561,7 @@ export function ReservationCmsScreen({
 
   const handleDeleteSlot = (slotId: string) => {
     startTransition(async () => {
-      const res = await deleteTimeSlotAction(data.tenantId, slotId);
+      const res = await deleteTimeSlotAction(data.restaurantId, slotId);
       if (res.success) {
         setData((prev) => ({
           ...prev,
@@ -589,7 +589,7 @@ export function ReservationCmsScreen({
             { dayOfWeek, reason: "Cerrado por descanso semanal" },
           ];
 
-      const res = await setRecurringClosuresAction(data.tenantId, {
+      const res = await setRecurringClosuresAction(data.restaurantId, {
         closures: nextClosures.map((c) => ({
           dayOfWeek: c.dayOfWeek,
           reason: c.reason,
@@ -612,7 +612,7 @@ export function ReservationCmsScreen({
     e.preventDefault();
     if (!newBlockedDate.date) return;
     startTransition(async () => {
-      const res = await addBlockedDateAction(data.tenantId, newBlockedDate);
+      const res = await addBlockedDateAction(data.restaurantId, newBlockedDate);
       if (res.success) {
         setData((prev) => {
           const exists = prev.blockedDates.some(
@@ -638,7 +638,7 @@ export function ReservationCmsScreen({
 
   const handleRemoveBlockedDate = (id: string) => {
     startTransition(async () => {
-      const res = await removeBlockedDateAction(data.tenantId, id);
+      const res = await removeBlockedDateAction(data.restaurantId, id);
       if (res.success) {
         setData((prev) => ({
           ...prev,
@@ -678,7 +678,7 @@ export function ReservationCmsScreen({
         ...eventForm,
         id: editingEvent?.id,
       };
-      const res = await upsertRestaurantEventAction(data.tenantId, cmd);
+      const res = await upsertRestaurantEventAction(data.restaurantId, cmd);
       if (res.success) {
         setData((prev) => {
           const exists = prev.events.some((ev) => ev.id === res.data.id);
@@ -703,7 +703,7 @@ export function ReservationCmsScreen({
     if (!deletingEvent) return;
     startTransition(async () => {
       const res = await deleteRestaurantEventAction(
-        data.tenantId,
+        data.restaurantId,
         deletingEvent.id,
       );
       if (res.success) {
@@ -798,7 +798,7 @@ export function ReservationCmsScreen({
         <div className="flex items-center gap-2.5 flex-wrap">
           {data.landingEnabled && (
             <a
-              href={`/p/${data.restaurantSlug}`}
+              href={`/l/${data.restaurantSlug}`}
               target="_blank"
               rel="noreferrer"
               className={adminSecondaryButtonClass}
@@ -1830,8 +1830,8 @@ export function ReservationCmsScreen({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {data.events.map((evt) => {
-                const confirmedCount = evt.confirmedReservationsCount ?? 0;
                 const capacity = evt.capacity;
+                const confirmedCount = capacity - (evt.remainingCapacity ?? capacity);
                 const percent = Math.min(100, Math.round((confirmedCount / capacity) * 100));
                 const isSoldOut = confirmedCount >= capacity;
 

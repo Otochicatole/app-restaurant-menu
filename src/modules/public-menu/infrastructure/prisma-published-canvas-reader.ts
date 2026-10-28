@@ -6,11 +6,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      tenant: { status: "ACTIVE" },
-      OR: [
-        { isPrimary: true },
-        { tenant: { multiMenuEnabled: true } },
-      ],
+      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
     select: {
       id: true,
@@ -18,7 +14,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
       slug: true,
       publicDescription: true,
       publishedJson: true,
-      tenant: { select: { id: true, name: true, slug: true } },
+      restaurant: { select: { id: true, name: true, slug: true } },
     },
   });
   if (!project?.publishedJson) return null;
@@ -32,7 +28,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
     if (node.type === "shape" && node.shape === "rect" && node.backgroundImage) ids.add(node.backgroundImage.assetId);
   }
   const assets = ids.size
-    ? await prisma.menuAsset.findMany({ where: { tenantId: project.tenant.id, id: { in: [...ids] } } })
+    ? await prisma.menuAsset.findMany({ where: { restaurantId: project.restaurant.id, id: { in: [...ids] } } })
     : [];
   const assetMap: PublicCanvasMenuView["assets"] = {};
   for (const asset of assets) {
@@ -44,11 +40,11 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
       url: `/api/public/menus/${encodeURIComponent(project.slug)}/assets/${encodeURIComponent(asset.id)}/file`,
       width: asset.width,
       height: asset.height,
-      fontFamily: asset.fontFamily ?? (asset.kind === "FONT" ? `"editor-font-${asset.id}"` : null),
+      fontFamily: asset.kind === "FONT" ? `editor-font-${asset.id}` : null,
     };
   }
   return {
-    tenant: { id: project.tenant.id, name: project.name, slug: project.slug },
+    restaurant: { id: project.restaurant.id, name: project.name, slug: project.slug },
     profile: { name: project.name, description: project.publicDescription },
     document,
     assets: assetMap,
@@ -59,11 +55,7 @@ export async function getPublicMenuStatus(slug: string): Promise<"published" | "
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      tenant: { status: "ACTIVE" },
-      OR: [
-        { isPrimary: true },
-        { tenant: { multiMenuEnabled: true } },
-      ],
+      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
     select: { publishedJson: true },
   });
@@ -75,28 +67,20 @@ export async function getPublicMenuMetadata(slug: string): Promise<{ title: stri
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      tenant: { status: "ACTIVE" },
-      OR: [
-        { isPrimary: true },
-        { tenant: { multiMenuEnabled: true } },
-      ],
+      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
     select: { name: true, publicDescription: true },
   });
   return project ? { title: project.name, description: project.publicDescription } : null;
 }
 
-export async function resolvePublishedMenuBySlug(slug: string): Promise<{ tenantId: string; projectId: string } | null> {
+export async function resolvePublishedMenuBySlug(slug: string): Promise<{ restaurantId: string; projectId: string } | null> {
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      tenant: { status: "ACTIVE" },
-      OR: [
-        { isPrimary: true },
-        { tenant: { multiMenuEnabled: true } },
-      ],
+      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
     },
-    select: { id: true, tenantId: true },
+    select: { id: true, restaurantId: true },
   });
-  return project ? { tenantId: project.tenantId, projectId: project.id } : null;
+  return project ? { restaurantId: project.restaurantId, projectId: project.id } : null;
 }

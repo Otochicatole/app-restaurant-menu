@@ -23,8 +23,8 @@ async function cleanE2eRows(connectionString: string): Promise<void> {
   const prisma = createSqlitePrismaClient(connectionString);
   try {
     await prisma.$transaction([
-      prisma.assetCleanupJob.deleteMany({ where: { storageKey: { startsWith: `tenants/${E2E_ID_PREFIX}` } } }),
-      prisma.tenant.deleteMany({
+      prisma.assetCleanupJob.deleteMany({ where: { OR: [{ storageKey: { startsWith: `restaurants/${E2E_ID_PREFIX}` } }, { storageKey: { startsWith: `tenants/${E2E_ID_PREFIX}` } }] } }),
+      prisma.organization.deleteMany({
         where: { OR: [{ id: { startsWith: E2E_ID_PREFIX } }, { slug: { startsWith: E2E_ID_PREFIX } }] },
       }),
       prisma.admin.deleteMany({

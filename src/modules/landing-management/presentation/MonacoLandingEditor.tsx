@@ -95,6 +95,14 @@ import type {
   SubElementStyleOverride,
 } from "../contracts";
 import type { LandingEditorView } from "../application/landing-use-cases";
+import { landingPreviewSource } from "../domain/landing-asset-urls";
+import {
+  getLandingRouteContext,
+  markLandingContext,
+  recontextualizeLandingDocument,
+  recontextualizeLandingSource,
+  rewriteLandingRoutes,
+} from "../domain/landing-route-context";
 import {
   BUILTIN_LANDING_MODULES,
   createBlockFromBuiltinModule,
@@ -4041,14 +4049,14 @@ function StudioDimensionsAndPositionEditor({
 }
 
 export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
-  const { tenant } = initialData;
+  const { restaurant } = initialData;
 
   const initialDoc = useMemo<LandingDocumentV1>(() => {
     if (initialData.landingPage.document) {
       return initialData.landingPage.document;
     }
-    return createDefaultLandingDocument(tenant.name, tenant.slug);
-  }, [initialData.landingPage.document, tenant.name, tenant.slug]);
+    return createDefaultLandingDocument(restaurant.name, restaurant.landingSlug, restaurant.slug);
+  }, [initialData.landingPage.document, restaurant.name, restaurant.slug, restaurant.landingSlug]);
 
   const [documentState, setDocumentState] = useState<LandingDocumentV1>(initialDoc);
   const [history, setHistory] = useState<{
@@ -4304,28 +4312,39 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   // Compile output from visual document with interactiveEditor always enabled for the studio canvas
   const compiledVisual = useMemo(
-    () =>
-      compileLandingFromDocument(
+    () => {
+      const compiled = compileLandingFromDocument(
         documentState,
         {
-          restaurantName: tenant.name,
-          restaurantSlug: tenant.slug,
+          restaurantName: restaurant.name,
+          restaurantSlug: restaurant.landingSlug,
+          menuSlug: restaurant.slug,
         },
         {
           interactiveEditor: true,
         },
-      ),
-    [documentState, tenant.name, tenant.slug],
+      );
+      return {
+        ...compiled,
+        fullHtml: landingPreviewSource(compiled.fullHtml, restaurant.id, restaurant.landingSlug),
+        htmlContent: landingPreviewSource(compiled.htmlContent, restaurant.id, restaurant.landingSlug),
+        previewCss: landingPreviewSource(compiled.previewCss, restaurant.id, restaurant.landingSlug),
+      };
+    },
+    [documentState, restaurant.id, restaurant.name, restaurant.slug, restaurant.landingSlug],
   );
 
   // Compile clean output for saving/publishing
   const compiledClean = useMemo(
-    () =>
-      compileLandingFromDocument(documentState, {
-        restaurantName: tenant.name,
-        restaurantSlug: tenant.slug,
-      }),
-    [documentState, tenant.name, tenant.slug],
+    () => {
+      const compiled = compileLandingFromDocument(documentState, {
+        restaurantName: restaurant.name,
+        restaurantSlug: restaurant.landingSlug,
+        menuSlug: restaurant.slug,
+      });
+      return { ...compiled, htmlContent: markLandingContext(compiled.htmlContent, { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug }) };
+    },
+    [documentState, restaurant.name, restaurant.slug, restaurant.landingSlug],
   );
 
   const activeCodePayload = useMemo(() => {
@@ -4341,12 +4360,12 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       htmlContent: rawHtml,
       cssContent: rawCss,
       jsContent: rawJs,
-      fullHtml: compileLandingDocument({
+      fullHtml: landingPreviewSource(recontextualizeLandingSource(compileLandingDocument({
         htmlContent: rawHtml,
         cssContent: rawCss,
         jsContent: rawJs,
-        title: tenant.name,
-      }),
+        title: restaurant.name,
+      }), { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug }), restaurant.id, restaurant.landingSlug),
     };
   }, [
     documentState.mode,
@@ -4355,7 +4374,10 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     rawHtml,
     rawCss,
     rawJs,
-    tenant.name,
+    restaurant.name,
+    restaurant.id,
+    restaurant.landingSlug,
+    restaurant.slug,
   ]);
 
   // Stable bootstrap srcDoc: in visual mode, we only reload srcDoc if mode or jsContent changes!
@@ -4745,8 +4767,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       targetBlockId?: string | null,
       position?: "before" | "after",
     ) => {
-      const safeName = tenant.name.trim() || "Nuestro Restaurante";
-      const menuUrl = `/m/${tenant.slug}`;
+      const safeName = restaurant.name.trim() || "Nuestro Restaurante";
+      const menuUrl = `/m/${restaurant.slug}`;
       const created = createBlockFromBuiltinModule(definition);
       for (const [k, v] of Object.entries(created.values)) {
         created.values[k] = v
@@ -4759,7 +4781,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         message: `Módulo "${definition.name}" agregado a tu página.`,
       });
     },
-    [insertBlockAt, tenant.name, tenant.slug],
+    [insertBlockAt, restaurant.name, restaurant.slug],
   );
 
   const handleAddCustomBlock = useCallback(
@@ -5313,7 +5335,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     setFeedback(null);
     startTransition(async () => {
       const res = await saveLandingDraftAction({
-        tenantId: tenant.id,
+        restaurantId: restaurant.id,
         htmlContent: activeCodePayload.htmlContent,
         cssContent: activeCodePayload.cssContent,
         jsContent: activeCodePayload.jsContent,
@@ -5334,7 +5356,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         });
       }
     });
-  }, [activeCodePayload, documentState, tenant.id]);
+  }, [activeCodePayload, documentState, restaurant.id]);
 
   // Listen to messages from the Interactive Canvas Bridge inside the iframe
   useEffect(() => {
@@ -5544,7 +5566,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     setFeedback(null);
     startTransition(async () => {
       const res = await publishLandingAction({
-        tenantId: tenant.id,
+        restaurantId: restaurant.id,
         htmlContent: activeCodePayload.htmlContent,
         cssContent: activeCodePayload.cssContent,
         jsContent: activeCodePayload.jsContent,
@@ -5557,7 +5579,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         setLastSavedAt(res.data.updatedAt);
         setFeedback({
           type: "success",
-          message: `¡Landing publicada en /l/${tenant.slug}!`,
+          message: `¡Landing publicada en /l/${restaurant.landingSlug}!`,
         });
       } else {
         setFeedback({
@@ -5611,7 +5633,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     if (!selectedBlock || !moduleName.trim()) return;
     startTransition(async () => {
       const res = await createCustomLandingModuleAction({
-        tenantId: tenant.id,
+        restaurantId: restaurant.id,
         name: moduleName.trim(),
         description: moduleDesc.trim(),
         category: "custom",
@@ -5641,7 +5663,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   const handleDeleteCustomModule = (moduleId: string) => {
     startTransition(async () => {
-      const res = await deleteCustomLandingModuleAction(tenant.id, moduleId);
+      const res = await deleteCustomLandingModuleAction(restaurant.id, moduleId);
       if (res.success) {
         setCustomModules((prev) => prev.filter((m) => m.id !== moduleId));
         setFeedback({
@@ -5667,14 +5689,17 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       return;
     }
 
-    const clonedDoc: LandingDocumentV1 = JSON.parse(
+    const originalDoc: LandingDocumentV1 = JSON.parse(
       JSON.stringify(template.document),
     );
+    const current = { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug };
+    const previous = getLandingRouteContext(template.htmlContent) ?? current;
+    const clonedDoc = recontextualizeLandingDocument(originalDoc, previous, current);
     updateDocument(clonedDoc);
     setSelectedBlockId(clonedDoc.blocks[0]?.id ?? null);
-    setRawHtml(template.htmlContent);
-    setRawCss(template.cssContent);
-    setRawJs(template.jsContent);
+    setRawHtml(recontextualizeLandingSource(template.htmlContent, current, previous));
+    setRawCss(rewriteLandingRoutes(template.cssContent, previous, current));
+    setRawJs(rewriteLandingRoutes(template.jsContent, previous, current));
     setShowTemplatesModal(false);
     setFeedback({
       type: "success",
@@ -5686,7 +5711,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     if (!templateName.trim()) return;
     startTransition(async () => {
       const res = await createLandingTemplateAction({
-        tenantId: tenant.id,
+        restaurantId: restaurant.id,
         document: documentState,
         command: {
           name: templateName.trim(),
@@ -5719,7 +5744,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
   const handleDeleteTemplate = (templateId: string) => {
     startTransition(async () => {
       const res = await deletePrivateLandingTemplateAction(
-        tenant.id,
+        restaurant.id,
         templateId,
       );
       if (res.success) {
@@ -5739,7 +5764,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
 
   const handleExportTemplate = (templateId: string) => {
     startTransition(async () => {
-      const res = await exportLandingTemplateAction(tenant.id, templateId);
+      const res = await exportLandingTemplateAction(restaurant.id, templateId);
       if (res.success) {
         const binary = atob(res.data.base64);
         const bytes = new Uint8Array(binary.length);
@@ -5777,7 +5802,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       }
       const base64 = btoa(binary);
       startTransition(async () => {
-        const res = await importLandingTemplateAction(tenant.id, base64);
+        const res = await importLandingTemplateAction(restaurant.id, base64);
         if (res.success) {
           setTemplates((prev) => [res.data, ...prev]);
           setFeedback({
@@ -5804,7 +5829,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
     ) {
       return;
     }
-    const starter = createDefaultLandingTemplate(tenant.name, tenant.slug);
+    const starter = createDefaultLandingTemplate(restaurant.name, restaurant.landingSlug, restaurant.slug);
     updateDocument(starter.document);
     setSelectedBlockId(starter.document.blocks[0]?.id ?? null);
     setRawHtml(starter.html);
@@ -5920,7 +5945,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
             </span>
             <span className="text-zinc-400 hidden sm:inline">/</span>
             <span className="text-sm font-semibold text-zinc-900 truncate max-w-[180px]">
-              {tenant.name}
+              {restaurant.name}
             </span>
           </div>
 
@@ -6079,7 +6104,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
         <div className="flex items-center gap-2">
           {isPublished && (
             <a
-              href={`/l/${tenant.slug}`}
+              href={`/l/${restaurant.landingSlug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 shadow-2xs transition-colors"
@@ -7650,7 +7675,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
                   </div>
                   <div className="px-3 py-0.5 rounded-md bg-white border border-zinc-200 text-[11px] font-mono text-zinc-600 shadow-2xs">
-                    /l/{tenant.slug}
+                    /l/{restaurant.landingSlug}
                   </div>
                   <div className="w-10" />
                 </div>
@@ -7995,7 +8020,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                     {effectiveSrc ? (
                                       // eslint-disable-next-line @next/next/no-img-element
                                       <img
-                                        src={effectiveSrc}
+                                        src={landingPreviewSource(effectiveSrc, restaurant.id, restaurant.landingSlug)}
                                         alt={effectiveAlt || "Imagen"}
                                         className="h-full w-full object-cover"
                                       />
@@ -8207,7 +8232,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const url = `/m/${tenant.slug}`;
+                                      const url = `/m/${restaurant.slug}`;
                                       if (activeSubElement.boundHrefField) {
                                         handleUpdateBlockValue(
                                           selectedBlock.id,
@@ -8224,7 +8249,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                                       }
                                     }}
                                     className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
-                                      effectiveHref === `/m/${tenant.slug}`
+                                      effectiveHref === `/m/${restaurant.slug}`
                                         ? "border-blue-300 bg-blue-50 text-blue-800"
                                         : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                                     }`}
@@ -11129,7 +11154,7 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
                       >
                         <Download className="h-3.5 w-3.5" />
                       </button>
-                      {!tpl.isSystem && tpl.tenantId === tenant.id && (
+                      {!tpl.isSystem && tpl.restaurantId === restaurant.id && (
                         <button
                           type="button"
                           onClick={() => handleDeleteTemplate(tpl.id)}
@@ -11151,8 +11176,8 @@ export function MonacoLandingEditor({ initialData }: MonacoLandingEditorProps) {
       {mediaPickerTarget && (
         <LandingMediaModal
           open={true}
-          tenantSlug={tenant.slug}
-          tenantId={tenant.id}
+          landingSlug={restaurant.landingSlug}
+          restaurantId={restaurant.id}
           currentUrl={mediaPickerTarget.currentUrl}
           title={mediaPickerTarget.title}
           onClose={() => setMediaPickerTarget(null)}

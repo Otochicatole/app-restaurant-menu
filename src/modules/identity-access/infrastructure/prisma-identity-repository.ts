@@ -7,7 +7,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   async findAccountByEmail(email: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findFirst({
       where: { email },
-      include: { tenant: true },
+      include: { organization: true },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -15,7 +15,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   async findAccountById(adminId: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findUnique({
       where: { id: adminId },
-      include: { tenant: true },
+      include: { organization: true },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -36,7 +36,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
           },
         },
       },
-      include: { tenant: true },
+      include: { organization: true },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -112,7 +112,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
 
 type PrismaAccount = Awaited<
   ReturnType<PrismaClient["admin"]["findUnique"]>
-> & { tenant?: { id: string; slug: string; status: "ACTIVE" | "SUSPENDED" } | null };
+> & { organization?: { id: string; slug: string; status: "ACTIVE" | "SUSPENDED" } | null };
 
 function toAccountRecord(account: NonNullable<PrismaAccount>): AccountRecord {
   return {
@@ -120,9 +120,9 @@ function toAccountRecord(account: NonNullable<PrismaAccount>): AccountRecord {
     email: account.email,
     passwordHash: account.passwordHash,
     role: account.role,
-    tenantId: account.tenantId,
-    tenantSlug: account.tenant?.slug ?? null,
-    tenantStatus: account.tenant?.status ?? null,
+    organizationId: account.organizationId,
+    organizationSlug: account.organization?.slug ?? null,
+    organizationStatus: account.organization?.status ?? null,
     mustChangePassword: account.mustChangePassword,
   };
 }

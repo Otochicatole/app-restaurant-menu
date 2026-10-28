@@ -15,7 +15,7 @@ function resolveBack(actor: CurrentActor) {
   if (actor.kind === "super-admin") {
     return { href: "/superadmin" as const };
   }
-  return { href: "/admin/settings" as const };
+  return { href: "/admin/account" as const };
 }
 
 export default async function ChangePasswordPage() {

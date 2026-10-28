@@ -7,7 +7,7 @@ import {
   type ActionResult,
 } from "@/platform/application/action-result";
 import { ForbiddenError } from "@/platform/application/errors";
-import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
+import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import {
   addBlockedDateSchema,
   adminCreateReservationSchema,
@@ -31,30 +31,25 @@ import {
 } from "../contracts";
 import { reservationManagementService } from "../infrastructure/composition";
 
-async function assertCanManageReservations(tenantId: string) {
-  const actor = await requireAuthenticatedAccount();
-  if (actor.kind === "tenant-admin") {
-    if (actor.tenantId !== tenantId) {
-      throw new ForbiddenError("No tenés acceso a este negocio");
-    }
-    const isEnabled = await reservationManagementService.isLandingEnabled(tenantId);
-    if (!isEnabled) {
-      throw new ForbiddenError(
-        "La funcionalidad de Landing y Reservas no está habilitada por el Super Admin",
-      );
-    }
+async function assertCanManageReservations(restaurantId: string) {
+  await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
+  const isEnabled = await reservationManagementService.isLandingEnabled(restaurantId);
+  if (!isEnabled) {
+    throw new ForbiddenError(
+      "La funcionalidad de Landing y Reservas no está habilitada para este restaurante",
+    );
   }
 }
 
 export async function upsertTimeSlotAction(
-  tenantId: string,
+  restaurantId: string,
   input: UpsertTimeSlotCommand,
 ): Promise<ActionResult<TimeSlotView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = upsertTimeSlotSchema.parse(input);
-    const data = await reservationManagementService.upsertTimeSlot(tenantId, cmd);
-    revalidatePath("/admin/reservas");
+    const data = await reservationManagementService.upsertTimeSlot(restaurantId, cmd);
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(error, "No se pudo guardar el turno de atención");
@@ -62,13 +57,13 @@ export async function upsertTimeSlotAction(
 }
 
 export async function deleteTimeSlotAction(
-  tenantId: string,
+  restaurantId: string,
   slotId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageReservations(tenantId);
-    await reservationManagementService.deleteTimeSlot(tenantId, slotId);
-    revalidatePath("/admin/reservas");
+    await assertCanManageReservations(restaurantId);
+    await reservationManagementService.deleteTimeSlot(restaurantId, slotId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess({ deletedId: slotId });
   } catch (error) {
     return actionErrorResult(error, "No se pudo eliminar el turno de atención");
@@ -76,17 +71,17 @@ export async function deleteTimeSlotAction(
 }
 
 export async function setRecurringClosuresAction(
-  tenantId: string,
+  restaurantId: string,
   input: SetRecurringClosuresCommand,
 ): Promise<ActionResult<RecurringClosureView[]>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = setRecurringClosuresSchema.parse(input);
     const data = await reservationManagementService.setRecurringClosures(
-      tenantId,
+      restaurantId,
       cmd.closures,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(
@@ -97,18 +92,18 @@ export async function setRecurringClosuresAction(
 }
 
 export async function addBlockedDateAction(
-  tenantId: string,
+  restaurantId: string,
   input: AddBlockedDateCommand,
 ): Promise<ActionResult<BlockedDateView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = addBlockedDateSchema.parse(input);
     const data = await reservationManagementService.addBlockedDate(
-      tenantId,
+      restaurantId,
       cmd.date,
       cmd.reason,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(error, "No se pudo bloquear la fecha seleccionada");
@@ -116,13 +111,13 @@ export async function addBlockedDateAction(
 }
 
 export async function removeBlockedDateAction(
-  tenantId: string,
+  restaurantId: string,
   blockedDateId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageReservations(tenantId);
-    await reservationManagementService.removeBlockedDate(tenantId, blockedDateId);
-    revalidatePath("/admin/reservas");
+    await assertCanManageReservations(restaurantId);
+    await reservationManagementService.removeBlockedDate(restaurantId, blockedDateId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess({ deletedId: blockedDateId });
   } catch (error) {
     return actionErrorResult(error, "No se pudo desbloquear la fecha");
@@ -130,17 +125,17 @@ export async function removeBlockedDateAction(
 }
 
 export async function upsertRestaurantEventAction(
-  tenantId: string,
+  restaurantId: string,
   input: UpsertRestaurantEventCommand,
 ): Promise<ActionResult<RestaurantEventView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = upsertRestaurantEventSchema.parse(input);
     const data = await reservationManagementService.upsertRestaurantEvent(
-      tenantId,
+      restaurantId,
       cmd,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(error, "No se pudo guardar el evento");
@@ -148,13 +143,13 @@ export async function upsertRestaurantEventAction(
 }
 
 export async function deleteRestaurantEventAction(
-  tenantId: string,
+  restaurantId: string,
   eventId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageReservations(tenantId);
-    await reservationManagementService.deleteRestaurantEvent(tenantId, eventId);
-    revalidatePath("/admin/reservas");
+    await assertCanManageReservations(restaurantId);
+    await reservationManagementService.deleteRestaurantEvent(restaurantId, eventId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess({ deletedId: eventId });
   } catch (error) {
     return actionErrorResult(error, "No se pudo eliminar el evento");
@@ -162,17 +157,17 @@ export async function deleteRestaurantEventAction(
 }
 
 export async function createAdminReservationAction(
-  tenantId: string,
+  restaurantId: string,
   input: AdminCreateReservationCommand,
 ): Promise<ActionResult<ReservationView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = adminCreateReservationSchema.parse(input);
     const data = await reservationManagementService.createAdminReservation(
-      tenantId,
+      restaurantId,
       cmd,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(error, "No se pudo crear la reserva");
@@ -180,17 +175,17 @@ export async function createAdminReservationAction(
 }
 
 export async function updateReservationAction(
-  tenantId: string,
+  restaurantId: string,
   input: UpdateReservationCommand,
 ): Promise<ActionResult<ReservationView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const cmd = updateReservationSchema.parse(input);
     const data = await reservationManagementService.updateReservation(
-      tenantId,
+      restaurantId,
       cmd,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(error, "No se pudo actualizar la reserva");
@@ -198,19 +193,19 @@ export async function updateReservationAction(
 }
 
 export async function updateReservationStatusAction(
-  tenantId: string,
+  restaurantId: string,
   reservationId: string,
   status: ReservationStatus,
 ): Promise<ActionResult<ReservationView>> {
   try {
-    await assertCanManageReservations(tenantId);
+    await assertCanManageReservations(restaurantId);
     const parsedStatus = reservationStatusSchema.parse(status);
     const data = await reservationManagementService.updateReservationStatus(
-      tenantId,
+      restaurantId,
       reservationId,
       parsedStatus,
     );
-    revalidatePath("/admin/reservas");
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(
@@ -221,13 +216,13 @@ export async function updateReservationStatusAction(
 }
 
 export async function deleteReservationAction(
-  tenantId: string,
+  restaurantId: string,
   reservationId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageReservations(tenantId);
-    await reservationManagementService.deleteReservation(tenantId, reservationId);
-    revalidatePath("/admin/reservas");
+    await assertCanManageReservations(restaurantId);
+    await reservationManagementService.deleteReservation(restaurantId, reservationId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess({ deletedId: reservationId });
   } catch (error) {
     return actionErrorResult(error, "No se pudo eliminar la reserva");

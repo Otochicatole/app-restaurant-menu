@@ -218,7 +218,7 @@ describe("availability-engine", () => {
       reservations,
     });
 
-    expect(result.events[0].remainingSpots).toBe(3); // 5 - 2 active = 3
+    expect(result.events[0].remainingSpots).toBe(2); // 5 - 3 people in active reservations
     expect(result.events[0].available).toBe(true);
   });
 });

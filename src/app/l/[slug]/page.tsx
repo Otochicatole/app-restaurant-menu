@@ -45,7 +45,7 @@ export default async function PublicLandingPage({
     return (
       <LandingPreparationScreen
         restaurantName={result.restaurantName}
-        restaurantSlug={result.restaurantSlug}
+        menuSlug={result.menuSlug}
       />
     );
   }

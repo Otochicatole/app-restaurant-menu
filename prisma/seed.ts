@@ -22,27 +22,28 @@ async function main() {
   const tenantEmail = (process.env.SEED_RESTAURANT_ADMIN_EMAIL?.trim().toLowerCase() || "admin@fuzion.local");
   const tenantPassword = process.env.SEED_RESTAURANT_ADMIN_PASSWORD || "FuzionAdmin2026!";
   if (tenantPassword.length < 8) throw new Error("SEED_RESTAURANT_ADMIN_PASSWORD debe tener al menos 8 caracteres.");
-  const existingTenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const existingTenant = await prisma.organization.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
   const seedTenantId = existingTenant?.id ?? tenantId;
 
   const existing = await prisma.admin.findUnique({ where: { email } });
   if (existing?.role === "TENANT_ADMIN") throw new Error("El correo del superadministrador ya pertenece a un cliente.");
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.admin.upsert({ where: { email }, update: { passwordHash, role: "SUPER_ADMIN", tenantId: null, mustChangePassword: false }, create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false } });
+  await prisma.admin.upsert({ where: { email }, update: { passwordHash, role: "SUPER_ADMIN", organizationId: null, mustChangePassword: false }, create: { email, passwordHash, role: "SUPER_ADMIN", mustChangePassword: false } });
 
   const tenantPasswordHash = await bcrypt.hash(tenantPassword, 12);
   const tenantAdminId = `admin-${seedTenantId}`;
   await prisma.$transaction(async (transaction) => {
-    const tenant = await transaction.tenant.upsert({
+    const tenant = await transaction.organization.upsert({
       where: { id: seedTenantId },
-      update: { name: tenantName, slug: tenantSlug, publicDescription: `Menú digital de ${tenantName}`, status: "ACTIVE" },
-      create: { id: seedTenantId, name: tenantName, slug: tenantSlug, publicDescription: `Menú digital de ${tenantName}`, status: "ACTIVE" },
+      update: { name: tenantName, slug: tenantSlug, status: "ACTIVE" },
+      create: { id: seedTenantId, name: tenantName, slug: tenantSlug, status: "ACTIVE" },
     });
-    const existingTenantAdmin = await transaction.admin.findUnique({ where: { tenantId: tenant.id }, select: { id: true } });
+    const existingTenantAdmin = await transaction.admin.findUnique({ where: { organizationId: tenant.id }, select: { id: true } });
     if (existingTenantAdmin) await transaction.admin.update({ where: { id: existingTenantAdmin.id }, data: { email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", mustChangePassword: false } });
-    else await transaction.admin.create({ data: { id: tenantAdminId, email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", tenantId: tenant.id, mustChangePassword: false } });
+    else await transaction.admin.create({ data: { id: tenantAdminId, email: tenantEmail, passwordHash: tenantPasswordHash, role: "TENANT_ADMIN", organizationId: tenant.id, mustChangePassword: false } });
+    const restaurant = await transaction.restaurant.upsert({ where: { slug: tenantSlug }, update: {}, create: { id: `restaurant-${tenant.id}`, organizationId: tenant.id, name: tenantName, slug: tenantSlug, landingSlug: tenantSlug, publicDescription: `Menú digital de ${tenantName}` } });
     const initialDocument = createTemplateDocument(tenantName);
-    const primary = await transaction.menuProject.findFirst({ where: { tenantId: tenant.id, isPrimary: true }, select: { id: true } });
+    const primary = await transaction.menuProject.findFirst({ where: { restaurantId: restaurant.id }, select: { id: true } });
     if (primary) {
       await transaction.menuProject.update({
         where: { id: primary.id },
@@ -56,7 +57,7 @@ async function main() {
     } else {
       await transaction.menuProject.create({
         data: {
-          tenantId: tenant.id,
+          restaurantId: restaurant.id,
           name: tenantName,
           slug: tenantSlug,
           publicDescription: `Menú digital de ${tenantName}`,
@@ -72,7 +73,7 @@ async function main() {
   for (const preset of TEMPLATE_PRESETS) {
     await prisma.menuTemplate.upsert({
       where: { id: preset.id },
-      update: { name: preset.name, description: preset.description, documentJson: JSON.stringify(preset.document), schemaVersion: preset.document.schemaVersion, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, tenantId: null, publishedAt: systemPublishedAt },
+      update: { name: preset.name, description: preset.description, documentJson: JSON.stringify(preset.document), schemaVersion: preset.document.schemaVersion, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, restaurantId: null, publishedAt: systemPublishedAt },
       create: { id: preset.id, name: preset.name, description: preset.description, documentJson: JSON.stringify(preset.document), schemaVersion: preset.document.schemaVersion, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, publishedAt: systemPublishedAt },
     });
   }

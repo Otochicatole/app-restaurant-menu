@@ -4,7 +4,8 @@ const businessModules = [
   "menu-editor",
   "public-menu",
   "reservation-management",
-  "tenant-management",
+  "organization-management",
+  "restaurant-management",
 ];
 
 /** @type {import('dependency-cruiser').IConfiguration} */

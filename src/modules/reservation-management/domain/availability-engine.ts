@@ -29,6 +29,7 @@ export interface DomainRestaurantEvent {
   imageUrl: string;
   blocksRegularReservations: boolean;
   status: "DRAFT" | "PUBLISHED" | "CANCELLED" | "COMPLETED";
+  occupiedSpots?: number;
 }
 
 export interface DomainReservation {
@@ -162,7 +163,7 @@ export function computeAvailability({
 
     if (r.eventId) {
       const count = activeEventReservationsByEvent.get(r.eventId) ?? 0;
-      activeEventReservationsByEvent.set(r.eventId, count + 1);
+      activeEventReservationsByEvent.set(r.eventId, count + r.partySize);
     }
     // Note: Regular table reservations do NOT block time slots because
     // restaurants seat multiple parties and tables at the same hour.
@@ -260,7 +261,7 @@ export function computeAvailability({
 
   // 2. Process Events
   const processedEvents: PublicEventAvailabilityView[] = publishedEvents.map((evt) => {
-    const bookedCount = activeEventReservationsByEvent.get(evt.id) ?? 0;
+    const bookedCount = evt.occupiedSpots ?? activeEventReservationsByEvent.get(evt.id) ?? 0;
     const remainingSpots = Math.max(0, evt.capacity - bookedCount);
     return {
       id: evt.id,

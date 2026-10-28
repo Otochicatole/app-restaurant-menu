@@ -23,6 +23,7 @@ fi
 
 chmod 600 -- "$SHARED_ENV"
 validate_shared_environment
+install_schema_guard
 
 echo "Creando $SERVICE para una unica instancia SQLite..."
 sudo tee "/etc/systemd/system/$SERVICE" >/dev/null <<EOF
@@ -36,6 +37,7 @@ Type=simple
 User=$USER_NAME
 WorkingDirectory=$CURRENT_LINK
 ExecStart=$BUN_PATH run start
+ExecStartPre=$SHARED_DIR/ops/assert-schema-compatibility.sh $CURRENT_LINK $DATABASE_FILE
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

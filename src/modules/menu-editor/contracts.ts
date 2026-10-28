@@ -295,6 +295,7 @@ export const profileSchema = z.object({
   name: z.string().trim().min(1).max(100),
   publicDescription: z.string().trim().max(500),
   slug: menuSlugSchema,
+  landingSlug: menuSlugSchema,
 });
 
 export type SaveDocumentCommand = z.infer<typeof saveDocumentSchema>;
@@ -362,7 +363,7 @@ export type MenuTemplateView = {
   visibility: MenuTemplateVisibility;
   status: MenuTemplateStatus;
   isSystem: boolean;
-  tenantId: string | null;
+  restaurantId: string | null;
   document: CanvasDocumentV1;
   rejectionReason: string | null;
   createdAt: string;
@@ -379,7 +380,7 @@ export const superadminTemplateQuerySchema = z.object({
 export type SuperadminTemplateTab = z.infer<typeof superadminTemplateTabSchema>;
 export type SuperadminTemplateQuery = z.infer<typeof superadminTemplateQuerySchema>;
 export type SuperadminTemplateView = MenuTemplateView & {
-  owner: { tenantId: string; name: string; slug: string } | null;
+  owner: { restaurantId: string; name: string; slug: string } | null;
 };
 export type SuperadminTemplateList = {
   items: SuperadminTemplateView[];

@@ -504,4 +504,4 @@ export const TEMPLATE_PRESETS: ReadonlyArray<{ id: string; name: string; descrip
   },
 ];
 
-export function presetAsView(preset: typeof TEMPLATE_PRESETS[number]): MenuTemplateView { const now = new Date(0).toISOString(); return { id: preset.id, name: preset.name, description: preset.description, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, tenantId: null, document: preset.document, rejectionReason: null, createdAt: now, updatedAt: now }; }
+export function presetAsView(preset: typeof TEMPLATE_PRESETS[number]): MenuTemplateView { const now = new Date(0).toISOString(); return { id: preset.id, name: preset.name, description: preset.description, visibility: "PUBLIC", status: "PUBLISHED", isSystem: true, restaurantId: null, document: preset.document, rejectionReason: null, createdAt: now, updatedAt: now }; }

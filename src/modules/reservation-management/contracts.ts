@@ -20,6 +20,15 @@ export type RestaurantEventStatus = z.infer<typeof restaurantEventStatusSchema>;
 export const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 export const timeStringRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+const isoDateSchema = z.string().trim().regex(isoDateRegex, "Fecha inválida (YYYY-MM-DD)")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (year < 1) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  }, "La fecha no existe en el calendario");
+
 // ---------------------------------------------------------------------------
 // Turnos / Horarios de Atención
 // ---------------------------------------------------------------------------
@@ -37,7 +46,7 @@ export type UpsertTimeSlotCommand = z.infer<typeof upsertTimeSlotSchema>;
 
 export type TimeSlotView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   time: string;
   label: string;
   active: boolean;
@@ -61,7 +70,7 @@ export type SetRecurringClosuresCommand = z.infer<typeof setRecurringClosuresSch
 
 export type RecurringClosureView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   dayOfWeek: number;
   reason: string;
   createdAt: string;
@@ -72,17 +81,14 @@ export type RecurringClosureView = {
 // Bloqueo de Fechas Específicas
 // ---------------------------------------------------------------------------
 export const addBlockedDateSchema = z.object({
-  date: z
-    .string()
-    .trim()
-    .regex(isoDateRegex, "La fecha debe tener formato YYYY-MM-DD"),
+  date: isoDateSchema,
   reason: z.string().trim().max(160).default("Cerrado por fecha especial"),
 });
 export type AddBlockedDateCommand = z.infer<typeof addBlockedDateSchema>;
 
 export type BlockedDateView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   date: string;
   reason: string;
   createdAt: string;
@@ -96,12 +102,12 @@ export const upsertRestaurantEventSchema = z.object({
   id: z.string().optional(),
   title: z.string().trim().min(1, "El título del evento es obligatorio").max(120),
   description: z.string().trim().max(1000).default(""),
-  date: z.string().trim().regex(isoDateRegex, "Fecha inválida (YYYY-MM-DD)"),
+  date: isoDateSchema,
   startTime: z
     .string()
     .trim()
     .regex(timeStringRegex, "Horario de inicio inválido (HH:mm)"),
-  endTime: z.string().trim().max(10).default(""),
+  endTime: z.string().trim().refine((value) => value === "" || timeStringRegex.test(value), "Horario de fin inválido (HH:mm)").default(""),
   capacity: z.coerce.number().int().min(1, "El cupo mínimo es 1").max(500).default(20),
   priceLabel: z.string().trim().max(80).default(""),
   imageUrl: z.string().trim().max(500).default(""),
@@ -112,7 +118,7 @@ export type UpsertRestaurantEventCommand = z.infer<typeof upsertRestaurantEventS
 
 export type RestaurantEventView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   title: string;
   description: string;
   date: string;
@@ -150,7 +156,7 @@ export const publicCreateReservationSchema = z.object({
     .min(6, "Ingresá un número de teléfono o WhatsApp válido")
     .max(40),
   partySize: z.coerce.number().int().min(1, "Mínimo 1 persona").max(40, "Máximo 40 personas").default(2),
-  date: z.string().trim().regex(isoDateRegex, "Fecha inválida (YYYY-MM-DD)"),
+  date: isoDateSchema,
   time: z.string().trim().regex(timeStringRegex, "Horario inválido (HH:mm)"),
   notes: z.string().trim().max(500).optional().default(""),
   eventId: z.string().trim().nullable().optional(),
@@ -175,7 +181,7 @@ export const publicCreateTableReservationSchema = z.object({
     .min(6, "Ingresá un número de teléfono o WhatsApp válido")
     .max(40),
   partySize: z.coerce.number().int().min(1, "Mínimo 1 persona").max(40, "Máximo 40 personas").default(2),
-  date: z.string().trim().regex(isoDateRegex, "Fecha inválida (YYYY-MM-DD)"),
+  date: isoDateSchema,
   time: z.string().trim().regex(timeStringRegex, "Horario inválido (HH:mm)"),
   notes: z.string().trim().max(500).optional().default(""),
 });
@@ -217,7 +223,7 @@ export const updateReservationSchema = z.object({
   customerEmail: z.string().trim().max(120).default(""),
   customerPhone: z.string().trim().min(6).max(40),
   partySize: z.coerce.number().int().min(1).max(40),
-  date: z.string().trim().regex(isoDateRegex),
+  date: isoDateSchema,
   time: z.string().trim().regex(timeStringRegex),
   notes: z.string().trim().max(500).default(""),
   adminNotes: z.string().trim().max(500).default(""),
@@ -227,7 +233,7 @@ export type UpdateReservationCommand = z.infer<typeof updateReservationSchema>;
 
 export type ReservationView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   code: string;
   customerName: string;
   customerEmail: string;
@@ -249,9 +255,9 @@ export type ReservationView = {
 // Consultas de Disponibilidad
 // ---------------------------------------------------------------------------
 export const publicAvailabilityQuerySchema = z.object({
-  from: z.string().trim().regex(isoDateRegex).optional(),
-  to: z.string().trim().regex(isoDateRegex).optional(),
-  date: z.string().trim().regex(isoDateRegex).optional(),
+  from: isoDateSchema.optional(),
+  to: isoDateSchema.optional(),
+  date: isoDateSchema.optional(),
 });
 export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuerySchema>;
 
@@ -259,7 +265,7 @@ export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuerySche
 // Vista Completa del CMS (Panel Admin)
 // ---------------------------------------------------------------------------
 export type ReservationCmsData = {
-  tenantId: string;
+  restaurantId: string;
   restaurantName: string;
   restaurantSlug: string;
   landingEnabled: boolean;

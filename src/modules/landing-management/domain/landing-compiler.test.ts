@@ -91,6 +91,20 @@ describe("landing-compiler", () => {
     expect(synced.values.badge).toBe("Nuevo");
   });
 
+  it("keeps reservation landing slug independent from the menu URL", () => {
+    const doc = createDefaultLandingDocument("Casa Brasa", "casa-web", "casa-carta");
+    const block = doc.blocks[0]!;
+    block.htmlTemplate = '<section data-restaurant-slug="{{restaurantSlug}}"><a href="{{menuUrl}}">{{restaurantName}}</a></section>';
+    const compiled = compileLandingFromDocument(doc, {
+      restaurantName: "Casa Brasa",
+      restaurantSlug: "casa-web",
+      menuSlug: "casa-carta",
+    });
+    expect(compiled.htmlContent).toContain('data-restaurant-slug="casa-web"');
+    expect(compiled.htmlContent).toContain('href="/m/casa-carta"');
+    expect(compiled.htmlContent).not.toContain('href="/m/casa-web"');
+  });
+
   it("compiles a visual modular LandingDocument into HTML, CSS, and JS", () => {
     const doc = createDefaultLandingDocument("Casa Brasa", "casa-brasa");
     const compiled = compileLandingFromDocument(doc, {

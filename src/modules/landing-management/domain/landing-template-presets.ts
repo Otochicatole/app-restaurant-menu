@@ -750,7 +750,7 @@ export function presetAsLandingTemplateView(
     visibility: "PUBLIC",
     status: "PUBLISHED",
     isSystem: true,
-    tenantId: null,
+    restaurantId: null,
     document: preset.document,
     htmlContent: compiled.htmlContent,
     cssContent: compiled.cssContent,

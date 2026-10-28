@@ -546,14 +546,14 @@ export function resolveDocumentBlockAnchors(
 
 export function interpolateBlockHtml(
   block: LandingBlock,
-  context: { restaurantName: string; restaurantSlug: string },
+  context: { restaurantName: string; restaurantSlug: string; menuSlug?: string },
   options?: { interactiveEditor?: boolean },
 ): string {
   const safeRestaurantName = escapeHtml(
     context.restaurantName.trim() || "Nuestro Restaurante",
   );
   const safeRestaurantSlug = escapeHtml(context.restaurantSlug.trim());
-  const menuUrl = `/m/${context.restaurantSlug}`;
+  const menuUrl = `/m/${context.menuSlug ?? context.restaurantSlug}`;
   const isInteractive = Boolean(options?.interactiveEditor);
 
   const resolveTokens = (raw: string): string =>
@@ -2687,7 +2687,7 @@ a[data-original-href] {
 
 export function compileLandingFromDocument(
   document: LandingDocumentV1,
-  context: { restaurantName: string; restaurantSlug: string },
+  context: { restaurantName: string; restaurantSlug: string; menuSlug?: string },
   options?: { interactiveEditor?: boolean; selectedBlockId?: string | null },
 ): {
   htmlContent: string;
@@ -4272,9 +4272,10 @@ export const DEFAULT_LANDING_THEME: LandingTheme = {
 export function createDefaultLandingDocument(
   restaurantName: string,
   restaurantSlug: string,
+  menuSlug = restaurantSlug,
 ): LandingDocumentV1 {
   const safeName = restaurantName.trim() || "Nuestro Restaurante";
-  const menuUrl = `/m/${restaurantSlug}`;
+  const menuUrl = `/m/${menuSlug}`;
   const defaultKeys = [
     "header",
     "hero",
@@ -4308,16 +4309,18 @@ export function createDefaultLandingDocument(
 export function createDefaultLandingTemplate(
   restaurantName: string,
   restaurantSlug: string,
+  menuSlug = restaurantSlug,
 ): {
   document: LandingDocumentV1;
   html: string;
   css: string;
   js: string;
 } {
-  const document = createDefaultLandingDocument(restaurantName, restaurantSlug);
+  const document = createDefaultLandingDocument(restaurantName, restaurantSlug, menuSlug);
   const compiled = compileLandingFromDocument(document, {
     restaurantName,
     restaurantSlug,
+    menuSlug,
   });
 
   return {

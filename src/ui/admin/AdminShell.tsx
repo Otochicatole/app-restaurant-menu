@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { CalendarDays, Globe, Layers3, LayoutGrid, Menu, Settings } from "lucide-react";
+import { CalendarDays, Globe, Layers3, LayoutGrid, Menu, Settings, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export function AdminShell({
@@ -14,27 +14,33 @@ export function AdminShell({
   brandSubtitle,
   showMenuPickerLink,
   landingEnabled = false,
+  restaurantId,
+  organizationName,
 }: {
   children: React.ReactNode;
   brandTitle: string;
   brandSubtitle: string;
   showMenuPickerLink: boolean;
   landingEnabled?: boolean;
+  restaurantId: string;
+  organizationName: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isMenusPage = pathname === "/admin/menus" || pathname.startsWith("/admin/menus/");
-  const isLandingPage = pathname === "/admin/landing" || pathname.startsWith("/admin/landing/");
+  const basePath = `/admin/restaurantes/${restaurantId}`;
+  const isMenusPage = pathname === "/admin/restaurantes";
+  const isLandingPage = pathname === `${basePath}/landing`;
 
   const navigation = [
-    { label: "Editor", href: "/admin", exact: true, icon: Layers3 },
+    { label: "Editor", href: basePath, exact: true, icon: Layers3 },
     ...(landingEnabled
       ? [
-          { label: "Landing", href: "/admin/landing", exact: true, icon: Globe },
-          { label: "Reservas", href: "/admin/reservas", icon: CalendarDays },
+          { label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe },
+          { label: "Reservas", href: `${basePath}/reservas`, icon: CalendarDays },
         ]
       : []),
-    { label: "Configuración", href: "/admin/settings", icon: Settings },
+    { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
+    { label: "Mi cuenta", href: "/admin/account", icon: UserRound },
   ];
 
   const isActive = (item: (typeof navigation)[number]) =>
@@ -59,7 +65,7 @@ export function AdminShell({
         {/* Logo de la aplicación */}
         <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b shadow-xs border-zinc-200">
           <Link
-            href="/admin"
+            href={basePath}
             className="flex h-10 w-10 items-center justify-center rounded-xl p-2 transition-all hover:scale-105 hover:bg-black/10 hover:border-zinc-300 active:scale-95"
             aria-label={brandTitle}
           >
@@ -76,9 +82,9 @@ export function AdminShell({
           {showMenuPickerLink && (
             <div className="group relative flex w-full items-center justify-center">
               <Link
-                href="/admin/menus"
+                href="/admin/restaurantes"
                 onClick={() => setMobileOpen(false)}
-                aria-label="Cambiar menú"
+                aria-label="Cambiar restaurante"
                 aria-current={isMenusPage ? "page" : undefined}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
                   isMenusPage
@@ -92,7 +98,7 @@ export function AdminShell({
                 )}
               </Link>
               <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
-                <span>Cambiar menú</span>
+                <span>Cambiar restaurante</span>
               </div>
             </div>
           )}
@@ -157,8 +163,11 @@ export function AdminShell({
 
       {/* Contenido principal: vista completa para /admin/landing o contenedor con padding para settings */}
       <div className="md:pl-16">
+        <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
+          <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
+        </header>
         {isLandingPage ? (
-          <div className="h-screen w-full flex flex-col">{children}</div>
+          <div className="h-[calc(100dvh-3.5rem)] w-full flex flex-col">{children}</div>
         ) : (
           <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
         )}

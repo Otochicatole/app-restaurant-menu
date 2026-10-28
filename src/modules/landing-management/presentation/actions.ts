@@ -7,10 +7,8 @@ import {
   type ActionResult,
 } from "@/platform/application/action-result";
 import { ForbiddenError } from "@/platform/application/errors";
-import {
-  requireAuthenticatedAccount,
-  requireSuperAdmin,
-} from "@/modules/identity-access/server";
+import { requireSuperAdmin } from "@/modules/identity-access/server";
+import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import {
   createCustomModuleCommandSchema,
   createLandingTemplateSchema,
@@ -30,18 +28,13 @@ import { landingManagementService } from "../infrastructure/composition";
 
 export type LandingActionResult = ActionResult<LandingPageData>;
 
-async function assertCanManageLanding(tenantId: string) {
-  const actor = await requireAuthenticatedAccount();
-  if (actor.kind === "tenant-admin") {
-    if (actor.tenantId !== tenantId) {
-      throw new ForbiddenError("No tenés acceso a este negocio");
-    }
-    const isEnabled = await landingManagementService.isLandingEnabled(tenantId);
-    if (!isEnabled) {
-      throw new ForbiddenError(
-        "La funcionalidad de Landing no está habilitada por el Super Admin",
-      );
-    }
+async function assertCanManageLanding(restaurantId: string) {
+  await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
+  const isEnabled = await landingManagementService.isLandingEnabled(restaurantId);
+  if (!isEnabled) {
+    throw new ForbiddenError(
+      "La funcionalidad de Landing no está habilitada para este restaurante",
+    );
   }
 }
 
@@ -50,10 +43,10 @@ export async function saveLandingDraftAction(
 ): Promise<LandingActionResult> {
   try {
     const command = saveLandingCommandSchema.parse(input);
-    await assertCanManageLanding(command.tenantId);
+    await assertCanManageLanding(command.restaurantId);
     const data = await landingManagementService.saveDraft(command);
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${command.tenantId}/landing`);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(
@@ -68,10 +61,10 @@ export async function publishLandingAction(
 ): Promise<LandingActionResult> {
   try {
     const command = publishLandingCommandSchema.parse(input);
-    await assertCanManageLanding(command.tenantId);
+    await assertCanManageLanding(command.restaurantId);
     const data = await landingManagementService.publishLanding(command);
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${command.tenantId}/landing`);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     revalidatePath("/l/[slug]", "page");
     return actionSuccess(data);
   } catch (error) {
@@ -84,10 +77,10 @@ export async function createCustomLandingModuleAction(
 ): Promise<ActionResult<LandingCustomModuleView>> {
   try {
     const command = createCustomModuleCommandSchema.parse(input);
-    await assertCanManageLanding(command.tenantId);
+    await assertCanManageLanding(command.restaurantId);
     const created = await landingManagementService.createCustomModule(command);
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${command.tenantId}/landing`);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess(created);
   } catch (error) {
     return actionErrorResult(
@@ -98,14 +91,14 @@ export async function createCustomLandingModuleAction(
 }
 
 export async function deleteCustomLandingModuleAction(
-  tenantId: string,
+  restaurantId: string,
   moduleId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageLanding(tenantId);
-    await landingManagementService.deleteCustomModule(tenantId, moduleId);
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${tenantId}/landing`);
+    await assertCanManageLanding(restaurantId);
+    await landingManagementService.deleteCustomModule(restaurantId, moduleId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess({ deletedId: moduleId });
   } catch (error) {
     return actionErrorResult(
@@ -116,20 +109,20 @@ export async function deleteCustomLandingModuleAction(
 }
 
 export async function createLandingTemplateAction(input: {
-  tenantId: string;
+  restaurantId: string;
   document: LandingDocumentV1;
   command: CreateLandingTemplateCommand;
 }): Promise<ActionResult<LandingTemplateView>> {
   try {
-    await assertCanManageLanding(input.tenantId);
+    await assertCanManageLanding(input.restaurantId);
     const parsedCmd = createLandingTemplateSchema.parse(input.command);
     const created = await landingManagementService.createTemplate(
-      input.tenantId,
+      input.restaurantId,
       input.document,
       parsedCmd,
     );
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${input.tenantId}/landing`);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     revalidatePath("/superadmin/plantillas");
     return actionSuccess(created);
   } catch (error) {
@@ -141,14 +134,14 @@ export async function createLandingTemplateAction(input: {
 }
 
 export async function deletePrivateLandingTemplateAction(
-  tenantId: string,
+  restaurantId: string,
   templateId: string,
 ): Promise<ActionResult<{ deletedId: string }>> {
   try {
-    await assertCanManageLanding(tenantId);
-    await landingManagementService.deletePrivateTemplate(tenantId, templateId);
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${tenantId}/landing`);
+    await assertCanManageLanding(restaurantId);
+    await landingManagementService.deletePrivateTemplate(restaurantId, templateId);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess({ deletedId: templateId });
   } catch (error) {
     return actionErrorResult(
@@ -159,13 +152,13 @@ export async function deletePrivateLandingTemplateAction(
 }
 
 export async function exportLandingTemplateAction(
-  tenantId: string,
+  restaurantId: string,
   templateId: string,
 ): Promise<ActionResult<{ base64: string; filename: string }>> {
   try {
-    await assertCanManageLanding(tenantId);
+    await assertCanManageLanding(restaurantId);
     const { bytes, filename } = await landingManagementService.exportTemplate(
-      tenantId,
+      restaurantId,
       templateId,
     );
     return actionSuccess({
@@ -181,18 +174,18 @@ export async function exportLandingTemplateAction(
 }
 
 export async function importLandingTemplateAction(
-  tenantId: string,
+  restaurantId: string,
   base64Content: string,
 ): Promise<ActionResult<LandingTemplateView>> {
   try {
-    await assertCanManageLanding(tenantId);
+    await assertCanManageLanding(restaurantId);
     const bytes = new Uint8Array(Buffer.from(base64Content, "base64"));
     const imported = await landingManagementService.importTemplate(
-      tenantId,
+      restaurantId,
       bytes,
     );
-    revalidatePath("/admin/landing");
-    revalidatePath(`/superadmin/clientes/${tenantId}/landing`);
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess(imported);
   } catch (error) {
     return actionErrorResult(
@@ -236,7 +229,7 @@ export async function moderateLandingTemplateAction(input: {
       );
     }
     revalidatePath("/superadmin/plantillas");
-    revalidatePath("/admin/landing");
+    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
     return actionSuccess({ ok: true });
   } catch (error) {
     return actionErrorResult(

@@ -1,11 +1,11 @@
 import { menuTemplates } from "@/modules/menu-editor/server";
-import { tenantManagement } from "@/modules/tenant-management/server";
+import { organizationManagement } from "@/modules/organization-management/server";
 import { BarChart3, PanelsTopLeft, Store } from "lucide-react";
 import Link from "next/link";
 
 export default async function SuperAdminDashboardPage() {
   const [tenants, templates] = await Promise.all([
-    tenantManagement.listTenants(),
+    organizationManagement.listOrganizations(),
     menuTemplates.listForSuperadmin({ tab: "all", query: "", page: 1, pageSize: 24 }),
   ]);
   const pending = templates.items.filter((template) => template.status === "PENDING").length;
@@ -29,7 +29,7 @@ export default async function SuperAdminDashboardPage() {
         <SummaryCard
           href="/superadmin/clientes"
           icon={<Store size={18} />}
-          label="Clientes"
+          label="Organizaciones"
           value={tenants.length}
           detail={`${active} activos`}
           highlight

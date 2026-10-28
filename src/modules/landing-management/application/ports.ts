@@ -12,16 +12,19 @@ import type {
 } from "../contracts";
 import type { PortableLandingTemplate } from "../domain/landing-template-bundle";
 
-export type TenantInfo = {
+export type RestaurantInfo = {
   id: string;
+  organizationId: string;
   name: string;
   slug: string;
+  landingSlug: string;
   status: string;
+  organizationStatus: string;
   landingEnabled: boolean;
 };
 
 export type LandingTemplateCreateInput = CreateLandingTemplateCommand & {
-  tenantId: string;
+  restaurantId: string;
   document: LandingDocumentV1;
   htmlContent: string;
   cssContent: string;
@@ -29,39 +32,39 @@ export type LandingTemplateCreateInput = CreateLandingTemplateCommand & {
 };
 
 export interface LandingRepository {
-  findByTenantId(tenantId: string): Promise<LandingPageData | null>;
+  findByRestaurantId(restaurantId: string): Promise<LandingPageData | null>;
   save(command: SaveLandingCommand): Promise<LandingPageData>;
   publish(
     command: PublishLandingCommand,
     compiledHtml: string,
   ): Promise<LandingPageData>;
-  getPublishedHtmlFromStorage(tenantId: string): Promise<string | null>;
-  findTenantBySlug(slug: string): Promise<TenantInfo | null>;
-  findTenantById(tenantId: string): Promise<TenantInfo | null>;
-  isLandingEnabledForTenant(tenantId: string): Promise<boolean>;
+  getPublishedHtmlFromStorage(restaurantId: string): Promise<string | null>;
+  findRestaurantByLandingSlug(slug: string): Promise<RestaurantInfo | null>;
+  findRestaurantById(restaurantId: string): Promise<RestaurantInfo | null>;
+  isLandingEnabledForRestaurant(restaurantId: string): Promise<boolean>;
 
   // Reusable Custom Modules
-  listCustomModules(tenantId: string): Promise<LandingCustomModuleView[]>;
+  listCustomModules(restaurantId: string): Promise<LandingCustomModuleView[]>;
   createCustomModule(
     command: CreateCustomModuleCommand,
   ): Promise<LandingCustomModuleView>;
-  deleteCustomModule(tenantId: string, moduleId: string): Promise<void>;
+  deleteCustomModule(restaurantId: string, moduleId: string): Promise<void>;
 
   // Landing Templates
-  listTemplates(tenantId: string): Promise<LandingTemplateView[]>;
+  listTemplates(restaurantId: string): Promise<LandingTemplateView[]>;
   createPrivateTemplate(
     input: LandingTemplateCreateInput,
   ): Promise<LandingTemplateView>;
   submitPublicTemplate(
     input: LandingTemplateCreateInput,
   ): Promise<LandingTemplateView>;
-  deletePrivateTemplate(tenantId: string, templateId: string): Promise<void>;
+  deletePrivateTemplate(restaurantId: string, templateId: string): Promise<void>;
   exportPortableTemplate(
-    tenantId: string,
+    restaurantId: string,
     templateId: string,
   ): Promise<PortableLandingTemplate>;
   importPortableTemplate(
-    tenantId: string,
+    restaurantId: string,
     portable: PortableLandingTemplate,
   ): Promise<LandingTemplateView>;
   listTemplatesForSuperadmin(

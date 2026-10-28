@@ -10,11 +10,11 @@ import {
   type DateAvailabilityView,
   type DomainBlockedDate,
   type DomainRecurringClosure,
-  type DomainReservation,
   type DomainRestaurantEvent,
   type DomainTimeSlot,
   type PublicEventAvailabilityView,
 } from "../domain/availability-engine";
+import { generateReservationCode } from "../domain/reservation-code";
 import type {
   AdminCreateReservationCommand,
   BlockedDateView,
@@ -33,15 +33,6 @@ import type {
   UpsertTimeSlotCommand,
 } from "../contracts";
 import type { ReservationRepositoryPort } from "./ports";
-
-function generateReservationCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let random = "";
-  for (let i = 0; i < 5; i++) {
-    random += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `RES-${random}`;
-}
 
 function getTodayIsoString(): string {
   const now = new Date();
@@ -76,29 +67,30 @@ function generateDatesInRange(fromIso: string, toIso: string): string[] {
 export class ReservationManagementService {
   constructor(private readonly repo: ReservationRepositoryPort) {}
 
-  async isLandingEnabled(tenantId: string): Promise<boolean> {
-    return this.repo.isLandingEnabled(tenantId);
+  async isLandingEnabled(restaurantId: string): Promise<boolean> {
+    return this.repo.isLandingEnabled(restaurantId);
   }
 
   // ---------------------------------------------------------------------------
   // Admin CMS Operations
   // ---------------------------------------------------------------------------
 
-  async getCmsData(tenantId: string): Promise<ReservationCmsData> {
-    const isEnabled = await this.repo.isLandingEnabled(tenantId);
+  async getCmsData(restaurantId: string): Promise<ReservationCmsData> {
+    const isEnabled = await this.repo.isLandingEnabled(restaurantId);
     if (!isEnabled) {
       throw new ForbiddenError(
         "La funcionalidad de Landing y Reservas no está habilitada para esta cuenta.",
       );
     }
 
-    const [timeSlots, recurringClosures, blockedDates, events, reservations] =
+    const [restaurant, timeSlots, recurringClosures, blockedDates, events, reservations] =
       await Promise.all([
-        this.repo.getTimeSlots(tenantId),
-        this.repo.getRecurringClosures(tenantId),
-        this.repo.getBlockedDates(tenantId),
-        this.repo.getEvents(tenantId),
-        this.repo.getReservations(tenantId),
+        this.repo.getRestaurantInfo(restaurantId),
+        this.repo.getTimeSlots(restaurantId),
+        this.repo.getRecurringClosures(restaurantId),
+        this.repo.getBlockedDates(restaurantId),
+        this.repo.getEvents(restaurantId),
+        this.repo.getReservations(restaurantId),
       ]);
 
     const todayIso = getTodayIsoString();
@@ -109,9 +101,9 @@ export class ReservationManagementService {
     const activeSlots = timeSlots.filter((s) => s.active);
 
     return {
-      tenantId,
-      restaurantName: "Mi Restaurante",
-      restaurantSlug: "",
+      restaurantId,
+      restaurantName: restaurant?.name ?? "Mi Restaurante",
+      restaurantSlug: restaurant?.landingSlug ?? "",
       landingEnabled: isEnabled,
       timeSlots,
       recurringClosures,
@@ -129,71 +121,71 @@ export class ReservationManagementService {
   }
 
   async upsertTimeSlot(
-    tenantId: string,
+    restaurantId: string,
     cmd: UpsertTimeSlotCommand,
   ): Promise<TimeSlotView> {
-    return this.repo.upsertTimeSlot(tenantId, cmd);
+    return this.repo.upsertTimeSlot(restaurantId, cmd);
   }
 
-  async deleteTimeSlot(tenantId: string, slotId: string): Promise<void> {
-    return this.repo.deleteTimeSlot(tenantId, slotId);
+  async deleteTimeSlot(restaurantId: string, slotId: string): Promise<void> {
+    return this.repo.deleteTimeSlot(restaurantId, slotId);
   }
 
   async setRecurringClosures(
-    tenantId: string,
+    restaurantId: string,
     closures: { dayOfWeek: number; reason: string }[],
   ): Promise<RecurringClosureView[]> {
-    return this.repo.setRecurringClosures(tenantId, closures);
+    return this.repo.setRecurringClosures(restaurantId, closures);
   }
 
   async addBlockedDate(
-    tenantId: string,
+    restaurantId: string,
     date: string,
     reason: string,
   ): Promise<BlockedDateView> {
-    return this.repo.addBlockedDate(tenantId, date, reason);
+    return this.repo.addBlockedDate(restaurantId, date, reason);
   }
 
-  async removeBlockedDate(tenantId: string, id: string): Promise<void> {
-    return this.repo.removeBlockedDate(tenantId, id);
+  async removeBlockedDate(restaurantId: string, id: string): Promise<void> {
+    return this.repo.removeBlockedDate(restaurantId, id);
   }
 
   async upsertRestaurantEvent(
-    tenantId: string,
+    restaurantId: string,
     cmd: UpsertRestaurantEventCommand,
   ): Promise<RestaurantEventView> {
-    return this.repo.upsertEvent(tenantId, cmd);
+    return this.repo.upsertEvent(restaurantId, cmd);
   }
 
-  async deleteRestaurantEvent(tenantId: string, eventId: string): Promise<void> {
-    return this.repo.deleteEvent(tenantId, eventId);
+  async deleteRestaurantEvent(restaurantId: string, eventId: string): Promise<void> {
+    return this.repo.deleteEvent(restaurantId, eventId);
   }
 
   async createAdminReservation(
-    tenantId: string,
+    restaurantId: string,
     cmd: AdminCreateReservationCommand,
   ): Promise<ReservationView> {
     const code = generateReservationCode();
-    return this.repo.createReservation(tenantId, cmd, code);
+    return this.repo.createReservation(restaurantId, cmd, code);
   }
 
   async updateReservation(
-    tenantId: string,
+    restaurantId: string,
     cmd: UpdateReservationCommand,
   ): Promise<ReservationView> {
-    return this.repo.updateReservation(tenantId, cmd);
+    return this.repo.updateReservation(restaurantId, cmd);
   }
 
   async updateReservationStatus(
-    tenantId: string,
+    restaurantId: string,
     id: string,
     status: ReservationStatus,
   ): Promise<ReservationView> {
-    return this.repo.updateReservationStatus(tenantId, id, status);
+    return this.repo.updateReservationStatus(restaurantId, id, status);
   }
 
-  async deleteReservation(tenantId: string, id: string): Promise<void> {
-    return this.repo.deleteReservation(tenantId, id);
+  async deleteReservation(restaurantId: string, id: string): Promise<void> {
+    return this.repo.deleteReservation(restaurantId, id);
   }
 
   // ---------------------------------------------------------------------------
@@ -213,7 +205,7 @@ export class ReservationManagementService {
     events: PublicEventAvailabilityView[];
     availability: AvailabilityResult;
   }> {
-    const context = await this.repo.getTenantPublicContext(slug);
+    const context = await this.repo.getRestaurantPublicContext(slug);
     if (!context) {
       throw new NotFoundError("Restaurante no encontrado");
     }
@@ -224,17 +216,22 @@ export class ReservationManagementService {
     const todayIso = getTodayIsoString();
     let fromIso = query.from || query.date || todayIso;
     if (fromIso < todayIso) fromIso = todayIso;
-    const toIso = query.to || query.date || addDaysToIso(fromIso, 60);
+    const requestedTo = query.to || query.date || addDaysToIso(fromIso, 60);
+    if (requestedTo < fromIso) {
+      throw new BadRequestError("La fecha final debe ser igual o posterior a la inicial.");
+    }
+    const toIso = requestedTo < addDaysToIso(fromIso, 119)
+      ? requestedTo
+      : addDaysToIso(fromIso, 119);
 
     const datesList = generateDatesInRange(fromIso, toIso);
 
-    const [timeSlots, recurringClosures, blockedDates, events, reservations] =
+    const [timeSlots, recurringClosures, blockedDates, events] =
       await Promise.all([
-        this.repo.getTimeSlots(context.tenantId),
-        this.repo.getRecurringClosures(context.tenantId),
-        this.repo.getBlockedDates(context.tenantId),
-        this.repo.getEvents(context.tenantId),
-        this.repo.getReservations(context.tenantId),
+        this.repo.getTimeSlots(context.restaurantId),
+        this.repo.getRecurringClosures(context.restaurantId),
+        this.repo.getBlockedDates(context.restaurantId),
+        this.repo.getAvailabilityEvents(context.restaurantId, { from: fromIso, to: toIso }),
       ]);
 
     const activeSlots: DomainTimeSlot[] = timeSlots
@@ -268,15 +265,7 @@ export class ReservationManagementService {
       imageUrl: e.imageUrl,
       blocksRegularReservations: e.blocksRegularReservations,
       status: e.status,
-    }));
-
-    const domainReservations: DomainReservation[] = reservations.map((r) => ({
-      id: r.id,
-      date: r.date,
-      time: r.time,
-      status: r.status,
-      partySize: r.partySize,
-      eventId: r.eventId,
+      occupiedSpots: e.occupiedSpots,
     }));
 
     const availability = computeAvailability({
@@ -285,7 +274,7 @@ export class ReservationManagementService {
       recurringClosures: domainClosures,
       blockedDates: domainBlockedDates,
       events: domainEvents,
-      reservations: domainReservations,
+      reservations: [],
       todayIso,
     });
 
@@ -340,13 +329,12 @@ export class ReservationManagementService {
     slug: string,
     cmd: PublicCreateEventReservationCommand,
   ): Promise<ReservationView> {
-    const context = await this.repo.getTenantPublicContext(slug);
+    const context = await this.repo.getRestaurantPublicContext(slug);
     if (!context || !context.landingEnabled) {
       throw new ForbiddenError("Las reservas no están habilitadas para este restaurante");
     }
 
-    const events = await this.repo.getEvents(context.tenantId);
-    const targetEvent = events.find((e) => e.id === cmd.eventId);
+    const targetEvent = await this.repo.getEventById(context.restaurantId, cmd.eventId);
     if (!targetEvent || targetEvent.status !== "PUBLISHED") {
       throw new NotFoundError("El evento seleccionado no existe o no está publicado.");
     }
@@ -367,7 +355,7 @@ export class ReservationManagementService {
     slug: string,
     cmd: PublicCreateReservationCommand,
   ): Promise<ReservationView> {
-    const context = await this.repo.getTenantPublicContext(slug);
+    const context = await this.repo.getRestaurantPublicContext(slug);
     if (!context) {
       throw new NotFoundError("Restaurante no encontrado");
     }
@@ -375,15 +363,24 @@ export class ReservationManagementService {
       throw new ForbiddenError("Las reservas no están habilitadas para este restaurante");
     }
 
+    let reservationCommand = cmd;
+    if (cmd.eventId) {
+      const event = await this.repo.getEventById(context.restaurantId, cmd.eventId);
+      if (!event || event.status !== "PUBLISHED") {
+        throw new NotFoundError("El evento seleccionado no existe o no está publicado.");
+      }
+      reservationCommand = { ...cmd, date: event.date, time: event.startTime };
+    }
+
     const todayIso = getTodayIsoString();
-    if (cmd.date < todayIso) {
+    if (reservationCommand.date < todayIso) {
       throw new BadRequestError("No se pueden realizar reservas para fechas pasadas.");
     }
 
     // Availability validation check
     const availResult = await this.getPublicAvailability(slug, {
-      from: cmd.date,
-      to: cmd.date,
+      from: reservationCommand.date,
+      to: reservationCommand.date,
     });
     const dateAvail = availResult.availability.dates[0];
 
@@ -394,7 +391,7 @@ export class ReservationManagementService {
       if (!targetEvent) {
         throw new NotFoundError("El evento seleccionado no existe o no está publicado.");
       }
-      if (!targetEvent.available || targetEvent.remainingSpots <= 0) {
+      if (!targetEvent.available || targetEvent.remainingSpots < cmd.partySize) {
         throw new ConflictError("Lo sentimos, este evento no tiene cupos disponibles.");
       }
     } else {
@@ -415,12 +412,12 @@ export class ReservationManagementService {
 
     const code = generateReservationCode();
     const adminCommand: AdminCreateReservationCommand = {
-      ...cmd,
+      ...reservationCommand,
       adminNotes: "",
       status: "PENDING",
       source: "LANDING",
     };
 
-    return this.repo.createReservation(context.tenantId, adminCommand, code);
+    return this.repo.createReservation(context.restaurantId, adminCommand, code);
   }
 }

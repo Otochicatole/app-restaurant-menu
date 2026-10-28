@@ -28,16 +28,35 @@ import {
   encodeLandingTemplateBundle,
   landingTemplateBundleFilename,
 } from "../domain/landing-template-bundle";
-import type { LandingRepository, TenantInfo } from "./ports";
+import type { LandingRepository, RestaurantInfo } from "./ports";
+import {
+  getLandingRouteContext,
+  recontextualizeLandingDocument,
+  recontextualizeLandingSource,
+  rewriteLandingRoutes,
+} from "../domain/landing-route-context";
+
+function normalizeLandingCommandRoutes<T extends SaveLandingCommand>(command: T, restaurant: RestaurantInfo): T {
+  const current = { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug };
+  const previous = getLandingRouteContext(command.htmlContent) ?? current;
+  return {
+    ...command,
+    htmlContent: recontextualizeLandingSource(command.htmlContent, current, previous),
+    cssContent: rewriteLandingRoutes(command.cssContent, previous, current),
+    jsContent: rewriteLandingRoutes(command.jsContent, previous, current),
+    ...(command.document ? { document: recontextualizeLandingDocument(command.document, previous, current) } : {}),
+  };
+}
 
 export type LandingEditorView = {
   landingPage: LandingPageData;
   customModules: LandingCustomModuleView[];
   templates: LandingTemplateView[];
-  tenant: {
+  restaurant: {
     id: string;
     name: string;
     slug: string;
+    landingSlug: string;
     landingEnabled: boolean;
   };
   hasPublishedStorage: boolean;
@@ -45,39 +64,47 @@ export type LandingEditorView = {
 
 export function createLandingUseCases(repository: LandingRepository) {
   return {
-    async getLandingEditorData(tenantId: string): Promise<LandingEditorView> {
-      const tenant = await repository.findTenantById(tenantId);
-      if (!tenant) {
+    async getLandingEditorData(restaurantId: string): Promise<LandingEditorView> {
+      const restaurant = await repository.findRestaurantById(restaurantId);
+      if (!restaurant) {
         throw new Error("Negocio no encontrado");
       }
 
       const [existing, hasStorageHtml, customModules, templates] =
         await Promise.all([
-          repository.findByTenantId(tenantId),
-          repository.getPublishedHtmlFromStorage(tenantId),
-          repository.listCustomModules(tenantId),
-          repository.listTemplates(tenantId),
+          repository.findByRestaurantId(restaurantId),
+          repository.getPublishedHtmlFromStorage(restaurantId),
+          repository.listCustomModules(restaurantId),
+          repository.listTemplates(restaurantId),
         ]);
 
       const hasPublishedStorage = Boolean(hasStorageHtml);
       const defaultCode = createDefaultLandingTemplate(
-        tenant.name,
-        tenant.slug,
+        restaurant.name,
+        restaurant.landingSlug,
+        restaurant.slug,
       );
 
       if (existing) {
+        const current = { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug };
+        const previous = getLandingRouteContext(existing.htmlContent)
+          ?? getLandingRouteContext(hasStorageHtml ?? "") ?? current;
         return {
           landingPage: {
             ...existing,
-            document: existing.document ?? defaultCode.document,
+            document: recontextualizeLandingDocument(existing.document ?? defaultCode.document, previous, current),
+            htmlContent: recontextualizeLandingSource(existing.htmlContent, current, previous),
+            cssContent: rewriteLandingRoutes(existing.cssContent, previous, current),
+            jsContent: rewriteLandingRoutes(existing.jsContent, previous, current),
           },
           customModules,
           templates,
-          tenant: {
-            id: tenant.id,
-            name: tenant.name,
-            slug: tenant.slug,
-            landingEnabled: tenant.landingEnabled,
+          restaurant: {
+            id: restaurant.id,
+            name: restaurant.name,
+            slug: restaurant.slug,
+            landingSlug: restaurant.landingSlug,
+            landingEnabled: restaurant.landingEnabled,
           },
           hasPublishedStorage,
         };
@@ -85,7 +112,7 @@ export function createLandingUseCases(repository: LandingRepository) {
 
       const initialLanding: LandingPageData = {
         id: "draft-initial",
-        tenantId: tenant.id,
+        restaurantId: restaurant.id,
         document: defaultCode.document,
         htmlContent: defaultCode.html,
         cssContent: defaultCode.css,
@@ -100,11 +127,12 @@ export function createLandingUseCases(repository: LandingRepository) {
         landingPage: initialLanding,
         customModules,
         templates,
-        tenant: {
-          id: tenant.id,
-          name: tenant.name,
-          slug: tenant.slug,
-          landingEnabled: tenant.landingEnabled,
+        restaurant: {
+          id: restaurant.id,
+          name: restaurant.name,
+          slug: restaurant.slug,
+          landingSlug: restaurant.landingSlug,
+          landingEnabled: restaurant.landingEnabled,
         },
         hasPublishedStorage,
       };
@@ -112,15 +140,17 @@ export function createLandingUseCases(repository: LandingRepository) {
 
     async saveDraft(input: SaveLandingCommand): Promise<LandingPageData> {
       const command = saveLandingCommandSchema.parse(input);
-      return repository.save(command);
+      const restaurant = await repository.findRestaurantById(command.restaurantId);
+      return repository.save(restaurant ? normalizeLandingCommandRoutes(command, restaurant) : command);
     },
 
     async publishLanding(
       input: PublishLandingCommand,
     ): Promise<LandingPageData> {
-      const command = publishLandingCommandSchema.parse(input);
-      const tenant = await repository.findTenantById(command.tenantId);
-      const title = tenant?.name || "Restaurante";
+      const parsed = publishLandingCommandSchema.parse(input);
+      const restaurant = await repository.findRestaurantById(parsed.restaurantId);
+      const command = restaurant ? normalizeLandingCommandRoutes(parsed, restaurant) : parsed;
+      const title = restaurant?.name || "Restaurante";
 
       const compiledHtml = compileLandingDocument({
         htmlContent: command.htmlContent,
@@ -129,81 +159,95 @@ export function createLandingUseCases(repository: LandingRepository) {
         title,
       });
 
-      return repository.publish(command, compiledHtml);
+      return repository.publish(command, restaurant
+        ? recontextualizeLandingSource(compiledHtml, { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug })
+        : compiledHtml);
     },
 
     async getPublicLanding(slug: string): Promise<PublicLandingResult> {
-      const tenant = await repository.findTenantBySlug(slug);
-      if (!tenant) {
+      const restaurant = await repository.findRestaurantByLandingSlug(slug);
+      if (!restaurant) {
         return { kind: "not_found" };
       }
 
-      if (tenant.status !== "ACTIVE" || !tenant.landingEnabled) {
+      if (
+        restaurant.status !== "ACTIVE" ||
+        restaurant.organizationStatus !== "ACTIVE" ||
+        !restaurant.landingEnabled
+      ) {
         return { kind: "disabled" };
       }
 
+      const dbRecord = await repository.findByRestaurantId(restaurant.id);
+      if (!dbRecord?.published) {
+        return {
+          kind: "preparation",
+          restaurantName: restaurant.name,
+          restaurantSlug: restaurant.landingSlug,
+          menuSlug: restaurant.slug,
+        };
+      }
+
       const publishedHtml = await repository.getPublishedHtmlFromStorage(
-        tenant.id,
+        restaurant.id,
       );
+      const current = { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug };
       if (!publishedHtml) {
-        const dbRecord = await repository.findByTenantId(tenant.id);
-        if (dbRecord?.published) {
-          const compiledHtml = compileLandingDocument({
+        const compiledHtml = recontextualizeLandingSource(compileLandingDocument({
+          htmlContent: dbRecord.htmlContent,
+          cssContent: dbRecord.cssContent,
+          jsContent: dbRecord.jsContent,
+          title: restaurant.name,
+        }), current);
+        await repository.publish(
+          {
+            restaurantId: restaurant.id,
             htmlContent: dbRecord.htmlContent,
             cssContent: dbRecord.cssContent,
             jsContent: dbRecord.jsContent,
-            title: tenant.name,
-          });
-          await repository.publish(
-            {
-              tenantId: tenant.id,
-              htmlContent: dbRecord.htmlContent,
-              cssContent: dbRecord.cssContent,
-              jsContent: dbRecord.jsContent,
-              document: dbRecord.document ?? undefined,
-            },
-            compiledHtml,
-          );
-          return {
-            kind: "ready",
-            restaurantName: tenant.name,
-            restaurantSlug: tenant.slug,
-            html: compiledHtml,
-          };
-        }
-
+            document: dbRecord.document ?? undefined,
+          },
+          compiledHtml,
+        );
         return {
-          kind: "preparation",
-          restaurantName: tenant.name,
-          restaurantSlug: tenant.slug,
+          kind: "ready",
+          restaurantName: restaurant.name,
+          restaurantSlug: restaurant.landingSlug,
+          menuSlug: restaurant.slug,
+          html: compiledHtml,
         };
       }
 
       return {
         kind: "ready",
-        restaurantName: tenant.name,
-        restaurantSlug: tenant.slug,
-        html: publishedHtml,
+        restaurantName: restaurant.name,
+        restaurantSlug: restaurant.landingSlug,
+        menuSlug: restaurant.slug,
+        html: recontextualizeLandingSource(publishedHtml, current),
       };
     },
 
-    async isLandingEnabled(tenantId: string): Promise<boolean> {
-      return repository.isLandingEnabledForTenant(tenantId);
+    async isLandingEnabled(restaurantId: string): Promise<boolean> {
+      return repository.isLandingEnabledForRestaurant(restaurantId);
     },
 
-    async getTenant(tenantId: string): Promise<TenantInfo | null> {
-      return repository.findTenantById(tenantId);
+    async isLandingPublished(restaurantId: string): Promise<boolean> {
+      return Boolean((await repository.findByRestaurantId(restaurantId))?.published);
     },
 
-    async getTenantBySlug(slug: string): Promise<TenantInfo | null> {
-      return repository.findTenantBySlug(slug);
+    async getRestaurant(restaurantId: string): Promise<RestaurantInfo | null> {
+      return repository.findRestaurantById(restaurantId);
+    },
+
+    async getRestaurantByLandingSlug(slug: string): Promise<RestaurantInfo | null> {
+      return repository.findRestaurantByLandingSlug(slug);
     },
 
     // Reusable Custom Modules
     async listCustomModules(
-      tenantId: string,
+      restaurantId: string,
     ): Promise<LandingCustomModuleView[]> {
-      return repository.listCustomModules(z.string().min(1).parse(tenantId));
+      return repository.listCustomModules(z.string().min(1).parse(restaurantId));
     },
 
     async createCustomModule(
@@ -222,39 +266,43 @@ export function createLandingUseCases(repository: LandingRepository) {
     },
 
     async deleteCustomModule(
-      tenantId: string,
+      restaurantId: string,
       moduleId: string,
     ): Promise<void> {
       return repository.deleteCustomModule(
-        z.string().min(1).parse(tenantId),
+        z.string().min(1).parse(restaurantId),
         z.string().min(1).parse(moduleId),
       );
     },
 
     // Landing Templates
-    async listTemplates(tenantId: string): Promise<LandingTemplateView[]> {
-      return repository.listTemplates(z.string().min(1).parse(tenantId));
+    async listTemplates(restaurantId: string): Promise<LandingTemplateView[]> {
+      return repository.listTemplates(z.string().min(1).parse(restaurantId));
     },
 
     async createTemplate(
-      tenantId: string,
+      restaurantId: string,
       document: LandingDocumentV1,
       input: CreateLandingTemplateCommand,
     ): Promise<LandingTemplateView> {
-      const id = z.string().min(1).parse(tenantId);
+      const id = z.string().min(1).parse(restaurantId);
       const validDocument = landingDocumentSchema.parse(document);
       const command = createLandingTemplateSchema.parse(input);
-      const tenant = await repository.findTenantById(id);
+      const restaurant = await repository.findRestaurantById(id);
       const compiled = compileLandingFromDocument(validDocument, {
-        restaurantName: tenant?.name ?? command.name,
-        restaurantSlug: tenant?.slug ?? "restaurante",
+        restaurantName: restaurant?.name ?? command.name,
+        restaurantSlug: restaurant?.landingSlug ?? "restaurante",
+        menuSlug: restaurant?.slug ?? "restaurante",
       });
 
       const payload = {
         ...command,
-        tenantId: id,
+        restaurantId: id,
         document: validDocument,
-        htmlContent: compiled.htmlContent,
+        htmlContent: recontextualizeLandingSource(compiled.htmlContent, {
+          menuSlug: restaurant?.slug ?? "restaurante",
+          landingSlug: restaurant?.landingSlug ?? "restaurante",
+        }),
         cssContent: compiled.cssContent,
         jsContent: compiled.jsContent,
       };
@@ -266,21 +314,21 @@ export function createLandingUseCases(repository: LandingRepository) {
     },
 
     async deletePrivateTemplate(
-      tenantId: string,
+      restaurantId: string,
       templateId: string,
     ): Promise<void> {
       return repository.deletePrivateTemplate(
-        z.string().min(1).parse(tenantId),
+        z.string().min(1).parse(restaurantId),
         z.string().min(1).parse(templateId),
       );
     },
 
     async exportTemplate(
-      tenantId: string,
+      restaurantId: string,
       templateId: string,
     ): Promise<{ bytes: Uint8Array; filename: string }> {
       const portable = await repository.exportPortableTemplate(
-        z.string().min(1).parse(tenantId),
+        z.string().min(1).parse(restaurantId),
         z.string().min(1).parse(templateId),
       );
       return {
@@ -290,12 +338,12 @@ export function createLandingUseCases(repository: LandingRepository) {
     },
 
     async importTemplate(
-      tenantId: string,
+      restaurantId: string,
       bytes: Uint8Array,
     ): Promise<LandingTemplateView> {
       const portable = decodeLandingTemplateBundle(bytes);
       return repository.importPortableTemplate(
-        z.string().min(1).parse(tenantId),
+        z.string().min(1).parse(restaurantId),
         portable,
       );
     },

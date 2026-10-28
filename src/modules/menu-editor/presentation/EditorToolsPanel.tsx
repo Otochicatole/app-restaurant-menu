@@ -118,7 +118,7 @@ export function EditorToolsPanel({
   );
 }
 
-export function TemplatePickerDrawer({ templates, assets, onClose, onApply, onSaveTemplate, onDelete, onImport }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onClose: () => void; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
+export function TemplatePickerDrawer({ editorApi, templates, assets, onClose, onApply, onSaveTemplate, onDelete, onImport }: { editorApi: string; templates: MenuTemplateView[]; assets: MenuAssetView[]; onClose: () => void; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
   return (
     <aside id="editor-templates" className="flex h-full w-80 min-w-72 shrink-0 flex-col border-r border-zinc-200 bg-white p-3">
       <div className="mb-2 flex shrink-0 items-center justify-between">
@@ -128,12 +128,12 @@ export function TemplatePickerDrawer({ templates, assets, onClose, onApply, onSa
         </div>
         <button className="rounded p-1 text-zinc-500 hover:bg-zinc-100" onClick={onClose} aria-label="Volver a capas"><X size={17} /></button>
       </div>
-      <TemplateLibrary templates={templates} assets={assets} onApply={onApply} onSaveTemplate={onSaveTemplate} onDelete={onDelete} onImport={onImport} />
+      <TemplateLibrary editorApi={editorApi} templates={templates} assets={assets} onApply={onApply} onSaveTemplate={onSaveTemplate} onDelete={onDelete} onImport={onImport} />
     </aside>
   );
 }
 
-export function TemplateLibrary({ templates, assets, onApply, onSaveTemplate, onDelete, onImport }: { templates: MenuTemplateView[]; assets: MenuAssetView[]; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
+export function TemplateLibrary({ editorApi, templates, assets, onApply, onSaveTemplate, onDelete, onImport }: { editorApi: string; templates: MenuTemplateView[]; assets: MenuAssetView[]; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
   const [filter, setFilter] = useState<"ALL" | "PUBLIC" | "PRIVATE">("ALL");
   const [importing, setImporting] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -154,7 +154,7 @@ export function TemplateLibrary({ templates, assets, onApply, onSaveTemplate, on
     setTransferError(null);
     setTransferSuccess(null);
     try {
-      const response = await fetch(`/api/editor/templates/${encodeURIComponent(template.id)}/export`);
+      const response = await fetch(`${editorApi}/templates/${encodeURIComponent(template.id)}/export`);
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.error?.message ?? "No se pudo exportar la plantilla.");

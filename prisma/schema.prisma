@@ -7,6 +7,9 @@ datasource db {
   provider = "sqlite"
 }
 
+// Domain CHECK constraints live in the database_hardening SQL migration.
+// Preserve them when future migrations rebuild SQLite tables.
+
 enum AdminRole {
   SUPER_ADMIN
   TENANT_ADMIN
@@ -18,45 +21,69 @@ enum TenantStatus {
 }
 
 model Admin {
-  id                 String    @id @default(cuid())
-  email              String    @unique
+  // SQL migrations preserve NOCASE email uniqueness and role/organization checks.
+  id                 String        @id @default(cuid())
+  email              String        @unique
   passwordHash       String
-  role               AdminRole @default(TENANT_ADMIN)
-  tenantId           String?   @unique
-  tenant             Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  mustChangePassword Boolean   @default(false)
+  role               AdminRole     @default(TENANT_ADMIN)
+  organizationId     String?       @unique
+  organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mustChangePassword Boolean       @default(false)
   lastLoginAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   sessions           Session[]
 }
 
-model Tenant {
-  id        String       @id @default(cuid())
-  name      String
-  publicDescription String @default("Menú digital")
-  assetQuotaBytes Int @default(262144000)
-  slug      String       @unique
-  status    TenantStatus @default(ACTIVE)
-  multiMenuEnabled Boolean @default(false)
-  maxMenus  Int          @default(1)
-  landingEnabled Boolean @default(false)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  admin     Admin?
-  landingPage LandingPage?
-  landingCustomModules LandingCustomModule[]
-  landingTemplates LandingTemplate[]
-  menuProjects MenuProject[]
-  menuAssets MenuAsset[]
-  menuAssetReferences MenuAssetReference[]
-  menuTemplates MenuTemplate[]
-  menuTemplateAssetReferences MenuTemplateAssetReference[]
-  reservationTimeSlots ReservationTimeSlot[]
+model Organization {
+  id             String       @id @default(cuid())
+  name           String
+  slug           String       @unique
+  status         TenantStatus @default(ACTIVE)
+  maxRestaurants Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  admin          Admin?
+  restaurants    Restaurant[]
+}
+
+model AppSchemaState {
+  id            String   @id @default("singleton")
+  generation    Int      @default(2)
+  state         String   @default("READY")
+  migrationJson String?
+  updatedAt     DateTime @updatedAt
+}
+
+model Restaurant {
+  id                           String                        @id @default(cuid())
+  organizationId               String
+  organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                         String
+  publicDescription            String                        @default("Menú digital")
+  assetQuotaBytes              Int                           @default(262144000)
+  dailyReservationCapacity     Int                           @default(50)
+  slug                         String                        @unique
+  landingSlug                  String                        @unique
+  status                       TenantStatus                  @default(ACTIVE)
+  landingEnabled               Boolean                       @default(false)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  landingPage                  LandingPage?
+  landingCustomModules         LandingCustomModule[]
+  landingTemplates             LandingTemplate[]
+  menuProject                  MenuProject?
+  menuAssets                   MenuAsset[]
+  menuAssetReferences          MenuAssetReference[]
+  menuTemplates                MenuTemplate[]
+  menuTemplateAssetReferences  MenuTemplateAssetReference[]
+  reservationTimeSlots         ReservationTimeSlot[]
   reservationRecurringClosures ReservationRecurringClosure[]
-  reservationBlockedDates ReservationBlockedDate[]
-  restaurantEvents RestaurantEvent[]
-  tableReservations TableReservation[]
+  reservationBlockedDates      ReservationBlockedDate[]
+  restaurantEvents             RestaurantEvent[]
+  tableReservations            TableReservation[]
+
+  @@index([organizationId])
 }
 
 model Session {
@@ -83,14 +110,14 @@ model LoginThrottle {
 }
 
 model AssetCleanupJob {
-  id          String   @id @default(cuid())
-  storageKey  String   @unique
-  deletePrefix Boolean @default(false)
-  attempts    Int      @default(0)
-  availableAt DateTime @default(now())
-  lastError   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  storageKey   String   @unique
+  deletePrefix Boolean  @default(false)
+  attempts     Int      @default(0)
+  availableAt  DateTime @default(now())
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([availableAt])
 }
@@ -120,152 +147,153 @@ enum MenuTemplateStatus {
 }
 
 model MenuProject {
-  id                String   @id @default(cuid())
-  tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                String               @id @default(cuid())
+  restaurantId      String               @unique
+  restaurant        Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name              String
-  slug              String   @unique
-  publicDescription String   @default("Menú digital")
-  isPrimary         Boolean  @default(false)
+  slug              String               @unique
+  publicDescription String               @default("Menú digital")
+  isPrimary         Boolean              @default(false)
   draftJson         String
-  draftRevision     Int      @default(0)
+  draftRevision     Int                  @default(0)
   publishedJson     String?
   publishedRevision Int?
   publishedAt       DateTime?
-  schemaVersion     Int      @default(1)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  schemaVersion     Int                  @default(1)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
   assetReferences   MenuAssetReference[]
 
-  @@unique([id, tenantId])
-  @@index([tenantId])
-  @@index([tenantId, isPrimary])
+  @@unique([id, restaurantId])
 }
 
 model MenuAsset {
-  id          String        @id @default(cuid())
-  tenantId    String
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  kind        MenuAssetKind
-  name        String
-  storageKey  String        @unique
-  mimeType    String
-  byteSize    Int
-  checksum    String
-  width       Int?
-  height      Int?
-  fontFamily  String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  references  MenuAssetReference[]
+  id                 String                       @id @default(cuid())
+  restaurantId       String
+  restaurant         Restaurant                   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  kind               MenuAssetKind
+  name               String
+  storageKey         String                       @unique
+  mimeType           String
+  byteSize           Int
+  checksum           String
+  width              Int?
+  height             Int?
+  fontFamily         String?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  references         MenuAssetReference[]
   templateReferences MenuTemplateAssetReference[]
 
-  @@unique([id, tenantId])
-  @@index([tenantId, kind])
+  @@unique([id, restaurantId])
+  @@index([restaurantId, kind])
+  @@index([restaurantId, checksum])
 }
 
 model MenuAssetReference {
-  tenantId  String
-  projectId String
-  assetId   String
-  scope     MenuAssetReferenceScope
-  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project   MenuProject @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  asset     MenuAsset   @relation(fields: [assetId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  restaurantId String
+  projectId    String
+  assetId      String
+  scope        MenuAssetReferenceScope
+  restaurant   Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  project      MenuProject             @relation(fields: [projectId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  asset        MenuAsset               @relation(fields: [assetId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
 
   @@id([projectId, assetId, scope])
-  @@index([tenantId, scope])
+  @@index([restaurantId, scope])
+  @@index([restaurantId, assetId])
 }
 
 model MenuTemplate {
-  id           String                @id @default(cuid())
-  tenantId     String?
-  tenant       Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name         String
-  description  String                @default("")
-  documentJson String
-  schemaVersion Int                  @default(1)
-  visibility   MenuTemplateVisibility @default(PRIVATE)
-  status       MenuTemplateStatus    @default(DRAFT)
-  isSystem     Boolean               @default(false)
+  id              String                       @id @default(cuid())
+  restaurantId    String?
+  restaurant      Restaurant?                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name            String
+  description     String                       @default("")
+  documentJson    String
+  schemaVersion   Int                          @default(1)
+  visibility      MenuTemplateVisibility       @default(PRIVATE)
+  status          MenuTemplateStatus           @default(DRAFT)
+  isSystem        Boolean                      @default(false)
   rejectionReason String?
-  submittedAt  DateTime?
-  publishedAt  DateTime?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  assets       MenuTemplateAsset[]
-  references   MenuTemplateAssetReference[]
+  submittedAt     DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  assets          MenuTemplateAsset[]
+  references      MenuTemplateAssetReference[]
 
+  @@unique([id, restaurantId])
   @@index([visibility, status])
-  @@index([tenantId, status])
+  @@index([restaurantId, status])
 }
 
 model MenuTemplateAsset {
-  id          String        @id @default(cuid())
-  templateId  String
-  template    MenuTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  kind        MenuAssetKind
-  name        String
-  storageKey  String        @unique
-  mimeType    String
-  byteSize    Int
-  checksum    String
-  width       Int?
-  height      Int?
-  fontFamily  String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id         String        @id @default(cuid())
+  templateId String
+  template   MenuTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  kind       MenuAssetKind
+  name       String
+  storageKey String        @unique
+  mimeType   String
+  byteSize   Int
+  checksum   String
+  width      Int?
+  height     Int?
+  fontFamily String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([templateId])
 }
 
 model MenuTemplateAssetReference {
-  tenantId   String
-  templateId String
-  assetId    String
-  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  template   MenuTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  asset      MenuAsset    @relation(fields: [assetId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  restaurantId String
+  templateId   String
+  assetId      String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  template     MenuTemplate @relation(fields: [templateId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  asset        MenuAsset    @relation(fields: [assetId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
 
   @@id([templateId, assetId])
-  @@index([tenantId, assetId])
+  @@index([restaurantId, assetId])
 }
 
 model LandingPage {
-  id           String    @id @default(cuid())
-  tenantId     String    @unique
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  restaurantId String     @unique
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   documentJson String?
-  htmlContent  String    @default("")
-  cssContent   String    @default("")
-  jsContent    String    @default("")
-  published    Boolean   @default(false)
+  htmlContent  String     @default("")
+  cssContent   String     @default("")
+  jsContent    String     @default("")
+  published    Boolean    @default(false)
   publishedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@index([tenantId])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model LandingCustomModule {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name         String
-  description  String   @default("")
-  category     String   @default("custom")
-  fieldsJson   String   @default("[]")
-  htmlTemplate String   @default("")
-  cssTemplate  String   @default("")
-  jsTemplate   String   @default("")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  description  String     @default("")
+  category     String     @default("custom")
+  fieldsJson   String     @default("[]")
+  htmlTemplate String     @default("")
+  cssTemplate  String     @default("")
+  jsTemplate   String     @default("")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@index([tenantId])
+  @@index([restaurantId])
 }
 
 model LandingTemplate {
   id              String                 @id @default(cuid())
-  tenantId        String?
-  tenant          Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId    String?
+  restaurant      Restaurant?            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name            String
   description     String                 @default("")
   documentJson    String
@@ -283,7 +311,7 @@ model LandingTemplate {
   updatedAt       DateTime               @updatedAt
 
   @@index([visibility, status])
-  @@index([tenantId, status])
+  @@index([restaurantId, status])
 }
 
 enum ReservationStatus {
@@ -302,50 +330,48 @@ enum RestaurantEventStatus {
 }
 
 model ReservationTimeSlot {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  time      String
-  label     String   @default("")
-  active    Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  time         String
+  label        String     @default("")
+  active       Boolean    @default(true)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@unique([tenantId, time])
-  @@index([tenantId, active])
+  @@unique([restaurantId, time])
+  @@index([restaurantId, active])
 }
 
 model ReservationRecurringClosure {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dayOfWeek Int
-  reason    String   @default("Cerrado por descanso semanal")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  dayOfWeek    Int
+  reason       String     @default("Cerrado por descanso semanal")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@unique([tenantId, dayOfWeek])
-  @@index([tenantId])
+  @@unique([restaurantId, dayOfWeek])
 }
 
 model ReservationBlockedDate {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  date      String
-  reason    String   @default("Cerrado por fecha especial")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  date         String
+  reason       String     @default("Cerrado por fecha especial")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@unique([tenantId, date])
-  @@index([tenantId, date])
+  @@unique([restaurantId, date])
 }
 
 model RestaurantEvent {
   id                        String                @id @default(cuid())
-  tenantId                  String
-  tenant                    Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId              String
+  restaurant                Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   title                     String
   description               String                @default("")
   date                      String
@@ -360,13 +386,14 @@ model RestaurantEvent {
   updatedAt                 DateTime              @updatedAt
   reservations              TableReservation[]
 
-  @@index([tenantId, date, status])
+  @@unique([id, restaurantId])
+  @@index([restaurantId, date, status])
 }
 
 model TableReservation {
   id            String            @id @default(cuid())
-  tenantId      String
-  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  restaurant    Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   code          String
   customerName  String
   customerEmail String            @default("")
@@ -379,11 +406,12 @@ model TableReservation {
   status        ReservationStatus @default(PENDING)
   source        String            @default("LANDING")
   eventId       String?
-  event         RestaurantEvent?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  event         RestaurantEvent?  @relation(fields: [eventId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: NoAction)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  @@index([tenantId, date, status])
-  @@index([tenantId, status])
+  @@unique([restaurantId, code])
+  @@index([restaurantId, date, status])
+  @@index([restaurantId, status])
   @@index([eventId])
 }

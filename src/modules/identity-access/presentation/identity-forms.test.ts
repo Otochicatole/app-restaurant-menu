@@ -38,7 +38,7 @@ describe("identity forms", () => {
         data: {
           email: "admin@example.test",
           role: "TENANT_ADMIN",
-          tenantSlug: "restaurant",
+          organizationSlug: "restaurant",
           mustChangePassword: true,
         },
       }),

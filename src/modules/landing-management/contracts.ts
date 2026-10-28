@@ -162,11 +162,11 @@ export const landingContentSchema = z.object({
 });
 
 export const saveLandingCommandSchema = landingContentSchema.extend({
-  tenantId: z.string().min(1),
+  restaurantId: z.string().min(1),
 });
 
 export const publishLandingCommandSchema = landingContentSchema.extend({
-  tenantId: z.string().min(1),
+  restaurantId: z.string().min(1),
 });
 
 export type SaveLandingCommand = z.infer<typeof saveLandingCommandSchema>;
@@ -174,7 +174,7 @@ export type PublishLandingCommand = z.infer<typeof publishLandingCommandSchema>;
 
 export type LandingPageData = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   document: LandingDocumentV1 | null;
   htmlContent: string;
   cssContent: string;
@@ -188,17 +188,18 @@ export type LandingPageData = {
 export type PublicLandingResult =
   | { kind: "not_found" }
   | { kind: "disabled" }
-  | { kind: "preparation"; restaurantName: string; restaurantSlug: string }
+  | { kind: "preparation"; restaurantName: string; restaurantSlug: string; menuSlug: string }
   | {
       kind: "ready";
       restaurantName: string;
       restaurantSlug: string;
+      menuSlug: string;
       html: string;
     };
 
 // Reusable Custom Modules
 export const createCustomModuleCommandSchema = z.object({
-  tenantId: z.string().min(1),
+  restaurantId: z.string().min(1),
   name: z.string().trim().min(1, "El nombre es obligatorio").max(100),
   description: z.string().trim().max(300).default(""),
   category: z.string().trim().max(50).default("custom"),
@@ -214,7 +215,7 @@ export type CreateCustomModuleCommand = z.infer<
 
 export type LandingCustomModuleView = {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   name: string;
   description: string;
   category: string;
@@ -252,7 +253,7 @@ export type LandingTemplateView = {
   visibility: LandingTemplateVisibility;
   status: LandingTemplateStatus;
   isSystem: boolean;
-  tenantId: string | null;
+  restaurantId: string | null;
   document: LandingDocumentV1;
   htmlContent: string;
   cssContent: string;
@@ -288,7 +289,7 @@ export type SuperadminLandingTemplateQuery = z.infer<
 
 export type SuperadminLandingTemplateView = LandingTemplateView & {
   owner: {
-    tenantId: string;
+    restaurantId: string;
     name: string;
     slug: string;
   } | null;

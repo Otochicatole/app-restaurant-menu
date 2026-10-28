@@ -259,23 +259,23 @@ function accountToActorData(account: AccountRecord): ActorWithoutSession | null 
       ...common,
       kind: "super-admin",
       role: "SUPER_ADMIN",
-      tenantId: null,
-      tenantSlug: null,
+      organizationId: null,
+      organizationSlug: null,
     };
   }
 
   if (
     account.role === "TENANT_ADMIN" &&
-    account.tenantId &&
-    account.tenantSlug &&
-    account.tenantStatus === "ACTIVE"
+    account.organizationId &&
+    account.organizationSlug &&
+    account.organizationStatus === "ACTIVE"
   ) {
     return {
       ...common,
       kind: "tenant-admin",
       role: "TENANT_ADMIN",
-      tenantId: account.tenantId,
-      tenantSlug: account.tenantSlug,
+      organizationId: account.organizationId,
+      organizationSlug: account.organizationSlug,
     };
   }
 

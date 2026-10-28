@@ -11,11 +11,17 @@ export async function GET(
 ) {
   try {
     const { slug, id } = await params;
-    const tenant = await landingManagement.getTenantBySlug(slug);
-    if (!tenant || tenant.status !== "ACTIVE") {
+    const restaurant = await landingManagement.getRestaurantByLandingSlug(slug);
+    if (
+      !restaurant ||
+      restaurant.status !== "ACTIVE" ||
+      restaurant.organizationStatus !== "ACTIVE" ||
+      !restaurant.landingEnabled ||
+      !(await landingManagement.isLandingPublished(restaurant.id))
+    ) {
       return new Response(null, { status: 404 });
     }
-    const asset = await menuEditor.getAsset(tenant.id, id, "private");
+    const asset = await menuEditor.getAsset(restaurant.id, id, "private");
     if (!asset) return new Response(null, { status: 404 });
     const metadata = await blobStore.stat(asset.storageKey);
     if (!metadata) return new Response(null, { status: 404 });

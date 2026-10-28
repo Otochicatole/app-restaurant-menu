@@ -5,7 +5,7 @@ import { blobStore } from "@/platform/storage";
 import type {
   LandingRepository,
   LandingTemplateCreateInput,
-  TenantInfo,
+  RestaurantInfo,
 } from "../application/ports";
 import {
   landingDocumentSchema,
@@ -29,8 +29,26 @@ import {
   presetAsLandingTemplateView,
 } from "../domain/landing-template-presets";
 
-function landingStorageKey(tenantId: string, filename: string): string {
-  return `tenants/${tenantId}/landing/${filename}`;
+function landingStorageKey(restaurantId: string, filename: string): string {
+  return `restaurants/${restaurantId}/landing/${filename}`;
+}
+
+const restaurantInfoSelect = {
+  id: true,
+  organizationId: true,
+  name: true,
+  slug: true,
+  landingSlug: true,
+  status: true,
+  landingEnabled: true,
+  organization: { select: { status: true } },
+} as const;
+
+function toRestaurantInfo(record: Omit<RestaurantInfo, "organizationStatus"> & {
+  organization: { status: string };
+}): RestaurantInfo {
+  const { organization, ...restaurant } = record;
+  return { ...restaurant, organizationStatus: organization.status };
 }
 
 function parseDocumentJson(raw: string | null): LandingDocumentV1 | null {
@@ -54,7 +72,7 @@ function parseFieldsJson(raw: string): LandingModuleField[] {
 
 function toLandingPageData(record: {
   id: string;
-  tenantId: string;
+  restaurantId: string;
   documentJson: string | null;
   htmlContent: string;
   cssContent: string;
@@ -66,7 +84,7 @@ function toLandingPageData(record: {
 }): LandingPageData {
   return {
     id: record.id,
-    tenantId: record.tenantId,
+    restaurantId: record.restaurantId,
     document: parseDocumentJson(record.documentJson),
     htmlContent: record.htmlContent,
     cssContent: record.cssContent,
@@ -85,7 +103,7 @@ function toTemplateView(row: {
   visibility: string;
   status: string;
   isSystem: boolean;
-  tenantId: string | null;
+  restaurantId: string | null;
   documentJson: string;
   htmlContent: string;
   cssContent: string;
@@ -105,7 +123,7 @@ function toTemplateView(row: {
     visibility: row.visibility as LandingTemplateView["visibility"],
     status: row.status as LandingTemplateView["status"],
     isSystem: row.isSystem,
-    tenantId: row.tenantId,
+    restaurantId: row.restaurantId,
     document,
     htmlContent: row.htmlContent,
     cssContent: row.cssContent,
@@ -117,9 +135,9 @@ function toTemplateView(row: {
 }
 
 export class PrismaLandingRepository implements LandingRepository {
-  async findByTenantId(tenantId: string): Promise<LandingPageData | null> {
+  async findByRestaurantId(restaurantId: string): Promise<LandingPageData | null> {
     const record = await prisma.landingPage.findUnique({
-      where: { tenantId },
+      where: { restaurantId },
     });
 
     if (!record) return null;
@@ -132,9 +150,9 @@ export class PrismaLandingRepository implements LandingRepository {
       : undefined;
 
     const record = await prisma.landingPage.upsert({
-      where: { tenantId: command.tenantId },
+      where: { restaurantId: command.restaurantId },
       create: {
-        tenantId: command.tenantId,
+        restaurantId: command.restaurantId,
         documentJson: documentJson ?? null,
         htmlContent: command.htmlContent,
         cssContent: command.cssContent,
@@ -162,9 +180,9 @@ export class PrismaLandingRepository implements LandingRepository {
       : undefined;
 
     const record = await prisma.landingPage.upsert({
-      where: { tenantId: command.tenantId },
+      where: { restaurantId: command.restaurantId },
       create: {
-        tenantId: command.tenantId,
+        restaurantId: command.restaurantId,
         documentJson: documentJson ?? null,
         htmlContent: command.htmlContent,
         cssContent: command.cssContent,
@@ -184,15 +202,15 @@ export class PrismaLandingRepository implements LandingRepository {
 
     await Promise.all([
       blobStore.put(
-        landingStorageKey(command.tenantId, "index.html"),
+        landingStorageKey(command.restaurantId, "index.html"),
         Buffer.from(compiledHtml, "utf-8"),
       ),
       blobStore.put(
-        landingStorageKey(command.tenantId, "style.css"),
+        landingStorageKey(command.restaurantId, "style.css"),
         Buffer.from(command.cssContent, "utf-8"),
       ),
       blobStore.put(
-        landingStorageKey(command.tenantId, "script.js"),
+        landingStorageKey(command.restaurantId, "script.js"),
         Buffer.from(command.jsContent, "utf-8"),
       ),
     ]);
@@ -200,8 +218,8 @@ export class PrismaLandingRepository implements LandingRepository {
     return toLandingPageData(record);
   }
 
-  async getPublishedHtmlFromStorage(tenantId: string): Promise<string | null> {
-    const key = landingStorageKey(tenantId, "index.html");
+  async getPublishedHtmlFromStorage(restaurantId: string): Promise<string | null> {
+    const key = landingStorageKey(restaurantId, "index.html");
     const exists = await blobStore.exists(key);
     if (!exists) return null;
 
@@ -213,53 +231,51 @@ export class PrismaLandingRepository implements LandingRepository {
     }
   }
 
-  async findTenantBySlug(slug: string): Promise<TenantInfo | null> {
-    return prisma.tenant.findUnique({
-      where: { slug },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        landingEnabled: true,
-      },
+  async findRestaurantByLandingSlug(slug: string): Promise<RestaurantInfo | null> {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { landingSlug: slug },
+      select: restaurantInfoSelect,
     });
+    return restaurant ? toRestaurantInfo(restaurant) : null;
   }
 
-  async findTenantById(tenantId: string): Promise<TenantInfo | null> {
-    return prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        landingEnabled: true,
-      },
+  async findRestaurantById(restaurantId: string): Promise<RestaurantInfo | null> {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: restaurantInfoSelect,
     });
+    return restaurant ? toRestaurantInfo(restaurant) : null;
   }
 
-  async isLandingEnabledForTenant(tenantId: string): Promise<boolean> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { landingEnabled: true },
+  async isLandingEnabledForRestaurant(restaurantId: string): Promise<boolean> {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: {
+        landingEnabled: true,
+        status: true,
+        organization: { select: { status: true } },
+      },
     });
 
-    return tenant?.landingEnabled ?? false;
+    return Boolean(
+      restaurant?.landingEnabled &&
+      restaurant.status === "ACTIVE" &&
+      restaurant.organization.status === "ACTIVE",
+    );
   }
 
   // Reusable Custom Modules
   async listCustomModules(
-    tenantId: string,
+    restaurantId: string,
   ): Promise<LandingCustomModuleView[]> {
     const rows = await prisma.landingCustomModule.findMany({
-      where: { tenantId },
+      where: { restaurantId },
       orderBy: { updatedAt: "desc" },
     });
 
     return rows.map((row) => ({
       id: row.id,
-      tenantId: row.tenantId,
+      restaurantId: row.restaurantId,
       name: row.name,
       description: row.description,
       category: row.category,
@@ -278,7 +294,7 @@ export class PrismaLandingRepository implements LandingRepository {
     const row = await prisma.landingCustomModule.create({
       data: {
         id: randomUUID(),
-        tenantId: command.tenantId,
+        restaurantId: command.restaurantId,
         name: command.name,
         description: command.description,
         category: command.category,
@@ -291,7 +307,7 @@ export class PrismaLandingRepository implements LandingRepository {
 
     return {
       id: row.id,
-      tenantId: row.tenantId,
+      restaurantId: row.restaurantId,
       name: row.name,
       description: row.description,
       category: row.category,
@@ -304,9 +320,9 @@ export class PrismaLandingRepository implements LandingRepository {
     };
   }
 
-  async deleteCustomModule(tenantId: string, moduleId: string): Promise<void> {
+  async deleteCustomModule(restaurantId: string, moduleId: string): Promise<void> {
     const res = await prisma.landingCustomModule.deleteMany({
-      where: { id: moduleId, tenantId },
+      where: { id: moduleId, restaurantId },
     });
     if (res.count !== 1) {
       throw new NotFoundError("Módulo personalizado");
@@ -314,13 +330,13 @@ export class PrismaLandingRepository implements LandingRepository {
   }
 
   // Landing Templates
-  async listTemplates(tenantId: string): Promise<LandingTemplateView[]> {
+  async listTemplates(restaurantId: string): Promise<LandingTemplateView[]> {
     const rows = await prisma.landingTemplate.findMany({
       where: {
         OR: [
           { isSystem: true, status: "PUBLISHED" },
           { visibility: "PUBLIC", status: "PUBLISHED" },
-          { tenantId },
+          { restaurantId },
         ],
       },
       orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }],
@@ -342,7 +358,7 @@ export class PrismaLandingRepository implements LandingRepository {
     const row = await prisma.landingTemplate.create({
       data: {
         id: randomUUID(),
-        tenantId: input.tenantId,
+        restaurantId: input.restaurantId,
         name: input.name,
         description: input.description,
         documentJson: JSON.stringify(input.document),
@@ -363,7 +379,7 @@ export class PrismaLandingRepository implements LandingRepository {
     const row = await prisma.landingTemplate.create({
       data: {
         id: randomUUID(),
-        tenantId: input.tenantId,
+        restaurantId: input.restaurantId,
         name: input.name,
         description: input.description,
         documentJson: JSON.stringify(input.document),
@@ -380,13 +396,13 @@ export class PrismaLandingRepository implements LandingRepository {
   }
 
   async deletePrivateTemplate(
-    tenantId: string,
+    restaurantId: string,
     templateId: string,
   ): Promise<void> {
     const result = await prisma.landingTemplate.deleteMany({
       where: {
         id: templateId,
-        tenantId,
+        restaurantId,
         isSystem: false,
         visibility: "PRIVATE",
       },
@@ -397,7 +413,7 @@ export class PrismaLandingRepository implements LandingRepository {
   }
 
   async exportPortableTemplate(
-    tenantId: string,
+    restaurantId: string,
     templateId: string,
   ): Promise<PortableLandingTemplate> {
     const preset = LANDING_TEMPLATE_PRESETS.find((item) => item.id === templateId);
@@ -419,7 +435,7 @@ export class PrismaLandingRepository implements LandingRepository {
         OR: [
           { isSystem: true, status: "PUBLISHED" },
           { visibility: "PUBLIC", status: "PUBLISHED" },
-          { tenantId },
+          { restaurantId },
         ],
       },
     });
@@ -440,13 +456,13 @@ export class PrismaLandingRepository implements LandingRepository {
   }
 
   async importPortableTemplate(
-    tenantId: string,
+    restaurantId: string,
     portable: PortableLandingTemplate,
   ): Promise<LandingTemplateView> {
     const row = await prisma.landingTemplate.create({
       data: {
         id: randomUUID(),
-        tenantId,
+        restaurantId,
         name: portable.name,
         description: portable.description,
         documentJson: JSON.stringify(portable.document),
@@ -493,25 +509,25 @@ export class PrismaLandingRepository implements LandingRepository {
                   OR: [
                     { name: { contains: input.query } },
                     { description: { contains: input.query } },
-                    { tenant: { name: { contains: input.query } } },
-                    { tenant: { slug: { contains: input.query } } },
+                    { restaurant: { name: { contains: input.query } } },
+                    { restaurant: { slug: { contains: input.query } } },
                   ],
                 },
               ]
             : []),
         ],
       },
-      include: { tenant: { select: { id: true, name: true, slug: true } } },
+      include: { restaurant: { select: { id: true, name: true, slug: true } } },
       orderBy: [{ isSystem: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
     });
 
     const items: SuperadminLandingTemplateView[] = rows.map((row) => ({
       ...toTemplateView(row),
-      owner: row.tenant
+      owner: row.restaurant
         ? {
-            tenantId: row.tenant.id,
-            name: row.tenant.name,
-            slug: row.tenant.slug,
+            restaurantId: row.restaurant.id,
+            name: row.restaurant.name,
+            slug: row.restaurant.slug,
           }
         : null,
     }));

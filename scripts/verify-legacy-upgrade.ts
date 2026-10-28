@@ -12,7 +12,8 @@ const migrationNames = (await readdir(migrationsRoot, { withFileTypes: true }))
   .sort();
 const cutoverName = migrationNames.find((name) => name.includes("canvas_cutover"));
 if (!cutoverName) throw new Error("No se encontró la migración canvas_cutover.");
-const baseMigrations = migrationNames.filter((name) => name !== cutoverName);
+const organizationCutover = "20261027180000_organization_restaurants";
+const baseMigrations = migrationNames.filter((name) => name < cutoverName);
 const workspace = await mkdtemp(path.join(tmpdir(), "canvas-cutover-test-"));
 const upgradeUrl = `file:${path.join(workspace, "upgrade.db").replaceAll(path.sep, "/")}`;
 const freshUrl = `file:${path.join(workspace, "fresh.db").replaceAll(path.sep, "/")}`;
@@ -22,12 +23,16 @@ try {
   await applyMigrations(upgradeUrl, baseMigrations);
   await seedLegacy(upgradeUrl);
   await runCutover(upgradeUrl, storageRoot);
-  await applyMigrations(upgradeUrl, [cutoverName]);
+  await applyMigrations(upgradeUrl, migrationNames.filter((name) => name >= cutoverName && name < organizationCutover));
   await verifyUpgrade(upgradeUrl);
   await runCutover(upgradeUrl, storageRoot);
   await verifyUpgrade(upgradeUrl);
 
+  await applyMigrations(upgradeUrl, migrationNames.filter((name) => name >= organizationCutover));
+  await run(process.execPath, ["run", "scripts/cutover-organizations.ts"], { DATABASE_URL: upgradeUrl, STORAGE_ROOT: storageRoot });
+
   await applyMigrations(freshUrl, migrationNames);
+  await run(process.execPath, ["run", "scripts/cutover-organizations.ts"], { DATABASE_URL: freshUrl, STORAGE_ROOT: storageRoot });
   await verifyFresh(freshUrl);
   console.log("Migración Canvas verificada: upgrade, publicación automática, limpieza legacy y replay idempotente.");
 } finally {
@@ -80,7 +85,7 @@ async function verifyFresh(database: string): Promise<void> {
   try {
     const tables = await client.execute(`SELECT name FROM sqlite_schema WHERE type = 'table'`);
     const names = new Set(tables.rows.map((row) => String(row.name)));
-    for (const table of ["Admin", "Tenant", "Session", "LoginThrottle", "AssetCleanupJob", "MenuProject", "MenuAsset", "MenuAssetReference"]) if (!names.has(table)) throw new Error(`Falta la tabla ${table} en instalación limpia.`);
+    for (const table of ["Admin", "Organization", "Restaurant", "Session", "LoginThrottle", "AssetCleanupJob", "MenuProject", "MenuAsset", "MenuAssetReference"]) if (!names.has(table)) throw new Error(`Falta la tabla ${table} en instalación limpia.`);
     for (const table of ["Group", "Product", "FeaturedProduct", "HomePage", "Font", "Setting"]) if (names.has(table)) throw new Error(`La instalación limpia contiene ${table}.`);
   } finally { client.close(); }
 }

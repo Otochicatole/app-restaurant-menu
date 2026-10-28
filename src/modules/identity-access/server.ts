@@ -81,7 +81,7 @@ export function toLoginView(actor: CurrentActor): LoginView {
   return {
     email: actor.email,
     role: actor.role,
-    tenantSlug: actor.tenantSlug,
+    organizationSlug: actor.organizationSlug,
     mustChangePassword: actor.mustChangePassword,
   };
 }

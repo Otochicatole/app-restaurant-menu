@@ -34,10 +34,10 @@ export function PublicLandingViewer({
 
 export function LandingPreparationScreen({
   restaurantName,
-  restaurantSlug,
+  menuSlug,
 }: {
   restaurantName: string;
-  restaurantSlug: string;
+  menuSlug: string;
 }) {
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-[#f8f5ee] px-6 text-center text-[#1c2c1a]">
@@ -54,7 +54,7 @@ export function LandingPreparationScreen({
         </p>
         <div className="mt-6 pt-6 border-t border-[#1c2c1a]/10">
           <Link
-            href={`/m/${restaurantSlug}`}
+            href={`/m/${menuSlug}`}
             className="inline-flex items-center gap-2 rounded-xl bg-[#253621] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1a2817]"
           >
             Ver Carta Digital interactiva
