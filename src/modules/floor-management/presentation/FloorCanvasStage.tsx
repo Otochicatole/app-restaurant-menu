@@ -139,18 +139,10 @@ function Table({ table, selected, draggable, onSelect, onDragStart, onDragMove, 
   const unavailable = table.state === "unavailable" || !table.active;
   const fill = selected ? "#d6e8d4" : reserved ? "#f0d6c4" : unavailable ? "#e8e8e2" : "#e8dfc9";
   const stroke = selected ? "#255f46" : reserved ? "#95664c" : "#aaa28d";
-  const chairs = Math.min(12, table.capacity);
   return <Group id={`floor-table-${table.id}`} x={table.x} y={table.y} rotation={table.rotation} opacity={unavailable ? 0.55 : 1} draggable={draggable && table.active}
     onMouseDown={(event) => { event.cancelBubble = true; onSelect(event.evt.shiftKey); }} onTap={(event) => { event.cancelBubble = true; onSelect(false); }}
     onDragStart={(event) => { event.cancelBubble = true; onDragStart(event.target); }} onDragMove={(event) => { event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
-    {Array.from({ length: chairs }, (_, index) => {
-      const circular = table.shape === "CIRCLE";
-      const angle = Math.PI * 2 * index / chairs;
-      const x = circular ? Math.cos(angle) * (table.width / 2 + 10) : -table.width / 2 + table.width * ((index % Math.ceil(chairs / 2)) + 0.5) / Math.ceil(chairs / 2);
-      const y = circular ? Math.sin(angle) * (table.height / 2 + 10) : index < Math.ceil(chairs / 2) ? -table.height / 2 - 10 : table.height / 2 + 10;
-      return <Rect key={index} x={x - 10} y={y - 5} width={20} height={10} rotation={circular ? angle * 180 / Math.PI + 90 : 0} fill={fill} stroke={stroke} strokeWidth={1} cornerRadius={3} listening={false} />;
-    })}
     {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}
-    <Group rotation={-table.rotation} listening={false}><Text x={-60} y={-15} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill="#313a2f" /><Text x={-50} y={5} width={100} align="center" text={`${table.capacity} lugares`} fontSize={11} fill="#555d4f" /></Group>
+    <Group rotation={-table.rotation} listening={false}><Text x={-60} y={-8} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill="#313a2f" /></Group>
   </Group>;
 }
