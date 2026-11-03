@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { FloorAssignmentPicker, FloorRoomSelector } from "@/modules/floor-management/ui";
+import { restaurantToday, type FloorAssignmentInput } from "@/modules/floor-management/contracts";
 import {
   AlertCircle,
   Building2,
@@ -95,7 +97,7 @@ const STATUS_BADGE_CLASSES: Record<ReservationStatus, string> = {
 const STATUS_LABEL: Record<ReservationStatus, string> = {
   PENDING: "Pendiente",
   CONFIRMED: "Confirmada",
-  COMPLETED: "Asistió",
+  COMPLETED: "Finalizada",
   CANCELLED: "Cancelada",
   REJECTED: "Rechazada",
 };
@@ -124,14 +126,6 @@ const SPANISH_DAYS_LONG = [
   "Viernes",
   "Sábado",
 ];
-
-function getTodayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function addDaysToIso(isoDate: string, days: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
@@ -270,6 +264,11 @@ export function ReservationCmsScreen({
   initialData: ReservationCmsData;
 }) {
   const [data, setData] = useState<ReservationCmsData>(initialData);
+  const today = restaurantToday(data.timeZone ?? "America/Argentina/Buenos_Aires");
+  const [resAssignment, setResAssignment] = useState<FloorAssignmentInput | null>(null);
+  const [optionalAssignment, setOptionalAssignment] = useState(false);
+  const [quickAssignment, setQuickAssignment] = useState<FloorAssignmentInput | null>(null);
+  const [assigningReservation, setAssigningReservation] = useState<ReservationView | null>(null);
   const [activeTab, setActiveTab] = useState<CmsTab>("reservations");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [isPending, startTransition] = useTransition();
@@ -312,7 +311,7 @@ export function ReservationCmsScreen({
     customerEmail: "",
     customerPhone: "",
     partySize: 2,
-    date: getTodayIso(),
+    date: today,
     time: data.timeSlots[0]?.time || "20:00",
     notes: "",
     adminNotes: "",
@@ -324,13 +323,14 @@ export function ReservationCmsScreen({
   const [eventForm, setEventForm] = useState<UpsertRestaurantEventCommand>({
     title: "",
     description: "",
-    date: getTodayIso(),
+    date: today,
     startTime: "21:00",
     endTime: "",
     capacity: 20,
     priceLabel: "",
     imageUrl: "",
     blocksRegularReservations: false,
+    roomIds: [],
     status: "PUBLISHED",
   });
 
@@ -363,12 +363,14 @@ export function ReservationCmsScreen({
   // Handlers: Reservas
   // ---------------------------------------------------------------------------
   const handleOpenCreateRes = () => {
+    setResAssignment(null);
+    setOptionalAssignment(false);
     setResForm({
       customerName: "",
       customerEmail: "",
       customerPhone: "",
       partySize: 2,
-      date: dateFilter || getTodayIso(),
+      date: dateFilter || today,
       time: data.timeSlots[0]?.time || "20:00",
       notes: "",
       adminNotes: "",
@@ -382,10 +384,16 @@ export function ReservationCmsScreen({
 
   const handleSaveReservation = (e: React.FormEvent) => {
     e.preventDefault();
+    if (data.floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment) {
+      showFeedback("error", "Seleccioná y ubicá las mesas antes de confirmar la reserva.");
+      return;
+    }
     startTransition(async () => {
       if (editingReservation) {
         const cmd: UpdateReservationCommand = {
           id: editingReservation.id,
+          expectedRevision: editingReservation.revision,
+          ...(resForm.status === "CONFIRMED" && resAssignment ? { assignment: resAssignment } : {}),
           customerName: resForm.customerName,
           customerEmail: resForm.customerEmail || "",
           customerPhone: resForm.customerPhone,
@@ -405,12 +413,13 @@ export function ReservationCmsScreen({
             ),
           }));
           setEditingReservation(null);
+          setResAssignment(null);
           showFeedback("success", "Reserva actualizada con éxito.");
         } else {
           showFeedback("error", res.error.message);
         }
       } else {
-        const res = await createAdminReservationAction(data.restaurantId, resForm);
+        const res = await createAdminReservationAction(data.restaurantId, { ...resForm, ...(resForm.status === "CONFIRMED" && resAssignment ? { assignment: resAssignment } : {}) });
         if (res.success) {
           setData((prev) => ({
             ...prev,
@@ -418,7 +427,7 @@ export function ReservationCmsScreen({
             summary: {
               ...prev.summary,
               totalReservationsToday:
-                res.data.date === getTodayIso()
+                res.data.date === today
                   ? prev.summary.totalReservationsToday + 1
                   : prev.summary.totalReservationsToday,
               confirmedReservationsCount:
@@ -432,6 +441,7 @@ export function ReservationCmsScreen({
             },
           }));
           setIsCreateResModalOpen(false);
+          setResAssignment(null);
           showFeedback("success", `Reserva creada con código ${res.data.code}`);
         } else {
           showFeedback("error", res.error.message);
@@ -443,12 +453,21 @@ export function ReservationCmsScreen({
   const handleQuickStatusChange = (
     reservationId: string,
     nextStatus: ReservationStatus,
+    assignment?: FloorAssignmentInput,
   ) => {
+    const current = data.reservations.find((reservation) => reservation.id === reservationId);
+    if (nextStatus === "CONFIRMED" && data.floorManagementEnabled && !assignment && current) {
+      setQuickAssignment(null);
+      setAssigningReservation(current);
+      setPreviewReservation(null);
+      return;
+    }
     startTransition(async () => {
       const res = await updateReservationStatusAction(
         data.restaurantId,
         reservationId,
         nextStatus,
+        { expectedRevision: current?.revision, ...(assignment ? { assignment } : {}) },
       );
       if (res.success) {
         setData((prev) => ({
@@ -466,6 +485,8 @@ export function ReservationCmsScreen({
             ).length,
           },
         }));
+        setAssigningReservation(null);
+        setPreviewReservation((previous) => previous?.id === reservationId ? res.data : previous);
         showFeedback("success", `Estado actualizado a "${STATUS_LABEL[nextStatus]}"`);
       } else {
         showFeedback("error", res.error.message);
@@ -658,13 +679,14 @@ export function ReservationCmsScreen({
     setEventForm({
       title: "",
       description: "",
-      date: getTodayIso(),
+      date: today,
       startTime: "21:00",
       endTime: "",
       capacity: 20,
       priceLabel: "",
       imageUrl: "",
       blocksRegularReservations: false,
+      roomIds: [],
       status: "PUBLISHED",
     });
     setEditingEvent(null);
@@ -722,7 +744,7 @@ export function ReservationCmsScreen({
   // ---------------------------------------------------------------------------
   // Computed & Filtered Data
   // ---------------------------------------------------------------------------
-  const todayIso = useMemo(() => getTodayIso(), []);
+  const todayIso = today;
 
   const filteredReservations = useMemo(() => {
     return data.reservations.filter((r) => {
@@ -1445,7 +1467,7 @@ export function ReservationCmsScreen({
                               className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                             >
                               <Utensils size={12} />
-                              <span>Asistió</span>
+                              <span>{data.floorManagementEnabled ? "Finalizar y liberar" : "Asistió"}</span>
                             </button>
                             <button
                               type="button"
@@ -1487,6 +1509,8 @@ export function ReservationCmsScreen({
                         <button
                           type="button"
                           onClick={() => {
+                            setResAssignment(null);
+                            setOptionalAssignment(false);
                             setEditingReservation(res);
                             setResForm({
                               customerName: res.customerName,
@@ -1554,7 +1578,7 @@ export function ReservationCmsScreen({
                         ) : (
                           <span className="flex items-center gap-1">
                             <UserCheck size={11} className="text-zinc-400" />
-                            <span>Manual (Admin)</span>
+                            <span>{res.source === "WALK_IN" ? "Llegada sin reserva" : "Manual (Admin)"}</span>
                           </span>
                         )}
                       </div>
@@ -1723,7 +1747,7 @@ export function ReservationCmsScreen({
                                   onClick={() => handleQuickStatusChange(res.id, "COMPLETED")}
                                   className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#182618] text-white hover:bg-[#101c10] transition cursor-pointer"
                                 >
-                                  Asistió
+                                  {data.floorManagementEnabled ? "Finalizar y liberar" : "Asistió"}
                                 </button>
                               )}
 
@@ -1754,7 +1778,9 @@ export function ReservationCmsScreen({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setEditingReservation(res);
+                                  setResAssignment(null);
+                            setOptionalAssignment(false);
+                            setEditingReservation(res);
                                   setResForm({
                                     customerName: res.customerName,
                                     customerEmail: res.customerEmail,
@@ -1936,6 +1962,7 @@ export function ReservationCmsScreen({
                               priceLabel: evt.priceLabel,
                               imageUrl: evt.imageUrl,
                               blocksRegularReservations: evt.blocksRegularReservations,
+                              roomIds: evt.roomIds ?? [],
                               status: evt.status,
                             });
                             setIsEventModalOpen(true);
@@ -2330,7 +2357,7 @@ export function ReservationCmsScreen({
                     ) : (
                       <>
                         <Building2 size={10} className="text-zinc-400" />
-                        <span>Registrada en Admin</span>
+                        <span>{previewReservation.source === "WALK_IN" ? "Llegada sin reserva" : "Registrada en Admin"}</span>
                       </>
                     )}
                   </span>
@@ -2449,7 +2476,6 @@ export function ReservationCmsScreen({
                       disabled={isPending}
                       onClick={async () => {
                         await handleQuickStatusChange(previewReservation.id, "CONFIRMED");
-                        setPreviewReservation((prev) => prev ? { ...prev, status: "CONFIRMED" } : null);
                       }}
                       className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                     >
@@ -2461,7 +2487,6 @@ export function ReservationCmsScreen({
                       disabled={isPending}
                       onClick={async () => {
                         await handleQuickStatusChange(previewReservation.id, "REJECTED");
-                        setPreviewReservation((prev) => prev ? { ...prev, status: "REJECTED" } : null);
                       }}
                       className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer"
                     >
@@ -2477,19 +2502,17 @@ export function ReservationCmsScreen({
                       disabled={isPending}
                       onClick={async () => {
                         await handleQuickStatusChange(previewReservation.id, "COMPLETED");
-                        setPreviewReservation((prev) => prev ? { ...prev, status: "COMPLETED" } : null);
                       }}
                       className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#182618] hover:bg-[#101c10] text-white transition shadow-2xs cursor-pointer flex items-center gap-1"
                     >
                       <Utensils size={13} />
-                      <span>Asistió</span>
+                      <span>{data.floorManagementEnabled ? "Finalizar y liberar" : "Asistió"}</span>
                     </button>
                     <button
                       type="button"
                       disabled={isPending}
                       onClick={async () => {
                         await handleQuickStatusChange(previewReservation.id, "CANCELLED");
-                        setPreviewReservation((prev) => prev ? { ...prev, status: "CANCELLED" } : null);
                       }}
                       className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer"
                     >
@@ -2504,6 +2527,8 @@ export function ReservationCmsScreen({
                   onClick={() => {
                     const resToEdit = previewReservation;
                     setPreviewReservation(null);
+                    setResAssignment(null);
+                    setOptionalAssignment(false);
                     setEditingReservation(resToEdit);
                     setResForm({
                       customerName: resToEdit.customerName,
@@ -2580,11 +2605,20 @@ export function ReservationCmsScreen({
       )}
 
       {/* =================================================================== */}
+      {assigningReservation && <AdminModal open title={`Confirmar reserva ${assigningReservation.code}`} description={`${assigningReservation.customerName} · ${assigningReservation.partySize} personas · ${assigningReservation.date} ${assigningReservation.time}`} wide onClose={() => { if (!isPending) setAssigningReservation(null); }}>
+        <div className="space-y-4">
+          {feedback?.type === "error" && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{feedback.message}</p>}
+          <FloorAssignmentPicker restaurantId={data.restaurantId} query={{ date: assigningReservation.date, time: assigningReservation.time, partySize: assigningReservation.partySize, eventId: assigningReservation.eventId, excludeReservationId: assigningReservation.id }} value={quickAssignment} onChange={setQuickAssignment} />
+          <div className="flex justify-end gap-2"><button type="button" className={adminSecondaryButtonClass} onClick={() => setAssigningReservation(null)} disabled={isPending}>Cancelar</button><button type="button" className={adminPrimaryButtonClass} disabled={isPending || !quickAssignment} onClick={() => { if (quickAssignment) handleQuickStatusChange(assigningReservation.id, "CONFIRMED", quickAssignment); }}>{isPending && <Loader2 size={15} className="animate-spin" />}Confirmar y asignar mesas</button></div>
+        </div>
+      </AdminModal>}
+
       {/* MODAL: CREAR / EDITAR RESERVA                                      */}
       {/* =================================================================== */}
       <AdminModal
         open={isCreateResModalOpen || Boolean(editingReservation)}
         title={editingReservation ? "Modificar Reserva" : "Nueva Reserva Manual"}
+        wide={Boolean(data.floorManagementEnabled)}
         description={
           editingReservation
             ? `Editando los datos de la reserva ${editingReservation.code}`
@@ -2596,6 +2630,7 @@ export function ReservationCmsScreen({
         }}
       >
         <form onSubmit={handleSaveReservation} className="space-y-4">
+          {feedback?.type === "error" && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{feedback.message}</p>}
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
               Nombre y Apellido del Cliente *
@@ -2615,11 +2650,11 @@ export function ReservationCmsScreen({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                Teléfono / WhatsApp *
+                Teléfono / WhatsApp{editingReservation?.source === "WALK_IN" ? " (opcional)" : " *"}
               </label>
               <input
                 type="tel"
-                required
+                required={editingReservation?.source !== "WALK_IN"}
                 placeholder="Ej. +54 9 11 1234-5678"
                 value={resForm.customerPhone}
                 onChange={(e) =>
@@ -2706,6 +2741,7 @@ export function ReservationCmsScreen({
             </label>
             <select
               value={resForm.eventId || ""}
+              disabled={Boolean(editingReservation)}
               onChange={(e) => {
                 const selectedId = e.target.value || null;
                 const targetEvt = data.events.find((ev) => ev.id === selectedId);
@@ -2743,11 +2779,20 @@ export function ReservationCmsScreen({
             >
               <option value="CONFIRMED">Confirmada</option>
               <option value="PENDING">Pendiente</option>
-              <option value="COMPLETED">Asistió</option>
+              <option value="COMPLETED">Finalizada</option>
               <option value="CANCELLED">Cancelada</option>
               <option value="REJECTED">Rechazada</option>
             </select>
           </div>
+
+          {!data.floorManagementEnabled && resForm.status === "CONFIRMED" && !optionalAssignment && <button type="button" className={adminSecondaryButtonClass} onClick={() => setOptionalAssignment(true)}><LayoutGrid size={15} />Asignar mesas antes de activar salones</button>}
+          {(data.floorManagementEnabled || optionalAssignment) && resForm.status === "CONFIRMED" && <FloorAssignmentPicker
+            key={editingReservation?.id ?? "new-reservation"}
+            restaurantId={data.restaurantId}
+            query={{ date: resForm.date, time: resForm.time, partySize: resForm.partySize, eventId: resForm.eventId, ...(editingReservation ? { excludeReservationId: editingReservation.id } : {}) }}
+            value={resAssignment}
+            onChange={setResAssignment}
+          />}
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
@@ -2792,7 +2837,7 @@ export function ReservationCmsScreen({
             </button>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || (data.floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment)}
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}
@@ -2815,6 +2860,7 @@ export function ReservationCmsScreen({
         }}
       >
         <form onSubmit={handleSaveEvent} className="space-y-4">
+          {feedback?.type === "error" && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{feedback.message}</p>}
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">
               Título del Evento *
@@ -2967,6 +3013,8 @@ export function ReservationCmsScreen({
               Salón Exclusivo (bloquea las reservas regulares en esta fecha)
             </label>
           </div>
+
+          {data.floorManagementEnabled && <FloorRoomSelector restaurantId={data.restaurantId} value={eventForm.roomIds ?? []} onChange={(roomIds) => setEventForm((previous) => ({ ...previous, roomIds }))} />}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100">
             <button
@@ -3142,6 +3190,8 @@ export function ReservationCmsScreen({
                 onClick={() => {
                   const targetEvt = viewingEventAttendees;
                   setViewingEventAttendees(null);
+                  setResAssignment(null);
+                  setOptionalAssignment(false);
                   setResForm({
                     customerName: "",
                     customerEmail: "",

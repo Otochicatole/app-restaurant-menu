@@ -15,6 +15,7 @@ import {
   type PublicEventAvailabilityView,
 } from "../domain/availability-engine";
 import { generateReservationCode } from "../domain/reservation-code";
+import { restaurantLocalDateTime } from "@/modules/floor-management/contracts";
 import type {
   AdminCreateReservationCommand,
   BlockedDateView,
@@ -25,6 +26,7 @@ import type {
   RecurringClosureView,
   ReservationCmsData,
   ReservationStatus,
+  ReservationStatusOptions,
   ReservationView,
   RestaurantEventView,
   TimeSlotView,
@@ -93,7 +95,7 @@ export class ReservationManagementService {
         this.repo.getReservations(restaurantId),
       ]);
 
-    const todayIso = getTodayIsoString();
+    const todayIso = restaurant ? restaurantLocalDateTime(restaurant.timeZone).date : getTodayIsoString();
     const todayReservations = reservations.filter((r) => r.date === todayIso);
     const pendingReservations = reservations.filter((r) => r.status === "PENDING");
     const confirmedReservations = reservations.filter((r) => r.status === "CONFIRMED");
@@ -105,6 +107,8 @@ export class ReservationManagementService {
       restaurantName: restaurant?.name ?? "Mi Restaurante",
       restaurantSlug: restaurant?.landingSlug ?? "",
       landingEnabled: isEnabled,
+      floorManagementEnabled: restaurant?.floorManagementEnabled ?? false,
+      timeZone: restaurant?.timeZone ?? "America/Argentina/Buenos_Aires",
       timeSlots,
       recurringClosures,
       blockedDates,
@@ -180,8 +184,9 @@ export class ReservationManagementService {
     restaurantId: string,
     id: string,
     status: ReservationStatus,
+    options?: ReservationStatusOptions,
   ): Promise<ReservationView> {
-    return this.repo.updateReservationStatus(restaurantId, id, status);
+    return this.repo.updateReservationStatus(restaurantId, id, status, options);
   }
 
   async deleteReservation(restaurantId: string, id: string): Promise<void> {
@@ -198,6 +203,9 @@ export class ReservationManagementService {
   ): Promise<{
     restaurantName: string;
     restaurantSlug: string;
+    timeZone: string;
+    currentDate: string;
+    currentTime: string;
     from: string;
     to: string;
     recurringClosedDays: number[];
@@ -213,7 +221,8 @@ export class ReservationManagementService {
       throw new ForbiddenError("Las reservas no están habilitadas para este restaurante");
     }
 
-    const todayIso = getTodayIsoString();
+    const localNow = restaurantLocalDateTime(context.timeZone ?? "America/Argentina/Buenos_Aires");
+    const todayIso = localNow.date;
     let fromIso = query.from || query.date || todayIso;
     if (fromIso < todayIso) fromIso = todayIso;
     const requestedTo = query.to || query.date || addDaysToIso(fromIso, 60);
@@ -268,6 +277,11 @@ export class ReservationManagementService {
       occupiedSpots: e.occupiedSpots,
     }));
 
+    const physicalAvailability = context.floorManagementEnabled
+      ? await this.repo.getPhysicalAvailability(context.restaurantId, {
+        dates: datesList, times: activeSlots.map((slot) => slot.time), partySize: query.partySize ?? 2,
+      })
+      : undefined;
     const availability = computeAvailability({
       dates: datesList,
       activeSlots,
@@ -276,11 +290,17 @@ export class ReservationManagementService {
       events: domainEvents,
       reservations: [],
       todayIso,
+      currentTime: localNow.time,
+      availableTimesByDate: physicalAvailability,
+      useRoomAvailability: context.floorManagementEnabled,
     });
 
     return {
       restaurantName: context.name,
       restaurantSlug: context.slug,
+      timeZone: context.timeZone ?? "America/Argentina/Buenos_Aires",
+      currentDate: localNow.date,
+      currentTime: localNow.time,
       from: fromIso,
       to: toIso,
       recurringClosedDays: recurringClosures.map((c) => c.dayOfWeek),
@@ -298,6 +318,9 @@ export class ReservationManagementService {
     return {
       restaurantName: full.restaurantName,
       restaurantSlug: full.restaurantSlug,
+      timeZone: full.timeZone,
+      currentDate: full.currentDate,
+      currentTime: full.currentTime,
       from: full.from,
       to: full.to,
       recurringClosedDays: full.recurringClosedDays,
@@ -372,8 +395,8 @@ export class ReservationManagementService {
       reservationCommand = { ...cmd, date: event.date, time: event.startTime };
     }
 
-    const todayIso = getTodayIsoString();
-    if (reservationCommand.date < todayIso) {
+    const localNow = restaurantLocalDateTime(context.timeZone ?? "America/Argentina/Buenos_Aires");
+    if (reservationCommand.date < localNow.date || (reservationCommand.date === localNow.date && reservationCommand.time <= localNow.time)) {
       throw new BadRequestError("No se pueden realizar reservas para fechas pasadas.");
     }
 
@@ -381,6 +404,7 @@ export class ReservationManagementService {
     const availResult = await this.getPublicAvailability(slug, {
       from: reservationCommand.date,
       to: reservationCommand.date,
+      partySize: cmd.partySize,
     });
     const dateAvail = availResult.availability.dates[0];
 
@@ -393,6 +417,9 @@ export class ReservationManagementService {
       }
       if (!targetEvent.available || targetEvent.remainingSpots < cmd.partySize) {
         throw new ConflictError("Lo sentimos, este evento no tiene cupos disponibles.");
+      }
+      if (context.floorManagementEnabled && !await this.repo.hasEventPhysicalAvailability(context.restaurantId, cmd.eventId, cmd.partySize)) {
+        throw new ConflictError("No hay mesas disponibles para ese grupo en este evento.");
       }
     } else {
       if (!dateAvail || !dateAvail.available) {

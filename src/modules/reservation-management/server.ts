@@ -1,6 +1,11 @@
 import "server-only";
 
 import { reservationManagementService } from "./infrastructure/composition";
+import { prisma } from "@/platform/database/prisma";
+import type { FloorOptionsQuery } from "@/modules/floor-management/contracts";
+import { getFloorAssignmentOptions as readFloorAssignmentOptions } from "./infrastructure/floor-allocations";
+import { createWalkIn, getWalkInOptions, releaseWalkIn } from "./infrastructure/floor-walk-ins";
+import type { CreateWalkInCommand } from "./contracts";
 
 export {
   addBlockedDateAction,
@@ -27,6 +32,7 @@ export type {
   RecurringClosureView,
   ReservationCmsData,
   ReservationStatus,
+  ReservationStatusOptions,
   ReservationView,
   RestaurantEventStatus,
   RestaurantEventView,
@@ -54,3 +60,14 @@ export {
 } from "./contracts";
 
 export const reservationManagement = reservationManagementService;
+
+export function getFloorAssignmentOptions(restaurantId: string, query: FloorOptionsQuery) {
+  return readFloorAssignmentOptions(prisma, restaurantId, query);
+}
+
+export { createWalkInSchema, walkInDurationSchema } from "./contracts";
+export const floorWalkIns = {
+  options: (restaurantId: string, partySize: number, durationMinutes: number) => getWalkInOptions(prisma, restaurantId, partySize, durationMinutes),
+  create: (restaurantId: string, command: CreateWalkInCommand) => createWalkIn(prisma, restaurantId, command),
+  release: (restaurantId: string, reservationId: string, expectedRevision: number) => releaseWalkIn(prisma, restaurantId, reservationId, expectedRevision),
+};

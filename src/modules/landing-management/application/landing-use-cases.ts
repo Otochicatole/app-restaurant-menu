@@ -13,6 +13,7 @@ import {
   type LandingDocumentV1,
   type LandingPageData,
   type LandingTemplateView,
+  type ManagedReservationRuntimeCompatibility,
   type PublicLandingResult,
   type PublishLandingCommand,
   type SaveLandingCommand,
@@ -35,6 +36,7 @@ import {
   recontextualizeLandingSource,
   rewriteLandingRoutes,
 } from "../domain/landing-route-context";
+import { inspectPublishedReservationRuntime, upgradePublishedReservationRuntime } from "../domain/published-reservation-runtime";
 
 function normalizeLandingCommandRoutes<T extends SaveLandingCommand>(command: T, restaurant: RestaurantInfo): T {
   const current = { menuSlug: restaurant.slug, landingSlug: restaurant.landingSlug };
@@ -223,8 +225,16 @@ export function createLandingUseCases(repository: LandingRepository) {
         restaurantName: restaurant.name,
         restaurantSlug: restaurant.landingSlug,
         menuSlug: restaurant.slug,
-        html: recontextualizeLandingSource(publishedHtml, current),
+        html: recontextualizeLandingSource(upgradePublishedReservationRuntime(publishedHtml).html, current),
       };
+    },
+
+    async getReservationRuntimeCompatibility(restaurantId: string): Promise<ManagedReservationRuntimeCompatibility> {
+      const record = await repository.findByRestaurantId(restaurantId);
+      if (!record?.published) return { status: "compatible", hasManagedReservations: false };
+      const published = await repository.getPublishedHtmlFromStorage(restaurantId);
+      if (!published) return { status: "manual-update-required", hasManagedReservations: false, reason: "No se encontró la publicación guardada. Revisá su recuperación antes de activar las mesas." };
+      return inspectPublishedReservationRuntime(published);
     },
 
     async isLandingEnabled(restaurantId: string): Promise<boolean> {

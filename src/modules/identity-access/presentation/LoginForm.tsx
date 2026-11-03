@@ -38,6 +38,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       if (onSuccess) onSuccess(result.data);
       else if (result.data.role === "SUPER_ADMIN") router.push("/superadmin");
+      else if (result.data.role === "WAITER") router.push("/sala");
       else if (result.data.mustChangePassword) router.push("/admin/account/password");
       else router.push("/admin");
       router.refresh();

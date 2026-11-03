@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export type ManagedReservationRuntimeCompatibility = {
+  status: "compatible" | "manual-update-required";
+  hasManagedReservations: boolean;
+  reason?: string;
+};
+
 export const landingFieldTypeSchema = z.enum([
   "text",
   "textarea",

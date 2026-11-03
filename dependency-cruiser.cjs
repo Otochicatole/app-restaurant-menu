@@ -6,6 +6,7 @@ const businessModules = [
   "reservation-management",
   "organization-management",
   "restaurant-management",
+  "floor-management",
 ];
 
 /** @type {import('dependency-cruiser').IConfiguration} */

@@ -19,4 +19,12 @@ export type TenantAdminActor = ActorBase & {
   organizationSlug: string;
 };
 
-export type CurrentActor = SuperAdminActor | TenantAdminActor;
+export type WaiterActor = ActorBase & {
+  kind: "waiter";
+  role: "WAITER";
+  organizationId: string;
+  organizationSlug: string;
+  restaurantId: string;
+};
+
+export type CurrentActor = SuperAdminActor | TenantAdminActor | WaiterActor;

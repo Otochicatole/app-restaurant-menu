@@ -3,6 +3,7 @@ import type {
   BlockedDateView,
   RecurringClosureView,
   ReservationStatus,
+  ReservationStatusOptions,
   ReservationView,
   RestaurantEventView,
   TimeSlotView,
@@ -17,12 +18,16 @@ export interface ReservationRepositoryPort {
   getRestaurantInfo(restaurantId: string): Promise<{
     name: string;
     landingSlug: string;
+    floorManagementEnabled: boolean;
+    timeZone: string;
   } | null>;
   getRestaurantPublicContext(slug: string): Promise<{
     restaurantId: string;
     name: string;
     slug: string;
     landingEnabled: boolean;
+    floorManagementEnabled: boolean;
+    timeZone: string;
   } | null>;
 
   // Time slots
@@ -49,6 +54,11 @@ export interface ReservationRepositoryPort {
     restaurantId: string,
     range: { from: string; to: string },
   ): Promise<DomainRestaurantEvent[]>;
+  getPhysicalAvailability(
+    restaurantId: string,
+    query: { dates: string[]; times: string[]; partySize: number },
+  ): Promise<Record<string, string[]>>;
+  hasEventPhysicalAvailability(restaurantId: string, eventId: string, partySize: number): Promise<boolean>;
   upsertEvent(restaurantId: string, cmd: UpsertRestaurantEventCommand): Promise<RestaurantEventView>;
   deleteEvent(restaurantId: string, eventId: string): Promise<void>;
 
@@ -68,6 +78,7 @@ export interface ReservationRepositoryPort {
     restaurantId: string,
     id: string,
     status: ReservationStatus,
+    options?: ReservationStatusOptions,
   ): Promise<ReservationView>;
   deleteReservation(restaurantId: string, id: string): Promise<void>;
 }

@@ -14,7 +14,7 @@ import {
   type UpdateAccountEmailCommand,
   type VerifyCurrentPasswordCommand,
 } from "./contracts";
-import type { CurrentActor, SuperAdminActor, TenantAdminActor } from "./domain/current-actor";
+import type { CurrentActor, SuperAdminActor, TenantAdminActor, WaiterActor } from "./domain/current-actor";
 import type { SessionClaims } from "./domain/session";
 import { JoseSessionTokenService, resolveJwtSecret } from "./infrastructure/jose-session-token-service";
 
@@ -94,7 +94,7 @@ export async function verifySessionToken(token: string): Promise<SessionClaims> 
   return tokenVerifier.verify(token);
 }
 
-export type { CurrentActor, SessionClaims, SuperAdminActor, TenantAdminActor };
+export type { CurrentActor, SessionClaims, SuperAdminActor, TenantAdminActor, WaiterActor };
 
 async function identityAccess() {
   return (await import("./infrastructure/composition")).getIdentityAccess();

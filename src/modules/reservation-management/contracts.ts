@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { floorAssignmentSchema, type FloorAssignmentInput } from "@/modules/floor-management/contracts";
 
 export const reservationStatusSchema = z.enum([
   "PENDING",
@@ -8,6 +9,16 @@ export const reservationStatusSchema = z.enum([
   "REJECTED",
 ]);
 export type ReservationStatus = z.infer<typeof reservationStatusSchema>;
+
+export const walkInDurationSchema = z.coerce.number().int().min(15).max(720).default(120);
+export const createWalkInSchema = z.object({
+  customerName: z.string().trim().min(1).max(100).default("Sin reserva"),
+  partySize: z.number().int().min(1).max(40),
+  notes: z.string().trim().max(500).default(""),
+  durationMinutes: walkInDurationSchema,
+  assignment: floorAssignmentSchema,
+});
+export type CreateWalkInCommand = z.infer<typeof createWalkInSchema>;
 
 export const restaurantEventStatusSchema = z.enum([
   "DRAFT",
@@ -113,6 +124,7 @@ export const upsertRestaurantEventSchema = z.object({
   imageUrl: z.string().trim().max(500).default(""),
   blocksRegularReservations: z.boolean().default(false),
   status: restaurantEventStatusSchema.default("PUBLISHED"),
+  roomIds: z.array(z.string().min(1)).max(200).optional(),
 });
 export type UpsertRestaurantEventCommand = z.infer<typeof upsertRestaurantEventSchema>;
 
@@ -133,6 +145,7 @@ export type RestaurantEventView = {
   remainingCapacity?: number;
   createdAt: string;
   updatedAt: string;
+  roomIds?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -214,6 +227,8 @@ export const adminCreateReservationSchema = publicCreateReservationSchema.extend
   adminNotes: z.string().trim().max(500).optional().default(""),
   status: reservationStatusSchema.default("CONFIRMED"),
   source: z.enum(["ADMIN", "LANDING"]).default("ADMIN"),
+  assignment: floorAssignmentSchema.optional(),
+  expectedRevision: z.number().int().nonnegative().optional(),
 });
 export type AdminCreateReservationCommand = z.infer<typeof adminCreateReservationSchema>;
 
@@ -221,15 +236,21 @@ export const updateReservationSchema = z.object({
   id: z.string().min(1),
   customerName: z.string().trim().min(2).max(100),
   customerEmail: z.string().trim().max(120).default(""),
-  customerPhone: z.string().trim().min(6).max(40),
+  customerPhone: z.string().trim().max(40).refine((value) => value === "" || value.length >= 6, "Teléfono inválido"),
   partySize: z.coerce.number().int().min(1).max(40),
   date: isoDateSchema,
   time: z.string().trim().regex(timeStringRegex),
   notes: z.string().trim().max(500).default(""),
   adminNotes: z.string().trim().max(500).default(""),
   status: reservationStatusSchema,
+  assignment: floorAssignmentSchema.optional(),
+  expectedRevision: z.number().int().nonnegative().optional(),
 });
 export type UpdateReservationCommand = z.infer<typeof updateReservationSchema>;
+export const floorReservationStatusOptionsSchema = z.object({
+  assignment: floorAssignmentSchema.optional(), expectedRevision: z.number().int().nonnegative().optional(),
+});
+export type ReservationStatusOptions = { assignment?: FloorAssignmentInput; expectedRevision?: number };
 
 export type ReservationView = {
   id: string;
@@ -249,6 +270,7 @@ export type ReservationView = {
   eventTitle?: string | null;
   createdAt: string;
   updatedAt: string;
+  revision: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -258,6 +280,7 @@ export const publicAvailabilityQuerySchema = z.object({
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
   date: isoDateSchema.optional(),
+  partySize: z.coerce.number().int().min(1).max(40).optional(),
 });
 export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuerySchema>;
 
@@ -269,6 +292,8 @@ export type ReservationCmsData = {
   restaurantName: string;
   restaurantSlug: string;
   landingEnabled: boolean;
+  floorManagementEnabled: boolean;
+  timeZone: string;
   timeSlots: TimeSlotView[];
   recurringClosures: RecurringClosureView[];
   blockedDates: BlockedDateView[];

@@ -5,5 +5,6 @@ export default async function AnonymousAdminLayout({ children }: { children: Rea
   const actor = await getAuthenticatedAccount();
   if (!actor) return children;
   if (actor.kind === "super-admin") redirect("/superadmin");
+  if (actor.kind === "waiter") redirect("/sala");
   redirect(actor.mustChangePassword ? "/admin/account/password" : "/admin");
 }

@@ -2,21 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { CalendarDays, Globe, Layers3, LayoutGrid, Menu, Settings, UserRound } from "lucide-react";
+import { CalendarDays, Globe, Layers3, LayoutGrid, Map, Menu, Settings, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { AdminNavigationGuardProvider, useAdminNavigationGuard } from "./AdminNavigationGuard";
 
-export function AdminShell({
-  children,
-  brandTitle,
-  brandSubtitle,
-  showMenuPickerLink,
-  landingEnabled = false,
-  restaurantId,
-  organizationName,
-}: {
+type AdminShellProps = {
   children: React.ReactNode;
   brandTitle: string;
   brandSubtitle: string;
@@ -24,15 +17,33 @@ export function AdminShell({
   landingEnabled?: boolean;
   restaurantId: string;
   organizationName: string;
-}) {
+};
+
+export function AdminShell(props: AdminShellProps) {
+  return <AdminNavigationGuardProvider><AdminShellContent {...props} /></AdminNavigationGuardProvider>;
+}
+
+function AdminShellContent({
+  children,
+  brandTitle,
+  brandSubtitle,
+  showMenuPickerLink,
+  landingEnabled = false,
+  restaurantId,
+  organizationName,
+}: AdminShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { requestNavigation } = useAdminNavigationGuard();
   const [mobileOpen, setMobileOpen] = useState(false);
   const basePath = `/admin/restaurantes/${restaurantId}`;
   const isMenusPage = pathname === "/admin/restaurantes";
   const isLandingPage = pathname === `${basePath}/landing`;
+  const isFloorEditorPage = pathname === `${basePath}/salones`;
 
   const navigation = [
     { label: "Editor", href: basePath, exact: true, icon: Layers3 },
+    { label: "Salones", href: `${basePath}/salones`, exact: true, icon: Map },
     ...(landingEnabled
       ? [
           { label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe },
@@ -45,6 +56,13 @@ export function AdminShell({
 
   const isActive = (item: (typeof navigation)[number]) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
+
+  const navigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (href === pathname) { setMobileOpen(false); return; }
+    requestNavigation(() => { setMobileOpen(false); router.push(href); });
+  };
 
   if (isMenusPage) {
     return <>{children}</>;
@@ -59,13 +77,14 @@ export function AdminShell({
       {/* Sidebar Fija Siempre Contraída (w-16 / 64px) */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-16 select-none flex-col items-center border-r border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[1px_0_16px_rgba(24,24,27,0.03)] backdrop-blur-md transition-transform duration-200 ease-out ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          isFloorEditorPage || mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
         {/* Logo de la aplicación */}
         <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b shadow-xs border-zinc-200">
           <Link
             href={basePath}
+            onClick={(event) => navigate(event, basePath)}
             className="flex h-10 w-10 items-center justify-center rounded-xl p-2 transition-all hover:scale-105 hover:bg-black/10 hover:border-zinc-300 active:scale-95"
             aria-label={brandTitle}
           >
@@ -83,7 +102,7 @@ export function AdminShell({
             <div className="group relative flex w-full items-center justify-center">
               <Link
                 href="/admin/restaurantes"
-                onClick={() => setMobileOpen(false)}
+                onClick={(event) => navigate(event, "/admin/restaurantes")}
                 aria-label="Cambiar restaurante"
                 aria-current={isMenusPage ? "page" : undefined}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
@@ -110,7 +129,7 @@ export function AdminShell({
               <div key={item.href} className="group relative flex w-full items-center justify-center">
                 <Link
                   href={item.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(event) => navigate(event, item.href)}
                   aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
@@ -135,7 +154,7 @@ export function AdminShell({
         {/* Footer con Cerrar Sesión */}
         <div className="mt-auto flex w-full shrink-0 flex-col items-center border-t border-zinc-100 py-3">
           <div className="group relative flex w-full items-center justify-center">
-            <LogoutButton compact />
+            <LogoutButton compact onBeforeLogout={(proceed) => requestNavigation(() => { void proceed(); })} />
             <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
               <span>Cerrar sesión</span>
             </div>
@@ -144,7 +163,7 @@ export function AdminShell({
       </aside>
 
       {/* Overlay para móviles */}
-      {mobileOpen && (
+      {mobileOpen && !isFloorEditorPage && (
         <button
           type="button"
           aria-label="Cerrar navegación"
@@ -152,17 +171,17 @@ export function AdminShell({
           onClick={() => setMobileOpen(false)}
         />
       )}
-      <button
+      {!isFloorEditorPage && <button
         type="button"
         className="fixed right-4 top-4 z-30 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 md:hidden"
         onClick={() => setMobileOpen(true)}
         aria-label="Abrir menú"
       >
         <Menu size={18} />
-      </button>
+      </button>}
 
       {/* Contenido principal: vista completa para /admin/landing o contenedor con padding para settings */}
-      <div className="md:pl-16">
+      {isFloorEditorPage ? children : <div className="md:pl-16">
         <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
           <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
         </header>
@@ -171,7 +190,7 @@ export function AdminShell({
         ) : (
           <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

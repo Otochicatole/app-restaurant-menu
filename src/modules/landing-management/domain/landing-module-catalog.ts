@@ -2253,6 +2253,26 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var recurringClosedDays = [];
     var datesCache = {};
 
+    function applyRestaurantClock(payload) {
+      if (!payload.currentDate || payload.currentDate === todayStr) return false;
+      var previousToday = todayStr;
+      todayStr = payload.currentDate;
+      var parts = todayStr.split('-').map(Number);
+      todayObj = new Date(parts[0], parts[1] - 1, parts[2], 12);
+      if (selectedDateVal === previousToday || selectedDateVal < todayStr) {
+        selectedDateVal = todayStr;
+        if (dateInput) dateInput.value = todayStr;
+        viewYear = parts[0]; viewMonth = parts[1] - 1;
+      }
+      datesCache = {};
+      selectedTimeVal = '';
+      if (selectedTimeInput) selectedTimeInput.value = '';
+      renderCalendar(viewYear, viewMonth);
+      fetchMonthAvailability(viewYear, viewMonth);
+      fetchAvailability(selectedDateVal);
+      return true;
+    }
+
     function formatReadableDateShort(isoStr) {
       if (!isoStr) return '—';
       var parts = isoStr.split('-');
@@ -2504,22 +2524,25 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         return;
       }
 
-      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso);
+      var requestedPartySize = selectedPartySize;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso) + '&partySize=' + requestedPartySize;
 
       fetch(url)
         .then(function(res) {
           if (!res.ok) {
-            return fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?date=' + encodeURIComponent(selectedDateVal))
+            return fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?date=' + encodeURIComponent(selectedDateVal) + '&partySize=' + requestedPartySize)
               .then(function(r) { return r.json(); });
           }
           return res.json();
         })
         .then(function(data) {
+          if (selectedPartySize !== requestedPartySize) return;
           if (!data || !data.success || !data.data) {
             renderCalendar(viewYear, viewMonth);
             return;
           }
           var payload = data.data;
+          if (applyRestaurantClock(payload)) return;
           if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
             recurringClosedDays = payload.recurringClosedDays;
           }
@@ -2541,6 +2564,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     // Party size counter
     function updatePartySize(val) {
       var n = Math.max(1, Math.min(val, 20));
+      var changed = n !== selectedPartySize;
       selectedPartySize = n;
       if (partyDisplay) partyDisplay.textContent = String(n);
       if (selectedPartySizeInput) selectedPartySizeInput.value = String(n);
@@ -2549,6 +2573,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         papResumenPersonas.textContent = n + (n === 1 ? loc.personSingular : loc.personPlural);
       }
       if (partyMinusBtn) partyMinusBtn.disabled = (n <= 1);
+      if (changed) {
+        datesCache = {};
+        selectedTimeVal = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        fetchMonthAvailability(viewYear, viewMonth);
+        fetchAvailability(selectedDateVal);
+      }
     }
 
     if (partyMinusBtn) {
@@ -2594,22 +2625,25 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       }
       if (slotsAlert) slotsAlert.style.display = 'none';
 
-      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateVal);
+      var requestedPartySize = selectedPartySize;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateVal) + '&partySize=' + requestedPartySize;
 
       fetch(url)
         .then(function(res) {
           if (!res.ok) {
-            return fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?date=' + encodeURIComponent(dateVal))
+            return fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?date=' + encodeURIComponent(dateVal) + '&partySize=' + requestedPartySize)
               .then(function(r) { return r.json(); });
           }
           return res.json();
         })
         .then(function(data) {
+          if (selectedPartySize !== requestedPartySize || selectedDateVal !== dateVal) return;
           if (!data || !data.success || !data.data) {
             renderSlotsFallback();
             return;
           }
           var payload = data.data;
+          if (applyRestaurantClock(payload)) return;
           if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
             recurringClosedDays = payload.recurringClosedDays;
             renderCalendar(viewYear, viewMonth);
@@ -2624,18 +2658,13 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         });
     }
 
-    function renderSlotsFallback() {
+    function renderSlotsFallback(message) {
       if (slotsGrid) {
-        var defaultHours = ['19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30', '00:00'];
-        var currentSelected = selectedTimeInput ? (selectedTimeInput.value || '20:00') : '20:00';
-        var html = defaultHours.map(function(h) {
-          var isSel = (h === currentSelected);
-          return '<button type="button" class="pap__hora res-slot-pill' + (isSel ? ' active es-elegida' : '') + '" data-time="' + h + '">' + h + '</button>';
-        }).join('');
-        slotsGrid.innerHTML = html;
-        if (selectedTimeInput) selectedTimeInput.value = currentSelected;
-        if (papResumenHora) papResumenHora.textContent = currentSelected + ' hs';
-        bindSlotButtons();
+        slotsGrid.innerHTML = '<p role="status" style="grid-column:1/-1">' + (message || 'No pudimos consultar los horarios. Intentá nuevamente.') + '</p>';
+        selectedTimeVal = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        if (papResumenHora) papResumenHora.textContent = '—';
+        if (papNextBtn && currentStep === 2) papNextBtn.disabled = true;
       }
     }
 
@@ -2669,7 +2698,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       allTimes.sort(function(a, b) { return a.time.localeCompare(b.time); });
 
       if (allTimes.length === 0) {
-        renderSlotsFallback();
+        renderSlotsFallback('No hay mesas disponibles para ese grupo en esta fecha.');
         return;
       }
 
@@ -3719,8 +3748,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   }
 
   function normalizeDateObject(d) {
-    var isClosed = !d.available || d.status === 'CLOSED' || d.status === 'BLOCKED' || Boolean(d.isClosed);
     var isFullyBooked = d.status === 'FULLY_BOOKED';
+    var isClosed = !isFullyBooked && (!d.available || d.status === 'CLOSED' || d.status === 'BLOCKED' || Boolean(d.isClosed));
 
     var slots = [];
     if (Array.isArray(d.slots)) {
@@ -3911,6 +3940,11 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         partyPills.forEach(function(p) { p.classList.remove('active'); });
         this.classList.add('active');
         if (customPartyInput) customPartyInput.value = '';
+        datesCache = {};
+        availabilityDates = [];
+        selectedTimeStr = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        fetchAvailability();
       });
     });
 
@@ -3921,6 +3955,11 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           selectedPartySize = val;
           if (selectedPartySizeInput) selectedPartySizeInput.value = String(val);
           partyPills.forEach(function(p) { p.classList.remove('active'); });
+          datesCache = {};
+          availabilityDates = [];
+          selectedTimeStr = '';
+          if (selectedTimeInput) selectedTimeInput.value = '';
+          fetchAvailability();
         }
       });
     }
@@ -3961,6 +4000,26 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var viewMonth = todayObj.getMonth();
     var recurringClosedDays = [];
     var datesCache = {};
+
+    function applyRestaurantClock(payload) {
+      if (!payload.currentDate || payload.currentDate === todayStr) return false;
+      var previousToday = todayStr;
+      todayStr = payload.currentDate;
+      var parts = todayStr.split('-').map(Number);
+      todayObj = new Date(parts[0], parts[1] - 1, parts[2], 12);
+      if (selectedDateStr === previousToday || selectedDateStr < todayStr) {
+        selectedDateStr = todayStr;
+        if (hiddenDatePicker) hiddenDatePicker.value = todayStr;
+        viewYear = parts[0]; viewMonth = parts[1] - 1;
+      }
+      datesCache = {}; availabilityDates = [];
+      selectedTimeStr = '';
+      if (selectedTimeInput) selectedTimeInput.value = '';
+      renderCalendar(viewYear, viewMonth);
+      fetchMonthAvailability(viewYear, viewMonth);
+      fetchSingleDateSlots(selectedDateStr);
+      return true;
+    }
 
     selectedDateStr = todayStr;
     if (hiddenDatePicker) {
@@ -4102,11 +4161,14 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     function fetchSingleDateSlots(dateStr) {
       var slug = resolveRestaurantSlug(root);
       if (!slug) return;
-      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateStr);
+      var requestedPartySize = selectedPartySize;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateStr) + '&partySize=' + requestedPartySize;
       fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(data) {
+          if (selectedPartySize !== requestedPartySize || selectedDateStr !== dateStr) return;
           if (!data || !data.success || !data.data) return;
+          if (applyRestaurantClock(data.data)) return;
           var datesList = data.data.dates || [];
           var dayInfo = datesList.find(function(d) { return d.date === dateStr; }) || datesList[0];
           if (dayInfo) {
@@ -4126,6 +4188,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       var slotsAlert = root.querySelector('#resSlotsAlert');
 
       if (dateObj.isClosed) {
+        slotsContainer.innerHTML = '';
         slotsContainer.style.display = 'none';
         if (slotsAlert) {
           slotsAlert.textContent = 'El restaurante se encuentra cerrado en esta fecha: ' + (dateObj.closureReason || 'Día de descanso');
@@ -4138,6 +4201,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       }
 
       if (dateObj.isFullyBooked) {
+        slotsContainer.innerHTML = '';
         slotsContainer.style.display = 'none';
         if (slotsAlert) {
           slotsAlert.textContent = 'Todos los turnos de este día ya han sido reservados. Por favor seleccioná otra fecha.';
@@ -4149,8 +4213,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         return;
       }
 
-      var slots = dateObj.slots || [];
+      var slots = (dateObj.slots || []).filter(function(slot) { return slot.available; });
       if (slots.length === 0) {
+        slotsContainer.innerHTML = '';
         slotsContainer.style.display = 'none';
         if (slotsAlert) {
           slotsAlert.textContent = 'No hay turnos configurados para este día.';
@@ -4208,7 +4273,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     }
 
     function renderEvents(events) {
-      eventsList = events || [];
+      eventsList = (events || []).map(function(event) {
+        return Object.assign({}, event, {
+          time: event.startTime || event.time,
+          price: event.priceLabel || event.price,
+          availableSpots: event.remainingSpots !== undefined ? event.remainingSpots : event.availableSpots,
+          maxCapacity: event.capacity !== undefined ? event.capacity : event.maxCapacity,
+          isSoldOut: event.available === false || Boolean(event.isSoldOut),
+        });
+      });
       if (eventsCountBadge) {
         if (eventsList.length > 0) {
           eventsCountBadge.textContent = String(eventsList.length);
@@ -4330,12 +4403,15 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       var toIso = year + '-' + mStr + '-' + String(lastDay).padStart(2, '0');
       if (fromIso < todayStr) fromIso = todayStr;
 
-      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso);
+      var requestedPartySize = selectedPartySize;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso) + '&partySize=' + requestedPartySize;
       fetch(url)
         .then(function(res) { return res.json(); })
         .then(function(data) {
+          if (selectedPartySize !== requestedPartySize) return;
           if (data && data.success && data.data) {
             var payload = data.data;
+            if (applyRestaurantClock(payload)) return;
             if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
               recurringClosedDays = payload.recurringClosedDays;
             }
@@ -5149,7 +5225,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
       var html = [];
       events.forEach(function(evt) {
-        var isSoldOut = evt.remainingSpots <= 0;
+        var isSoldOut = evt.available === false || evt.remainingSpots <= 0;
         var spotsText = isSoldOut ? '🚫 Cupos agotados' : ('👥 ' + evt.remainingSpots + ' lugares disponibles');
         var spotsBadgeClass = isSoldOut ? 'event-spots-badge sold-out' : 'event-spots-badge';
         var disabledAttr = isSoldOut ? ' disabled' : '';

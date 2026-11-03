@@ -39,7 +39,7 @@ async function preflightOrganizationCutover(database: Client): Promise<void> {
 async function completeOrganizationCutover(database: Client): Promise<void> {
   const state = await database.execute("SELECT generation,state,migrationJson FROM AppSchemaState WHERE id='singleton'");
   if (!state.rows[0]?.migrationJson) {
-    if (state.rows[0]?.generation !== 2 || state.rows[0]?.state !== "READY") throw new Error("El esquema de organizaciones no está listo.");
+    if (![2, 3, 4].includes(Number(state.rows[0]?.generation)) || state.rows[0]?.state !== "READY") throw new Error("El esquema de organizaciones no está listo.");
     return;
   }
   const legacy = JSON.parse(String(state.rows[0].migrationJson)) as { tenants: Row[]; projects: Row[]; assets: Row[]; templates: Row[]; landings: Row[] };
@@ -103,7 +103,7 @@ async function completeOrganizationCutover(database: Client): Promise<void> {
     if (foreignKeys.rows.length) throw new Error("El cutover produjo referencias inválidas; restaurá el snapshot antes de reabrir tráfico.");
   }
   // Legacy files remain untouched, so restoring the pre-cutover SQLite snapshot is sufficient.
-  await database.execute("UPDATE AppSchemaState SET generation=2,state='READY',migrationJson=NULL,updatedAt=CURRENT_TIMESTAMP WHERE id='singleton'");
+  await database.execute("UPDATE AppSchemaState SET state='READY',migrationJson=NULL,updatedAt=CURRENT_TIMESTAMP WHERE id='singleton'");
   console.log(`Cutover de organizaciones completo: ${tenants.length} organizaciones, bibliotecas y archivos aislados.`);
 }
 

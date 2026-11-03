@@ -13,6 +13,7 @@ datasource db {
 enum AdminRole {
   SUPER_ADMIN
   TENANT_ADMIN
+  WAITER
 }
 
 enum TenantStatus {
@@ -28,6 +29,8 @@ model Admin {
   role               AdminRole     @default(TENANT_ADMIN)
   organizationId     String?       @unique
   organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  restaurantId       String?       @unique
+  restaurant         Restaurant?   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   mustChangePassword Boolean       @default(false)
   lastLoginAt        DateTime?
   createdAt          DateTime      @default(now())
@@ -49,7 +52,7 @@ model Organization {
 
 model AppSchemaState {
   id            String   @id @default("singleton")
-  generation    Int      @default(2)
+  generation    Int      @default(4)
   state         String   @default("READY")
   migrationJson String?
   updatedAt     DateTime @updatedAt
@@ -63,6 +66,8 @@ model Restaurant {
   publicDescription            String                        @default("Menú digital")
   assetQuotaBytes              Int                           @default(262144000)
   dailyReservationCapacity     Int                           @default(50)
+  timeZone                     String                        @default("America/Argentina/Buenos_Aires")
+  floorManagementEnabled       Boolean                       @default(false)
   slug                         String                        @unique
   landingSlug                  String                        @unique
   status                       TenantStatus                  @default(ACTIVE)
@@ -82,6 +87,11 @@ model Restaurant {
   reservationBlockedDates      ReservationBlockedDate[]
   restaurantEvents             RestaurantEvent[]
   tableReservations            TableReservation[]
+  waiterAccount                Admin?
+  diningRooms                  DiningRoom[]
+  diningTables                 DiningTable[]
+  diningTableCombinations      DiningTableCombination[]
+  reservationAllocations       ReservationAllocation[]
 
   @@index([organizationId])
 }
@@ -385,6 +395,7 @@ model RestaurantEvent {
   createdAt                 DateTime              @default(now())
   updatedAt                 DateTime              @updatedAt
   reservations              TableReservation[]
+  rooms                     RestaurantEventRoom[]
 
   @@unique([id, restaurantId])
   @@index([restaurantId, date, status])
@@ -409,9 +420,182 @@ model TableReservation {
   event         RestaurantEvent?  @relation(fields: [eventId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: NoAction)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  revision      Int               @default(0)
+  allocation    ReservationAllocation?
 
+  @@unique([id, restaurantId])
   @@unique([restaurantId, code])
   @@index([restaurantId, date, status])
   @@index([restaurantId, status])
   @@index([eventId])
+}
+
+enum DiningTableShape {
+  SQUARE
+  RECTANGLE
+  CIRCLE
+}
+
+model DiningRoom {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name          String
+  width         Float @default(1200)
+  height        Float @default(800)
+  fixturesJson  String @default("[]")
+  revision      Int @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tables        DiningTable[]
+  combinations  DiningTableCombination[]
+  locations     DiningRoomLocation[]
+  events        RestaurantEventRoom[]
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, name])
+}
+
+model DiningRoomLocation {
+  id            String @id @default(cuid())
+  restaurantId  String
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  name          String
+  x             Float
+  y             Float
+  width         Float
+  height        Float
+  rotation      Int @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, name])
+  @@index([restaurantId, roomId, active])
+}
+
+model DiningTable {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  label         String
+  shape         DiningTableShape
+  capacity      Int @default(4)
+  x             Float
+  y             Float
+  width         Float @default(80)
+  height        Float @default(80)
+  rotation      Int @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  combinationMembers DiningTableCombinationMember[]
+  allocations   ReservationAllocationTable[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, label])
+  @@index([restaurantId, roomId, active])
+}
+
+model DiningTableCombination {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  name          String
+  capacity      Int
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  members       DiningTableCombinationMember[]
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, name])
+}
+
+model DiningTableCombinationMember {
+  combinationId String
+  tableId       String
+  restaurantId  String
+  roomId        String
+  x             Float
+  y             Float
+  rotation      Int @default(0)
+  combination   DiningTableCombination @relation(fields: [combinationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table         DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+
+  @@id([combinationId, tableId])
+  @@index([restaurantId, tableId])
+}
+
+model RestaurantEventRoom {
+  eventId       String
+  roomId        String
+  restaurantId  String
+  event         RestaurantEvent @relation(fields: [eventId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+
+  @@id([eventId, roomId])
+  @@index([restaurantId, roomId])
+}
+
+model ReservationAllocation {
+  id             String @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reservationId  String @unique
+  reservation    TableReservation @relation(fields: [reservationId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  roomId         String
+  room           DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  combinationId  String?
+  combination    DiningTableCombination? @relation(fields: [combinationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+  locationId     String?
+  location       DiningRoomLocation? @relation(fields: [locationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+  capacity       Int
+  timeZone       String
+  serviceStartAt DateTime
+  serviceEndAt   DateTime
+  blockedFrom    DateTime
+  blockedUntil   DateTime
+  releasedAt     DateTime?
+  roomRevision   Int
+  version        Int @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tables         ReservationAllocationTable[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([reservationId, restaurantId])
+  @@index([restaurantId, blockedFrom])
+  @@index([restaurantId, roomId, blockedFrom])
+  @@index([restaurantId, roomId, locationId, blockedFrom])
+}
+
+model ReservationAllocationTable {
+  allocationId    String
+  tableId         String
+  restaurantId    String
+  roomId          String
+  labelSnapshot   String
+  shapeSnapshot   DiningTableShape
+  capacitySnapshot Int
+  width           Float
+  height          Float
+  x               Float
+  y               Float
+  rotation        Int
+  allocation      ReservationAllocation @relation(fields: [allocationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table           DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+
+  @@id([allocationId, tableId])
+  @@index([restaurantId, tableId, allocationId])
 }

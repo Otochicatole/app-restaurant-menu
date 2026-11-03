@@ -2,13 +2,16 @@ import { BadRequestError, ConflictError, NotFoundError } from "@/platform/applic
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/platform/database/prisma";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
-import { getDayOfWeekFromIsoDate, isOccupyingReservation, type DomainRestaurantEvent } from "../domain/availability-engine";
+import { getDayOfWeekFromIsoDate, type DomainRestaurantEvent } from "../domain/availability-engine";
 import { generateReservationCode } from "../domain/reservation-code";
+import { calculateFloorInterval, restaurantLocalDateTime } from "@/modules/floor-management/contracts";
+import { getFloorAssignmentOptions, getPhysicalAvailability, syncReservationAllocation } from "./floor-allocations";
 import type {
   AdminCreateReservationCommand,
   BlockedDateView,
   RecurringClosureView,
   ReservationStatus,
+  ReservationStatusOptions,
   ReservationView,
   RestaurantEventView,
   TimeSlotView,
@@ -34,8 +37,9 @@ function toReservationView(reservation: ReservationRecord): ReservationView {
   };
 }
 
-function toEventView(event: Prisma.RestaurantEventGetPayload<object>): RestaurantEventView {
-  return { ...event, createdAt: event.createdAt.toISOString(), updatedAt: event.updatedAt.toISOString() };
+function toEventView(event: Prisma.RestaurantEventGetPayload<object> & { rooms?: { roomId: string }[] }): RestaurantEventView {
+  const { rooms, ...data } = event;
+  return { ...data, roomIds: rooms?.map((room) => room.roomId), createdAt: event.createdAt.toISOString(), updatedAt: event.updatedAt.toISOString() };
 }
 
 function isCodeCollision(error: unknown): boolean {
@@ -49,6 +53,25 @@ function isCodeCollision(error: unknown): boolean {
 export class PrismaReservationRepository implements ReservationRepositoryPort {
   constructor(private readonly database: PrismaClient = prisma) {}
 
+  private async settings(database: Prisma.TransactionClient, restaurantId: string) {
+    const restaurant = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { timeZone: true, floorManagementEnabled: true } });
+    if (!restaurant) throw new NotFoundError("Restaurante");
+    return restaurant;
+  }
+
+  private async statuses(database: Prisma.TransactionClient, restaurantId: string) {
+    return (await this.settings(database, restaurantId)).floorManagementEnabled
+      ? ["CONFIRMED", "COMPLETED"] as const : occupyingStatuses;
+  }
+
+  private async assertRevision(tx: Prisma.TransactionClient, existing: { restaurantId: string; revision: number }, status: ReservationStatus, expectedRevision?: number) {
+    const settings = await this.settings(tx, existing.restaurantId);
+    if ((expectedRevision !== undefined && expectedRevision !== existing.revision) ||
+      (settings.floorManagementEnabled && status === "CONFIRMED" && expectedRevision === undefined)) {
+      throw new ConflictError("La reserva cambió o falta su revisión actual. Actualizá la vista antes de confirmar.");
+    }
+  }
+
   private async assertEventCapacity(
     tx: Prisma.TransactionClient,
     restaurantId: string,
@@ -59,12 +82,13 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
   ) {
     const event = await tx.restaurantEvent.findFirst({ where: { id: eventId, restaurantId } });
     if (!event) throw new NotFoundError("Evento no encontrado");
-    if (isOccupyingReservation(status)) {
+    const statuses = await this.statuses(tx, restaurantId);
+    if (statuses.some((value) => value === status)) {
       const occupied = await tx.tableReservation.aggregate({
         where: {
           restaurantId,
           eventId,
-          status: { in: [...occupyingStatuses] },
+          status: { in: [...statuses] },
           id: excludeReservationId ? { not: excludeReservationId } : undefined,
         },
         _sum: { partySize: true },
@@ -82,7 +106,9 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     date: string,
     time: string,
   ) {
-    if (date < new Date().toISOString().slice(0, 10)) {
+    const settings = await this.settings(tx, restaurantId);
+    const localNow = restaurantLocalDateTime(settings.timeZone);
+    if (date < localNow.date || (date === localNow.date && time <= localNow.time)) {
       throw new BadRequestError("No se pueden realizar reservas para fechas pasadas.");
     }
     const [slot, closure, blocked, exclusive] = await Promise.all([
@@ -91,7 +117,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       tx.reservationBlockedDate.findFirst({ where: { restaurantId, date }, select: { reason: true } }),
       tx.restaurantEvent.findFirst({ where: { restaurantId, date, status: "PUBLISHED", blocksRegularReservations: true }, select: { id: true } }),
     ]);
-    if (!slot || closure || blocked || exclusive) {
+    if (!slot || closure || blocked || (exclusive && !settings.floorManagementEnabled)) {
       throw new ConflictError(closure?.reason || blocked?.reason || "El horario seleccionado no está disponible.");
     }
   }
@@ -116,7 +142,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
   async getRestaurantInfo(restaurantId: string) {
     return this.database.restaurant.findUnique({
       where: { id: restaurantId },
-      select: { name: true, landingSlug: true },
+      select: { name: true, landingSlug: true, floorManagementEnabled: true, timeZone: true },
     });
   }
 
@@ -125,6 +151,8 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     name: string;
     slug: string;
     landingEnabled: boolean;
+    floorManagementEnabled: boolean;
+    timeZone: string;
   } | null> {
     const restaurant = await this.database.restaurant.findUnique({
       where: { landingSlug: slug },
@@ -133,6 +161,8 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
         name: true,
         landingSlug: true,
         landingEnabled: true,
+        floorManagementEnabled: true,
+        timeZone: true,
         status: true,
         organization: { select: { status: true } },
         landingPage: { select: { published: true } },
@@ -153,6 +183,8 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       name: restaurant.name,
       slug: restaurant.landingSlug,
       landingEnabled: restaurant.landingEnabled,
+      floorManagementEnabled: restaurant.floorManagementEnabled,
+      timeZone: restaurant.timeZone,
     };
   }
 
@@ -361,11 +393,12 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
   // ---------------------------------------------------------------------------
 
   async getEvents(restaurantId: string): Promise<RestaurantEventView[]> {
+    const statuses = await this.statuses(this.database, restaurantId);
     const [events, occupancy] = await Promise.all([
-      this.database.restaurantEvent.findMany({ where: { restaurantId }, orderBy: { date: "asc" } }),
+      this.database.restaurantEvent.findMany({ where: { restaurantId }, include: { rooms: { select: { roomId: true } } }, orderBy: { date: "asc" } }),
       this.database.tableReservation.groupBy({
         by: ["eventId"],
-        where: { restaurantId, eventId: { not: null }, status: { in: [...occupyingStatuses] } },
+        where: { restaurantId, eventId: { not: null }, status: { in: [...statuses] } },
         _sum: { partySize: true },
         _count: { _all: true },
       }),
@@ -373,20 +406,22 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     const byEvent = new Map(occupancy.map((item) => [item.eventId, item]));
     return events.map((event) => ({
       ...toEventView(event),
+      roomIds: event.rooms.map((room) => room.roomId),
       confirmedReservationsCount: byEvent.get(event.id)?._count._all ?? 0,
       remainingCapacity: Math.max(0, event.capacity - (byEvent.get(event.id)?._sum.partySize ?? 0)),
     }));
   }
 
   async getEventById(restaurantId: string, eventId: string): Promise<RestaurantEventView | null> {
-    const event = await this.database.restaurantEvent.findFirst({ where: { id: eventId, restaurantId } });
-    return event ? toEventView(event) : null;
+    const event = await this.database.restaurantEvent.findFirst({ where: { id: eventId, restaurantId }, include: { rooms: { select: { roomId: true } } } });
+    return event ? { ...toEventView(event), roomIds: event.rooms.map((room) => room.roomId) } : null;
   }
 
   async getAvailabilityEvents(
     restaurantId: string,
     { from, to }: { from: string; to: string },
   ): Promise<DomainRestaurantEvent[]> {
+    const statuses = await this.statuses(this.database, restaurantId);
     const eventWhere = { restaurantId, status: "PUBLISHED" as const, date: { gte: from, lte: to } };
     const events = await this.database.restaurantEvent.findMany({
       where: eventWhere,
@@ -399,70 +434,82 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     if (events.length === 0) return [];
     const occupancy = await this.database.tableReservation.groupBy({
       by: ["eventId"],
-      where: { restaurantId, eventId: { in: events.map((event) => event.id) }, status: { in: [...occupyingStatuses] } },
+      where: { restaurantId, eventId: { in: events.map((event) => event.id) }, status: { in: [...statuses] } },
       _sum: { partySize: true },
     });
     const byEvent = new Map(occupancy.map((item) => [item.eventId, item._sum.partySize ?? 0]));
     return events.map((event) => ({ ...event, occupiedSpots: byEvent.get(event.id) ?? 0 }));
   }
 
+  getPhysicalAvailability(restaurantId: string, query: { dates: string[]; times: string[]; partySize: number }) {
+    return getPhysicalAvailability(this.database, restaurantId, query);
+  }
+
+  async hasEventPhysicalAvailability(restaurantId: string, eventId: string, partySize: number) {
+    const event = await this.database.restaurantEvent.findFirst({ where: { id: eventId, restaurantId }, select: { date: true, startTime: true } });
+    if (!event) return false;
+    return Boolean((await getFloorAssignmentOptions(this.database, restaurantId, { date: event.date, time: event.startTime, eventId, partySize })).hasAvailability);
+  }
+
   async upsertEvent(
     restaurantId: string,
     cmd: UpsertRestaurantEventCommand,
   ): Promise<RestaurantEventView> {
-    if (cmd.id) {
-      return withSqliteTransaction(this.database, async (tx) => {
-        const occupied = await tx.tableReservation.aggregate({
-          where: { restaurantId, eventId: cmd.id, status: { in: [...occupyingStatuses] } },
-          _sum: { partySize: true },
+    return withSqliteTransaction(this.database, async (tx) => {
+      const settings = await this.settings(tx, restaurantId);
+      const existing = cmd.id ? await tx.restaurantEvent.findFirst({ where: { id: cmd.id, restaurantId }, include: { rooms: true } }) : null;
+      if (cmd.id && !existing) throw new NotFoundError("Evento");
+      const roomIds = [...new Set(cmd.roomIds ?? existing?.rooms.map((room) => room.roomId) ?? [])];
+      if (settings.floorManagementEnabled && roomIds.length === 0) throw new BadRequestError("Seleccioná al menos un salón para el evento.");
+      if (roomIds.length && await tx.diningRoom.count({ where: { restaurantId, id: { in: roomIds }, active: true } }) !== roomIds.length) {
+        throw new BadRequestError("Los salones del evento deben estar activos y pertenecer a este restaurante.");
+      }
+      const interval = settings.floorManagementEnabled ? calculateFloorInterval({
+        date: cmd.date, time: cmd.startTime, timeZone: settings.timeZone,
+        event: { date: cmd.date, startTime: cmd.startTime, endTime: cmd.endTime },
+      }) : null;
+      const occupied = existing ? await tx.tableReservation.aggregate({
+        where: { restaurantId, eventId: existing.id, status: { in: [...await this.statuses(tx, restaurantId)] } }, _sum: { partySize: true },
+      }) : null;
+      if ((occupied?._sum.partySize ?? 0) > cmd.capacity) throw new ConflictError("El aforo no puede ser menor que la cantidad de personas ya reservadas.");
+      if (interval && cmd.status === "PUBLISHED" && cmd.blocksRegularReservations) {
+        const exclusiveEvents = await tx.restaurantEvent.findMany({
+          where: { restaurantId, status: "PUBLISHED", blocksRegularReservations: true,
+            ...(existing ? { id: { not: existing.id } } : {}), rooms: { some: { roomId: { in: roomIds } } } },
+          select: { date: true, startTime: true, endTime: true },
         });
-        if ((occupied._sum.partySize ?? 0) > cmd.capacity) {
-          throw new ConflictError("El aforo no puede ser menor que la cantidad de personas ya reservadas.");
-        }
-        const updated = await tx.restaurantEvent.update({
-          where: { id: cmd.id, restaurantId },
-          data: {
-            title: cmd.title, description: cmd.description, date: cmd.date, startTime: cmd.startTime,
-            endTime: cmd.endTime, capacity: cmd.capacity, priceLabel: cmd.priceLabel, imageUrl: cmd.imageUrl,
-            blocksRegularReservations: cmd.blocksRegularReservations, status: cmd.status,
-          },
+        if (exclusiveEvents.some((event) => {
+          const other = calculateFloorInterval({ date: event.date, time: event.startTime, timeZone: settings.timeZone, event });
+          return Date.parse(other.blockedFrom) < Date.parse(interval.blockedUntil) && Date.parse(other.blockedUntil) > Date.parse(interval.blockedFrom);
+        })) throw new ConflictError("Otro evento exclusivo ya ocupa uno de los salones durante ese horario.");
+        const conflicting = await tx.reservationAllocation.findFirst({
+          where: {
+            restaurantId, roomId: { in: roomIds }, releasedAt: null,
+            blockedFrom: { lt: new Date(interval.blockedUntil) }, blockedUntil: { gt: new Date(interval.blockedFrom) },
+            reservation: { status: "CONFIRMED", ...(existing ? { OR: [{ eventId: null }, { eventId: { not: existing.id } }] } : {}) },
+          }, select: { id: true },
         });
-        return toEventView(updated);
-      });
-    }
-
-    const created = await this.database.restaurantEvent.create({
-      data: {
-        restaurantId,
-        title: cmd.title,
-        description: cmd.description,
-        date: cmd.date,
-        startTime: cmd.startTime,
-        endTime: cmd.endTime,
-        capacity: cmd.capacity,
-        priceLabel: cmd.priceLabel,
-        imageUrl: cmd.imageUrl,
-        blocksRegularReservations: cmd.blocksRegularReservations,
-        status: cmd.status,
-      },
+        if (conflicting) throw new ConflictError("El evento exclusivo se superpone con mesas ya confirmadas en uno de sus salones.");
+      }
+      const data = {
+        title: cmd.title, description: cmd.description, date: cmd.date, startTime: cmd.startTime,
+        endTime: cmd.endTime, capacity: cmd.capacity, priceLabel: cmd.priceLabel, imageUrl: cmd.imageUrl,
+        blocksRegularReservations: cmd.blocksRegularReservations, status: cmd.status,
+      };
+      const event = existing
+        ? await tx.restaurantEvent.update({ where: { id: existing.id, restaurantId }, data })
+        : await tx.restaurantEvent.create({ data: { ...data, restaurantId } });
+      await tx.restaurantEventRoom.deleteMany({ where: { eventId: event.id, restaurantId } });
+      if (roomIds.length) await tx.restaurantEventRoom.createMany({ data: roomIds.map((roomId) => ({ eventId: event.id, restaurantId, roomId })) });
+      const scheduleChanged = existing && (existing.date !== cmd.date || existing.startTime !== cmd.startTime || existing.endTime !== cmd.endTime ||
+        existing.rooms.map((room) => room.roomId).sort().join(",") !== [...roomIds].sort().join(","));
+      if (scheduleChanged) {
+        await tx.tableReservation.updateMany({ where: { restaurantId, eventId: event.id }, data: { date: event.date, time: event.startTime, revision: { increment: 1 } } });
+        const confirmed = await tx.tableReservation.findMany({ where: { restaurantId, eventId: event.id, status: "CONFIRMED" } });
+        for (const reservation of confirmed) await syncReservationAllocation(tx, reservation);
+      }
+      return { ...toEventView(event), roomIds };
     });
-
-    return {
-      id: created.id,
-      restaurantId: created.restaurantId,
-      title: created.title,
-      description: created.description,
-      date: created.date,
-      startTime: created.startTime,
-      endTime: created.endTime,
-      capacity: created.capacity,
-      priceLabel: created.priceLabel,
-      imageUrl: created.imageUrl,
-      blocksRegularReservations: created.blocksRegularReservations,
-      status: created.status as RestaurantEventView["status"],
-      createdAt: created.createdAt.toISOString(),
-      updatedAt: created.updatedAt.toISOString(),
-    };
   }
 
   async deleteEvent(restaurantId: string, eventId: string): Promise<void> {
@@ -515,6 +562,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       source: r.source,
       eventId: r.eventId,
       eventTitle: r.event?.title ?? null,
+      revision: r.revision,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
@@ -548,6 +596,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       source: r.source,
       eventId: r.eventId,
       eventTitle: r.event?.title ?? null,
+      revision: r.revision,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     };
@@ -570,12 +619,17 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
             time = event.startTime;
             if (cmd.source === "LANDING") {
               if (event.status !== "PUBLISHED") throw new NotFoundError("Evento no publicado");
-              if (date < new Date().toISOString().slice(0, 10)) {
+              const localNow = restaurantLocalDateTime((await this.settings(tx, restaurantId)).timeZone);
+              if (date < localNow.date || (date === localNow.date && time <= localNow.time)) {
                 throw new BadRequestError("No se pueden realizar reservas para fechas pasadas.");
               }
             }
           } else if (cmd.source === "LANDING") {
             await this.assertPublicTableAvailability(tx, restaurantId, date, time);
+          }
+          if (cmd.source === "LANDING" && (await this.settings(tx, restaurantId)).floorManagementEnabled) {
+            const available = await getFloorAssignmentOptions(tx, restaurantId, { date, time, partySize: cmd.partySize, eventId: cmd.eventId });
+            if (!available.hasAvailability) throw new ConflictError("No hay mesas disponibles para ese grupo en el horario seleccionado.");
           }
           const created = await tx.tableReservation.create({
             data: {
@@ -585,6 +639,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
             },
             include: { event: { select: { title: true } } },
           });
+          await syncReservationAllocation(tx, created, cmd.assignment);
           return toReservationView(created);
         });
       } catch (error) {
@@ -603,6 +658,8 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     return withSqliteTransaction(this.database, async (tx) => {
       const existing = await tx.tableReservation.findFirst({ where: { id: cmd.id, restaurantId } });
       if (!existing) throw new NotFoundError("Reserva no encontrada");
+      if (existing.source !== "WALK_IN" && cmd.customerPhone.trim().length < 6) throw new BadRequestError("La reserva requiere un teléfono de contacto válido.");
+      await this.assertRevision(tx, existing, cmd.status, cmd.expectedRevision);
       const id = cmd.id;
       const data = {
         customerName: cmd.customerName, customerEmail: cmd.customerEmail, customerPhone: cmd.customerPhone,
@@ -614,8 +671,9 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
         data.time = event.startTime;
       }
       const updated = await tx.tableReservation.update({
-        where: { id, restaurantId }, data, include: { event: { select: { title: true } } },
+        where: { id, restaurantId }, data: { ...data, revision: { increment: 1 } }, include: { event: { select: { title: true } } },
       });
+      await syncReservationAllocation(tx, updated, cmd.assignment);
       return toReservationView(updated);
     });
   }
@@ -624,16 +682,19 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     restaurantId: string,
     id: string,
     status: ReservationStatus,
+    options?: ReservationStatusOptions,
   ): Promise<ReservationView> {
     return withSqliteTransaction(this.database, async (tx) => {
       const existing = await tx.tableReservation.findFirst({ where: { id, restaurantId } });
       if (!existing) throw new NotFoundError("Reserva no encontrada");
+      await this.assertRevision(tx, existing, status, options?.expectedRevision);
       if (existing.eventId) {
         await this.assertEventCapacity(tx, restaurantId, existing.eventId, existing.partySize, status, id);
       }
       const updated = await tx.tableReservation.update({
-        where: { id, restaurantId }, data: { status }, include: { event: { select: { title: true } } },
+        where: { id, restaurantId }, data: { status, revision: { increment: 1 } }, include: { event: { select: { title: true } } },
       });
+      await syncReservationAllocation(tx, updated, options?.assignment);
       return toReservationView(updated);
     });
   }

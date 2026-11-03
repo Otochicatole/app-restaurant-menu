@@ -6,15 +6,19 @@ import { createClient } from "@libsql/client";
 
 const root = await mkdtemp(path.join(os.tmpdir(), "schema-guard-test-"));
 const oldRelease = path.join(root, "release-1");
-const newRelease = path.join(root, "release-2");
+const previousRelease = path.join(root, "release-2");
+const floorRelease = path.join(root, "release-3");
+const newRelease = path.join(root, "release-4");
 const binaries = path.join(root, "bin");
 const databasePath = path.join(root, "test.db");
 const database = createClient({ url: `file:${databasePath.replaceAll("\\", "/")}` });
 const bash = process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash";
 const guard = path.resolve("scripts/deploy/assert-schema-compatibility.sh");
 try {
-  await Promise.all([mkdir(oldRelease), mkdir(newRelease), mkdir(binaries)]);
-  await writeFile(path.join(newRelease, "app-schema-generation"), "2\n");
+  await Promise.all([mkdir(oldRelease), mkdir(previousRelease), mkdir(floorRelease), mkdir(newRelease), mkdir(binaries)]);
+  await writeFile(path.join(previousRelease, "app-schema-generation"), "2\n");
+  await writeFile(path.join(floorRelease, "app-schema-generation"), "3\n");
+  await writeFile(path.join(newRelease, "app-schema-generation"), "4\n");
   // Exercise the actual shell guard and SQL with a portable sqlite3 CLI adapter.
   await writeFile(path.join(binaries, "sqlite3"), `#!/usr/bin/env bun
 import { Database } from "bun:sqlite";
@@ -27,12 +31,24 @@ finally { db.close(); }
   await expectGuard(oldRelease, true, "release anterior con base anterior");
   await expectGuard(newRelease, false, "release nuevo con base anterior");
   await expectPortableGuard(false);
-  await database.executeMultiple("CREATE TABLE AppSchemaState(id TEXT PRIMARY KEY,generation INTEGER,state TEXT); INSERT INTO AppSchemaState VALUES('singleton',2,'MIGRATING');");
+  await database.executeMultiple("CREATE TABLE AppSchemaState(id TEXT PRIMARY KEY,generation INTEGER,state TEXT); INSERT INTO AppSchemaState VALUES('singleton',2,'READY');");
+  await expectGuard(previousRelease, true, "release de organizaciones con generación 2");
+  await expectGuard(newRelease, false, "release de salas rechaza generación 2");
+  await expectPortableGuard(false);
+  await database.execute("UPDATE AppSchemaState SET generation=3,state='READY'");
+  await expectGuard(floorRelease, true, "release de planos con generación 3");
+  await expectGuard(newRelease, false, "release de inventario rechaza generación 3");
+  await expectPortableGuard(false);
+  await database.execute("UPDATE AppSchemaState SET generation=4,state='MIGRATING'");
   await expectGuard(oldRelease, false, "release anterior durante cutover");
   await expectGuard(newRelease, false, "release nuevo durante cutover");
+  await expectGuard(previousRelease, false, "release anterior durante migración de salas");
+  await expectGuard(floorRelease, false, "release de planos durante migración de inventario");
   await expectPortableGuard(false);
   await database.execute("UPDATE AppSchemaState SET state='READY'");
   await expectGuard(oldRelease, false, "rollback incompatible");
+  await expectGuard(previousRelease, false, "rollback de reservas sin asignación incompatible");
+  await expectGuard(floorRelease, false, "rollback de planos sin sectores incompatible");
   await expectGuard(newRelease, true, "release nuevo listo");
   await expectPortableGuard(false);
   await database.execute("PRAGMA journal_mode=WAL");

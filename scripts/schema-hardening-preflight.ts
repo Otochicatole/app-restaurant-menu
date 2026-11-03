@@ -16,8 +16,6 @@ function minimum(table: string, column: string, bound: number, nullable = false)
   check(table, [column], `${nullable ? `"${column}" IS NULL OR ` : ""}(typeof("${column}")='integer' AND "${column}">=${bound})`, `${column} debe ser entero ${nullable ? "o NULL, " : ""}>= ${bound}`);
 }
 
-values("Admin", "role", ["SUPER_ADMIN", "TENANT_ADMIN"]);
-check("Admin", ["role", "organizationId"], `("role"='SUPER_ADMIN' AND "organizationId" IS NULL) OR ("role"='TENANT_ADMIN' AND "organizationId" IS NOT NULL)`, "rol y organización incompatibles");
 for (const table of ["Organization", "Restaurant"]) values(table, "status", ["ACTIVE", "SUSPENDED"]);
 minimum("Organization", "maxRestaurants", 1);
 minimum("Restaurant", "assetQuotaBytes", 1);
@@ -44,7 +42,21 @@ minimum("RestaurantEvent", "capacity", 1);
 values("RestaurantEvent", "status", ["DRAFT", "PUBLISHED", "CANCELLED", "COMPLETED"]);
 minimum("TableReservation", "partySize", 1);
 values("TableReservation", "status", ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED", "REJECTED"]);
-values("TableReservation", "source", ["ADMIN", "LANDING"]);
+minimum("TableReservation", "revision", 0);
+minimum("DiningRoom", "revision", 0);
+for (const table of ["DiningTable", "DiningTableCombination", "ReservationAllocation"]) minimum(table, "capacity", 1);
+minimum("ReservationAllocationTable", "capacitySnapshot", 1);
+minimum("ReservationAllocation", "version", 0);
+minimum("ReservationAllocation", "roomRevision", 0);
+for (const table of ["DiningRoom", "DiningRoomLocation", "DiningTable", "ReservationAllocationTable"]) {
+  check(table, ["width", "height"], '"width">0 AND "height">0', "dimensiones no positivas");
+}
+for (const table of ["DiningRoomLocation", "DiningTable", "DiningTableCombinationMember", "ReservationAllocationTable"]) {
+  check(table, ["rotation"], '"rotation" IN (0,90,180,270)', "rotación inválida");
+}
+values("DiningTable", "shape", ["SQUARE", "RECTANGLE", "CIRCLE"]);
+values("ReservationAllocationTable", "shapeSnapshot", ["SQUARE", "RECTANGLE", "CIRCLE"]);
+check("ReservationAllocation", ["serviceStartAt", "serviceEndAt", "blockedFrom", "blockedUntil"], '"serviceEndAt">"serviceStartAt" AND "blockedUntil">"blockedFrom" AND "blockedFrom"<="serviceStartAt" AND "blockedUntil">="serviceEndAt"', "intervalos inválidos");
 
 /** Read-only: missing databases and older tables/columns are deliberately skipped. */
 export async function assertSchemaHardeningPreflight(databaseUrl: string): Promise<void> {
@@ -65,10 +77,20 @@ export async function assertSchemaHardeningPreflight(databaseUrl: string): Promi
       columns.set(String(name), new Set(info.rows.map((row) => String(row.name))));
     }
     const problems: string[] = [];
-    for (const rule of checks) {
+    const hasWaiterScope = columns.get("Admin")?.has("restaurantId");
+    const adminChecks: Check[] = [
+      { table: "Admin", columns: ["role"], valid: `"role" IN ('SUPER_ADMIN','TENANT_ADMIN'${hasWaiterScope ? ",'WAITER'" : ""})`, label: "role inválido" },
+      { table: "Admin", columns: ["role", "organizationId", ...(hasWaiterScope ? ["restaurantId"] : [])],
+        valid: hasWaiterScope
+          ? `("role"='SUPER_ADMIN' AND "organizationId" IS NULL AND "restaurantId" IS NULL) OR ("role"='TENANT_ADMIN' AND "organizationId" IS NOT NULL AND "restaurantId" IS NULL) OR ("role"='WAITER' AND "organizationId" IS NULL AND "restaurantId" IS NOT NULL)`
+          : `("role"='SUPER_ADMIN' AND "organizationId" IS NULL) OR ("role"='TENANT_ADMIN' AND "organizationId" IS NOT NULL)`, label: "rol y alcance incompatibles" },
+    ];
+    const reservationSource: Check = { table: "TableReservation", columns: ["source"],
+      valid: `"source" IN ('ADMIN','LANDING'${columns.has("DiningRoomLocation") ? ",'WALK_IN'" : ""})`, label: "source inválido" };
+    for (const rule of [...checks, ...adminChecks, reservationSource]) {
       const available = columns.get(rule.table);
       if (!available || !rule.columns.every((column) => available.has(column))) continue;
-      const identity = available.has("id") ? '"id"' : available.has("key") ? '"key"' : `"projectId" || ':' || "assetId" || ':' || "scope"`;
+      const identity = available.has("id") ? '"id"' : available.has("key") ? '"key"' : available.has("projectId") ? `"projectId" || ':' || "assetId" || ':' || "scope"` : available.has("allocationId") ? `"allocationId" || ':' || "tableId"` : available.has("combinationId") ? `"combinationId" || ':' || "tableId"` : "rowid";
       const invalid = await database.execute(`SELECT ${identity} AS id FROM "${rule.table}" WHERE (${rule.valid}) IS NOT TRUE LIMIT 21`);
       if (invalid.rows.length) problems.push(`${rule.table}: ${rule.label}; IDs: ${invalid.rows.slice(0, 20).map((row) => String(row.id)).join(", ")}${invalid.rows.length > 20 ? ", …" : ""}`);
     }

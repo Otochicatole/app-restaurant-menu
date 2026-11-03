@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { LoginForm } from "./LoginForm";
+import { LogoutButton } from "./LogoutButton";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 
@@ -19,6 +20,32 @@ afterEach(() => {
 });
 
 describe("identity forms", () => {
+  it.each([{ floating: true }, { sidebar: true }, {}])("defers logout until the navigation guard proceeds (%j)", async (props) => {
+    const request = vi.fn().mockResolvedValue({ json: async () => ({ success: true, data: null }) });
+    vi.stubGlobal("fetch", request);
+    let proceed: (() => Promise<void>) | undefined;
+    render(React.createElement(LogoutButton, { ...props, onBeforeLogout: (logout) => { proceed = logout; } }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    expect(request).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(proceed).toBeDefined();
+    await act(async () => { await proceed!(); });
+    expect(request).toHaveBeenCalledWith("/api/auth", { method: "DELETE" });
+    expect(router.push).toHaveBeenCalledWith("/admin/login");
+    expect(router.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("sends a shared waiter directly to its read-only floor view", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ success: true,
+      data: { email: "sala@example.test", role: "WAITER", organizationSlug: "restaurant", mustChangePassword: false } }) }));
+    const user = userEvent.setup();
+    render(React.createElement(LoginForm));
+    await user.type(screen.getByLabelText("Correo electrónico"), "sala@example.test");
+    await user.type(screen.getByLabelText("Contraseña"), "password123");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/sala"));
+  });
+
   it("lets the user reveal and hide the login password", async () => {
     const user = userEvent.setup();
     render(React.createElement(LoginForm));

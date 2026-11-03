@@ -17,6 +17,7 @@ export async function GET(
       from: searchParams.get("from") || undefined,
       to: searchParams.get("to") || undefined,
       date: searchParams.get("date") || undefined,
+      partySize: searchParams.get("partySize") || undefined,
     });
 
     const result = await reservationManagement.getPublicTableAvailability(slug, query);

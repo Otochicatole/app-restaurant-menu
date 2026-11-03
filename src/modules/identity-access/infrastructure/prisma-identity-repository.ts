@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { AccountRecord, IdentityRepository } from "../application/ports";
 
 export class PrismaIdentityRepository implements IdentityRepository {
@@ -7,7 +7,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   async findAccountByEmail(email: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findFirst({
       where: { email },
-      include: { organization: true },
+      include: { organization: true, restaurant: { include: { organization: true } } },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -15,7 +15,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   async findAccountById(adminId: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findUnique({
       where: { id: adminId },
-      include: { organization: true },
+      include: { organization: true, restaurant: { include: { organization: true } } },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -36,7 +36,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
           },
         },
       },
-      include: { organization: true },
+      include: { organization: true, restaurant: { include: { organization: true } } },
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -110,19 +110,21 @@ export class PrismaIdentityRepository implements IdentityRepository {
   }
 }
 
-type PrismaAccount = Awaited<
-  ReturnType<PrismaClient["admin"]["findUnique"]>
-> & { organization?: { id: string; slug: string; status: "ACTIVE" | "SUSPENDED" } | null };
+type PrismaAccount = Prisma.AdminGetPayload<{ include: { organization: true; restaurant: { include: { organization: true } } } }>;
 
 function toAccountRecord(account: NonNullable<PrismaAccount>): AccountRecord {
+  const organization = account.role === "WAITER" ? account.restaurant?.organization : account.organization;
   return {
     id: account.id,
     email: account.email,
     passwordHash: account.passwordHash,
     role: account.role,
-    organizationId: account.organizationId,
-    organizationSlug: account.organization?.slug ?? null,
-    organizationStatus: account.organization?.status ?? null,
+    organizationId: organization?.id ?? null,
+    organizationSlug: organization?.slug ?? null,
+    organizationStatus: organization?.status ?? null,
+    restaurantId: account.restaurantId,
+    restaurantStatus: account.restaurant?.status ?? null,
+    floorManagementEnabled: account.restaurant?.floorManagementEnabled ?? false,
     mustChangePassword: account.mustChangePassword,
   };
 }

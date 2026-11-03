@@ -24,12 +24,16 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     getRestaurantInfo: vi.fn().mockResolvedValue({
       name: "Bistró Test",
       landingSlug: "bistro-test",
+      floorManagementEnabled: false,
+      timeZone: "America/Argentina/Buenos_Aires",
     }),
     getRestaurantPublicContext: vi.fn().mockResolvedValue({
       restaurantId: "t1",
       name: "Bistró Test",
       slug: "bistro-test",
       landingEnabled: true,
+      floorManagementEnabled: false,
+      timeZone: "America/Argentina/Buenos_Aires",
     }),
     getTimeSlots: vi.fn().mockResolvedValue(defaultSlots),
     upsertTimeSlot: vi.fn(),
@@ -42,6 +46,8 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     getEvents: vi.fn().mockResolvedValue(defaultEvents),
     getEventById: vi.fn().mockResolvedValue(null),
     getAvailabilityEvents: vi.fn().mockResolvedValue(defaultEvents),
+    getPhysicalAvailability: vi.fn().mockResolvedValue({}),
+    hasEventPhysicalAvailability: vi.fn().mockResolvedValue(true),
     upsertEvent: vi.fn(),
     deleteEvent: vi.fn(),
     getReservations: vi.fn().mockResolvedValue(defaultReservations),
@@ -49,6 +55,7 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     createReservation: vi.fn().mockImplementation((restaurantId, cmd, code) =>
       Promise.resolve({
         id: "res-new",
+        revision: 0,
         restaurantId,
         code,
         customerName: cmd.customerName,
@@ -270,6 +277,7 @@ describe("ReservationManagementService", () => {
     const existingReservations: ReservationView[] = [
       {
         id: "r1",
+        revision: 0,
         restaurantId: "t1",
         code: "RES-EXIST",
         customerName: "Pedro",

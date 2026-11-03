@@ -12,6 +12,7 @@ import {
   addBlockedDateSchema,
   adminCreateReservationSchema,
   reservationStatusSchema,
+  floorReservationStatusOptionsSchema,
   setRecurringClosuresSchema,
   updateReservationSchema,
   upsertRestaurantEventSchema,
@@ -21,6 +22,7 @@ import {
   type BlockedDateView,
   type RecurringClosureView,
   type ReservationStatus,
+  type ReservationStatusOptions,
   type ReservationView,
   type RestaurantEventView,
   type SetRecurringClosuresCommand,
@@ -196,6 +198,7 @@ export async function updateReservationStatusAction(
   restaurantId: string,
   reservationId: string,
   status: ReservationStatus,
+  options?: ReservationStatusOptions,
 ): Promise<ActionResult<ReservationView>> {
   try {
     await assertCanManageReservations(restaurantId);
@@ -204,6 +207,7 @@ export async function updateReservationStatusAction(
       restaurantId,
       reservationId,
       parsedStatus,
+      floorReservationStatusOptionsSchema.parse(options ?? {}),
     );
     revalidatePath("/admin/restaurantes/[restaurantId]/reservas", "page");
     return actionSuccess(data);
