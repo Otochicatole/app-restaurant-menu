@@ -5,6 +5,7 @@ import { ChevronDown, Loader2, RefreshCw, RotateCw } from "lucide-react";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import type { FloorRotation } from "../contracts";
 import { floorInputClass } from "./floor-api";
+import { groupInventoryTables, selectTableGroupQuantity } from "./floor-table-groups";
 import type { FloorAssemblyController } from "./useFloorAssembly";
 
 export type FloorAssemblyControlsProps = {
@@ -17,11 +18,14 @@ export function FloorAssemblyControls({ controller, partySize, customerName, dur
   const [expanded, setExpanded] = useState(true);
   const contentId = useId();
   const { room, location, locationId, selected, value, capacity, options, loading } = controller;
+  const selectedIds = selected.map((pose) => pose.tableId);
+  const availableIds = new Set((room?.tables ?? []).filter((table) => {
+    const option = options?.options.find((candidate) => candidate.roomId === room?.id && candidate.id === `table:${table.id}`);
+    return table.active && (option?.resourceAvailable ?? option?.available ?? false);
+  }).map((table) => table.id));
+  const inventoryGroups = groupInventoryTables(room?.tables.filter((table) => table.active || selectedIds.includes(table.id)) ?? []);
   const totalSeats = selected.reduce((sum, pose) => sum + pose.capacity, 0);
-  const unavailable = selected.find((pose) => {
-    const option = options?.options.find((candidate) => candidate.roomId === room?.id && candidate.id === `table:${pose.tableId}`);
-    return option && !(option.resourceAvailable ?? option.available);
-  });
+  const unavailable = selected.find((pose) => !availableIds.has(pose.tableId));
   const capacityError = selected.length > 0 && capacity < partySize ? `Este armado ofrece ${capacity} lugares para ${partySize} personas.` : capacity > totalSeats ? "Los lugares útiles superan la capacidad de las mesas elegidas." : null;
   const selectionError = unavailable ? `La mesa ${unavailable.label} ya no está disponible. Elegí otra mesa o actualizá.` : null;
   const problem = conflict || selectionError || capacityError;
@@ -36,12 +40,12 @@ export function FloorAssemblyControls({ controller, partySize, customerName, dur
         {loading && <p role="status" className="flex items-center gap-2 text-xs text-[#52634b]"><Loader2 size={14} className="animate-spin" />Consultando disponibilidad…</p>}
         <label className="grid gap-1 text-xs font-medium text-[#46543e]">Sector del salón<select className={floorInputClass} value={locationId} disabled={!room || fieldDisabled} onChange={(event) => controller.selectLocation(event.target.value)}><option value="">Elegí un sector</option>{room?.locations.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         {room && !room.locations.some((item) => item.active) && <p className="text-xs leading-relaxed text-amber-900">Este salón necesita un sector activo antes de armar mesas.</p>}
-        <fieldset disabled={!location || fieldDisabled} className="space-y-2 disabled:opacity-50"><legend className="mb-2 text-xs font-semibold">Mesas del inventario</legend>{room?.tables.filter((table) => table.active).map((table) => {
-          const option = options?.options.find((candidate) => candidate.roomId === room.id && candidate.id === `table:${table.id}`);
-          const checked = selected.some((pose) => pose.tableId === table.id);
-          const available = option?.resourceAvailable ?? option?.available ?? false;
-          return <label key={table.id} title={!available ? option?.conflict : undefined} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${checked ? "border-[#3d5934] bg-[#edf2e9]" : "border-stone-200"} ${available || checked ? "" : "cursor-not-allowed opacity-50"}`}><input type="checkbox" checked={checked} disabled={!available && !checked} onChange={() => controller.toggleTable(table.id)} className="h-4 w-4 accent-[#3d5934]" /><span className="min-w-0"><span className="font-medium">Mesa {table.label}</span>{!available && <span className="mt-0.5 block text-xs text-[#52634b]">{option?.conflict ?? "Ocupada"}</span>}</span></label>;
-        })}{room && !room.tables.some((table) => table.active) && <p className="text-xs text-[#52634b]">No hay mesas activas en el inventario.</p>}</fieldset>
+        <fieldset disabled={!location || fieldDisabled} className="space-y-2 disabled:opacity-50"><legend className="mb-2 text-xs font-semibold">Mesas del inventario</legend>{inventoryGroups.map((group) => {
+          const chosen = group.tables.filter((table) => selectedIds.includes(table.id)).length;
+          const free = group.tables.filter((table) => availableIds.has(table.id) && !selectedIds.includes(table.id)).length;
+          const maximum = Math.max(0, Math.min(chosen + free, 40 - (selectedIds.length - chosen)));
+          return <label key={group.key} className={`flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${chosen ? "border-[#3d5934] bg-[#edf2e9]" : "border-stone-200"}`}><span className="min-w-0"><span className="font-medium">{group.label}</span><span className="mt-1 block text-xs text-[#52634b]">Disponibles: {free} · Elegidas: {chosen}</span></span><input aria-label={`Cantidad de ${group.label}`} type="number" min={0} max={maximum} step={1} value={chosen} disabled={!chosen && !maximum} className={`${floorInputClass} max-w-20 shrink-0`} onChange={(event) => { if (!event.target.value.trim()) return; const quantity = Number(event.target.value); if (quantity > maximum) return; const ids = selectTableGroupQuantity(group, selectedIds, quantity, availableIds); if (ids) controller.setTableIds(ids); }} /></label>;
+        })}{room && !inventoryGroups.length && <p className="text-xs text-[#52634b]">No hay mesas activas en el inventario.</p>}</fieldset>
         {options?.options.some((option) => option.roomId === room?.id && option.id.startsWith("combination:")) && <details><summary className="cursor-pointer text-xs font-semibold">Armados predefinidos</summary><div className="mt-2 space-y-2">{options.options.filter((option) => option.roomId === room?.id && option.id.startsWith("combination:")).map((option) => <button key={option.id} type="button" disabled={!location || !option.available || fieldDisabled} title={option.conflict} onClick={() => controller.selectOption(option)} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-left text-xs hover:bg-[#edf2e9] disabled:opacity-50">{option.label} · {option.capacity} lugares</button>)}</div></details>}
         {selected.length > 0 && value && <section aria-label="Posición del armado" className="space-y-3 border-t border-stone-200 pt-4"><p className="text-xs leading-relaxed text-[#52634b]">Arrastrá las mesas en el salón o tocá el lugar donde querés armar el grupo.</p><button type="button" disabled={fieldDisabled} onClick={controller.rotate} className={`${adminSecondaryButtonClass} w-full`}><RotateCw size={15} />Girar armado 90°</button><div className="grid grid-cols-2 gap-3">{(["x", "y"] as const).map((axis) => <label key={axis} className="grid gap-1 text-xs font-medium text-[#46543e]">Centro {axis.toUpperCase()}<input type="number" step={1} value={value[axis]} disabled={fieldDisabled} className={floorInputClass} onChange={(event) => { const coordinate = Number(event.target.value); if (Number.isFinite(coordinate)) controller.move(axis === "x" ? coordinate - value.x : 0, axis === "y" ? coordinate - value.y : 0); }} /></label>)}</div><label className="grid gap-1 text-xs font-medium text-[#46543e]">Lugares útiles<input type="number" min={1} max={totalSeats} step={1} value={capacity} disabled={fieldDisabled} className={floorInputClass} onChange={(event) => controller.setCapacity(Number(event.target.value))} /></label><p className="text-xs leading-relaxed text-[#52634b]">Dos mesas de cuatro suelen ofrecer seis lugares al unirlas. Ajustá el cupo real del armado.</p><details><summary className="cursor-pointer text-xs font-semibold">Ajustar cada mesa</summary><div className="mt-3 space-y-3">{selected.map((pose) => <div key={pose.tableId} className="space-y-2"><span className="text-xs font-semibold">Mesa {pose.label}</span><div className="grid grid-cols-[1fr_1fr_2.75rem] items-end gap-2">{(["x", "y"] as const).map((axis) => <label key={axis} className="grid min-w-0 gap-1 text-xs text-[#46543e]">{axis.toUpperCase()}<input aria-label={`Mesa ${pose.label} ${axis.toUpperCase()}`} type="number" value={pose[axis]} disabled={fieldDisabled} className={floorInputClass} onChange={(event) => controller.updateTable(pose.tableId, { [axis]: Number(event.target.value) })} /></label>)}<button type="button" aria-label={`Girar mesa ${pose.label}`} disabled={fieldDisabled} onClick={() => controller.updateTable(pose.tableId, { rotation: ((pose.rotation + 90) % 360) as FloorRotation })} className="flex h-11 w-11 items-center justify-center rounded-lg border border-stone-200 hover:bg-[#edf2e9] disabled:opacity-50"><RotateCw size={16} /></button></div></div>)}</div></details></section>}
       </div>

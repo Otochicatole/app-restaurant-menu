@@ -24,6 +24,24 @@ export function createAssembly(room: FloorRoom, location: FloorLocation, ids: st
   return { roomId: room.id, locationId: location.id, optionId: "custom", x: anchor.x, y: anchor.y, rotation: 0, customTables, capacity: Math.max(1, tables.reduce((sum, table) => sum + table.capacity, 0) - Math.max(0, tables.length - 1) * 2), expectedRoomRevision: room.revision, retainExisting: false };
 }
 
+export function changeAssemblyTables(room: FloorRoom, location: FloorLocation, ids: string[], value: FloorAssignmentInput | null, selected: FloorPose[], anchor: FloorAssemblyPoint = value ?? location): FloorAssignmentInput | null {
+  const retained = selected.filter((pose) => ids.includes(pose.tableId));
+  if (!value || !retained.length) return createAssembly(room, location, ids, anchor);
+  const previous = new Set(selected.map((pose) => pose.tableId));
+  const poses = [...retained];
+  const right = (pose: FloorPose) => pose.x + (pose.rotation % 180 ? pose.height : pose.width) / 2;
+  for (const id of ids) {
+    const table = room.tables.find((item) => item.id === id && item.active);
+    if (!table || previous.has(id)) continue;
+    const last = poses.reduce((furthest, pose) => right(pose) > right(furthest) ? pose : furthest);
+    const width = last.rotation % 180 ? table.height : table.width;
+    poses.push({ tableId: table.id, label: table.label, capacity: table.capacity, shape: table.shape, width: table.width, height: table.height,
+      x: right(last) + width / 2, y: last.y, rotation: last.rotation });
+  }
+  const capacity = Math.max(1, poses.reduce((sum, pose) => sum + pose.capacity, 0) - Math.max(0, poses.length - 1) * 2);
+  return { ...customAssembly(value, poses, capacity), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length };
+}
+
 export function containingLocation(room: FloorRoom, point: FloorAssemblyPoint): FloorLocation | undefined {
   return room.locations.find((location) => {
     if (!location.active) return false;

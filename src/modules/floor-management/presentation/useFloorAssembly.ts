@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FloorAssignmentInput, FloorAssignmentOption, FloorLocation, FloorOptionsView, FloorPose, FloorRoom, FloorRotation } from "../contracts";
 import { getFloorOptions } from "./floor-api";
-import { assemblyPoses, containingLocation, createAssembly, customAssembly, type FloorAssemblyPoint, type FloorAssemblyTableUpdate } from "./floor-assembly";
+import { assemblyPoses, changeAssemblyTables, containingLocation, customAssembly, type FloorAssemblyPoint, type FloorAssemblyTableUpdate } from "./floor-assembly";
 
 export type UseFloorAssemblyInput = {
   restaurantId: string; active: boolean; partySize: number; durationMinutes: number; roomId: string;
@@ -13,7 +13,7 @@ export type FloorAssemblyController = {
   options: FloorOptionsView | null; room: FloorRoom | undefined; location: FloorLocation | undefined;
   locationId: string; value: FloorAssignmentInput | null; selected: FloorPose[]; capacity: number;
   loading: boolean; error: string | null; refresh: () => void;
-  selectLocation: (id: string) => void; toggleTable: (id: string) => void; selectOption: (option: FloorAssignmentOption) => void;
+  selectLocation: (id: string) => void; setTableIds: (ids: string[]) => void; toggleTable: (id: string) => void; selectOption: (option: FloorAssignmentOption) => void;
   move: (dx: number, dy: number) => void; rotate: () => void; place: (point: FloorAssemblyPoint, locationId?: string) => void;
   setCapacity: (capacity: number) => void; updateTable: (tableId: string, partial: FloorAssemblyTableUpdate) => void;
 };
@@ -63,15 +63,26 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
       onChange({ ...draft, locationId: target.id, x: target.x, y: target.y, customTables: draft.customTables?.map((pose) => ({ ...pose, x: pose.x + dx, y: pose.y + dy })), retainExisting: false });
     }
   };
-  const toggleTable = (id: string) => {
+  const setTableIds = (requestedIds: string[]) => {
     if (!room || !location) { setError("Elegí primero un sector del salón."); return; }
-    const candidate = options?.options.find((item) => item.id === `table:${id}` && item.roomId === roomId);
-    const checked = selected.some((pose) => pose.tableId === id);
-    if (!checked && !(candidate?.resourceAvailable ?? candidate?.available)) return;
-    const ids = checked ? selected.filter((pose) => pose.tableId !== id).map((pose) => pose.tableId) : [...selected.map((pose) => pose.tableId), id];
+    const ids = [...new Set(requestedIds)];
     if (ids.length > 40) { setError("Podés armar hasta 40 mesas para un mismo grupo."); return; }
+    const previousIds = new Set(selected.map((pose) => pose.tableId));
+    const tables = ids.map((id) => room.tables.find((table) => table.id === id && (table.active || previousIds.has(id))));
+    if (tables.some((table) => !table)) { setError("Una de las mesas ya no pertenece al inventario activo del salón."); return; }
+    if (ids.some((id) => {
+      if (previousIds.has(id)) return false;
+      const candidate = options?.options.find((item) => item.id === `table:${id}` && item.roomId === roomId);
+      return !(candidate?.resourceAvailable ?? candidate?.available);
+    })) { setError("Una de las mesas ya no está disponible. Actualizá el inventario."); return; }
+    if (ids.length === previousIds.size && ids.every((id) => previousIds.has(id))) { setError(null); return; }
     const anchor = draft ?? (sector.roomId === roomId && sector.id === locationId ? sector.point : undefined) ?? location;
-    onChange(createAssembly(room, location, ids, anchor)); setError(null);
+    onChange(changeAssemblyTables(room, location, ids, draft, selected, anchor));
+    setError(null);
+  };
+  const toggleTable = (id: string) => {
+    const checked = selected.some((pose) => pose.tableId === id);
+    setTableIds(checked ? selected.filter((pose) => pose.tableId !== id).map((pose) => pose.tableId) : [...selected.map((pose) => pose.tableId), id]);
   };
   const selectOption = (candidate: FloorAssignmentOption) => {
     if (!room || !location || candidate.roomId !== roomId || !candidate.available) return;
@@ -103,5 +114,5 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     const next = customAssembly(draft, poses, capacity);
     onChange({ ...next, x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
   };
-  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable };
+  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, setTableIds, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable };
 }

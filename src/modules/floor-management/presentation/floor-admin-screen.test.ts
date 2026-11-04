@@ -183,6 +183,77 @@ describe("fullscreen room editor workflows", () => {
     expect(tables()).toEqual([]);
   });
 
+  it("edits a type quantity by preserving physical IDs and mixed capacities, archiving decreases and reactivating increases", async () => {
+    const value = config();
+    value.rooms[0].tables[1].capacity = 6;
+    value.rooms[0].tables.push({...room.tables[0], id: "three", label: "M3", capacity: 2}, {...room.tables[0], id: "four", label: "M4", capacity: 3, active: false});
+    api.config.mockResolvedValue(value);
+    const canvas = await editor();
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
+    const editQuantity = (quantity: number) => {
+      tool("Inventario");
+      const group = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 80 × 80"});
+      expect(within(group).queryByText(/M1|M2|lugares/)).toBeNull();
+      fireEvent.click(within(group).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
+      expect(screen.getByRole("dialog", {name: "Editar tipo de mesa"})).toBeTruthy();
+      fireEvent.change(screen.getByLabelText("Cantidad de mesas"), {target: {value: String(quantity)}});
+      fireEvent.click(screen.getByRole("button", {name: "Aplicar tipo"}));
+      closeDialog();
+    };
+    editQuantity(4);
+    expect(plan().tables.map((table) => table.id)).toEqual(["one", "two", "three", "four"]);
+    expect(plan().tables.every((table) => table.active)).toBe(true);
+    editQuantity(2);
+    expect(plan().tables.map((table) => ({id: table.id, active: table.active, capacity: table.capacity}))).toEqual([
+      {id: "one", active: true, capacity: 4}, {id: "two", active: true, capacity: 6},
+      {id: "three", active: false, capacity: 2}, {id: "four", active: false, capacity: 3},
+    ]);
+    expect(plan().combinations).toEqual(room.combinations);
+    expect(tables()).toEqual([]);
+    expect(api.save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(api.save.mock.calls[0][1]).toMatchObject({action: "save-room", expectedRevision: 4, room: {tables: plan().tables, combinations: room.combinations}});
+    await waitFor(() => expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(true));
+    editQuantity(4);
+    expect(plan().tables.map((table) => table.id)).toEqual(["one", "two", "three", "four"]);
+    expect(plan().tables.map((table) => table.capacity)).toEqual([4, 6, 2, 3]);
+    expect(plan().tables.every((table) => table.active)).toBe(true);
+    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(2));
+    expect(api.save.mock.calls[1][1].expectedRevision).toBe(5);
+    expect(screen.getByTestId("admin-canvas")).toBe(canvas);
+    expect(screen.getByTestId("admin-pan").textContent).toBe("1");
+  });
+
+  it("separates types by shape and dimensions and edits only that type without overwriting table capacities", async () => {
+    const value = config();
+    value.rooms[0].combinations = [];
+    value.rooms[0].tables[1].capacity = 6;
+    const large = {...room.tables[0], id: "large", label: "M3", width: 100, height: 100, capacity: 8};
+    value.rooms[0].tables.push(large);
+    api.config.mockResolvedValue(value);
+    await editor(); tool("Inventario");
+    const smallGroup = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 80 × 80"});
+    const largeGroup = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 100 × 100"});
+    expect((within(smallGroup).getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}) as HTMLInputElement).max).toBe("2");
+    expect((within(largeGroup).getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 100 × 100"}) as HTMLInputElement).max).toBe("1");
+    expect(screen.queryByRole("checkbox", {name: /Incluir mesa/})).toBeNull();
+    const individualDetails = screen.getByRole("button", {name: "Editar mesa M1"}).closest("details");
+    expect(individualDetails).not.toBeNull();
+    expect(individualDetails!.open).toBe(false);
+    fireEvent.click(within(smallGroup).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
+    fireEvent.change(screen.getByLabelText("Ancho"), {target: {value: "90"}});
+    fireEvent.click(screen.getByRole("button", {name: "Aplicar tipo"}));
+    expect(screen.getByRole("group", {name: "Tipo de mesa Cuadrada 90 × 90"})).toBeTruthy();
+    closeDialog();
+    expect(plan().tables.slice(0, 2)).toEqual([expect.objectContaining({id: "one", width: 90, height: 90, capacity: 4}), expect.objectContaining({id: "two", width: 90, height: 90, capacity: 6})]);
+    expect(plan().tables.find((table) => table.id === "large")).toEqual(large);
+    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(api.save.mock.calls[0][1]).toMatchObject({expectedRevision: 4, room: {tables: plan().tables}});
+  });
+
   it("selects and drags sectors and fixtures on the main canvas while canceled property edits stay local", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
@@ -360,8 +431,7 @@ describe("fullscreen room editor workflows", () => {
     await act(async () => { finishSave(saved); });
     expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
     tool("Inventario");
-    fireEvent.click(screen.getByRole("checkbox", {name: "Incluir mesa M1"}));
-    fireEvent.click(screen.getByRole("checkbox", {name: "Incluir mesa M2"}));
+    fireEvent.change(screen.getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}), {target: {value: "2"}});
     fireEvent.click(screen.getByRole("button", {name: "Crear armado predefinido"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
     fireEvent.click(screen.getByRole("button", {name: "Cancelar armado"}));
@@ -457,8 +527,7 @@ describe("fullscreen room editor workflows", () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
     tool("Inventario");
-    fireEvent.click(screen.getByRole("checkbox", {name: "Incluir mesa M1"}));
-    fireEvent.click(screen.getByRole("checkbox", {name: "Incluir mesa M2"}));
+    fireEvent.change(screen.getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}), {target: {value: "2"}});
     fireEvent.click(screen.getByRole("button", {name: "Crear armado predefinido"}));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(tables().map((table) => table.id)).toEqual(["one", "two"]);

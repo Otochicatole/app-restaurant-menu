@@ -11,10 +11,11 @@ import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/A
 import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorConfigView, type FloorFixture, type FloorLocation, type FloorRoom, type FloorRotation, type FloorTable } from "../contracts";
 import { FloorCanvas } from "./FloorCanvas";
 import { FloorSectorContextMenu } from "./FloorSectorContextMenu";
-import { CombinationPropertiesForm, FloorSettingsForm, InventoryForm, RoomDimensionsForm, SpatialPropertiesForm, TablePropertiesForm, type StockInput } from "./FloorAdminForms";
+import { CombinationPropertiesForm, FloorSettingsForm, InventoryForm, InventoryGroupForm, RoomDimensionsForm, SpatialPropertiesForm, TablePropertiesForm, type StockInput, type StockGroupInput } from "./FloorAdminForms";
 import { getFloorConfig, saveFloorAction } from "./floor-api";
+import { groupInventoryTables } from "./floor-table-groups";
 
-type EditorPanel = { kind: "dimensions" | "inventory" | "settings" | "combination" } | { kind: "table"; id: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
+type EditorPanel = { kind: "dimensions" | "inventory" | "settings" | "combination" } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
 type ConfirmPanel = { kind: "confirm"; title: string; description: string; confirmLabel: string; run: () => void | Promise<void>; cancelTo?: EditorPanel };
 type Panel = EditorPanel | ConfirmPanel | null;
 type Flyout = "rooms" | "sectors" | "elements" | null;
@@ -31,6 +32,13 @@ function uniqueName(base: string, existing: string[]) {
   if (!existing.includes(base)) return base;
   let suffix = 2; while (existing.includes(`${base} ${suffix}`)) suffix += 1;
   return `${base} ${suffix}`;
+}
+function inventoryTables(quantity: number, fields: Pick<FloorTable, "shape" | "capacity" | "width" | "height">, existing: FloorTable[]): FloorTable[] {
+  const labels = new Set(existing.map((table) => table.label));
+  return Array.from({ length: quantity }, () => {
+    let number = 1; while (labels.has(`M${number}`)) number += 1; labels.add(`M${number}`);
+    return { ...fields, id: crypto.randomUUID(), label: `M${number}`, x: 0, y: 0, height: fields.shape === "RECTANGLE" ? fields.height : fields.width, rotation: 0, active: true };
+  });
 }
 function roomError(room: FloorRoom): string | null {
   const result = floorRoomInputSchema.safeParse(room);
@@ -159,12 +167,27 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const addStock = (stock: StockInput): string | null => {
     if (!draft || busy) return "Esperá a que termine de guardar.";
     if (!Number.isInteger(stock.quantity) || stock.quantity < 1 || stock.quantity + draft.tables.length > 200 || !Number.isInteger(stock.capacity)) return "Ingresá una cantidad entera válida. El salón admite hasta 200 mesas.";
-    const labels = new Set(draft.tables.map((table) => table.label));
-    const tables = Array.from({ length: stock.quantity }, (): FloorTable => {
-      let number = 1; while (labels.has(`M${number}`)) number += 1; labels.add(`M${number}`);
-      return { id: crypto.randomUUID(), label: `M${number}`, shape: stock.shape, capacity: stock.capacity, x: 0, y: 0, width: stock.width, height: stock.shape === "RECTANGLE" ? stock.height : stock.width, rotation: 0, active: true };
-    });
-    return applyRoom({ ...draft, tables: [...draft.tables, ...tables] });
+    return applyRoom({ ...draft, tables: [...draft.tables, ...inventoryTables(stock.quantity, stock, draft.tables)] });
+  };
+  const applyTableGroup = (key: string, fields: StockGroupInput): string | null => {
+    if (!draft || busy) return "Esperá a que termine de guardar.";
+    if (!Number.isInteger(fields.quantity) || fields.quantity < 0 || fields.quantity > 200) return "Ingresá una cantidad entera entre 0 y 200.";
+    const group = groupInventoryTables(draft.tables).find((item) => item.key === key);
+    if (!group) return "El tipo de mesa ya no está disponible. Volvé al inventario.";
+    const referenced = new Set(draft.combinations.filter((item) => item.active).flatMap((item) => item.members.map((member) => member.tableId)));
+    const active = group.tables.filter((table) => table.active);
+    const protectedTables = active.filter((table) => referenced.has(table.id));
+    if (fields.quantity < protectedTables.length) return "Este tipo tiene mesas usadas por armados predefinidos. Modificá esos armados antes de reducir la cantidad.";
+    const candidates = [...protectedTables, ...active.filter((table) => !referenced.has(table.id)), ...group.tables.filter((table) => !table.active)];
+    const kept = new Set(candidates.slice(0, fields.quantity).map((table) => table.id));
+    const members = new Set(group.tables.map((table) => table.id));
+    const dimensions = { shape: fields.shape, width: fields.width, height: fields.shape === "RECTANGLE" ? fields.height : fields.width };
+    const tables = draft.tables.map((table) => members.has(table.id) ? { ...table, ...dimensions, active: kept.has(table.id) } : table);
+    const additional = Math.max(0, fields.quantity - group.tables.length);
+    if (tables.length + additional > 200) return "El salón admite hasta 200 mesas en el inventario.";
+    const capacity = active[0]?.capacity ?? group.tables[0].capacity;
+    tables.push(...inventoryTables(additional, { ...dimensions, capacity }, tables));
+    return applyRoom({ ...draft, tables }, () => setPanel({ kind: "inventory" }));
   };
   const startCombination = (combination: FloorCombination) => { setSectorMenu(null); setCombinationMode({ combination: copy(combination), selectedIds: combination.members[0] ? [combination.members[0].tableId] : [] }); setSelection(null); setPanel(null); setFlyout(null); setPlacement(null); setError(null); };
   const createCombination = (ids: string[]) => {
@@ -214,7 +237,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     return mutate(body, message);
   };
   const closePanel = () => { if (!busy) setPanel(null); };
-  const title = panel?.kind === "dimensions" ? "Medidas del salón" : panel?.kind === "inventory" ? "Inventario de mesas" : panel?.kind === "table" ? "Editar mesa" : panel?.kind === "sector" ? "Propiedades del sector" : panel?.kind === "fixture" ? "Propiedades del elemento" : panel?.kind === "combination" ? "Armado predefinido" : "Configuración del restaurante";
+  const title = panel?.kind === "dimensions" ? "Medidas del salón" : panel?.kind === "inventory" ? "Inventario de mesas" : panel?.kind === "table-group" ? "Editar tipo de mesa" : panel?.kind === "table" ? "Editar mesa" : panel?.kind === "sector" ? "Propiedades del sector" : panel?.kind === "fixture" ? "Propiedades del elemento" : panel?.kind === "combination" ? "Armado predefinido" : "Configuración del restaurante";
   const canvasTables = draft && combinationMode ? combinationMode.combination.members.flatMap((member) => {
     const table = draft.tables.find((item) => item.id === member.tableId); return table ? [{ ...table, x: draft.width / 2 + member.x, y: draft.height / 2 + member.y, rotation: member.rotation }] : [];
   }) : [];
@@ -241,7 +264,8 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
       <div ref={panelSurface} tabIndex={-1} className="outline-none">
       {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {draft && panel?.kind === "dimensions" && <RoomDimensionsForm key={draft.id} room={draft} busy={busy} saved={!!config?.rooms.some((room) => room.id === draft.id)} onApply={(fields) => applyRoom({ ...draft, ...fields }, closePanel)} onArchive={archiveRoom} onCancel={closePanel} />}
-      {draft && panel?.kind === "inventory" && <InventoryForm room={draft} onAdd={addStock} onEditTable={(id) => openPanel({ kind: "table", id })} onEditCombination={(id) => { const combination = draft.combinations.find((item) => item.id === id); if (combination) startCombination(combination); }} onCreateCombination={createCombination} onClose={closePanel} />}
+      {draft && panel?.kind === "inventory" && <InventoryForm room={draft} onAdd={addStock} onEditGroup={(key) => openPanel({ kind: "table-group", key })} onEditTable={(id) => openPanel({ kind: "table", id })} onEditCombination={(id) => { const combination = draft.combinations.find((item) => item.id === id); if (combination) startCombination(combination); }} onCreateCombination={createCombination} onClose={closePanel} />}
+      {draft && panel?.kind === "table-group" && groupInventoryTables(draft.tables).filter((group) => group.key === panel.key).map((group) => <InventoryGroupForm key={group.key} group={group} onApply={(fields) => applyTableGroup(group.key, fields)} onCancel={() => setPanel({ kind: "inventory" })} />)}
       {draft && panel?.kind === "table" && draft.tables.some((table) => table.id === panel.id) && <TablePropertiesForm key={panel.id} table={draft.tables.find((table) => table.id === panel.id)!} onApply={(table) => applyRoom({ ...draft, tables: draft.tables.map((item) => item.id === table.id ? table : item) }, () => setPanel({ kind: "inventory" }))} onCancel={() => setPanel({ kind: "inventory" })} />}
       {draft && panel?.kind === "sector" && <SpatialPropertiesForm key={panel.entity.id} kind="sector" entity={panel.entity} onApply={(entity) => { const location = entity as FloorLocation; return applyRoom({ ...draft, locations: draft.locations.some((item) => item.id === location.id) ? draft.locations.map((item) => item.id === location.id ? location : item) : [...draft.locations, location] }, () => { setSelection({ kind: "sector", id: location.id }); closePanel(); }); }} onCancel={closePanel} />}
       {draft && panel?.kind === "fixture" && <SpatialPropertiesForm key={panel.entity.id} kind="fixture" entity={panel.entity} onApply={(entity) => { const fixture = entity as FloorFixture; return applyRoom({ ...draft, fixtures: draft.fixtures.some((item) => item.id === fixture.id) ? draft.fixtures.map((item) => item.id === fixture.id ? fixture : item) : [...draft.fixtures, fixture] }, () => { setSelection({ kind: "fixture", id: fixture.id }); closePanel(); }); }} onCancel={closePanel} />}

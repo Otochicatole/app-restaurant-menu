@@ -39,7 +39,7 @@ describe("main-floor table assembly", () => {
     act(() => result.current.controller.toggleTable("one"));
     expect(result.current.controller.selected[0]).toMatchObject({ tableId: "one", x: 610, y: 380 });
     act(() => result.current.controller.toggleTable("two"));
-    expect(result.current.value).toMatchObject({ optionId: "custom", locationId: "window", x: 610, y: 380, capacity: 6, customTables: [{ tableId: "one", x: 570, y: 380 }, { tableId: "two", x: 650, y: 380 }] });
+    expect(result.current.value).toMatchObject({ optionId: "custom", locationId: "window", x: 650, y: 380, capacity: 6, customTables: [{ tableId: "one", x: 610, y: 380 }, { tableId: "two", x: 690, y: 380 }] });
     expect(validateAssembly(result.current.controller.selected)).toBeNull();
     expect(api.options).toHaveBeenCalledWith("restaurant", { date: "", time: "", partySize: 6 }, expect.any(AbortSignal), 120);
   });
@@ -68,6 +68,62 @@ describe("main-floor table assembly", () => {
     await waitFor(() => expect(result.current.controller.loading).toBe(false));
     expect(result.current.value).toEqual(saved);
     expect(result.current.controller.selected).toEqual(poses);
+  });
+
+  it("changes quantities in one batch without replacing or moving physical tables already arranged", async () => {
+    const stock = { ...room, tables: [...room.tables, { ...room.tables[0], id: "extra", label: "3", width: 120, shape: "RECTANGLE" as const }] };
+    api.options.mockResolvedValue(available([stock]));
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    expect(result.current.controller.selected.map((pose) => pose.tableId)).toEqual(["one", "two"]);
+    expect(result.current.value?.capacity).toBe(6);
+    act(() => result.current.controller.rotate());
+    act(() => result.current.controller.move(20, 10));
+    const arranged = structuredClone(result.current.controller.selected);
+    const unchanged = result.current.value;
+    act(() => result.current.controller.setTableIds(["two", "one", "one"]));
+    expect(result.current.value).toBe(unchanged);
+    act(() => result.current.controller.setTableIds(["one", "two", "extra"]));
+    expect(result.current.controller.selected.slice(0, 2)).toEqual(arranged);
+    expect(result.current.controller.selected[2]).toMatchObject({ tableId: "extra", x: 600, y: 320, rotation: 90 });
+    expect(validateAssembly(result.current.controller.selected)).toBeNull();
+    const retained = structuredClone(result.current.controller.selected.slice(1));
+    act(() => result.current.controller.setTableIds(["two", "extra"]));
+    expect(result.current.controller.selected).toEqual(retained);
+    expect(result.current.value?.capacity).toBe(6);
+  });
+
+  it("excludes occupied new inventory while allowing selected tables to remain or be removed after refresh", async () => {
+    const stock = { ...room, tables: [...room.tables, { ...room.tables[0], id: "extra", label: "3" }] };
+    api.options.mockResolvedValue(available([stock]));
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one"]));
+    const original = result.current.value;
+    const refreshed = available([{ ...stock, tables: stock.tables.map((table) => table.id === "one" ? { ...table, active: false } : table) }]);
+    refreshed.options = refreshed.options.map((option) => ({ ...option, resourceAvailable: option.id === "table:extra" }));
+    api.options.mockResolvedValue(refreshed);
+    act(() => result.current.controller.refresh());
+    await waitFor(() => expect(api.options).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.controller.loading).toBe(false));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    expect(result.current.value).toBe(original);
+    expect(result.current.controller.error).toMatch(/no está disponible/);
+    act(() => result.current.controller.setTableIds(["one", "extra"]));
+    expect(result.current.controller.selected.map((pose) => pose.tableId)).toEqual(["one", "extra"]);
+    expect(result.current.controller.error).toBeNull();
+    act(() => result.current.controller.setTableIds(["extra"]));
+    expect(result.current.controller.selected.map((pose) => pose.tableId)).toEqual(["extra"]);
+    const remaining = result.current.value;
+    act(() => result.current.controller.setTableIds(["one", "extra"]));
+    expect(result.current.value).toBe(remaining);
+    expect(result.current.controller.error).toMatch(/inventario activo/);
+    act(() => result.current.controller.setTableIds([]));
+    expect(result.current.value).toBeNull();
+    expect(result.current.controller.locationId).toBe("window");
   });
 
   it("keeps another room's physical tables out of the current room's draft", async () => {

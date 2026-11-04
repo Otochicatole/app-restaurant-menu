@@ -2,7 +2,7 @@
 import { createElement, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { buildFloorOptions, type FloorAssignmentInput, type FloorBoardView, type FloorOptionsQuery, type FloorOptionsView, type FloorRoom } from "../contracts";
+import { buildFloorOptions, validateAssembly, type FloorAssignmentInput, type FloorBoardView, type FloorOptionsQuery, type FloorOptionsView, type FloorPose, type FloorRoom } from "../contracts";
 
 const api = vi.hoisted(() => ({ options: vi.fn(), board: vi.fn(), config: vi.fn(), save: vi.fn() }));
 vi.mock("./floor-api", () => ({ getFloorOptions: api.options, getFloorBoard: api.board, getFloorConfig: api.config, saveFloorAction: api.save, floorInputClass: "input" }));
@@ -39,6 +39,10 @@ function Picker({ input = query, walkIn = false }: { input?: FloorOptionsQuery; 
   const [value, setValue] = useState<FloorAssignmentInput | null>(null);
   return createElement("div", null, createElement(FloorAssignmentPicker, { restaurantId: "restaurant", query: input, value, onChange: setValue, walkIn }), createElement("output", { "data-testid": "assignment" }, JSON.stringify(value)));
 }
+function selectQuantity(quantity: number, type = "Cuadrada 80 × 80") {
+  fireEvent.change(screen.getByRole("spinbutton", {name: `Cantidad de ${type}`}), {target: {value: String(quantity)}});
+}
+const assignment = (): FloorAssignmentInput | null => JSON.parse(screen.getByTestId("assignment").textContent!);
 
 describe("floor assignment interactions", () => {
   beforeEach(() => { vi.resetAllMocks(); document.body.style.overflow = ""; api.options.mockResolvedValue(options()); api.board.mockResolvedValue(board()); });
@@ -51,8 +55,9 @@ describe("floor assignment interactions", () => {
     render(createElement(Picker));
     await screen.findByLabelText("Sector del salón");
     fireEvent.change(screen.getByLabelText("Sector del salón"), { target: { value: "window" } });
-    const unavailable = screen.getByRole("checkbox", { name: /Mesa 1/ });
-    expect((unavailable as HTMLInputElement).disabled).toBe(true);
+    const quantity = screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"}) as HTMLInputElement;
+    expect(quantity.max).toBe("1");
+    expect(screen.queryByRole("checkbox", {name: /Mesa 1/})).toBeNull();
     expect(screen.getByTestId("assignment").textContent).toBe("null");
     fireEvent.click(screen.getByText("Armados predefinidos"));
     fireEvent.click(screen.getByRole("button", { name: /Mesas 1 \+ 2/ }));
@@ -110,7 +115,7 @@ describe("floor assignment interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mover unión" }));
     expect(JSON.parse(screen.getByTestId("assignment").textContent!)).toMatchObject({ optionId: "combination:archived", retainExisting: true });
     fireEvent.change(screen.getByLabelText("Sector del salón"), { target: { value: "window" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /^Mesa 1/ }));
+    selectQuantity(1);
     expect(JSON.parse(screen.getByTestId("assignment").textContent!)).toMatchObject({ optionId: "custom", retainExisting: false });
   });
 
@@ -128,13 +133,87 @@ describe("floor assignment interactions", () => {
     render(createElement(Picker));
     fireEvent.change(await screen.findByLabelText("Sector del salón"), { target: { value: "window" } });
     await waitFor(() => expect(screen.getByTestId("canvas-tables").textContent).toBe("[]"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mesa 1/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mesa 2/ }));
-    const assignment = JSON.parse(screen.getByTestId("assignment").textContent!);
-    expect(assignment).toMatchObject({ optionId: "custom", locationId: "window", capacity: 6, customTables: [{tableId: "one", x: 360, y: 300}, {tableId: "two", x: 440, y: 300}] });
+    selectQuantity(2);
+    const chosen = assignment();
+    expect(chosen).toMatchObject({ optionId: "custom", locationId: "window", capacity: 6, customTables: [{tableId: "one", x: 360, y: 300}, {tableId: "two", x: 440, y: 300}] });
+    expect(new Set(chosen!.customTables!.map((pose) => pose.tableId)).size).toBe(2);
     expect(screen.getByTestId("canvas-tables").textContent).toBe('["one","two"]');
     fireEvent.change(screen.getByLabelText("Lugares útiles"), { target: { value: "7" } });
     expect(JSON.parse(screen.getByTestId("assignment").textContent!).capacity).toBe(7);
+  });
+
+  it("keeps fractional table edges joined when moving and rotating a grouped selection", async () => {
+    const value = options();
+    value.rooms[0].tables = value.rooms[0].tables.map((table) => ({...table, width: 80.5, height: 80.5}));
+    value.rooms[0].combinations = [];
+    value.options = buildFloorOptions(value.rooms[0]);
+    api.options.mockResolvedValue(value);
+    render(createElement(Picker));
+    fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
+    selectQuantity(2, "Cuadrada 80,5 × 80,5");
+    const poses = (): FloorPose[] => JSON.parse(screen.getByTestId("canvas-poses").textContent!);
+    expect(assignment()!.customTables).toEqual([{tableId: "one", x: 359.75, y: 300, rotation: 0}, {tableId: "two", x: 440.25, y: 300, rotation: 0}]);
+    expect(validateAssembly(poses())).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
+    expect(assignment()!.customTables).toEqual([{tableId: "one", x: 379.75, y: 310, rotation: 0}, {tableId: "two", x: 460.25, y: 310, rotation: 0}]);
+    expect(validateAssembly(poses())).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name: "Girar unión 90°"}));
+    expect(assignment()!.customTables).toEqual([{tableId: "one", x: 420, y: 269.75, rotation: 90}, {tableId: "two", x: 420, y: 350.25, rotation: 90}]);
+    expect(validateAssembly(poses())).toBeNull();
+    expect(poses().map((pose) => pose.tableId)).toEqual(["one", "two"]);
+    expect((screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80,5 × 80,5"}) as HTMLInputElement).value).toBe("2");
+  });
+
+  it("groups equal sizes without losing different capacities and keeps other types and existing poses when quantities change", async () => {
+    const value = options();
+    const current = value.rooms[0];
+    current.combinations = [];
+    current.tables[1].capacity = 6;
+    current.tables.push({...current.tables[0], id: "large", label: "Grande", width: 100, height: 100, capacity: 8});
+    value.options = buildFloorOptions(current);
+    api.options.mockResolvedValue(value);
+    render(createElement(Picker));
+    fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
+    expect(screen.getAllByRole("spinbutton", {name: /^Cantidad de /})).toHaveLength(2);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    selectQuantity(1);
+    fireEvent.change(screen.getByLabelText("Centro X"), {target: {value: "460"}});
+    fireEvent.change(screen.getByLabelText("Centro Y"), {target: {value: "330"}});
+    fireEvent.click(screen.getByRole("button", {name: "Girar unión 90°"}));
+    const first = assignment()!.customTables![0];
+    expect(first).toMatchObject({tableId: "one", x: 460, y: 330, rotation: 90});
+    selectQuantity(1, "Cuadrada 100 × 100");
+    expect(assignment()!.customTables).toContainEqual(first);
+    const large = assignment()!.customTables!.find((pose) => pose.tableId === "large")!;
+    selectQuantity(2);
+    const added = assignment()!;
+    expect(added.customTables).toEqual(expect.arrayContaining([first, large, expect.objectContaining({tableId: "two"})]));
+    expect(new Set(added.customTables!.map((pose) => pose.tableId)).size).toBe(3);
+    expect(added.capacity).toBe(14);
+    const drawn = JSON.parse(screen.getByTestId("canvas-poses").textContent!) as {id: string; capacity: number}[];
+    expect(drawn.find((pose) => pose.id === "one")?.capacity).toBe(4);
+    expect(drawn.find((pose) => pose.id === "two")?.capacity).toBe(6);
+    selectQuantity(1);
+    expect(assignment()!.customTables).toEqual(expect.arrayContaining([first, large]));
+    expect(assignment()!.customTables).toHaveLength(2);
+    selectQuantity(0, "Cuadrada 100 × 100");
+    expect(assignment()!.customTables).toEqual([first]);
+  });
+
+  it("caps a type at its free physical inventory and never selects an occupied table", async () => {
+    const value = options();
+    value.options = value.options.map((option) => option.id === "table:one" ? {...option, available: false, resourceAvailable: false, conflict: "Ocupada por otra reserva"} : option);
+    api.options.mockResolvedValue(value);
+    render(createElement(Picker));
+    fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
+    expect((screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"}) as HTMLInputElement).max).toBe("1");
+    selectQuantity(2);
+    expect(assignment()).toBeNull();
+    selectQuantity(1);
+    expect(assignment()!.customTables).toEqual([expect.objectContaining({tableId: "two"})]);
+    expect((screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"}) as HTMLInputElement).value).toBe("1");
+    selectQuantity(0);
+    expect(assignment()).toBeNull();
   });
 
   it("requires a new selection when a historical allocation has been released", async () => {
@@ -150,7 +229,7 @@ describe("floor assignment interactions", () => {
   it("keeps a walk-in assembly when board polling crosses into the next minute", async () => {
     const view = render(createElement(Picker, {walkIn: true}));
     fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /Mesa 1/}));
+    selectQuantity(1);
     const assignment = screen.getByTestId("assignment").textContent;
     const requests = api.options.mock.calls.length;
     view.rerender(createElement(Picker, {walkIn: true, input: {...query, time: "20:01"}}));
@@ -183,7 +262,7 @@ describe("floor assignment interactions", () => {
     expect((screen.getByRole("button", {name: "Fecha y hora"}) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", {name: "Reservas"}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /Mesa 1/}));
+    selectQuantity(1);
     fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
     fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
     fireEvent.click(screen.getByRole("button", {name: "Girar armado 90°"}));
@@ -193,6 +272,49 @@ describe("floor assignment interactions", () => {
     expect(api.options).toHaveBeenCalledWith("restaurant", expect.anything(), expect.any(AbortSignal), 120);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect((screen.getByRole("button", {name: "Atender sin reserva"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("floor-canvas")).toBe(canvas);
+    expect(screen.getByTestId("canvas-pan").textContent).toBe("1");
+  });
+
+  it("assembles grouped quantities from distinct free tables while preserving another type and the board viewport", async () => {
+    const value = options();
+    const current = value.rooms[0];
+    current.combinations = [];
+    current.tables.push({...current.tables[0], id: "three", label: "3"}, {...current.tables[0], id: "large", label: "Grande", width: 100, height: 100, capacity: 6});
+    value.options = buildFloorOptions(current).map((option) => option.id === "table:one" ? {...option, available: false, resourceAvailable: false, conflict: "Ocupada"} : option);
+    api.options.mockResolvedValue(value);
+    const currentBoard = board(); currentBoard.rooms = [structuredClone(current)]; api.board.mockResolvedValue(currentBoard);
+    api.save.mockResolvedValue({});
+    render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true}));
+    await waitFor(() => expect(api.board).toHaveBeenCalled());
+    const canvas = screen.getByTestId("floor-canvas");
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar tablero"}));
+    fireEvent.click(screen.getByRole("button", {name: "Atender sin reserva"}));
+    fireEvent.change(screen.getByLabelText("Nombre del grupo"), {target: {value: "Grupo por tipos"}});
+    fireEvent.click(screen.getByRole("button", {name: "Elegir mesas"}));
+    fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
+    expect((screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"}) as HTMLInputElement).max).toBe("2");
+    selectQuantity(2);
+    fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
+    fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
+    const poses = () => JSON.parse(screen.getByTestId("canvas-poses").textContent!) as {id: string; x: number; y: number; rotation: number}[];
+    const positioned = poses();
+    expect(positioned.map((pose) => pose.id)).toEqual(["draft:two", "draft:three"]);
+    selectQuantity(1, "Cuadrada 100 × 100");
+    expect(poses()).toEqual(expect.arrayContaining(positioned));
+    const large = poses().find((pose) => pose.id === "draft:large")!;
+    selectQuantity(1);
+    expect(poses()).toEqual(expect.arrayContaining([positioned[0], large]));
+    expect(poses()).toHaveLength(2);
+    expect(screen.getByRole("alert").textContent).toContain("deben estar unidas");
+    expect((screen.getByRole("button", {name: "Armar y ocupar mesas"}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Ajustar cada mesa"));
+    const adjacentX = positioned[0].x + 40 + 50;
+    fireEvent.change(screen.getByLabelText("Mesa Grande X"), {target: {value: String(adjacentX)}});
+    fireEvent.click(screen.getByRole("button", {name: "Armar y ocupar mesas"}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    const command = api.save.mock.calls[0][1];
+    expect(command).toMatchObject({action: "walk-in", assignment: {expectedRoomRevision: 4, customTables: [expect.objectContaining({tableId: "two", x: positioned[0].x, y: positioned[0].y}), expect.objectContaining({tableId: "large", x: adjacentX, y: large.y})]}});
     expect(screen.getByTestId("floor-canvas")).toBe(canvas);
     expect(screen.getByTestId("canvas-pan").textContent).toBe("1");
   });
@@ -304,9 +426,14 @@ describe("floor assignment interactions", () => {
     expect((screen.getByLabelText("Notas de atención") as HTMLTextAreaElement).value).toBe("Cerca de la ventana");
     fireEvent.click(screen.getByRole("button", {name: "Elegir mesas"}));
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /Mesa 1/}));
-    fireEvent.click(screen.getByRole("checkbox", {name: /Mesa 2/}));
+    const sector = await screen.findByRole("combobox", {name: "Sector del salón"}) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(sector.disabled).toBe(false);
+      expect(within(sector).getByRole("option", {name: "Ventana"}).getAttribute("value")).toBe("window");
+    });
+    fireEvent.change(sector, {target: {value: "window"}});
+    await screen.findByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"});
+    selectQuantity(2);
     fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
     fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
     const positioned = screen.getByTestId("canvas-poses").textContent;
@@ -347,7 +474,7 @@ describe("floor assignment interactions", () => {
     fireEvent.change(screen.getByLabelText("Nombre del grupo"), {target: {value: "Armado que se descarta"}});
     fireEvent.click(screen.getByRole("button", {name: "Elegir mesas"}));
     fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
-    fireEvent.click(screen.getByRole("checkbox", {name: /Mesa 1/}));
+    selectQuantity(1);
     expect(screen.getByTestId("canvas-tables").textContent).toBe('["draft:one"]');
     fireEvent.click(within(screen.getByRole("complementary", {name: "Armar mesas en sala"})).getByRole("button", {name: "Cancelar"}));
     expect(screen.queryByRole("complementary", {name: "Armar mesas en sala"})).toBeNull();
