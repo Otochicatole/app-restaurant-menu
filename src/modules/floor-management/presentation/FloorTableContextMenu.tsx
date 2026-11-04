@@ -65,21 +65,16 @@ export function FloorTableContextMenu({ name, point, disabled, reason, onEdit, o
     const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowUp" || event.key === "ArrowLeft" ? (current <= 0 ? items.length - 1 : current - 1) : (current + 1) % items.length;
     items[next]?.focus();
   };
-  const itemClass = "flex min-h-11 w-full items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium hover:bg-[#edf2e9] focus-visible:bg-[#edf2e9] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50";
-  const groupItemClass = "flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium hover:bg-[#edf2e9] focus-visible:bg-[#edf2e9] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50";
+  const itemClass = "flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 
-  return <div ref={menu} role="menu" aria-label={`Acciones de mesa ${name}`} aria-describedby={reason ? reasonId : undefined} tabIndex={-1} style={{ left: point.x, top: point.y }} onKeyDown={navigate} onContextMenu={(event) => event.preventDefault()} className="fixed z-[60] max-h-[calc(100dvh_-_1rem)] w-[min(15.5rem,calc(100vw_-_1rem))] overflow-y-auto overscroll-contain rounded-xl bg-white p-1.5 text-[#263e23] shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] outline-none">
+  return <div ref={menu} role="menu" aria-label={`Acciones de mesa ${name}`} aria-describedby={reason ? reasonId : undefined} tabIndex={-1} style={{ left: point.x, top: point.y }} onKeyDown={navigate} onContextMenu={(event) => event.preventDefault()} className="fixed z-[60] max-h-[calc(100dvh_-_1rem)] w-[min(15.5rem,calc(100vw_-_1rem))] overflow-y-auto overscroll-contain rounded-xl bg-[var(--floor-surface,#fff)] p-1.5 text-[var(--floor-ink,#263e23)] shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] outline-none">
     <p className="mb-1 truncate px-2 py-1 text-sm font-semibold">Mesa {name}</p>
-    <div role="presentation" className="grid grid-cols-3 gap-0.5">
+    <div role="presentation" className="space-y-0.5">
       <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onEdit} className={itemClass}><Pencil size={15} className="shrink-0" />Editar</button>
-      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onRotate} className={itemClass}><RotateCw size={15} className="shrink-0" />Girar</button>
-      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onMove} className={itemClass}><Move size={15} className="shrink-0" />Mover</button>
+      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onRotateGroup ?? onRotate} className={itemClass}><RotateCw size={15} className="shrink-0" />{onRotateGroup ? "Girar grupo 90°" : "Girar"}</button>
+      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onMoveGroup ?? onMove} className={itemClass}><Move size={15} className="shrink-0" />{onMoveGroup ? "Mover grupo" : "Mover"}</button>
+      {onSeparate && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onSeparate} className={itemClass}><Unlink size={15} className="shrink-0" />Separar mesa</button>}
     </div>
-    {hasGroupActions && <div role="group" aria-label="Acciones del grupo" className="mt-1 border-t border-stone-200 pt-1">
-      {onMoveGroup && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onMoveGroup} className={groupItemClass}><Move size={15} className="shrink-0" />Mover grupo</button>}
-      {onRotateGroup && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onRotateGroup} className={groupItemClass}><RotateCw size={15} className="shrink-0" />Girar grupo 90°</button>}
-      {onSeparate && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onSeparate} className={groupItemClass}><Unlink size={15} className="shrink-0" />Separar mesa</button>}
-    </div>}
-    {reason && <p id={reasonId} className="px-2 pb-2 pt-1 text-xs leading-relaxed text-[#52634b]">{reason}</p>}
+    {reason && <p id={reasonId} className="px-2 pb-2 pt-1 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{reason}</p>}
   </div>;
 }

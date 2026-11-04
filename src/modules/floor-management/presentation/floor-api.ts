@@ -23,4 +23,4 @@ export const getFloorOptions = (restaurantId: string, input: FloorOptionsQuery, 
   ...(input.eventId ? { eventId: input.eventId } : {}), ...(input.excludeReservationId ? { excludeReservationId: input.excludeReservationId } : {}),
 }, undefined, signal);
 
-export const floorInputClass = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none transition focus:border-[#3d5934] focus:ring-2 focus:ring-[#3d5934]/15 disabled:bg-zinc-100";
+export const floorInputClass = "w-full rounded-lg border border-[var(--floor-border,#d4d4d8)] bg-white px-3 py-2 text-sm text-[var(--floor-ink,#09090b)] outline-none transition focus:border-[var(--floor-focus,#3d5934)] focus:ring-2 focus:ring-[var(--floor-focus,#3d5934)]/15 disabled:bg-zinc-100";

@@ -2,7 +2,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
-import { act, within } from "@testing-library/react";
+import { act, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FloorConfigView } from "../contracts";
 
@@ -70,6 +70,27 @@ describe("floor editor hydration and client configuration", () => {
     await act(async () => { root = hydrateRoot(container, component, {onRecoverableError: recoverable}); });
     expect(within(container).getByRole("img", {name: "Plano de Ventana"})).toBeTruthy();
     expect((within(container).getByRole("button", {name: "Inventario"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(errors).not.toHaveBeenCalled(); expect(recoverable).not.toHaveBeenCalled();
+  });
+
+  it("opens and restores its first nonmodal tool after hydration without replacing the canvas or restoring native button state", async () => {
+    api.config.mockResolvedValue(config(true));
+    const component = element(); container.innerHTML = renderToString(component);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {}); const recoverable = vi.fn();
+    await act(async () => { root = hydrateRoot(container, component, {onRecoverableError: recoverable}); });
+    const dom = within(container); const canvas = dom.getByRole("img", {name: "Plano de Ventana"});
+    fireEvent.click(dom.getByRole("button", {name: "Medidas"}));
+    const tool = dom.getByRole("dialog", {name: "Medidas del salón"});
+    expect(tool.getAttribute("aria-modal")).toBe("false");
+    const input = within(tool).getByRole("textbox", {name: "Nombre del salón"}) as HTMLInputElement;
+    fireEvent.change(input, {target: {value: "Nombre pendiente"}});
+    for (const name of ["Cerrar ventana", "Minimizar ventana"]) expect(within(tool).getByRole("button", {name}).getAttribute("autocomplete")).toBe("off");
+    fireEvent.click(within(tool).getByRole("button", {name: "Cerrar ventana"}));
+    expect(dom.queryByRole("dialog", {name: "Medidas del salón"})).toBeNull();
+    fireEvent.click(dom.getByRole("button", {name: "Abrir ventana Medidas del salón"}));
+    expect(dom.getByRole("dialog", {name: "Medidas del salón"})).toBe(tool);
+    expect(input.value).toBe("Nombre pendiente"); expect(input.isConnected).toBe(true);
+    expect(dom.getByRole("img", {name: "Plano de Ventana"})).toBe(canvas);
     expect(errors).not.toHaveBeenCalled(); expect(recoverable).not.toHaveBeenCalled();
   });
 

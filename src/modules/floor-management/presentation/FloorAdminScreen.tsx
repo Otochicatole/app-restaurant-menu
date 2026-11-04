@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Building2, Check, LayoutGrid, Loader2, MapPin, Package, Pencil, Plus, RotateCw, Ruler, Save, Settings2, Shapes, Trash2, X } from "lucide-react";
-import { AdminConfirmModal, AdminModal } from "@/ui/admin/AdminUI";
+import { Building2, Check, Layers3, LayoutGrid, Loader2, MapPin, Package, Pencil, Plus, RotateCw, Ruler, Save, Settings2, Shapes, Trash2, X } from "lucide-react";
+import { AdminConfirmModal } from "@/ui/admin/AdminUI";
+import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
+import { useFloatingWindows } from "@/ui/useFloatingWindows";
 import { useRegisterAdminNavigationGuard } from "@/ui/admin/AdminNavigationGuard";
 import { transientButtonProps } from "@/ui/button-state";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
@@ -16,9 +18,9 @@ import { getFloorConfig, saveFloorAction } from "./floor-api";
 import { groupInventoryTables } from "./floor-table-groups";
 import { inventoryTables, resizeInventoryGroup } from "./floor-inventory";
 
-type EditorPanel = { kind: "dimensions" | "inventory" | "settings" | "combination" } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
-type ConfirmPanel = { kind: "confirm"; title: string; description: string; confirmLabel: string; run: () => void | Promise<void>; cancelTo?: EditorPanel };
-type Panel = EditorPanel | ConfirmPanel | null;
+type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "combination"; entity: FloorCombination } | { kind: "combination-layout"; id: string } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
+type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
+type ConfirmPanel = { title: string; description: string; confirmLabel: string; run: () => void | Promise<void> };
 type Flyout = "rooms" | "sectors" | "elements" | null;
 type Selection = { kind: "sector" | "fixture"; id: string } | null;
 type CombinationMode = { combination: FloorCombination; selectedIds: string[] } | null;
@@ -38,6 +40,28 @@ function roomError(room: FloorRoom): string | null {
   const result = floorRoomInputSchema.safeParse(room);
   return result.success ? validateRoomLayout(result.data) : result.error.issues[0]?.message ?? "Revisá los datos del salón.";
 }
+function toolId(panel: EditorPanel): string {
+  return panel.kind === "sector" || panel.kind === "fixture" || panel.kind === "combination" ? `${panel.kind}:${panel.entity.id}`
+    : panel.kind === "table" || panel.kind === "combination-layout" ? `${panel.kind}:${panel.id}` : panel.kind === "table-group" ? `table-group:${panel.key}` : panel.kind;
+}
+function toolTitle(panel: EditorPanel): string {
+  return panel.kind === "dimensions" ? "Medidas del salón" : panel.kind === "inventory" ? "Inventario de mesas" : panel.kind === "table-group" ? "Editar tipo de mesa" : panel.kind === "table" ? "Editar mesa" : panel.kind === "sector" ? "Propiedades del sector" : panel.kind === "fixture" ? "Propiedades del elemento" : panel.kind === "combination" ? "Armado predefinido" : panel.kind === "combination-layout" ? "Edición del armado" : "Configuración del restaurante";
+}
+function toolLauncherTitle(value: EditorTool): string {
+  const panel = value.panel;
+  const detail = panel.kind === "sector" ? panel.entity.name : panel.kind === "fixture" ? panel.entity.label : panel.kind === "combination" ? panel.entity.name : panel.kind === "table" ? (value.baseline as FloorRoom["tables"][number] | undefined)?.label : panel.kind === "table-group" && Array.isArray(value.baseline) ? groupInventoryTables(value.baseline)[0]?.label : undefined;
+  return toolTitle(panel) + (detail ? ` · ${detail}` : "");
+}
+function baseline(panel: EditorPanel, room: FloorRoom | null, combination: CombinationMode): unknown {
+  if (!room) return undefined;
+  if (panel.kind === "dimensions") return { name: room.name, width: room.width, height: room.height, active: room.active };
+  if (panel.kind === "sector") return room.locations.find((item) => item.id === panel.entity.id);
+  if (panel.kind === "fixture") return room.fixtures.find((item) => item.id === panel.entity.id);
+  if (panel.kind === "table") return room.tables.find((item) => item.id === panel.id);
+  if (panel.kind === "table-group") return groupInventoryTables(room.tables).find((item) => item.key === panel.key)?.tables;
+  if (panel.kind === "combination") return combination?.combination.id === panel.entity.id ? combination.combination : room.combinations.find((item) => item.id === panel.entity.id);
+  return undefined;
+}
 
 export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
@@ -48,7 +72,9 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [panel, setPanel] = useState<Panel>(null);
+  const tools = useFloatingWindows<EditorTool>();
+  const [confirmation, setConfirmation] = useState<ConfirmPanel | null>(null);
+  const [editedTools, setEditedTools] = useState<Set<string>>(() => new Set());
   const [flyout, setFlyout] = useState<Flyout>(null);
   const [placement, setPlacement] = useState<"sector" | FloorFixture["type"] | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
@@ -56,9 +82,14 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const [combinationMode, setCombinationMode] = useState<CombinationMode>(null);
   const toolbar = useRef<HTMLElement>(null);
   const flyoutSurface = useRef<HTMLDivElement>(null);
-  const panelSurface = useRef<HTMLDivElement>(null);
+  const toolSurfaces = useRef(new Map<string, HTMLDivElement>());
   const toolButtons = useRef<(HTMLButtonElement | null)[]>([]);
-  const hasUnsaved = dirty || combinationMode !== null;
+  const toolsLaunchers = useRef(new Map<string, HTMLButtonElement>());
+  const windowsRef = useRef(tools.windows);
+  const hasPendingRoomChanges = dirty || combinationMode !== null;
+  const hasUnsaved = hasPendingRoomChanges || editedTools.size > 0;
+  const interactive = !busy && !confirmation && !tools.windows.some((entry) => entry.visible && ["sector", "fixture", "combination"].includes(entry.value.panel.kind));
+  const activationKey = tools.windows.map((entry) => `${entry.id}:${entry.visible}:${entry.activation}`).join("|");
   const roomHref = `/floor?restaurantId=${encodeURIComponent(restaurantId)}`;
 
   useEffect(() => {
@@ -92,18 +123,33 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", escape); };
   }, [flyout]);
   useEffect(() => {
-    if (!panel || panel.kind === "confirm") return;
-    const frame = window.requestAnimationFrame(() => (panelSurface.current?.querySelector<HTMLElement>("input,select,button:not([disabled])") ?? panelSurface.current)?.focus());
+    windowsRef.current = tools.windows;
+  }, [tools.windows]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const latest = windowsRef.current.filter((entry) => entry.visible).sort((a, b) => b.zIndex - a.zIndex)[0];
+      const surface = latest && toolSurfaces.current.get(latest.id);
+      (surface?.querySelector<HTMLElement>("input:not([disabled]),select:not([disabled]),button:not([disabled])") ?? surface)?.focus();
+    });
     return () => window.cancelAnimationFrame(frame);
-  }, [panel]);
+  }, [activationKey]);
 
   const patch = (next: FloorRoom) => { if (busy) return; setSectorMenu(null); setDraft(next); setDirty(true); setNotice(null); setError(null); };
-  const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); setPanel(null); setError(null); };
+  const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); tools.clear(); setEditedTools(new Set()); setConfirmation(null); setError(null); };
+  const clearToolEdit = (id: string) => setEditedTools((previous) => { if (!previous.has(id)) return previous; const next = new Set(previous); next.delete(id); return next; });
+  const closeTool = (id: string) => { if (!busy) { tools.close(id); clearToolEdit(id); } };
+  const markToolEdit = (id: string) => setEditedTools((previous) => previous.has(id) ? previous : new Set(previous).add(id));
+  const hideTool = (id: string) => { if (busy) return; tools.hide(id); window.requestAnimationFrame(() => toolsLaunchers.current.get(id)?.focus()); };
+  const staleTool = (value: EditorTool): string | null => {
+    if (!draft || value.roomId !== draft.id) return "El salón de esta ventana cambió. Cancelá y volvé a abrir la herramienta.";
+    if (JSON.stringify(baseline(value.panel, draft, combinationMode)) !== JSON.stringify(value.baseline)) return "Estos datos cambiaron en otra herramienta. Cancelá y volvé a abrir las propiedades antes de aplicar.";
+    return null;
+  };
   const discardBefore = (run: () => void) => {
     if (busy) return;
     setFlyout(null); setSectorMenu(null);
     if (!hasUnsaved) { run(); return; }
-    setPanel({ kind: "confirm", title: "Descartar cambios sin guardar", description: "Los cambios del plano y el armado que estás editando se perderán. Podés cancelar y guardar antes de continuar.", confirmLabel: "Descartar y continuar", run: () => { setPanel(null); run(); } });
+    setConfirmation({ title: "Descartar cambios sin guardar", description: "Los cambios del plano y el armado que estás editando se perderán. Podés cancelar y guardar antes de continuar.", confirmLabel: "Descartar y continuar", run: () => { setConfirmation(null); run(); } });
   };
   useRegisterAdminNavigationGuard(discardBefore);
   const selectRoom = (room: FloorRoom) => {
@@ -112,8 +158,8 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   };
   const createRoom = () => discardBefore(() => {
     const name = uniqueName("Nuevo salón", config?.rooms.map((room) => room.name) ?? []);
-    setDraft({ id: crypto.randomUUID(), restaurantId, name, width: 1000, height: 700, active: true, revision: 0, fixtures: [], locations: [], tables: [], combinations: [] });
-    setDirty(true); resetInteraction(); setPanel({ kind: "dimensions" });
+    const next: FloorRoom = { id: crypto.randomUUID(), restaurantId, name, width: 1000, height: 700, active: true, revision: 0, fixtures: [], locations: [], tables: [], combinations: [] };
+    setDraft(next); setDirty(true); resetInteraction(); openPanel({ kind: "dimensions" }, next);
   });
   const guardLink = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     if (busy || hasUnsaved) { event.preventDefault(); if (!busy) discardBefore(() => router.push(href)); }
@@ -124,8 +170,9 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     try {
       const next = await saveFloorAction(restaurantId, body);
       setConfig(next);
-      if (roomAction || !hasUnsaved) {
+      if (roomAction || !hasPendingRoomChanges) {
         const room = next.rooms.find((item) => item.id === draft?.id) ?? next.rooms[0];
+        if (room?.id !== draft?.id) resetInteraction();
         setDraft(room ? copy(room) : null); if (roomAction) setDirty(false);
       }
       setNotice(message); return true;
@@ -143,18 +190,22 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     const invalid = roomError(next); if (invalid) return invalid;
     patch(next); then?.(); return null;
   };
-  const openPanel = (next: EditorPanel) => { if (busy) return; setSectorMenu(null); setError(null); setFlyout(null); setPlacement(null); setPanel(next); };
+  function openPanel(next: EditorPanel, room = draft) {
+    if (busy) return;
+    setSectorMenu(null); setError(null); setFlyout(null); setPlacement(null);
+    tools.open(toolId(next), { panel: copy(next), roomId: room?.id ?? null, baseline: copy(baseline(next, room, combinationMode)) });
+  }
   const openSectorMenu = (id: string, point: { x: number; y: number }) => {
-    if (busy || panel || placement || combinationMode) return;
+    if (busy || confirmation || placement || combinationMode) return;
     toolButtons.current[3]?.focus();
     setSelection({ kind: "sector", id }); setSectorMenu({ id, point }); setFlyout(null);
   };
   const beginPlacement = (kind: NonNullable<typeof placement>) => {
     if (!draft || busy || combinationMode) return;
-    setSectorMenu(null); setPlacement(kind); setSelection(null); setFlyout(null); setPanel(null); setError(null);
+    setSectorMenu(null); setPlacement(kind); setSelection(null); setFlyout(null); setError(null);
   };
   const resizeSector = (id: string, geometry: Pick<FloorLocation, "x" | "y" | "width" | "height">) => {
-    if (!draft || busy || panel || placement || combinationMode || !draft.locations.some((location) => location.id === id)) return;
+    if (!draft || !interactive || placement || combinationMode || !draft.locations.some((location) => location.id === id)) return;
     const invalid = applyRoom({ ...draft, locations: draft.locations.map((location) => location.id === id ? { ...location, ...geometry } : location) });
     if (invalid) setError(invalid);
   };
@@ -163,13 +214,17 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     if (!Number.isInteger(stock.quantity) || stock.quantity < 1 || stock.quantity + draft.tables.length > 200 || !Number.isInteger(stock.capacity)) return "Ingresá una cantidad entera válida. El salón admite hasta 200 mesas.";
     return applyRoom({ ...draft, tables: [...draft.tables, ...inventoryTables(stock.quantity, stock, draft.tables)] });
   };
-  const applyTableGroup = (key: string, fields: StockGroupInput): string | null => {
+  const applyTableGroup = (key: string, fields: StockGroupInput, after: () => void): string | null => {
     if (!draft || busy) return "Esperá a que termine de guardar.";
     const tables = resizeInventoryGroup(draft, key, fields);
     if (typeof tables === "string") return tables;
-    return applyRoom({ ...draft, tables }, () => setPanel({ kind: "inventory" }));
+    return applyRoom({ ...draft, tables }, after);
   };
-  const startCombination = (combination: FloorCombination) => { setSectorMenu(null); setCombinationMode({ combination: copy(combination), selectedIds: combination.members[0] ? [combination.members[0].tableId] : [] }); setSelection(null); setPanel(null); setFlyout(null); setPlacement(null); setError(null); };
+  const startCombination = (combination: FloorCombination) => {
+    if (combinationMode && combinationMode.combination.id !== combination.id) { setError("Terminá o cancelá el armado actual antes de editar otro."); tools.open(`combination-layout:${combinationMode.combination.id}`, { panel: { kind: "combination-layout", id: combinationMode.combination.id }, roomId: draft?.id ?? null, baseline: undefined }); return; }
+    setSectorMenu(null); setCombinationMode((current) => current ?? { combination: copy(combination), selectedIds: combination.members[0] ? [combination.members[0].tableId] : [] }); setSelection(null); setFlyout(null); setPlacement(null); setError(null);
+    openPanel({ kind: "combination-layout", id: combination.id });
+  };
   const createCombination = (ids: string[]) => {
     if (!draft || busy) return;
     const tables = draft.tables.filter((table) => table.active && ids.includes(table.id)); if (tables.length < 2) return;
@@ -181,11 +236,11 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     if (!draft || !combinationMode || busy) return;
     const combination = combinationMode.combination;
     const combinations = draft.combinations.some((item) => item.id === combination.id) ? draft.combinations.map((item) => item.id === combination.id ? combination : item) : [...draft.combinations, combination];
-    const invalid = applyRoom({ ...draft, combinations }, () => { setCombinationMode(null); setPanel(null); });
+    const invalid = applyRoom({ ...draft, combinations }, () => { setCombinationMode(null); closeTool(`combination-layout:${combination.id}`); });
     if (invalid) setError(invalid);
   };
   const place = (point: { x: number; y: number }) => {
-    if (!draft || !placement || busy || panel) return;
+    if (!draft || !placement || busy || confirmation) return;
     const x = point.x; const y = point.y;
     if (placement === "sector") {
       const width = Math.min(360, draft.width); const height = Math.min(260, draft.height);
@@ -206,53 +261,87 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   };
   const removeSelection = () => {
     if (!draft || !selection || busy) return;
-    setPanel({ kind: "confirm", title: selectedSector ? "Archivar sector" : "Eliminar elemento", description: selectedSector ? "El sector dejará de estar disponible. Las asignaciones futuras se comprobarán al guardar." : "El elemento se quitará del plano cuando guardes los cambios.", confirmLabel: selectedSector ? "Archivar sector" : "Eliminar elemento", run: () => { patch(selectedSector ? { ...draft, locations: draft.locations.map((item) => item.id === selection.id ? { ...item, active: false } : item) } : { ...draft, fixtures: draft.fixtures.filter((item) => item.id !== selection.id) }); setSelection(null); setPanel(null); } });
+    setConfirmation({ title: selectedSector ? "Archivar sector" : "Eliminar elemento", description: selectedSector ? "El sector dejará de estar disponible. Las asignaciones futuras se comprobarán al guardar." : "El elemento se quitará del plano cuando guardes los cambios.", confirmLabel: selectedSector ? "Archivar sector" : "Eliminar elemento", run: () => { patch(selectedSector ? { ...draft, locations: draft.locations.map((item) => item.id === selection.id ? { ...item, active: false } : item) } : { ...draft, fixtures: draft.fixtures.filter((item) => item.id !== selection.id) }); setSelection(null); setConfirmation(null); } });
   };
   const archiveRoom = () => {
     if (!draft || busy) return;
-    setPanel({ kind: "confirm", title: "Archivar salón", description: `${hasUnsaved ? "Se descartarán los cambios sin guardar de este salón. " : ""}No se podrá archivar si tiene asignaciones futuras comprometidas.`, confirmLabel: "Archivar salón", cancelTo: { kind: "dimensions" }, run: async () => { if (await mutate({ action: "archive-room", roomId: draft.id, expectedRevision: draft.revision }, "Salón archivado.", true)) { setPanel(null); setSelection(null); } } });
+    setConfirmation({ title: "Archivar salón", description: `${hasUnsaved ? "Se descartarán los cambios sin guardar de este salón. " : ""}No se podrá archivar si tiene asignaciones futuras comprometidas.`, confirmLabel: "Archivar salón", run: async () => { if (await mutate({ action: "archive-room", roomId: draft.id, expectedRevision: draft.revision }, "Salón archivado.", true)) { setConfirmation(null); setSelection(null); } } });
   };
   const configurationAction = async (body: unknown, message: string) => {
-    if (hasUnsaved) { setError("Guardá el plano antes de modificar la configuración."); return false; }
+    if (hasPendingRoomChanges) { setError("Guardá el plano antes de modificar la configuración."); return false; }
     return mutate(body, message);
   };
-  const closePanel = () => { if (!busy) setPanel(null); };
-  const title = panel?.kind === "dimensions" ? "Medidas del salón" : panel?.kind === "inventory" ? "Inventario de mesas" : panel?.kind === "table-group" ? "Editar tipo de mesa" : panel?.kind === "table" ? "Editar mesa" : panel?.kind === "sector" ? "Propiedades del sector" : panel?.kind === "fixture" ? "Propiedades del elemento" : panel?.kind === "combination" ? "Armado predefinido" : "Configuración del restaurante";
   const canvasTables = draft && combinationMode ? combinationMode.combination.members.flatMap((member) => {
     const table = draft.tables.find((item) => item.id === member.tableId); return table ? [{ ...table, x: draft.width / 2 + member.x, y: draft.height / 2 + member.y, rotation: member.rotation }] : [];
   }) : [];
-  const interactive = !busy && panel === null;
-
-  return <main data-admin-panel className={`fixed inset-y-0 left-16 right-0 isolate h-dvh overflow-hidden bg-[#f5f2e9] text-zinc-950 selection:bg-[#d6e8d4] ${panel ? "z-50" : ""}`}>
+  return <main data-admin-panel className={`fixed inset-y-0 left-16 right-0 isolate h-dvh overflow-hidden bg-[#f5f2e9] text-zinc-950 selection:bg-[#d6e8d4] ${confirmation ? "z-50" : ""}`}>
     <h1 className="sr-only">Editor de salones · {config?.restaurantName ?? "Restaurante"}</h1>
-    <div role="region" aria-label="Editor del salón" className="absolute inset-0">{draft && <FloorCanvas key={draft.id} fullScreen editorMode grid room={combinationMode ? { ...draft, fixtures: [], locations: [] } : draft} tables={canvasTables} selectedIds={combinationMode?.selectedIds ?? []} selectedLocationId={selection?.kind === "sector" ? selection.id : undefined} selectedFixtureId={selection?.kind === "fixture" ? selection.id : undefined} draggableIds={interactive && combinationMode ? canvasTables.map((table) => table.id) : []} onSelect={interactive && combinationMode ? (id, additive) => setCombinationMode((current) => current ? { ...current, selectedIds: additive ? current.selectedIds.includes(id) ? current.selectedIds.filter((item) => item !== id) : [...current.selectedIds, id] : [id] } : null) : undefined} onMove={interactive && combinationMode ? (ids, delta) => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member) } } : null) : undefined} onPlace={interactive && placement ? place : undefined} onSelectLocation={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "sector", id }); setFlyout(null); } : undefined} onContextMenuLocation={interactive && !placement && !combinationMode ? openSectorMenu : undefined} onResizeLocation={interactive && !placement && !combinationMode ? resizeSector : undefined} onMoveLocation={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, locations: draft.locations.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} onSelectFixture={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "fixture", id }); setFlyout(null); } : undefined} onMoveFixture={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, fixtures: draft.fixtures.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} />}</div>
+    <div role="region" aria-label="Editor del salón" className="absolute inset-0">{draft && <FloorCanvas key={draft.id} fullScreen editorMode grid room={combinationMode ? { ...draft, fixtures: [], locations: [] } : draft} tables={canvasTables} selectedIds={combinationMode?.selectedIds ?? []} selectedLocationId={selection?.kind === "sector" ? selection.id : undefined} selectedFixtureId={selection?.kind === "fixture" ? selection.id : undefined} draggableIds={interactive && combinationMode ? canvasTables.map((table) => table.id) : []} onSelect={interactive && combinationMode ? (id, additive) => setCombinationMode((current) => current ? { ...current, selectedIds: additive ? current.selectedIds.includes(id) ? current.selectedIds.filter((item) => item !== id) : [...current.selectedIds, id] : [id] } : null) : undefined} onMove={interactive && combinationMode ? (ids, delta) => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member) } } : null) : undefined} onPlace={!busy && !confirmation && placement ? place : undefined} onSelectLocation={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "sector", id }); setFlyout(null); } : undefined} onContextMenuLocation={interactive && !placement && !combinationMode ? openSectorMenu : undefined} onResizeLocation={interactive && !placement && !combinationMode ? resizeSector : undefined} onMoveLocation={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, locations: draft.locations.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} onSelectFixture={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "fixture", id }); setFlyout(null); } : undefined} onMoveFixture={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, fixtures: draft.fixtures.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} />}</div>
     {!draft && <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><Building2 size={30} className="mx-auto mb-4 text-[#607054]" /><h2 className="text-lg font-semibold">{config ? "Creá tu primer salón" : "Cargando salones…"}</h2><p className="mt-2 text-sm leading-relaxed text-[#52634b]">{config ? "Definí las medidas, cargá tu inventario y dibujá los sectores sobre este tablero." : "Preparando el editor del restaurante."}</p>{config && <button {...transientButtonProps} type="button" disabled={busy} onClick={createRoom} className={`${adminPrimaryButtonClass} mt-5`}><Plus size={16} />Crear salón</button>}</div></div>}
     <header className="pointer-events-none absolute inset-x-0 top-[max(1rem,env(safe-area-inset-top,0px))] z-10 flex items-start justify-between gap-3 px-3 sm:px-6"><div className="pointer-events-auto flex min-w-0 items-start gap-2"><div className="min-w-0 rounded-xl bg-white px-3 py-2 shadow-[0_3px_16px_rgba(24,38,24,0.12)]"><p className="max-w-[32vw] truncate text-[11px] text-[#52634b] sm:max-w-64">{config?.restaurantName ?? "Restaurante"}</p><p className="max-w-[32vw] truncate text-sm font-semibold text-[#263e23] sm:max-w-64">{draft?.name ?? "Salones"}{draft && !draft.active && " · Archivado"}</p></div></div><div className="pointer-events-auto flex shrink-0 gap-2"><Link href={roomHref} aria-label="Ver sala" title="Ver sala" aria-disabled={busy || undefined} onClick={(event) => guardLink(event, roomHref)} className={floatingButton}><LayoutGrid size={18} /><span className="hidden lg:inline">Ver sala</span></Link><button {...transientButtonProps} type="button" aria-label="Guardar plano" title="Guardar plano" disabled={!draft || !dirty || busy || !!combinationMode} onClick={() => { void save(); }} className={`${buttonBase} bg-[#182618] text-white hover:bg-[#2d4628]`}>{busy ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}<span className="hidden lg:inline">Guardar plano</span></button></div></header>
-    <div className="pointer-events-none absolute left-3 right-3 top-[calc(max(1rem,env(safe-area-inset-top,0px))+4rem)] z-10 max-w-xl space-y-2 sm:left-6"><p role="status" className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]">{placement ? `Tocá dentro del salón para ubicar ${placement === "sector" ? "el sector" : placement === "WALL" ? "la pared" : placement === "BAR" ? "la barra" : "el texto"}.` : combinationMode ? `Editando armado: ${combinationMode.combination.name}` : dirty ? "Cambios sin guardar" : selectedSector ? "Arrastrá los bordes o las esquinas para ajustar el tamaño del sector." : config ? "Clic derecho en un sector para ver sus acciones." : "Preparando el plano…"}</p>{error && !panel && <div role="alert" className="pointer-events-auto flex items-start justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"><span>{error}</span>{!config ? <button {...transientButtonProps} type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="font-semibold underline underline-offset-4">Reintentar</button> : <button {...transientButtonProps} type="button" aria-label="Cerrar error" onClick={() => setError(null)}><X size={16} /></button>}</div>}{notice && !panel && <p role="status" className="w-fit rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">{notice}</p>}{placement && <button {...transientButtonProps} type="button" onClick={() => setPlacement(null)} className={`${adminSecondaryButtonClass} pointer-events-auto`}>Cancelar ubicación</button>}</div>
+    <div className="pointer-events-none absolute left-3 right-3 top-[calc(max(1rem,env(safe-area-inset-top,0px))+4rem)] z-10 max-w-xl space-y-2 sm:left-6"><p role="status" className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]">{placement ? `Tocá dentro del salón para ubicar ${placement === "sector" ? "el sector" : placement === "WALL" ? "la pared" : placement === "BAR" ? "la barra" : "el texto"}.` : combinationMode ? `Editando armado: ${combinationMode.combination.name}` : hasUnsaved ? "Cambios sin guardar" : selectedSector ? "Arrastrá los bordes o las esquinas para ajustar el tamaño del sector." : config ? "Clic derecho en un sector para ver sus acciones." : "Preparando el plano…"}</p>{error && <div role="alert" className="pointer-events-auto flex items-start justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"><span>{error}</span>{!config ? <button {...transientButtonProps} type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="font-semibold underline underline-offset-4">Reintentar</button> : <button {...transientButtonProps} type="button" aria-label="Cerrar error" onClick={() => setError(null)}><X size={16} /></button>}</div>}{notice && <p role="status" className="w-fit rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">{notice}</p>}{placement && <button {...transientButtonProps} type="button" onClick={() => setPlacement(null)} className={`${adminSecondaryButtonClass} pointer-events-auto`}>Cancelar ubicación</button>}</div>
     {draft && !placement && !combinationMode && !selectedFixture && <button {...transientButtonProps} type="button" disabled={busy} onClick={() => beginPlacement("sector")} className={`${adminPrimaryButtonClass} absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+8.5rem)] right-3 z-20 shadow-[0_3px_16px_rgba(24,38,24,0.12)] md:bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+4.5rem)] sm:right-6`}><Plus size={18} />Agregar sector</button>}
     {selectedFixture && !combinationMode && <aside aria-label="Selección del plano" className="absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+8.5rem)] right-3 z-20 md:bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+4.5rem)] max-w-[calc(100%_-_6rem)] rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] sm:right-6"><p className="mb-2 truncate text-sm font-semibold">{selectedLabel || (selectedFixture?.type === "WALL" ? "Pared" : "Elemento del salón")}</p><div className="flex flex-wrap gap-1"><button {...transientButtonProps} type="button" disabled={busy} onClick={editSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><Pencil size={15} />Editar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={rotateSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><RotateCw size={15} />Girar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={removeSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={15} />{selectedSector ? "Archivar" : "Eliminar"}</button></div></aside>}
-    {sectorMenu && selectedSector && !panel && !placement && !combinationMode && <FloorSectorContextMenu name={selectedSector.name} point={sectorMenu.point} disabled={busy} onEdit={() => { setSectorMenu(null); editSelection(); }} onRotate={() => { setSectorMenu(null); rotateSelection(); }} onArchive={() => { setSectorMenu(null); removeSelection(); }} onClose={() => setSectorMenu(null)} />}
-    {combinationMode && <aside aria-label="Edición del armado" className="absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+8.5rem)] right-3 z-20 md:bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+4.5rem)] max-h-[calc(100dvh-13rem)] max-w-[calc(100%_-_6rem)] space-y-3 overflow-y-auto rounded-xl bg-white p-4 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] sm:right-6"><p className="text-sm font-semibold">{combinationMode.combination.name}</p><p className="max-w-xs text-xs leading-relaxed text-[#52634b]">Arrastrá sus mesas para unirlas. Este armado no cambia las ubicaciones del salón.</p><div className="flex flex-wrap gap-2">{combinationMode.combination.members.map((member) => <button key={member.tableId} {...transientButtonProps} type="button" aria-pressed={combinationMode.selectedIds.includes(member.tableId)} disabled={busy} className="min-h-11 rounded-lg border border-stone-200 px-3 text-xs" onClick={() => setCombinationMode((current) => current ? { ...current, selectedIds: current.selectedIds.includes(member.tableId) ? current.selectedIds.filter((id) => id !== member.tableId) : [...current.selectedIds, member.tableId] } : null)}>{draft?.tables.find((table) => table.id === member.tableId)?.label}</button>)}</div><button {...transientButtonProps} type="button" disabled={busy || !combinationMode.selectedIds.length} className={adminSecondaryButtonClass} onClick={() => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => current.selectedIds.includes(member.tableId) ? { ...member, rotation: nextRotation(member.rotation) } : member) } } : null)}><RotateCw size={15} />Girar mesas seleccionadas</button><button {...transientButtonProps} type="button" className="block min-h-11 text-xs font-semibold underline underline-offset-4" onClick={() => openPanel({ kind: "combination" })}>Propiedades del armado</button><div className="flex flex-wrap gap-2"><button {...transientButtonProps} type="button" disabled={busy} onClick={() => { setCombinationMode(null); setError(null); }} className={adminSecondaryButtonClass}>Cancelar armado</button><button {...transientButtonProps} type="button" disabled={busy} onClick={applyCombination} className={adminPrimaryButtonClass}>Aplicar armado</button></div></aside>}
-    <nav ref={toolbar} aria-label="Herramientas del editor" className="absolute bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-1/2 z-30 grid w-[calc(100%_-_1.5rem)] max-w-lg -translate-x-1/2 grid-cols-3 items-center gap-1.5 md:flex md:w-max md:max-w-[calc(100%_-_1.5rem)]">{toolLabels.map((label, index) => { const Icon = toolIcons[index]; return <button key={label} {...transientButtonProps} ref={(element) => { toolButtons.current[index] = element; }} type="button" aria-label={label} title={label} aria-haspopup={index === 1 || index === 2 || index === 5 ? "dialog" : undefined} aria-expanded={index === 0 ? flyout === "rooms" : index === 3 ? flyout === "sectors" : index === 4 ? flyout === "elements" : panel?.kind === (index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings")} disabled={!config || busy || (index !== 0 && !!combinationMode) || ((index === 1 || index === 2 || index === 3 || index === 4) && !draft)} onClick={() => { setSectorMenu(null); if (index === 0 || index === 3 || index === 4) { const next = index === 0 ? "rooms" : index === 3 ? "sectors" : "elements"; setFlyout((current) => current === next ? null : next); setPlacement(null); } else openPanel({ kind: index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings" }); }} className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-white px-1 text-[10px] font-semibold text-[#263e23] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[#edf2e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:h-11 md:flex-row md:gap-2 md:px-3 md:text-xs lg:text-sm"><Icon size={18} /><span className="whitespace-nowrap">{label}</span></button>; })}
+    {sectorMenu && selectedSector && !busy && !confirmation && !placement && !combinationMode && <FloorSectorContextMenu name={selectedSector.name} point={sectorMenu.point} disabled={busy} onEdit={() => { setSectorMenu(null); editSelection(); }} onRotate={() => { setSectorMenu(null); rotateSelection(); }} onArchive={() => { setSectorMenu(null); removeSelection(); }} onClose={() => setSectorMenu(null)} />}
+    <nav ref={toolbar} aria-label="Herramientas del editor" className="absolute bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-1/2 z-30 grid w-[calc(100%_-_1.5rem)] max-w-lg -translate-x-1/2 grid-cols-3 items-center gap-1.5 md:flex md:w-max md:max-w-[calc(100%_-_1.5rem)]">{toolLabels.map((label, index) => { const Icon = toolIcons[index]; return <button key={label} {...transientButtonProps} ref={(element) => { toolButtons.current[index] = element; }} type="button" aria-label={label} title={label} aria-haspopup={index === 1 || index === 2 || index === 5 ? "dialog" : undefined} aria-expanded={index === 0 ? flyout === "rooms" : index === 3 ? flyout === "sectors" : index === 4 ? flyout === "elements" : tools.isVisible(index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings")} disabled={!config || busy || ((index === 1 || index === 2 || index === 3 || index === 4) && !draft)} onClick={() => { setSectorMenu(null); if (index === 0 || index === 3 || index === 4) { const next = index === 0 ? "rooms" : index === 3 ? "sectors" : "elements"; setFlyout((current) => current === next ? null : next); setPlacement(null); } else openPanel({ kind: index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings" }); }} className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-white px-1 text-[10px] font-semibold text-[#263e23] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[#edf2e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:h-11 md:flex-row md:gap-2 md:px-3 md:text-xs lg:text-sm"><Icon size={18} /><span className="whitespace-nowrap">{label}</span></button>; })}
       {flyout && <div ref={flyoutSurface} className="absolute bottom-[calc(100%_+_0.75rem)] left-1/2 max-h-[min(26rem,calc(100dvh_-_7rem))] w-[min(21rem,calc(100vw_-_1.5rem))] -translate-x-1/2 overflow-y-auto rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] lg:left-0 lg:translate-x-0">
         {flyout === "rooms" && <nav aria-label="Salones del restaurante" className="space-y-1">{config?.rooms.map((room) => <button key={room.id} {...transientButtonProps} type="button" aria-pressed={draft?.id === room.id} onClick={() => selectRoom(room)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]"><span>{room.name}{!room.active && " · Archivado"}</span>{draft?.id === room.id && <Check size={16} />}</button>)}<button {...transientButtonProps} type="button" onClick={createRoom} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#2d4628] hover:bg-[#edf2e9]"><Plus size={16} />Nuevo salón</button></nav>}
         {flyout === "sectors" && <nav aria-label="Sectores del salón" className="space-y-1"><button {...transientButtonProps} type="button" onClick={() => { beginPlacement("sector"); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-[#edf2e9]"><Plus size={16} />Nuevo sector</button>{draft?.locations.map((location) => <button key={location.id} {...transientButtonProps} type="button" aria-pressed={selection?.id === location.id} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); }} onContextMenu={(event) => { event.preventDefault(); openSectorMenu(location.id, { x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); } }} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]">{location.name}{!location.active && " · Archivado"}</button>)}</nav>}
         {flyout === "elements" && <nav aria-label="Elementos del salón" className="space-y-1">{([['WALL', 'Pared'], ['BAR', 'Barra'], ['LABEL', 'Texto']] as const).map(([type, label]) => <button key={type} {...transientButtonProps} type="button" onClick={() => { beginPlacement(type); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-[#edf2e9]"><Plus size={16} />{label}</button>)}{draft?.fixtures.map((fixture, index) => <button key={fixture.id} {...transientButtonProps} type="button" onClick={() => { setSelection({ kind: "fixture", id: fixture.id }); setFlyout(null); }} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]">{fixture.label || `${fixture.type === "WALL" ? "Pared" : "Elemento"} ${index + 1}`}</button>)}</nav>}
       </div>}
     </nav>
-    <AdminModal open={panel !== null && panel.kind !== "confirm"} title={title} onClose={closePanel} wide={panel?.kind === "inventory" || panel?.kind === "combination"}>
-      <div ref={panelSurface} tabIndex={-1} className="outline-none">
-      {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-      {draft && panel?.kind === "dimensions" && <RoomDimensionsForm key={draft.id} room={draft} busy={busy} saved={!!config?.rooms.some((room) => room.id === draft.id)} onApply={(fields) => applyRoom({ ...draft, ...fields }, closePanel)} onArchive={archiveRoom} onCancel={closePanel} />}
-      {draft && panel?.kind === "inventory" && <InventoryForm room={draft} onAdd={addStock} onEditGroup={(key) => openPanel({ kind: "table-group", key })} onEditTable={(id) => openPanel({ kind: "table", id })} onEditCombination={(id) => { const combination = draft.combinations.find((item) => item.id === id); if (combination) startCombination(combination); }} onCreateCombination={createCombination} onClose={closePanel} />}
-      {draft && panel?.kind === "table-group" && groupInventoryTables(draft.tables).filter((group) => group.key === panel.key).map((group) => <InventoryGroupForm key={group.key} group={group} onApply={(fields) => applyTableGroup(group.key, fields)} onCancel={() => setPanel({ kind: "inventory" })} />)}
-      {draft && panel?.kind === "table" && draft.tables.some((table) => table.id === panel.id) && <TablePropertiesForm key={panel.id} table={draft.tables.find((table) => table.id === panel.id)!} onApply={(table) => applyRoom({ ...draft, tables: draft.tables.map((item) => item.id === table.id ? table : item) }, () => setPanel({ kind: "inventory" }))} onCancel={() => setPanel({ kind: "inventory" })} />}
-      {draft && panel?.kind === "sector" && <SpatialPropertiesForm key={panel.entity.id} kind="sector" entity={panel.entity} onApply={(entity) => { const location = entity as FloorLocation; return applyRoom({ ...draft, locations: draft.locations.some((item) => item.id === location.id) ? draft.locations.map((item) => item.id === location.id ? location : item) : [...draft.locations, location] }, () => { setSelection({ kind: "sector", id: location.id }); closePanel(); }); }} onCancel={closePanel} />}
-      {draft && panel?.kind === "fixture" && <SpatialPropertiesForm key={panel.entity.id} kind="fixture" entity={panel.entity} onApply={(entity) => { const fixture = entity as FloorFixture; return applyRoom({ ...draft, fixtures: draft.fixtures.some((item) => item.id === fixture.id) ? draft.fixtures.map((item) => item.id === fixture.id ? fixture : item) : [...draft.fixtures, fixture] }, () => { setSelection({ kind: "fixture", id: fixture.id }); closePanel(); }); }} onCancel={closePanel} />}
-      {draft && combinationMode && panel?.kind === "combination" && <CombinationPropertiesForm key={combinationMode.combination.id} room={draft} combination={combinationMode.combination} onApply={(combination) => { const next = { ...draft, combinations: [...draft.combinations.filter((item) => item.id !== combination.id), combination] }; const invalid = roomError(next); if (invalid) return invalid; setCombinationMode((current) => current ? { ...current, combination } : null); closePanel(); return null; }} onCancel={closePanel} />}
-      {config && panel?.kind === "settings" && <FloorSettingsForm config={config} dirty={hasUnsaved} busy={busy} onAction={configurationAction} onDisableStaff={() => setPanel({ kind: "confirm", title: "Desactivar cuenta de sala", description: "Se cerrarán sus sesiones y el personal dejará de acceder con esta cuenta. Las asignaciones se conservarán.", confirmLabel: "Desactivar cuenta", cancelTo: { kind: "settings" }, run: async () => { if (await configurationAction({ action: "disable-staff" }, "Cuenta de sala desactivada.")) setPanel({ kind: "settings" }); } })} />}
-      </div>
-    </AdminModal>
-    {panel?.kind === "confirm" && <AdminConfirmModal open title={panel.title} description={panel.description} confirmLabel={panel.confirmLabel} loading={busy} onClose={() => { if (!busy) setPanel(panel.cancelTo ?? null); }} onConfirm={panel.run}>{error && <p role="alert" className="mb-4 text-sm text-red-800">{error}</p>}</AdminConfirmModal>}
+    {tools.windows.map((entry) => {
+      const value = entry.value;
+      const pane = value.panel;
+      const currentRoom = draft && draft.id === value.roomId ? draft : null;
+      const title = toolTitle(pane);
+      const finish = () => closeTool(entry.id);
+      const check = () => staleTool(value);
+      const group = pane.kind === "table-group" && Array.isArray(value.baseline) ? groupInventoryTables(value.baseline).find((item) => item.key === pane.key) : undefined;
+      const table = pane.kind === "table" ? value.baseline as FloorRoom["tables"][number] | undefined : undefined;
+      const layout = pane.kind === "combination-layout" && combinationMode?.combination.id === pane.id ? combinationMode : null;
+      const icon = pane.kind === "inventory" || pane.kind === "table" || pane.kind === "table-group" ? <Package size={17} className="text-[#3d5934]" /> : pane.kind === "settings" ? <Settings2 size={17} className="text-[#3d5934]" /> : pane.kind === "dimensions" ? <Ruler size={17} className="text-[#3d5934]" /> : pane.kind === "combination-layout" ? <Layers3 size={17} className="text-[#3d5934]" /> : <Shapes size={17} className="text-[#3d5934]" />;
+      return <FloatingModalWindow key={entry.id} id={"room-tool-" + entry.id} title={layout?.combination.name ?? title} subtitle={pane.kind === "sector" ? pane.entity.name : pane.kind === "fixture" ? pane.entity.label : layout ? "Armado predefinido" : currentRoom?.name ?? config?.restaurantName} icon={icon} role={pane.kind === "combination-layout" ? "complementary" : "dialog"} ariaLabel={pane.kind === "combination-layout" ? "Edición del armado" : title} isOpen={entry.visible} activation={entry.activation} initialOffset={entry.offset} keepMounted onClose={() => hideTool(entry.id)} closeDisabled={busy} onFocus={() => tools.focus(entry.id)} initialAnchor="right" viewportInset={{ left: 64, bottom: 132 }} initialPosition={{ x: 80, y: 112 }} initialSize={pane.kind === "combination-layout" ? { width: 380, height: 420 } : { width: 420, height: 620 }} minWidth={300} minHeight={320} zIndex={entry.zIndex}>
+        <div ref={(element) => { if (element) toolSurfaces.current.set(entry.id, element); else toolSurfaces.current.delete(entry.id); }} tabIndex={-1} onChangeCapture={() => markToolEdit(entry.id)} className="flex min-h-0 flex-1 flex-col outline-none">
+          <fieldset disabled={busy} className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {currentRoom && pane.kind === "dimensions" && <RoomDimensionsForm room={value.baseline ? { ...currentRoom, ...value.baseline as Pick<FloorRoom, "name" | "width" | "height" | "active"> } : currentRoom} busy={busy} saved={!!config?.rooms.some((room) => room.id === currentRoom.id)} onApply={(fields) => check() ?? applyRoom({ ...currentRoom, ...fields }, finish)} onArchive={archiveRoom} onCancel={finish} />}
+          {currentRoom && pane.kind === "inventory" && <InventoryForm room={currentRoom} onAdd={(stock) => { const invalid = check() ?? addStock(stock); if (!invalid) clearToolEdit(entry.id); return invalid; }} onEditGroup={(key) => openPanel({ kind: "table-group", key })} onEditTable={(id) => openPanel({ kind: "table", id })} onEditCombination={(id) => { const combination = currentRoom.combinations.find((item) => item.id === id); if (combination) startCombination(combination); }} onCreateCombination={createCombination} onClose={finish} />}
+          {currentRoom && pane.kind === "table-group" && group && <InventoryGroupForm group={group} onApply={(fields) => check() ?? applyTableGroup(group.key, fields, finish)} onCancel={finish} />}
+          {currentRoom && pane.kind === "table" && table && <TablePropertiesForm table={table} onApply={(next) => check() ?? applyRoom({ ...currentRoom, tables: currentRoom.tables.map((item) => item.id === next.id ? next : item) }, finish)} onCancel={finish} />}
+          {currentRoom && pane.kind === "sector" && <SpatialPropertiesForm kind="sector" entity={pane.entity} onApply={(entity) => {
+            const invalid = check(); if (invalid) return invalid;
+            const location = entity as FloorLocation;
+            return applyRoom({ ...currentRoom, locations: currentRoom.locations.some((item) => item.id === location.id) ? currentRoom.locations.map((item) => item.id === location.id ? location : item) : [...currentRoom.locations, location] }, () => { setSelection({ kind: "sector", id: location.id }); finish(); });
+          }} onCancel={finish} />}
+          {currentRoom && pane.kind === "fixture" && <SpatialPropertiesForm kind="fixture" entity={pane.entity} onApply={(entity) => {
+            const invalid = check(); if (invalid) return invalid;
+            const fixture = entity as FloorFixture;
+            return applyRoom({ ...currentRoom, fixtures: currentRoom.fixtures.some((item) => item.id === fixture.id) ? currentRoom.fixtures.map((item) => item.id === fixture.id ? fixture : item) : [...currentRoom.fixtures, fixture] }, () => { setSelection({ kind: "fixture", id: fixture.id }); finish(); });
+          }} onCancel={finish} />}
+          {currentRoom && pane.kind === "combination" && <CombinationPropertiesForm room={currentRoom} combination={pane.entity} onApply={(combination) => {
+            const invalid = check(); if (invalid) return invalid;
+            const next = { ...currentRoom, combinations: [...currentRoom.combinations.filter((item) => item.id !== combination.id), combination] };
+            const problem = roomError(next); if (problem) return problem;
+            if (combinationMode?.combination.id === combination.id) setCombinationMode((current) => current ? { ...current, combination } : null);
+            else patch(next);
+            finish(); return null;
+          }} onCancel={finish} />}
+          {config && pane.kind === "settings" && <FloorSettingsForm config={config} dirty={hasPendingRoomChanges} busy={busy} onAction={async (body, message) => { const result = await configurationAction(body, message); if (result) clearToolEdit(entry.id); return result; }} onDisableStaff={() => setConfirmation({ title: "Desactivar cuenta de sala", description: "Se cerrarán sus sesiones y el personal dejará de acceder con esta cuenta. Las asignaciones se conservarán.", confirmLabel: "Desactivar cuenta", run: async () => { if (await configurationAction({ action: "disable-staff" }, "Cuenta de sala desactivada.")) setConfirmation(null); } })} />}
+          {layout && <>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 text-[#263e23]">
+              <p className="text-xs leading-relaxed text-[#52634b]">Arrastrá sus mesas para unirlas. Este armado no cambia las ubicaciones del salón.</p>
+              <div role="group" aria-label="Mesas del armado predefinido" className="grid grid-cols-3 gap-2">{layout.combination.members.map((member) => <button key={member.tableId} {...transientButtonProps} type="button" aria-pressed={layout.selectedIds.includes(member.tableId)} disabled={busy} className={"min-h-11 truncate rounded-lg border px-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d5934] disabled:opacity-50 " + (layout.selectedIds.includes(member.tableId) ? "border-[#7e9272] bg-[#edf2e9]" : "border-stone-200 hover:bg-[#edf2e9]" )} onClick={() => setCombinationMode((current) => current ? { ...current, selectedIds: current.selectedIds.includes(member.tableId) ? current.selectedIds.filter((id) => id !== member.tableId) : [...current.selectedIds, member.tableId] } : null)}>{currentRoom?.tables.find((item) => item.id === member.tableId)?.label}</button>)}</div>
+              <button {...transientButtonProps} type="button" disabled={busy || !layout.selectedIds.length} className={adminSecondaryButtonClass + " w-full text-xs"} onClick={() => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => current.selectedIds.includes(member.tableId) ? { ...member, rotation: nextRotation(member.rotation) } : member) } } : null)}><RotateCw size={15} />Girar mesas seleccionadas</button>
+              <button {...transientButtonProps} type="button" disabled={busy} className="min-h-11 w-full rounded-lg px-2 text-left text-xs font-semibold underline underline-offset-4 hover:bg-[#edf2e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d5934]" onClick={() => openPanel({ kind: "combination", entity: copy(layout.combination) })}>Propiedades del armado</button>
+            </div>
+            <footer className="flex shrink-0 gap-2 border-t border-stone-200 bg-white px-4 py-3"><button {...transientButtonProps} type="button" disabled={busy} onClick={() => { setCombinationMode(null); setError(null); finish(); }} className={adminSecondaryButtonClass + " min-h-11 px-3 text-xs"}>Cancelar armado</button><button {...transientButtonProps} type="button" disabled={busy} onClick={applyCombination} className={adminPrimaryButtonClass + " min-h-11 flex-1 px-3 text-xs"}>Aplicar armado</button></footer>
+          </>}
+          {!currentRoom && pane.kind !== "settings" && <p role="alert" className="p-4 text-sm text-red-800">El salón de esta ventana ya no está disponible. Cerrala y volvé a abrir la herramienta.</p>}
+          </fieldset>
+        </div>
+      </FloatingModalWindow>;
+    })}
+    {tools.windows.some((entry) => !entry.visible) && <aside aria-label="Ventanas ocultas del salón" className="absolute bottom-40 right-3 z-30 flex max-w-[calc(100%_-_1.5rem)] flex-wrap justify-end gap-2 md:bottom-20 sm:right-6">{tools.windows.filter((entry) => !entry.visible).map((entry) => <button key={entry.id} {...transientButtonProps} ref={(element) => { if (element) toolsLaunchers.current.set(entry.id, element); else toolsLaunchers.current.delete(entry.id); }} type="button" aria-label={"Abrir ventana " + toolLauncherTitle(entry.value)} onClick={() => tools.open(entry.id, entry.value)} className={floatingButton + " w-auto px-3"}><Shapes size={17} /><span>{toolLauncherTitle(entry.value)}</span></button>)}</aside>}
+    {confirmation && <AdminConfirmModal open title={confirmation.title} description={confirmation.description} confirmLabel={confirmation.confirmLabel} loading={busy} onClose={() => { if (!busy) setConfirmation(null); }} onConfirm={confirmation.run}>{error && <p role="alert" className="mb-4 text-sm text-red-800">{error}</p>}</AdminConfirmModal>}
   </main>;
 }

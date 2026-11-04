@@ -58,7 +58,7 @@ function config(): FloorConfigView {
 }
 const plan = (): FloorRoom => JSON.parse(screen.getByTestId("admin-plan").textContent!);
 const tables = (): {id: string}[] => JSON.parse(screen.getByTestId("admin-tables").textContent!);
-function closeDialog() { fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", {name: "Cerrar"})); }
+function closeDialog() { fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", {name: "Cerrar ventana"})); }
 async function editor({withShell = false, landingEnabled = true}: {withShell?: boolean; landingEnabled?: boolean} = {}) {
   const content = createElement(FloorAdminScreen, {restaurantId: "restaurant"});
   render(withShell ? createElement(AdminShell, {restaurantId: "restaurant", organizationName: "Organización", brandTitle: "Bistró", brandSubtitle: "", showMenuPickerLink: true, landingEnabled} as Parameters<typeof AdminShell>[0], content) : content);
@@ -124,6 +124,238 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getAllByTestId("admin-canvas")).toHaveLength(1);
   });
 
+  it("keeps a tool's pending fields, scroll and geometry while hiding, restoring and minimizing over the main board", async () => {
+    const canvas = await editor({withShell: true});
+    tool("Medidas");
+    const window = screen.getByRole("dialog", {name: "Medidas del salón"});
+    expect(window.getAttribute("aria-modal")).toBe("false");
+    expect(document.body.style.overflow).toBe("");
+    const input = within(window).getByRole("spinbutton", {name: "Ancho del plano"}) as HTMLInputElement;
+    fireEvent.change(input, {target: {value: "1200"}});
+    const scroller = window.querySelector<HTMLElement>(".overflow-y-auto")!;
+    expect(scroller).not.toBeNull(); scroller.scrollTop = 90;
+    fireEvent.keyDown(within(window).getByRole("button", {name: "Mover ventana Medidas del salón"}), {key: "ArrowLeft"});
+    const position = {left: window.style.left, top: window.style.top, width: window.style.width, height: window.style.height};
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
+    expect(plan().width).toBe(800);
+    expect(screen.getByRole("navigation", {name: "Navegación principal"})).toBeTruthy();
+    closeDialog();
+    expect(screen.queryByRole("dialog", {name: "Medidas del salón"})).toBeNull();
+    expect(input.isConnected).toBe(true); expect(window.hidden).toBe(true);
+    const launcher = screen.getByRole("button", {name: "Abrir ventana Medidas del salón"});
+    fireEvent.click(launcher);
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(window);
+    expect(within(window).getByRole("spinbutton", {name: "Ancho del plano"})).toBe(input);
+    expect(input.value).toBe("1200"); expect(scroller.scrollTop).toBe(90);
+    fireEvent.click(within(window).getByRole("button", {name: "Minimizar ventana"}));
+    expect(within(window).queryByRole("spinbutton", {name: "Ancho del plano"})).toBeNull();
+    expect(input.isConnected).toBe(true);
+    fireEvent.click(within(window).getByRole("button", {name: "Restaurar ventana"}));
+    expect(within(window).getByRole("spinbutton", {name: "Ancho del plano"})).toBe(input);
+    expect(input.value).toBe("1200"); expect(scroller.scrollTop).toBe(90);
+    closeDialog(); tool("Medidas");
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(window);
+    expect(input.value).toBe("1200"); expect(scroller.scrollTop).toBe(90);
+    expect({left: window.style.left, top: window.style.top, width: window.style.width, height: window.style.height}).toEqual(position);
+    fireEvent.click(within(window).getByRole("button", {name: "Aplicar medidas"}));
+    expect(plan().width).toBe(1200); expect(api.save).not.toHaveBeenCalled();
+    expect(screen.getByTestId("admin-canvas")).toBe(canvas); expect(screen.getByTestId("admin-pan").textContent).toBe("1");
+  });
+
+  it("keeps inventory, dimensions and sector tools independent while applying each to the latest room draft", async () => {
+    const canvas = await editor();
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
+    tool("Medidas");
+    const dimensions = screen.getByRole("dialog", {name: "Medidas del salón"});
+    const name = within(dimensions).getByLabelText("Nombre del salón") as HTMLInputElement;
+    fireEvent.change(name, {target: {value: "Salón con ventana"}});
+    fireEvent.keyDown(within(dimensions).getByRole("button", {name: "Mover ventana Medidas del salón"}), {key: "ArrowLeft"});
+    const position = dimensions.style.left;
+    tool("Inventario");
+    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
+    const quantity = within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement;
+    fireEvent.change(quantity, {target: {value: "3"}});
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    const sector = screen.getByRole("dialog", {name: "Propiedades del sector"});
+    expect(screen.getAllByRole("dialog")).toHaveLength(3);
+    fireEvent.change(within(sector).getByLabelText("Nombre del sector"), {target: {value: "Ventana norte"}});
+    fireEvent.click(within(sector).getByRole("button", {name: "Aplicar sector"}));
+    expect(screen.queryByRole("dialog", {name: "Propiedades del sector"})).toBeNull();
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(dimensions);
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    expect(name.value).toBe("Salón con ventana"); expect(quantity.value).toBe("3");
+    fireEvent.click(within(inventory).getByRole("button", {name: "Agregar al inventario"}));
+    expect(plan().tables).toHaveLength(5);
+    fireEvent.click(within(dimensions).getByRole("button", {name: "Aplicar medidas"}));
+    expect(plan()).toMatchObject({name: "Salón con ventana", locations: [expect.objectContaining({name: "Ventana norte"})]});
+    expect(plan().tables).toHaveLength(5);
+    expect(dimensions.style.left).toBe(position);
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    fireEvent.click(within(inventory).getByRole("button", {name: "Volver al plano"}));
+    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", expect.objectContaining({expectedRevision: 4, room: expect.objectContaining({name: "Salón con ventana", tables: plan().tables})})));
+    expect(screen.getByTestId("admin-canvas")).toBe(canvas); expect(screen.getByTestId("admin-pan").textContent).toBe("1");
+  });
+
+  it("restores only the requested window without replacing another window or its minimized state", async () => {
+    await editor(); tool("Medidas");
+    const dimensions = screen.getByRole("dialog", {name: "Medidas del salón"});
+    const width = within(dimensions).getByLabelText("Ancho del plano") as HTMLInputElement;
+    fireEvent.change(width, {target: {value: "1100"}});
+    fireEvent.click(within(dimensions).getByRole("button", {name: "Minimizar ventana"}));
+    tool("Inventario");
+    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
+    const quantity = within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement;
+    fireEvent.change(quantity, {target: {value: "6"}});
+    fireEvent.click(within(inventory).getByRole("button", {name: "Cerrar ventana"}));
+    expect(within(dimensions).getByRole("button", {name: "Restaurar ventana"})).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Inventario de mesas"}));
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    expect(quantity.value).toBe("6");
+    expect(within(dimensions).getByRole("button", {name: "Restaurar ventana"})).toBeTruthy();
+    tool("Medidas");
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(dimensions);
+    expect(within(dimensions).getByLabelText("Ancho del plano")).toBe(width); expect(width.value).toBe("1100");
+    expect(screen.getAllByRole("dialog")).toHaveLength(2);
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    fireEvent.click(within(dimensions).getByRole("button", {name: "Cancelar"}));
+    expect(screen.queryByRole("dialog", {name: "Medidas del salón"})).toBeNull();
+    expect(quantity.isConnected).toBe(true); expect(quantity.value).toBe("6");
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale table properties after another inventory window changes that table", async () => {
+    const value = config(); value.rooms[0].combinations = []; api.config.mockResolvedValue(value);
+    await editor(); tool("Inventario");
+    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
+    fireEvent.click(within(inventory).getByRole("button", {name: "Editar mesa M1"}));
+    const table = screen.getByRole("dialog", {name: "Editar mesa"});
+    const label = within(table).getByLabelText("Número o nombre") as HTMLInputElement;
+    fireEvent.change(label, {target: {value: "Pendiente"}});
+    fireEvent.click(within(inventory).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
+    const group = screen.getByRole("dialog", {name: "Editar tipo de mesa"});
+    fireEvent.change(within(group).getByLabelText("Ancho"), {target: {value: "90"}});
+    fireEvent.click(within(group).getByRole("button", {name: "Aplicar tipo"}));
+    fireEvent.click(within(table).getByRole("button", {name: "Aplicar mesa"}));
+    expect(within(table).getByRole("alert").textContent).toContain("cambiaron en otra herramienta");
+    expect(plan().tables[0]).toMatchObject({id: "one", width: 90, height: 90, label: "M1"});
+    expect(label.value).toBe("Pendiente"); expect(label.isConnected).toBe(true);
+    fireEvent.click(within(table).getByRole("button", {name: "Cancelar"}));
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("opens one independent window per sector and restores the chosen entity with its pending values", async () => {
+    const value = config();
+    value.rooms[0].locations.push({...room.locations[0], id: "entrance", name: "Entrada", x: 200, width: 160});
+    api.config.mockResolvedValue(value);
+    await editor();
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    const windowSector = screen.getByRole("dialog", {name: "Propiedades del sector"});
+    const windowName = within(windowSector).getByLabelText("Nombre del sector") as HTMLInputElement;
+    fireEvent.change(windowName, {target: {value: "Ventana pendiente"}});
+    const openEntrance = () => {
+      tool("Sectores");
+      fireEvent.click(within(screen.getByRole("navigation", {name: "Sectores del salón"})).getByRole("button", {name: "Entrada"}));
+      fireEvent.click(within(screen.getByRole("menu", {name: "Acciones de Entrada"})).getByRole("menuitem", {name: "Editar"}));
+    };
+    openEntrance();
+    const entranceSector = screen.getAllByRole("dialog", {name: "Propiedades del sector"}).find((dialog) => dialog !== windowSector)!;
+    const entranceName = within(entranceSector).getByLabelText("Nombre del sector") as HTMLInputElement;
+    fireEvent.change(entranceName, {target: {value: "Entrada pendiente"}});
+    fireEvent.click(within(entranceSector).getByRole("button", {name: "Minimizar ventana"}));
+    openEntrance();
+    expect(screen.getAllByRole("dialog", {name: "Propiedades del sector"})).toHaveLength(2);
+    expect(within(entranceSector).getByLabelText("Nombre del sector")).toBe(entranceName);
+    expect(entranceName.value).toBe("Entrada pendiente");
+    fireEvent.click(within(windowSector).getByRole("button", {name: "Cerrar ventana"}));
+    fireEvent.click(within(entranceSector).getByRole("button", {name: "Cerrar ventana"}));
+    const dock = screen.getByRole("complementary", {name: "Ventanas ocultas del salón"});
+    expect(within(dock).getAllByRole("button")).toHaveLength(2);
+    fireEvent.click(within(dock).getByRole("button", {name: "Abrir ventana Propiedades del sector · Entrada"}));
+    expect(screen.getByRole("dialog", {name: "Propiedades del sector"})).toBe(entranceSector);
+    expect(windowSector.hidden).toBe(true); expect(windowName.value).toBe("Ventana pendiente");
+    fireEvent.click(within(entranceSector).getByRole("button", {name: "Aplicar sector"}));
+    expect(plan().locations.map((sector) => sector.name)).toEqual(["Ventana", "Entrada pendiente"]);
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Propiedades del sector · Ventana"}));
+    expect(screen.getByRole("dialog", {name: "Propiedades del sector"})).toBe(windowSector);
+    fireEvent.click(within(windowSector).getByRole("button", {name: "Aplicar sector"}));
+    expect(plan().locations.map((sector) => sector.name)).toEqual(["Ventana pendiente", "Entrada pendiente"]);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("keeps a removed element's old properties visible but refuses to resurrect it", async () => {
+    await editor();
+    fireEvent.click(screen.getByRole("button", {name: "Seleccionar elemento Barra"}));
+    fireEvent.click(within(screen.getByRole("complementary", {name: "Selección del plano"})).getByRole("button", {name: "Editar"}));
+    const element = screen.getByRole("dialog", {name: "Propiedades del elemento"});
+    const text = within(element).getByLabelText("Texto") as HTMLInputElement;
+    fireEvent.change(text, {target: {value: "Barra pendiente"}});
+    fireEvent.click(within(screen.getByRole("complementary", {name: "Selección del plano"})).getByRole("button", {name: "Eliminar"}));
+    fireEvent.click(within(screen.getByRole("dialog", {name: "Eliminar elemento"})).getByRole("button", {name: "Eliminar elemento"}));
+    expect(plan().fixtures).toEqual([]);
+    expect(screen.getByRole("dialog", {name: "Propiedades del elemento"})).toBe(element);
+    fireEvent.click(within(element).getByRole("button", {name: "Aplicar elemento"}));
+    expect(within(element).getByRole("alert").textContent).toContain("cambiaron en otra herramienta");
+    expect(plan().fixtures).toEqual([]); expect(text.value).toBe("Barra pendiente");
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("preserves every pending tool when navigation is canceled and clears them only after changing rooms", async () => {
+    const value = config(); value.rooms.push({...structuredClone(room), id: "terrace", name: "Terraza"}); api.config.mockResolvedValue(value);
+    await editor(); tool("Medidas");
+    const dimensions = screen.getByRole("dialog", {name: "Medidas del salón"});
+    const name = within(dimensions).getByLabelText("Nombre del salón") as HTMLInputElement;
+    fireEvent.change(name, {target: {value: "Nombre pendiente"}});
+    tool("Inventario");
+    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
+    const quantity = within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement;
+    fireEvent.change(quantity, {target: {value: "5"}});
+    const switchRoom = () => { tool("Salones"); fireEvent.click(within(screen.getByRole("navigation", {name: "Salones del restaurante"})).getByRole("button", {name: "Terraza"})); };
+    switchRoom();
+    fireEvent.click(within(screen.getByRole("dialog", {name: "Descartar cambios sin guardar"})).getByRole("button", {name: "Cancelar"}));
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(dimensions);
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    expect(name.value).toBe("Nombre pendiente"); expect(quantity.value).toBe("5");
+    expect(plan().id).toBe("main");
+    switchRoom(); fireEvent.click(screen.getByRole("button", {name: "Descartar y continuar"}));
+    expect(plan().id).toBe("terrace"); expect(name.isConnected).toBe(false); expect(quantity.isConnected).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull(); expect(screen.queryByRole("complementary", {name: "Ventanas ocultas del salón"})).toBeNull();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("discards a spatial form only with Cancelar while X retains its pending values for the launcher", async () => {
+    const canvas = await editor();
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    const input = screen.getByRole("textbox", {name: "Nombre del sector"}) as HTMLInputElement;
+    fireEvent.change(input, {target: {value: "Cambio pendiente"}});
+    closeDialog();
+    expect(plan().locations[0].name).toBe("Ventana");
+    expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Propiedades del sector · Ventana"}));
+    expect(screen.getByRole("textbox", {name: "Nombre del sector"})).toBe(input); expect(input.value).toBe("Cambio pendiente");
+    fireEvent.click(screen.getByRole("button", {name: "Cancelar"}));
+    expect(screen.queryByRole("dialog")).toBeNull(); expect(input.isConnected).toBe(false);
+    expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    expect((screen.getByRole("textbox", {name: "Nombre del sector"}) as HTMLInputElement).value).toBe("Ventana");
+    expect(screen.getByTestId("admin-canvas")).toBe(canvas); expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("keeps destructive confirmations modal while returning to the nonmodal editor on cancel", async () => {
+    await editor(); tool("Medidas");
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"}).getAttribute("aria-modal")).toBe("false");
+    fireEvent.click(screen.getByRole("button", {name: "Archivar salón"}));
+    const confirmation = screen.getByRole("dialog", {name: "Archivar salón"});
+    expect(confirmation.getAttribute("aria-modal")).toBe("true");
+    expect(screen.getAllByRole("dialog").filter((dialog) => dialog.getAttribute("aria-modal") === "true")).toEqual([confirmation]);
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBeTruthy();
+    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.click(within(confirmation).getByRole("button", {name: "Cancelar"}));
+    expect(screen.getByRole("dialog", {name: "Medidas del salón"}).getAttribute("aria-modal")).toBe("false");
+    expect(document.body.style.overflow).toBe(""); expect(api.save).not.toHaveBeenCalled();
+  });
+
   it("adds a sector directly while suppressing geometry selection and dragging until placement is applied", async () => {
     const canvas = await editor();
     expect(screen.queryByRole("navigation", {name: "Navegación del editor"})).toBeNull();
@@ -152,7 +384,7 @@ describe("fullscreen room editor workflows", () => {
     expect(within(navigation).getByRole("link", {name: "Configuración"})).toBeTruthy();
   });
 
-  it("adds stable inventory in a modal and saves custom dimensions and a newly placed sector", async () => {
+  it("adds stable inventory in a tool window and saves custom dimensions and a newly placed sector", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
     tool("Inventario");
@@ -267,7 +499,7 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.getByRole("dialog", {name: "Propiedades del sector"})).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Nombre del sector"), {target: {value: "Nombre descartado"}});
-    closeDialog();
+    fireEvent.click(screen.getByRole("button", {name: "Cancelar"}));
     expect(plan().locations[0].name).toBe("Ventana");
     fireEvent.click(screen.getByRole("button", {name: "Arrastrar elemento Barra"}));
     fireEvent.click(screen.getByRole("button", {name: "Seleccionar elemento Barra"}));
@@ -279,7 +511,7 @@ describe("fullscreen room editor workflows", () => {
     tool("Elementos"); fireEvent.click(screen.getByRole("button", {name: "Texto"}));
     fireEvent.click(screen.getByRole("button", {name: "Colocar en plano"}));
     fireEvent.change(screen.getByLabelText("Texto"), {target: {value: "Entrada descartada"}});
-    closeDialog();
+    fireEvent.click(screen.getByRole("button", {name: "Cancelar"}));
     expect(plan().fixtures).toHaveLength(1);
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);
     expect(screen.getByTestId("admin-pan").textContent).toBe("1");
@@ -411,13 +643,17 @@ describe("fullscreen room editor workflows", () => {
     expect(api.save.mock.calls[0][1]).toMatchObject({expectedRevision: 4, room: {width: 900, locations: room.locations}});
   });
 
-  it("disables cursor resizing while placing, saving, editing properties or assembling a preset", async () => {
+  it("keeps general tool windows nonmodal and locks geometry only for spatial edits, placement, saving or presets", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Seleccionar sector Ventana"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
     tool("Medidas");
-    expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
+    expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
     closeDialog();
+    expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
+    fireEvent.click(screen.getByRole("button", {name: "Cancelar"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
     fireEvent.click(screen.getByRole("button", {name: "Agregar sector"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
@@ -448,7 +684,7 @@ describe("fullscreen room editor workflows", () => {
     applyWidth(1400);
     tool("Medidas");
     fireEvent.change(screen.getByLabelText("Ancho del plano"), {target: {value: "1500"}});
-    fireEvent.keyDown(document, {key: "Escape"});
+    fireEvent.keyDown(screen.getByRole("dialog", {name: "Medidas del salón"}), {key: "Escape"});
     expect(plan().width).toBe(1400);
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     expect((await screen.findByRole("alert")).textContent).toContain("El salón cambió");
@@ -463,7 +699,13 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getByTestId("admin-pan").textContent).toBe("1");
     const unloadAfterSave = new Event("beforeunload", {cancelable: true});
     act(() => { window.dispatchEvent(unloadAfterSave); });
-    expect(unloadAfterSave.defaultPrevented).toBe(false);
+    expect(unloadAfterSave.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Medidas del salón"}));
+    expect((screen.getByLabelText("Ancho del plano") as HTMLInputElement).value).toBe("1500");
+    fireEvent.click(screen.getByRole("button", {name: "Cancelar"}));
+    const unloadAfterCancel = new Event("beforeunload", {cancelable: true});
+    act(() => { window.dispatchEvent(unloadAfterCancel); });
+    expect(unloadAfterCancel.defaultPrevented).toBe(false);
   });
 
   it("requires an explicit discard before switching rooms and keeps canceled changes", async () => {
@@ -529,7 +771,8 @@ describe("fullscreen room editor workflows", () => {
     tool("Inventario");
     fireEvent.change(screen.getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}), {target: {value: "2"}});
     fireEvent.click(screen.getByRole("button", {name: "Crear armado predefinido"}));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBeTruthy();
+    expect(screen.getByRole("complementary", {name: "Edición del armado"})).toBeTruthy();
     expect(tables().map((table) => table.id)).toEqual(["one", "two"]);
     expect(screen.getAllByTestId("admin-canvas")).toHaveLength(1);
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);

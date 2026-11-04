@@ -34,6 +34,8 @@ const allocation = (source = "WALK_IN"): FloorAllocationView => ({ ...interval, 
   poses: room.tables.map((table, index) => { const { id, active: _active, ...pose } = table; void _active; return { ...pose, tableId: id, x: 360 + index * 80, y: 300 }; }) });
 const poses = () => JSON.parse(screen.getByTestId("table-poses").textContent!) as { id: string; label: string; shape: string; x: number; y: number; rotation: number; width: number; height: number }[];
 const joinedGroups = () => JSON.parse(screen.getByTestId("joined-groups").textContent!) as { tableIds: string[]; label: string }[];
+const tableSummary = () => Object.fromEntries([...screen.getByRole("group", { name: "Mesas del salón" }).querySelectorAll("dt")]
+  .map((term) => [term.textContent, term.parentElement?.querySelector("dd")?.textContent]));
 
 function show(current = board(), readOnly = false) {
   return render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly, canManageWalkIns: true, initialBoard: current }));
@@ -52,15 +54,36 @@ function openTable(id = "draft:one") {
   fireEvent.contextMenu(screen.getByRole("button", { name: `Mesa del plano ${id}` }), { clientX: 320, clientY: 260 });
   return screen.getByRole("menu");
 }
+function openAssemblySettings() {
+  const summary = screen.getByText("Ajustes del armado", { selector: "summary" });
+  const details = summary.closest("details")!;
+  if (!details.open) fireEvent.click(summary);
+  return details;
+}
 
 describe("table actions on the operational board", () => {
   beforeEach(() => { vi.resetAllMocks(); document.body.style.overflow = ""; api.options.mockResolvedValue(options()); api.board.mockResolvedValue(board()); api.config.mockResolvedValue(config()); });
   afterEach(() => { cleanup(); document.body.style.overflow = ""; vi.restoreAllMocks(); });
 
+  it("keeps draft table arrangements out of the committed physical table counts", async () => {
+    await startDraft();
+    expect(poses().map((pose) => pose.id)).toEqual(["draft:one", "draft:two"]);
+    expect(tableSummary()).toEqual({ Libres: "2", Ocupadas: "0", Activas: "2" });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Cantidad de Cuadrada 80 × 80" }), { target: { value: "1" } });
+    await waitFor(() => expect(poses()).toHaveLength(1));
+    expect(tableSummary()).toEqual({ Libres: "2", Ocupadas: "0", Activas: "2" });
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
   it("rotates and moves only the right-clicked table without replacing the main board", async () => {
     await startDraft();
     const canvas = screen.getByTestId("table-board");
     fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
+    const joinedMenu = openTable();
+    expect(within(joinedMenu).queryByRole("menuitem", {name: "Girar"})).toBeNull();
+    expect(within(joinedMenu).queryByRole("menuitem", {name: "Mover"})).toBeNull();
+    fireEvent.click(within(joinedMenu).getByRole("menuitem", {name: "Separar mesa"}));
+    expect(joinedGroups()).toEqual([]);
     const originalSecond = poses().find((pose) => pose.id === "draft:two");
     fireEvent.click(within(openTable()).getByRole("menuitem", { name: "Girar" }));
     expect(poses().find((pose) => pose.id === "draft:one")?.rotation).toBe(90);
@@ -90,6 +113,25 @@ describe("table actions on the operational board", () => {
     expect(document.activeElement).toBe(trigger);
     expect(document.body.style.overflow).not.toBe("hidden");
     expect(screen.getAllByTestId("table-board")).toHaveLength(1);
+  });
+
+  it("moves and rotates the entire joined group from one table's menu on the main board", async () => {
+    await startDraft();
+    const canvas = screen.getByTestId("table-board");
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano de prueba"}));
+    const original = poses();
+    const center = {x: original.reduce((sum, pose) => sum + pose.x, 0) / original.length, y: original.reduce((sum, pose) => sum + pose.y, 0) / original.length};
+    const menu = openTable("draft:two");
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Mover grupo", "Girar grupo 90°", "Separar mesa"]);
+    fireEvent.click(within(menu).getByRole("menuitem", {name: "Mover grupo"}));
+    fireEvent.click(screen.getByRole("button", {name: "Colocar en el tablero"}));
+    for (const pose of original) expect(poses().find((candidate) => candidate.id === pose.id)).toMatchObject({x: pose.x + 440 - center.x, y: pose.y + 380 - center.y});
+    const moved = poses();
+    fireEvent.click(within(openTable()).getByRole("menuitem", {name: "Girar grupo 90°"}));
+    for (const pose of moved) expect(poses().find((candidate) => candidate.id === pose.id)).toMatchObject({x: 440 - (pose.y - 380), y: 380 + (pose.x - 440), rotation: 90});
+    expect(joinedGroups()).toEqual([expect.objectContaining({tableIds: ["draft:one", "draft:two"]})]);
+    expect(screen.queryByRole("dialog")).toBeNull(); expect(screen.getByTestId("table-board")).toBe(canvas);
+    expect(screen.getByTestId("table-pan").textContent).toBe("1"); expect(api.save).not.toHaveBeenCalled();
   });
 
   it("saves inventory properties with the room revision while retaining the other physical table and its position", async () => {
@@ -164,14 +206,14 @@ describe("table actions on the operational board", () => {
     show(current);
     const canvas = screen.getByTestId("table-board");
     fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
-    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar" }));
+    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar grupo 90°" }));
     await waitFor(() => expect(api.reassignOptions).toHaveBeenCalled());
     await waitFor(() => expect(poses().find((pose) => pose.id === "draft:one")?.rotation).toBe(90));
     expect(screen.queryByRole("dialog")).toBeNull();
     const save = screen.getByRole("button", { name: "Guardar armado" }) as HTMLButtonElement;
     await waitFor(() => expect(save.disabled).toBe(false));
     fireEvent.click(save);
-    await waitFor(() => expect(api.reassign).toHaveBeenCalledWith("restaurant", "reservation", expect.objectContaining({ expectedRevision: 7, expectedAllocationVersion: 2, assignment: expect.objectContaining({ expectedRoomRevision: 4, customTables: [expect.objectContaining({ tableId: "one", rotation: 90 }), expect.objectContaining({ tableId: "two", rotation: 0 })] }) })));
+    await waitFor(() => expect(api.reassign).toHaveBeenCalledWith("restaurant", "reservation", expect.objectContaining({ expectedRevision: 7, expectedAllocationVersion: 2, assignment: expect.objectContaining({ expectedRoomRevision: 4, customTables: [expect.objectContaining({ tableId: "one", rotation: 90 }), expect.objectContaining({ tableId: "two", rotation: 90 })] }) })));
     expect(api.save).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("table-board")).toHaveLength(1);
     expect(screen.getByTestId("table-board")).toBe(canvas);
@@ -183,7 +225,7 @@ describe("table actions on the operational board", () => {
     const existingOptions = options(); existingOptions.currentAllocation = stored; api.reassignOptions.mockResolvedValue(existingOptions);
     api.reassign.mockRejectedValue(new Error("El armado cambió en otra pantalla."));
     show(current);
-    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar" }));
+    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar grupo 90°" }));
     const save = await screen.findByRole("button", { name: "Guardar armado" }) as HTMLButtonElement;
     await waitFor(() => expect(save.disabled).toBe(false));
     const staged = poses(); fireEvent.click(save);
@@ -217,7 +259,7 @@ describe("table actions on the operational board", () => {
     const existingOptions = options(); existingOptions.currentAllocation = stored;
     api.reassignOptions.mockResolvedValue(existingOptions); api.reassign.mockResolvedValue(current);
     show(current, true);
-    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar" }));
+    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Girar grupo 90°" }));
     const save = await screen.findByRole("button", { name: "Guardar armado" }) as HTMLButtonElement;
     await waitFor(() => expect(save.disabled).toBe(false));
     expect(poses()[0]).toMatchObject({ id: "draft:one", rotation: 90 });
@@ -235,7 +277,7 @@ describe("table actions on the operational board", () => {
     show(current);
     const canvas = screen.getByTestId("table-board");
     fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
-    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Mover" }));
+    fireEvent.click(within(openTable("one")).getByRole("menuitem", { name: "Separar mesa" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Modo de consulta inválido."));
     const controls = screen.getByRole("complementary", { name: "Armar mesas en sala" });
     expect(within(controls).getByText("Salón principal")).toBeTruthy();
@@ -243,6 +285,7 @@ describe("table actions on the operational board", () => {
     expect(screen.queryByText("Los lugares útiles superan la capacidad de las mesas elegidas.")).toBeNull();
     expect(poses().map((pose) => pose.id)).toEqual(["draft:one", "draft:two"]);
     const second = poses()[1];
+    fireEvent.click(within(openTable()).getByRole("menuitem", { name: "Mover" }));
     fireEvent.click(screen.getByRole("button", { name: "Colocar en el tablero" }));
     expect(poses()[0]).toMatchObject({ id: "draft:one", x: 440, y: 380 });
     fireEvent.click(within(openTable()).getByRole("menuitem", { name: "Girar" }));
@@ -269,6 +312,7 @@ describe("table actions on the operational board", () => {
     expect(joinedGroups()).toEqual([expect.objectContaining({ tableIds: ["draft:one", "draft:two"] })]);
     fireEvent.click(screen.getByRole("button", { name: "Separar seleccionadas" }));
     expect(joinedGroups()).toEqual([]);
+    openAssemblySettings();
     expect((screen.getByLabelText("Lugares útiles") as HTMLInputElement).value).toBe("8");
     expect(screen.queryByRole("dialog")).toBeNull();
     if (rejoin) {
@@ -324,5 +368,170 @@ describe("table actions on the operational board", () => {
     expect(poses()).toHaveLength(2);
     expect(poses()[1].x - poses()[0].x).toBe(80);
     expect(joinedGroups()).toEqual([]);
+  });
+
+  it("closes the floating window without discarding its tables or blocking the main board", async () => {
+    await startDraft(true);
+    const canvas = screen.getByTestId("table-board");
+    const floating = screen.getByRole("complementary", { name: "Armar mesas en sala" });
+    fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
+    const staged = poses();
+    fireEvent.click(within(floating).getByRole("button", { name: "Cerrar ventana" }));
+    expect(screen.queryByRole("complementary", { name: "Armar mesas en sala" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir ventana Armar mesas" })).toBeTruthy();
+    expect(floating.isConnected).toBe(true);
+    expect(poses()).toEqual(staged);
+    expect(screen.getByTestId("table-board")).toBe(canvas);
+    expect(screen.getByTestId("table-pan").textContent).toBe("1");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).not.toBe("hidden");
+    expect(api.save).not.toHaveBeenCalled();
+    expect(api.reassign).not.toHaveBeenCalled();
+    expect(api.tables).not.toHaveBeenCalled();
+  });
+
+  it("restores the same window with selection, expanded settings, values and scroll intact", async () => {
+    await startDraft(true);
+    const floating = screen.getByRole("complementary", { name: "Armar mesas en sala" });
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar mesa M2" }));
+    const details = openAssemblySettings();
+    const capacity = within(floating).getByLabelText("Lugares útiles") as HTMLInputElement;
+    fireEvent.change(capacity, { target: { value: "5" } });
+    const scroller = details.closest<HTMLElement>(".overflow-y-auto")!;
+    scroller.scrollTop = 140;
+    const staged = poses();
+    fireEvent.click(within(floating).getByRole("button", { name: "Cerrar ventana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir ventana Armar mesas" }));
+    expect(screen.getByRole("complementary", { name: "Armar mesas en sala" })).toBe(floating);
+    expect(details.open).toBe(true);
+    expect(within(floating).getByLabelText("Lugares útiles")).toBe(capacity);
+    expect(capacity.value).toBe("5");
+    expect(scroller.scrollTop).toBe(140);
+    expect(within(floating).getByRole("button", { name: "Seleccionar mesa M1" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(floating).getByRole("button", { name: "Seleccionar mesa M2" }).getAttribute("aria-pressed")).toBe("false");
+    expect(poses()).toEqual(staged);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("minimizes the window while its table selection remains movable on the main board", async () => {
+    await startDraft(true);
+    const floating = screen.getByRole("complementary", { name: "Armar mesas en sala" });
+    const original = poses();
+    fireEvent.click(within(floating).getByRole("button", { name: "Minimizar ventana" }));
+    expect(screen.getByRole("complementary", { name: "Armar mesas en sala" })).toBe(floating);
+    expect(within(floating).queryByRole("spinbutton", { name: "Cantidad de Cuadrada 80 × 80" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Arrastrar seleccionadas" }));
+    for (const pose of original) expect(poses().find((item) => item.id === pose.id)).toMatchObject({ x: pose.x + 20, y: pose.y + 10 });
+    fireEvent.click(within(floating).getByRole("button", { name: "Restaurar ventana" }));
+    expect((within(floating).getByRole("spinbutton", { name: "Cantidad de Cuadrada 80 × 80" }) as HTMLInputElement).value).toBe("2");
+    expect(screen.getAllByTestId("table-board")).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).not.toBe("hidden");
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("keeps unapplied table properties and scroll when its tool window is hidden or minimized", async () => {
+    await startDraft(true);
+    const canvas = screen.getByTestId("table-board");
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano de prueba"}));
+    const staged = poses();
+    fireEvent.click(within(openTable()).getByRole("menuitem", {name: "Editar"}));
+    const dialog = screen.getByRole("dialog", {name: "Editar mesa M1"});
+    const name = within(dialog).getByLabelText("Número o nombre") as HTMLInputElement;
+    fireEvent.change(name, {target: {value: "Ventana reservada"}});
+    const scroller = name.closest<HTMLElement>(".overflow-y-auto")!;
+    scroller.scrollTop = 130;
+    fireEvent.click(within(dialog).getByRole("button", {name: "Minimizar ventana"}));
+    expect(within(dialog).queryByRole("textbox", {name: "Número o nombre"})).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", {name: "Restaurar ventana"}));
+    expect(name.value).toBe("Ventana reservada"); expect(scroller.scrollTop).toBe(130);
+    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar ventana"}));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("complementary", {name: "Armar mesas en sala"})).toBeTruthy();
+    expect(dialog.isConnected).toBe(true);
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Editar mesa M1"}));
+    expect(screen.getByRole("dialog", {name: "Editar mesa M1"})).toBe(dialog);
+    expect(within(dialog).getByLabelText("Número o nombre")).toBe(name); expect(name.value).toBe("Ventana reservada");
+    expect(scroller.scrollTop).toBe(130); expect(poses()).toEqual(staged);
+    expect(screen.getByTestId("table-board")).toBe(canvas); expect(screen.getByTestId("table-pan").textContent).toBe("1");
+    expect(dialog.getAttribute("aria-modal")).toBe("false"); expect(document.body.style.overflow).not.toBe("hidden");
+    expect(api.tables).not.toHaveBeenCalled(); expect(api.reassign).not.toHaveBeenCalled(); expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("keeps two physical table editors independent while the assembly and another tool remain open", async () => {
+    await startDraft(true);
+    const canvas = screen.getByTestId("table-board");
+    const assemblyWindow = screen.getByRole("complementary", { name: "Armar mesas en sala" });
+    fireEvent.click(within(openTable("draft:one")).getByRole("menuitem", { name: "Editar" }));
+    const first = screen.getByRole("dialog", { name: "Editar mesa M1" });
+    const firstName = within(first).getByLabelText("Número o nombre") as HTMLInputElement;
+    fireEvent.change(firstName, { target: { value: "Ventana 1" } });
+    fireEvent.click(within(openTable("draft:one")).getByRole("menuitem", { name: "Editar" }));
+    expect(screen.getByRole("dialog", { name: "Editar mesa M1" })).toBe(first);
+    expect(firstName.value).toBe("Ventana 1");
+    fireEvent.click(within(openTable("draft:two")).getByRole("menuitem", { name: "Editar" }));
+    const second = screen.getByRole("dialog", { name: "Editar mesa M2" });
+    const secondName = within(second).getByLabelText("Número o nombre") as HTMLInputElement;
+    fireEvent.change(secondName, { target: { value: "Ventana 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fecha y hora" }));
+    const scheduleWindow = screen.getByRole("dialog", { name: "Fecha y hora" });
+    expect(firstName.value).toBe("Ventana 1");
+    expect(secondName.value).toBe("Ventana 2");
+    expect(screen.getByRole("complementary", { name: "Armar mesas en sala" })).toBe(assemblyWindow);
+    expect(screen.getAllByRole("dialog")).toHaveLength(3);
+
+    fireEvent.click(within(first).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog", { name: "Editar mesa M1" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Editar mesa M2" })).toBe(second);
+    expect(secondName.value).toBe("Ventana 2");
+    fireEvent.click(within(second).getByRole("button", { name: "Cerrar ventana" }));
+    expect(screen.queryByRole("dialog", { name: "Editar mesa M2" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Fecha y hora" })).toBe(scheduleWindow);
+    expect(screen.getByRole("complementary", { name: "Armar mesas en sala" })).toBe(assemblyWindow);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir ventana Editar mesa M2" }));
+    expect(screen.getByRole("dialog", { name: "Editar mesa M2" })).toBe(second);
+    expect(within(second).getByLabelText("Número o nombre")).toBe(secondName);
+    expect(secondName.value).toBe("Ventana 2");
+    expect(screen.getByTestId("table-board")).toBe(canvas);
+    expect(api.tables).not.toHaveBeenCalled(); expect(api.reassign).not.toHaveBeenCalled(); expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("restores staged inventory through its launcher or toolbar without resetting dirty protection or scroll", async () => {
+    show(board(), true);
+    expect(tableSummary()).toEqual({ Libres: "2", Ocupadas: "0", Activas: "2" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const canvas = screen.getByTestId("table-board");
+    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano de prueba"}));
+    fireEvent.click(screen.getByRole("button", {name: "Inventario de mesas"}));
+    const dialog = screen.getByRole("dialog", {name: "Inventario de mesas"});
+    fireEvent.change(within(dialog).getByLabelText("Cantidad a agregar"), {target: {value: "3"}});
+    fireEvent.click(within(dialog).getByRole("button", {name: "Agregar al inventario"}));
+    const list = within(dialog).getByRole("heading", {name: "Inventario de mesas · 5"});
+    expect(tableSummary()).toEqual({ Libres: "2", Ocupadas: "0", Activas: "2" });
+    fireEvent.click(screen.getByRole("button", {name: "Fecha y hora"}));
+    const scheduleWindow = screen.getByRole("dialog", {name: "Fecha y hora"});
+    fireEvent.change(within(scheduleWindow).getByLabelText("Hora"), {target: {value: "21:45"}});
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(dialog);
+    expect(confirm).not.toHaveBeenCalled();
+    const scroller = list.closest<HTMLElement>(".overflow-y-auto")!;
+    scroller.scrollTop = 175;
+    fireEvent.click(within(dialog).getByRole("button", {name: "Minimizar ventana"}));
+    fireEvent.click(within(dialog).getByRole("button", {name: "Restaurar ventana"}));
+    expect(scroller.scrollTop).toBe(175); expect(within(dialog).getByRole("heading", {name: "Inventario de mesas · 5"})).toBe(list);
+    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar ventana"}));
+    expect(screen.queryByRole("dialog", {name: "Inventario de mesas"})).toBeNull(); expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBe(scheduleWindow);
+    expect((within(scheduleWindow).getByLabelText("Hora") as HTMLInputElement).value).toBe("21:45");
+    fireEvent.click(screen.getByRole("button", {name: "Inventario de mesas"}));
+    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(dialog);
+    expect(within(dialog).getByRole("heading", {name: "Inventario de mesas · 5"})).toBe(list); expect(scroller.scrollTop).toBe(175);
+    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar"}));
+    expect(confirm).toHaveBeenCalledOnce(); expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(dialog);
+    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar ventana"}));
+    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Inventario de mesas"}));
+    expect(within(dialog).getByRole("heading", {name: "Inventario de mesas · 5"})).toBe(list);
+    expect((within(dialog).getByRole("button", {name: "Guardar inventario"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("table-board")).toBe(canvas); expect(screen.getByTestId("table-pan").textContent).toBe("1");
+    expect(document.body.style.overflow).not.toBe("hidden"); expect(api.tables).not.toHaveBeenCalled();
   });
 });

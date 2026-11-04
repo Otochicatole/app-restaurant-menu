@@ -57,10 +57,19 @@ describe("floor board server snapshot hydration", () => {
     expect(api.board).not.toHaveBeenCalled();
 
     fireEvent.click(dom.getByRole("button", { name: "Fecha y hora" }));
+    const schedule = dom.getByRole("dialog", {name: "Fecha y hora"});
+    expect(schedule.getAttribute("aria-modal")).toBe("false");
+    expect(document.body.style.overflow).not.toBe("hidden");
+    fireEvent.click(dom.getByRole("button", {name: "Reservas"}));
+    const reservations = dom.getByRole("dialog", {name: "Reservas de Ventana"});
+    expect(dom.getByRole("dialog", {name: "Fecha y hora"})).toBe(schedule);
     fireEvent.change(dom.getByLabelText("Hora"), { target: { value: "21:30" } });
     fireEvent.click(dom.getByRole("button", { name: "Ver este horario" }));
     await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 10)); });
     expect(api.board).toHaveBeenCalledWith("restaurant", "2026-11-03T00:30:00Z", expect.any(AbortSignal));
+    expect(dom.queryByRole("dialog", {name: "Fecha y hora"})).toBeNull();
+    expect(dom.getByRole("dialog", {name: "Reservas de Ventana"})).toBe(reservations);
+    expect(errors).not.toHaveBeenCalled();
   });
 
   it("does not derive its first update timestamp from the server or browser's local time zone", async () => {

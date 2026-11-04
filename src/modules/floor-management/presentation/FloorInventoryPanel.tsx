@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
-import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
+import { floorPrimaryButtonClass as adminPrimaryButtonClass, floorSecondaryButtonClass as adminSecondaryButtonClass } from "./floor-ui";
 import { transientButtonProps } from "@/ui/button-state";
 import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorRoom } from "../contracts";
 import { CombinationPropertiesForm, InventoryForm, InventoryGroupForm, TablePropertiesForm } from "./FloorAdminForms";
@@ -51,9 +51,11 @@ export function FloorInventoryPanel({ restaurantId, room, onSaved, onClose, onDi
   };
   const group = view.kind === "group" ? groupInventoryTables(draft.tables).find((item) => item.key === view.key) : null;
   const table = view.kind === "table" ? draft.tables.find((item) => item.id === view.id) : null;
-  return <fieldset disabled={busy} className="min-w-0 space-y-5">
-    <p className="text-sm text-[#52634b]">{draft.name} · Administrá las mesas y sus armados predefinidos.</p>
-    {view.kind !== "inventory" && <button {...transientButtonProps} type="button" onClick={back} className={adminSecondaryButtonClass}><ArrowLeft size={15} />Volver al inventario</button>}
+  return <fieldset disabled={busy} className="flex min-h-0 min-w-0 flex-1 flex-col">
+    {view.kind !== "inventory" && <header className="shrink-0 border-b border-stone-200 px-4 py-2">
+      <button {...transientButtonProps} type="button" onClick={back} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}><ArrowLeft size={14} />Volver al inventario</button>
+    </header>}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {view.kind === "inventory" && <InventoryForm room={draft} onAdd={(stock) => {
       if (!Number.isInteger(stock.quantity) || stock.quantity < 1 || stock.quantity + draft.tables.length > 200) return "Ingresá una cantidad entera válida. El salón admite hasta 200 mesas.";
       return apply({ ...draft, tables: [...draft.tables, ...inventoryTables(stock.quantity, stock, draft.tables)] });
@@ -62,10 +64,13 @@ export function FloorInventoryPanel({ restaurantId, room, onSaved, onClose, onDi
     {view.kind === "group" && group && <InventoryGroupForm key={group.key} group={group} onCancel={back} onApply={(fields) => { const tables = resizeInventoryGroup(draft, group.key, fields); return typeof tables === "string" ? tables : apply({ ...draft, tables }, true); }} />}
     {table && <TablePropertiesForm key={table.id} table={table} onCancel={back} onApply={(value) => apply({ ...draft, tables: draft.tables.map((item) => item.id === value.id ? value : item) }, true)} />}
     {view.kind === "combination" && <CombinationPropertiesForm key={view.value.id} combination={view.value} room={draft} onCancel={back} onApply={(value) => apply({ ...draft, combinations: draft.combinations.some((item) => item.id === value.id) ? draft.combinations.map((item) => item.id === value.id ? value : item) : [...draft.combinations, value] }, true)} />}
-    {error && <p role="alert" className="text-sm leading-relaxed text-red-800">{error}</p>}
-    <footer className="flex flex-wrap justify-end gap-3 border-t border-stone-200 pt-5">
-      <button {...transientButtonProps} type="button" onClick={onClose} className={adminSecondaryButtonClass}>Cerrar</button>
-      <button {...transientButtonProps} type="button" disabled={busy || !dirty || view.kind !== "inventory"} onClick={() => { void save(); }} className={adminPrimaryButtonClass}>{busy ? <><Loader2 size={15} className="animate-spin" />Guardando…</> : <><Save size={15} />Guardar inventario</>}</button>
-    </footer>
+    </div>
+    {view.kind === "inventory" && <footer className="shrink-0 space-y-2 border-t border-stone-200 bg-white px-4 py-3">
+      {error && <p role="alert" className="text-xs leading-relaxed text-red-800">{error}</p>}
+      <div className="flex flex-wrap justify-end gap-2">
+        <button {...transientButtonProps} type="button" onClick={onClose} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}>Cerrar</button>
+        <button {...transientButtonProps} type="button" disabled={busy || !dirty || view.kind !== "inventory"} onClick={() => { void save(); }} className={`${adminPrimaryButtonClass} min-h-11 px-3 text-xs`}>{busy ? <><Loader2 size={14} className="animate-spin" />Guardando…</> : <><Save size={14} />Guardar inventario</>}</button>
+      </div>
+    </footer>}
   </fieldset>;
 }

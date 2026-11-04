@@ -15,7 +15,7 @@ describe("joined table menu actions", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      const height = this.querySelectorAll('[role="menuitem"]').length > 3 ? 238 : 100;
+      const height = 44 + this.querySelectorAll('[role="menuitem"]').length * 44;
       return { width: 248, height, x: 0, y: 0, top: 0, left: 0, right: 248, bottom: height, toJSON: () => ({}) };
     });
   });
@@ -25,17 +25,19 @@ describe("joined table menu actions", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: viewport.height });
   });
 
-  it("adds group actions to keyboard navigation and reclamps when a joined group becomes available", () => {
+  it("uses one vertical action list and replaces individual actions when tables are joined", () => {
     const view = render(createElement(FloorTableContextMenu, props()));
     const menu = screen.getByRole("menu");
     expect(screen.queryByRole("group", { name: "Acciones del grupo" })).toBeNull();
-    expect(menu.style.top).toBe("660px");
+    expect(menu.style.top).toBe("584px");
     fireEvent.keyDown(menu, { key: "End" });
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mover" }));
     view.rerender(createElement(FloorTableContextMenu, { ...props(), ...groupActions }));
-    expect(menu.style.top).toBe("522px");
+    expect(menu.style.top).toBe("540px");
     expect(menu.style.left).toBe("768px");
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Girar", "Mover", "Mover grupo", "Girar grupo 90°", "Separar mesa"]);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Girar grupo 90°", "Mover grupo", "Separar mesa"]);
+    expect(screen.queryByRole("menuitem", { name: "Girar" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Mover" })).toBeNull();
     fireEvent.keyDown(menu, { key: "End" });
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Separar mesa" }));
     fireEvent.keyDown(menu, { key: "ArrowRight" });
