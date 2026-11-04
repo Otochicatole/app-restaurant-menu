@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FloorLease, FloorPose, FloorRoom } from "../contracts";
-import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, leaseOverlaps, transformPoses, validateAssembly, validateFloorPlacement, validateRoomLayout } from "./floor-policy";
+import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, getJoinedTableGroups, leaseOverlaps, transformPoses, validateAssembly, validateFloorPlacement, validateRoomLayout, validateTableArrangement } from "./floor-policy";
 
 function room(overrides: Partial<FloorRoom> = {}): FloorRoom {
   return { id: "room", restaurantId: "restaurant", name: "Main", width: 800, height: 600, fixtures: [], locations: [{ id: "window", name: "Ventana", x: 400, y: 300, width: 800, height: 600, rotation: 0, active: true }], active: true,
@@ -73,6 +73,53 @@ describe("physical floor layouts", () => {
     expect(transformed[0].x).toBeCloseTo(200); expect(transformed[0].y).toBeCloseTo(260);
     expect(transformed[1].x).toBeCloseTo(200); expect(transformed[1].y).toBeCloseTo(340);
     expect(transformed.map((item) => item.rotation)).toEqual([90, 180]);
+  });
+});
+
+describe("independent tables and visual groups", () => {
+  it("allows separated tables in a reservation while keeping predefined combinations connected", () => {
+    const separate = [pose("a"), pose("b", { x: 300 })];
+    expect(validateTableArrangement(separate)).toBeNull();
+    expect(validateAssembly(separate)).toContain("unidas");
+    const predefined = room(); predefined.combinations[0].members[1].x = 100;
+    expect(validateRoomLayout(predefined)).toContain("unidas");
+  });
+
+  it("checks every pair for overlaps even when neither belongs to the first table's group", () => {
+    const detachedOverlap = [pose("a"), pose("b", { x: 300 }), pose("c", { x: 320 })];
+    expect(validateTableArrangement(detachedOverlap)).toContain("superponen");
+    expect(validateAssembly(detachedOverlap)).toContain("superponen");
+  });
+
+  it("rejects empty, repeated and invalid footprints", () => {
+    expect(validateTableArrangement([])).not.toBeNull();
+    expect(validateTableArrangement([pose(), pose()])).not.toBeNull();
+    expect(validateTableArrangement([pose("", { label: "Sin ID" })])).not.toBeNull();
+    expect(validateTableArrangement([pose("a", { x: NaN })])).toContain("no son válidas");
+    expect(validateTableArrangement([pose("a", { width: Infinity })])).toContain("no son válidas");
+    expect(validateTableArrangement([pose("a", { height: 0 })])).toContain("no son válidas");
+  });
+
+  it("derives connected components transitively, preserving input order and separate singletons", () => {
+    const pieces = [pose("a"), pose("c", { x: 260 }), pose("b", { x: 180 }), pose("d", { x: 500 })];
+    expect(getJoinedTableGroups(pieces).map((group) => group.map((item) => item.tableId))).toEqual([["a", "c", "b"], ["d"]]);
+    expect(getJoinedTableGroups([])).toEqual([]);
+    expect(getJoinedTableGroups([pieces[3]])).toEqual([[pieces[3]]]);
+    expect(pieces.map((item) => item.tableId)).toEqual(["a", "c", "b", "d"]);
+  });
+
+  it("uses rotated dimensions and circle tangency rather than overlapping bounding boxes", () => {
+    const mixed = [pose("a"), pose("b", { x: 180, shape: "RECTANGLE", width: 160, height: 80, rotation: 90 }), pose("c", { x: 260, shape: "CIRCLE" })];
+    expect(validateTableArrangement(mixed)).toBeNull(); expect(getJoinedTableGroups(mixed)).toHaveLength(1);
+    const circles = [pose("a", { shape: "CIRCLE", width: 100, height: 100 }), pose("b", { shape: "CIRCLE", width: 100, height: 100, x: 175, y: 175 })];
+    expect(validateTableArrangement(circles)).toBeNull(); expect(getJoinedTableGroups(circles)).toHaveLength(2);
+    circles[1].x = circles[1].y = 100 + Math.sqrt(5000);
+    expect(validateTableArrangement(circles)).toBeNull(); expect(getJoinedTableGroups(circles)).toHaveLength(1);
+  });
+
+  it("does not join overlapping pieces or bridge a visible gap", () => {
+    expect(getJoinedTableGroups([pose("a"), pose("b", { x: 120 })])).toHaveLength(2);
+    expect(getJoinedTableGroups([pose("a"), pose("b", { x: 180.1 })])).toHaveLength(2);
   });
 });
 

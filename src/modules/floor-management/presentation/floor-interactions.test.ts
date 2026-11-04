@@ -306,8 +306,8 @@ describe("floor assignment interactions", () => {
     selectQuantity(1);
     expect(poses()).toEqual(expect.arrayContaining([positioned[0], large]));
     expect(poses()).toHaveLength(2);
-    expect(screen.getByRole("alert").textContent).toContain("deben estar unidas");
-    expect((screen.getByRole("button", {name: "Armar y ocupar mesas"}) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", {name: "Armar y ocupar mesas"}) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByText("Ajustar cada mesa"));
     const adjacentX = positioned[0].x + 40 + 50;
     fireEvent.change(screen.getByLabelText("Mesa Grande X"), {target: {value: String(adjacentX)}});

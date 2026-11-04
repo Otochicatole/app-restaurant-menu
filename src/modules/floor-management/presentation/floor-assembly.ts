@@ -1,4 +1,5 @@
 import type { FloorAssignmentInput, FloorAssignmentOption, FloorLocation, FloorPose, FloorRoom, FloorRotation } from "../contracts";
+import { defaultLayoutCapacity } from "./floor-table-layout";
 
 export type FloorAssemblyPoint = { x: number; y: number };
 export type FloorAssemblyTableUpdate = Partial<FloorAssemblyPoint> & { rotation?: FloorRotation };
@@ -38,7 +39,7 @@ export function changeAssemblyTables(room: FloorRoom, location: FloorLocation, i
     poses.push({ tableId: table.id, label: table.label, capacity: table.capacity, shape: table.shape, width: table.width, height: table.height,
       x: right(last) + width / 2, y: last.y, rotation: last.rotation });
   }
-  const capacity = Math.max(1, poses.reduce((sum, pose) => sum + pose.capacity, 0) - Math.max(0, poses.length - 1) * 2);
+  const capacity = defaultLayoutCapacity(poses);
   return { ...customAssembly(value, poses, capacity), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length };
 }
 

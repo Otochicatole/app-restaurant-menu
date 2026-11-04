@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildFloorOptions, validateAssembly, type FloorAssignmentInput, type FloorOptionsView, type FloorRoom } from "../contracts";
+import { buildFloorOptions, getJoinedTableGroups, validateAssembly, validateTableArrangement, type FloorAssignmentInput, type FloorOptionsView, type FloorRoom } from "../contracts";
 import { useFloorAssembly } from "./useFloorAssembly";
 
 const api = vi.hoisted(() => ({ options: vi.fn() }));
@@ -161,5 +161,78 @@ describe("main-floor table assembly", () => {
     expect(first.x).toBeCloseTo(610.3);
     expect(second.x).toBeCloseTo(610.3);
     expect(second.y - first.y).toBeCloseTo(80.5);
+  });
+
+  it("joins and separates the same physical tables while deriving useful capacity from their visual groups", async () => {
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    expect(result.current.controller.capacity).toBe(6);
+    let problem: string | null = null;
+    act(() => { problem = result.current.controller.separateTables(["one", "two"]); });
+    expect(problem).toBeNull(); expect(result.current.controller.capacity).toBe(8);
+    expect(getJoinedTableGroups(result.current.controller.selected)).toHaveLength(2);
+    const other = structuredClone(result.current.controller.selected[1]);
+    act(() => result.current.controller.moveTables(["one"], 0, 100));
+    expect(result.current.controller.selected[1]).toEqual(other);
+    act(() => result.current.controller.rotateTables(["one"]));
+    expect(result.current.controller.selected[0].rotation).toBe(90);
+    expect(result.current.controller.selected[1]).toEqual(other);
+    act(() => { problem = result.current.controller.joinTables(["one", "two"]); });
+    expect(problem).toBeNull(); expect(validateAssembly(result.current.controller.selected)).toBeNull();
+    expect(result.current.controller.capacity).toBe(6);
+    expect(result.current.value).toMatchObject({ expectedRoomRevision: 3, retainExisting: false, optionId: "custom", customTables: [{ tableId: "one", rotation: 90 }, { tableId: "two", rotation: 0 }] });
+  });
+
+  it("retains an explicitly adjusted useful capacity when joining, separating and moving tables", async () => {
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    act(() => result.current.controller.setCapacity(5));
+    act(() => { result.current.controller.separateTables(["one", "two"]); });
+    expect(result.current.controller.capacity).toBe(5);
+    expect(validateTableArrangement(result.current.controller.selected)).toBeNull();
+    act(() => { result.current.controller.joinTables(["one", "two"]); });
+    act(() => result.current.controller.moveTables(["one", "two"], 10.5, 20.25));
+    act(() => result.current.controller.rotateTables(["one", "two"]));
+    expect(result.current.controller.capacity).toBe(5); expect(validateAssembly(result.current.controller.selected)).toBeNull();
+  });
+
+  it("derives capacity from the remaining visual groups when inventory quantities change after separation", async () => {
+    const stock = { ...room, tables: [...room.tables, { ...room.tables[0], id: "extra", label: "3" }] };
+    api.options.mockResolvedValue(available([stock]));
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    act(() => { result.current.controller.separateTables(["one", "two"]); });
+    const separated = structuredClone(result.current.controller.selected);
+    expect(result.current.controller.capacity).toBe(8);
+    act(() => result.current.controller.setTableIds(["one", "two", "extra"]));
+    expect(result.current.controller.selected.slice(0, 2)).toEqual(separated);
+    expect(getJoinedTableGroups(result.current.controller.selected).map((group) => group.map((pose) => pose.tableId))).toEqual([["one"], ["two", "extra"]]);
+    expect(result.current.controller.capacity).toBe(10);
+    const survivors = structuredClone(result.current.controller.selected.filter((pose) => pose.tableId !== "two"));
+    act(() => result.current.controller.setTableIds(["one", "extra"]));
+    expect(result.current.controller.selected).toEqual(survivors);
+    expect(getJoinedTableGroups(result.current.controller.selected)).toHaveLength(2);
+    expect(result.current.controller.capacity).toBe(8);
+  });
+
+  it("returns layout errors without changing the draft when the sector has no separation space", async () => {
+    const tight = { ...room, locations: [{ ...room.locations[0], width: 160, height: 80 }] };
+    api.options.mockResolvedValue(available([tight]));
+    const { result } = renderHook(useHarness);
+    await waitFor(() => expect(result.current.controller.room).toBeDefined());
+    act(() => result.current.controller.selectLocation("window"));
+    act(() => result.current.controller.setTableIds(["one", "two"]));
+    const before = result.current.value;
+    let problem: string | null = null;
+    act(() => { problem = result.current.controller.separateTables(["one", "two"]); });
+    expect(problem).toMatch(/No hay espacio/); expect(result.current.value).toBe(before);
+    act(() => { problem = result.current.controller.joinTables(["one"]); });
+    expect(problem).toMatch(/al menos dos/); expect(result.current.value).toBe(before);
   });
 });

@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from "react-konva";
 import type Konva from "konva";
-import type { FloorCanvasProps, FloorCanvasTable } from "./FloorCanvas";
+import { getJoinedTableGroups, type FloorRotation } from "../contracts";
+import type { FloorCanvasJoinedGroup, FloorCanvasProps, FloorCanvasTable } from "./FloorCanvas";
 import { FloorSectorResizeHandles, type FloorSectorResizePreview } from "./FloorSectorResizeHandles";
 import type { FloorSectorResizeGeometry } from "./floor-sector-resize";
 
-export default function FloorCanvasStage({ room, tables, selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onContextMenuTable, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
+export default function FloorCanvasStage({ room, tables, joinedGroups = [], selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onContextMenuTable, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
   const layer = useRef<Konva.Layer>(null);
@@ -15,6 +16,7 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [resizePreview, setResizePreview] = useState<FloorSectorResizePreview>(null);
   const [sectorDragPreview, setSectorDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [tableDragPreview, setTableDragPreview] = useState<Map<string, { x: number; y: number }> | null>(null);
   const pinch = useRef<{ distance: number; zoom: number; world: { x: number; y: number } } | null>(null);
   const multiTouch = useRef(false);
   const drag = useRef<{ origin: { x: number; y: number }; ids: string[]; starts: Map<string, { x: number; y: number }> } | null>(null);
@@ -37,6 +39,21 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
     const resized = selectedSector?.id === location.id && resizePreview?.id === location.id ? { ...location, ...resizePreview.geometry } : location;
     return sectorDragPreview?.id === location.id ? { ...resized, x: sectorDragPreview.x, y: sectorDragPreview.y } : resized;
   };
+  const liveTables = tables.filter((table) => table.active || grid).map((table) => {
+    const position = tableDragPreview?.get(table.id);
+    return position ? { ...table, ...position } : table;
+  });
+  const liveJoinedGroups = joinedGroups.flatMap((group) => {
+    const members = liveTables.filter((table) => group.tableIds.includes(table.id));
+    return getJoinedTableGroups(members.map((table) => ({ ...table, tableId: table.id, rotation: table.rotation as FloorRotation }))).filter((component) => component.length > 1).map((component) => {
+      const tableIds = component.map((table) => table.tableId);
+      const complete = component.length === new Set(group.tableIds).size;
+      return {
+        group: { id: complete ? group.id : `${group.id}:${tableIds.map(encodeURIComponent).sort().join("+")}`, tableIds, label: complete ? group.label : component.map((table) => table.label).join(" + ") },
+        tables: members.filter((table) => tableIds.includes(table.id)),
+      };
+    });
+  });
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -106,18 +123,21 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
           {fixture.type !== "LABEL" && <Rect x={-fixture.width / 2} y={-fixture.height / 2} width={fixture.width} height={fixture.height} fill={fixture.type === "WALL" ? "#777c72" : "#bca98b"} stroke={selectedFixtureId === fixture.id ? "#255f46" : undefined} strokeWidth={3} cornerRadius={fixture.type === "BAR" ? 5 : 0} />}
           {fixture.label && <Text text={fixture.label} x={-fixture.width / 2} y={-8} width={fixture.width} align="center" fontSize={fixture.type === "LABEL" ? 18 : 13} fill={fixture.type === "WALL" ? "#ffffff" : "#383d34"} fontStyle="bold" />}
         </Group>)}
-        {tables.filter((table) => table.active || grid).map((table) => <Table key={table.id} table={table} selected={selectedIds.includes(table.id)} draggable={Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
+        {liveJoinedGroups.map(({ group, tables }) => <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} />)}
+        {liveTables.map((table) => <Table key={table.id} table={table} selected={selectedIds.includes(table.id)} draggable={Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
           onSelect={(additive) => onSelect?.(table.id, additive)}
           onContextMenu={onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
           onDragStart={(node) => {
             const ids = selectedIds.includes(table.id) ? selectedIds : [table.id];
             if (!selectedIds.includes(table.id)) onSelect?.(table.id, false);
             drag.current = { origin: { x: node.x(), y: node.y() }, ids, starts: new Map(tables.filter((item) => ids.includes(item.id)).map((item) => [item.id, { x: item.x, y: item.y }])) };
+            setTableDragPreview(new Map(drag.current.starts));
           }}
           onDragMove={(node) => {
             const session = drag.current;
             if (!session) return;
             const delta = { x: node.x() - session.origin.x, y: node.y() - session.origin.y };
+            setTableDragPreview(new Map(Array.from(session.starts, ([id, start]) => [id, { x: start.x + delta.x, y: start.y + delta.y }])));
             for (const id of session.ids) {
               if (id === table.id) continue;
               const start = session.starts.get(id);
@@ -128,11 +148,36 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
             const session = drag.current;
             if (session) onMove?.(session.ids, { x: node.x() - session.origin.x, y: node.y() - session.origin.y });
             drag.current = null;
+            setTableDragPreview(null);
           }} />)}
         {selectedSector && onResizeLocation && <FloorSectorResizeHandles key={selectedSector.id} location={selectedSector as FloorSectorResizeGeometry & { id: string }} geometry={liveSector(selectedSector) as FloorSectorResizeGeometry} room={room} scale={scale} getPointer={() => layer.current?.getRelativePointerPosition() ?? null} onPreview={setResizePreview} onCommit={(id, { x, y, width, height }) => onResizeLocation(id, { x, y, width, height })} onCursor={setCursor} defaultCursor={zoom > 1 ? "grab" : "default"} cancelRef={cancelResize} onContextMenu={onContextMenuLocation ? (point) => onContextMenuLocation(selectedSector.id, point) : undefined} />}
       </Layer>
     </Stage>
   </div>;
+}
+
+function JoinedTables({ group, tables, selectedIds }: { group: FloorCanvasJoinedGroup; tables: FloorCanvasTable[]; selectedIds: string[] }) {
+  if (tables.length < 2) return null;
+  const bounds = tables.map((table) => {
+    const swapped = table.shape !== "CIRCLE" && Math.abs(table.rotation % 180) === 90;
+    const width = swapped ? table.height : table.width;
+    const height = table.shape === "CIRCLE" ? table.width : swapped ? table.width : table.height;
+    return { left: table.x - width / 2, right: table.x + width / 2, top: table.y - height / 2, bottom: table.y + height / 2 };
+  });
+  const left = Math.min(...bounds.map((bound) => bound.left)) - 6;
+  const top = Math.min(...bounds.map((bound) => bound.top)) - 6;
+  const width = Math.max(...bounds.map((bound) => bound.right)) + 6 - left;
+  const height = Math.max(...bounds.map((bound) => bound.bottom)) + 6 - top;
+  const selected = tables.some((table) => selectedIds.includes(table.id) || table.state === "selected");
+  const reserved = tables.some((table) => table.state === "reserved");
+  const stroke = selected ? "#255f46" : reserved ? "#95664c" : "#756b4f";
+  const labelWidth = Math.max(width, 160);
+  const labelX = (width - labelWidth) / 2;
+  return <Group id={`floor-joined-group-${group.id}`} x={left} y={top} listening={false}>
+    <Rect id={`floor-joined-outline-${group.id}`} width={width} height={height} stroke={stroke} strokeWidth={1.5} dash={[6, 4]} cornerRadius={9} listening={false} />
+    <Rect x={labelX} y={-25} width={labelWidth} height={21} fill="#fffdf7" cornerRadius={4} listening={false} />
+    <Text id={`floor-joined-label-${group.id}`} text={`Unidas · ${group.label}`} x={labelX + 5} y={-21} width={labelWidth - 10} height={16} wrap="none" ellipsis align="center" fontSize={12} fontStyle="bold" fill={stroke} listening={false} />
+  </Group>;
 }
 
 function Table({ table, selected, draggable, onSelect, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; draggable: boolean; onSelect: (additive: boolean) => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {

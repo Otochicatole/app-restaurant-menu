@@ -59,7 +59,9 @@ describe("narrow table inventory changes on SQLite", () => {
     const saved = await repository.saveTables(restaurantId, { ...command(), tables, combinations });
     expect(saved.revision).toBe(room.revision + 1);
     expect(saved.tables).toEqual(expect.arrayContaining(tables));
-    expect(saved.combinations).toEqual(combinations);
+    // Relation rows have no implicit SQL order; table identities and geometry must match.
+    const orderedMembers = (items: typeof saved.combinations) => items.map((item) => ({ ...item, members: [...item.members].sort((a, b) => a.tableId.localeCompare(b.tableId)) }));
+    expect(orderedMembers(saved.combinations)).toEqual(orderedMembers(combinations));
     const updated = await database.diningRoom.findUniqueOrThrow({ where: { id: room.id } });
     expect(updated).toMatchObject({ name: plan.name, width: plan.width, height: plan.height, fixturesJson: plan.fixturesJson, active: plan.active });
     expect(await database.diningRoomLocation.findUniqueOrThrow({ where: { id: "window" } })).toEqual(sector);

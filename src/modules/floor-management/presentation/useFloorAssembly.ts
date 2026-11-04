@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { buildFloorOptions, type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorLocation, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation } from "../contracts";
 import { getFloorOptions, getFloorReassignmentOptions } from "./floor-api";
 import { assemblyPoses, changeAssemblyTables, containingLocation, customAssembly, type FloorAssemblyPoint, type FloorAssemblyTableUpdate } from "./floor-assembly";
+import { defaultLayoutCapacity, joinLayoutTables, separateLayoutTables } from "./floor-table-layout";
 
 export type UseFloorAssemblyInput = {
   restaurantId: string; active: boolean; partySize: number; durationMinutes: number; roomId: string;
@@ -19,6 +20,8 @@ export type FloorAssemblyController = {
   move: (dx: number, dy: number) => void; rotate: () => void; place: (point: FloorAssemblyPoint, locationId?: string) => void;
   setCapacity: (capacity: number) => void; updateTable: (tableId: string, partial: FloorAssemblyTableUpdate) => void;
   replaceRoom: (room: FloorRoom, tableId: string, partial: FloorAssemblyTableUpdate) => void;
+  moveTables: (ids: string[], dx: number, dy: number) => void; rotateTables: (ids: string[]) => void;
+  joinTables: (ids: string[]) => string | null; separateTables: (ids: string[]) => string | null;
 };
 
 export function useFloorAssembly({ restaurantId, active, partySize, durationMinutes, roomId, value, onChange, editingAllocation, fallbackRoom }: UseFloorAssemblyInput): FloorAssemblyController {
@@ -114,13 +117,41 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     if (!draft || !selected.length || !Number.isInteger(number) || number < 1 || number > 500) return;
     onChange(customAssembly(draft, selected, number));
   };
+  const applyLayout = (poses: FloorPose[]) => {
+    if (!draft || !poses.length) return;
+    const nextCapacity = capacity === defaultLayoutCapacity(selected) ? defaultLayoutCapacity(poses) : capacity;
+    onChange({ ...customAssembly(draft, poses, nextCapacity), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
+  };
   const updateTable = (tableId: string, partial: FloorAssemblyTableUpdate) => {
     if (!draft || !selected.some((pose) => pose.tableId === tableId)) return;
     if ((partial.x !== undefined && !Number.isFinite(partial.x)) || (partial.y !== undefined && !Number.isFinite(partial.y))) return;
     if (partial.rotation !== undefined && ![0, 90, 180, 270].includes(partial.rotation)) return;
     const poses = selected.map((pose) => pose.tableId === tableId ? { ...pose, ...partial } : pose);
-    const next = customAssembly(draft, poses, capacity);
-    onChange({ ...next, x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
+    applyLayout(poses);
+  };
+  const moveTables = (ids: string[], dx: number, dy: number) => {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const targets = new Set(ids);
+    applyLayout(selected.map((pose) => targets.has(pose.tableId) ? { ...pose, x: pose.x + dx, y: pose.y + dy } : pose));
+  };
+  const rotateTables = (ids: string[]) => {
+    const targets = selected.filter((pose) => ids.includes(pose.tableId));
+    if (!targets.length) return;
+    const x = targets.reduce((sum, pose) => sum + pose.x, 0) / targets.length;
+    const y = targets.reduce((sum, pose) => sum + pose.y, 0) / targets.length;
+    applyLayout(selected.map((pose) => ids.includes(pose.tableId) ? { ...pose, x: x - (pose.y - y), y: y + (pose.x - x), rotation: ((pose.rotation + 90) % 360) as FloorRotation } : pose));
+  };
+  const joinTables = (ids: string[]) => {
+    if (!draft || !location) return "Elegí primero un sector y las mesas del armado.";
+    const next = joinLayoutTables(selected, ids, location);
+    if (typeof next === "string") return next;
+    applyLayout(next); return null;
+  };
+  const separateTables = (ids: string[]) => {
+    if (!draft || !location) return "Elegí primero un sector y las mesas del armado.";
+    const next = separateLayoutTables(selected, ids, location);
+    if (typeof next === "string") return next;
+    applyLayout(next); return null;
   };
   const replaceRoom = (nextRoom: FloorRoom, tableId: string, partial: FloorAssemblyTableUpdate) => {
     if (!options || nextRoom.id !== roomId || nextRoom.restaurantId !== restaurantId) return;
@@ -138,5 +169,5 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     }
     setError(null);
   };
-  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, setTableIds, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable, replaceRoom };
+  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, setTableIds, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable, replaceRoom, moveTables, rotateTables, joinTables, separateTables };
 }

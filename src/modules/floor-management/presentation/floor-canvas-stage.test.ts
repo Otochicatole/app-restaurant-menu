@@ -6,13 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const canvas = vi.hoisted(() => {
   const point = { x: 0, y: 0 };
   const surface = { element: undefined as HTMLDivElement | undefined };
+  const groups = new Map<string, Record<string, unknown>>();
   return {
     point,
     pointer: { x: 0, y: 0 },
     layer: { x: 0, y: 0, scaleX: 1, scaleY: 1 },
     stageEvents: {} as Record<string, unknown>,
-    groups: new Map<string, Record<string, unknown>>(),
+    groups,
     rects: new Map<string, Record<string, unknown>>(),
+    texts: new Map<string, Record<string, unknown>>(),
     groupOrder: [] as string[],
     surface,
     dragEnd: undefined as ((event: { target: unknown }) => void) | undefined,
@@ -21,6 +23,10 @@ const canvas = vi.hoisted(() => {
       position: (next: { x: number; y: number }) => { Object.assign(point, next); },
       stopDrag: () => {},
       container: () => surface.element,
+      findOne: (selector: string) => {
+        const group = groups.get(selector.slice(1));
+        return group ? { position: (position: { x: number; y: number }) => Object.assign(group, position) } : undefined;
+      },
     },
   };
 });
@@ -49,7 +55,8 @@ vi.mock("react-konva", async () => {
     return createElement("div", null, createElement("output", { "data-testid": "viewport-offset" }, JSON.stringify({ x, y })), children);
   });
   const Rect = (props: Props) => { if (props.id) canvas.rects.set(props.id, { ...props }); return createElement("div"); };
-  return { Stage, Layer, Group, Circle: Node, Line: Node, Rect, Text: Node };
+  const Text = (props: Props) => { if (props.id) canvas.texts.set(props.id, { ...props }); return createElement("div"); };
+  return { Stage, Layer, Group, Circle: Node, Line: Node, Rect, Text };
 });
 
 import FloorCanvasStage from "./FloorCanvasStage";
@@ -74,7 +81,7 @@ describe("floor viewport dragging", () => {
   beforeEach(() => {
     Object.assign(canvas.point, { x: 0, y: 0 });
     canvas.groups.clear();
-    canvas.rects.clear(); canvas.groupOrder.length = 0; canvas.surface.element = document.createElement("div");
+    canvas.rects.clear(); canvas.texts.clear(); canvas.groupOrder.length = 0; canvas.surface.element = document.createElement("div");
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -268,6 +275,84 @@ describe("floor viewport dragging", () => {
     expect(onMove.mock.calls).toEqual([[["one"], { x: 30.5, y: 45.25 }]]);
     expect(onSelect).not.toHaveBeenCalled();
     expect(canvas.groups.get("floor-table-two")!.x).toBe(280);
+  });
+
+  it("keeps the joined outline and its label attached throughout a zoomed drag and the parent's commit", () => {
+    const moved = vi.fn(); const onPlace = vi.fn(); const onContextMenuTable = vi.fn();
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true, state: "selected" as const };
+    const second = { ...first, id: "two", label: "M2", shape: "RECTANGLE" as const, x: 300, height: 120, rotation: 90 };
+    function Editor({ refresh = 0 }: { refresh?: number }) {
+      const [tables, setTables] = useState([first, second]);
+      return createElement(FloorCanvasStage, { room: { ...room, name: `Ventana ${refresh}` }, tables, zoom: 2, onZoomChange: vi.fn(), selectedIds: ["one", "two"], joinedGroups: [{ id: "joined", tableIds: ["one", "two"], label: "M1 + M2" }], onPlace, onContextMenuTable,
+        onMove: (ids, delta) => { moved(ids, delta); setTables((current) => current.map((table) => ids.includes(table.id) ? { ...table, x: table.x + delta.x, y: table.y + delta.y } : table)); },
+      });
+    }
+    const view = render(createElement(Editor));
+    act(() => { canvas.node.position({ x: 60, y: -40 }); canvas.dragEnd!({ target: canvas.node }); });
+    const before = offset();
+    const outline = canvas.rects.get("floor-joined-outline-joined")!;
+    expect(outline.width).toBe(212); expect(outline.height).toBe(92); expect(outline.stroke).toBe("#255f46");
+    expect(outline.listening).toBe(false);
+    expect(canvas.texts.get("floor-joined-label-joined")!.text).toBe("Unidas · M1 + M2");
+    expect(canvas.texts.get("floor-joined-label-joined")!.listening).toBe(false);
+    const group = canvas.groups.get("floor-joined-group-joined")!;
+    expect(group.x).toBe(154); expect(group.y).toBe(154); expect(group.listening).toBe(false);
+    expect(group.onClick).toBeUndefined(); expect(group.onContextMenu).toBeUndefined();
+    expect(canvas.groupOrder.indexOf("floor-joined-group-joined")).toBeLessThan(canvas.groupOrder.indexOf("floor-table-one"));
+    const position = { x: 200, y: 200 }; const node = { x: () => position.x, y: () => position.y };
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 230.5, y: 245.25 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(canvas.groups.get("floor-joined-group-joined")!.x).toBe(184.5);
+    expect(canvas.groups.get("floor-joined-group-joined")!.y).toBe(199.25);
+    expect(canvas.groups.get("floor-table-one")!.x).toBe(230.5);
+    expect(canvas.groups.get("floor-table-two")!.x).toBe(330.5);
+    expect(moved).not.toHaveBeenCalled();
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(moved.mock.calls).toEqual([[["one", "two"], { x: 30.5, y: 45.25 }]]);
+    view.rerender(createElement(Editor, { refresh: 1 }));
+    expect(canvas.groups.get("floor-joined-group-joined")!.x).toBe(184.5);
+    expect(canvas.groups.get("floor-joined-group-joined")!.y).toBe(199.25);
+    expect(offset()).toEqual(before);
+    const native = new MouseEvent("contextmenu", { button: 2, clientX: 500, clientY: 250, cancelable: true });
+    act(() => { (canvas.groups.get("floor-table-one")!.onContextMenu as (event: unknown) => void)({ evt: native, target: node, cancelBubble: false }); });
+    expect(onContextMenuTable.mock.calls).toEqual([["one", { x: 500, y: 250 }]]);
+    pointAt(400, 300);
+    act(() => { stageEvent("onClick", { target: canvas.node }); });
+    expect(onPlace).toHaveBeenCalledOnce();
+    expect(onPlace.mock.calls[0][0].x).toBeCloseTo(400);
+    expect(onPlace.mock.calls[0][0].y).toBeCloseTo(300);
+    expect(onPlace.mock.calls[0][1]).toBeUndefined();
+  });
+
+  it("outlines only explicit groups with at least two rendered tables, rather than inferring joins from table colors", () => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true, state: "reserved" as const };
+    const second = { ...first, id: "two", label: "M2", x: 280 };
+    const third = { ...first, id: "three", label: "M3", x: 360 };
+    render(createElement(FloorCanvasStage, { room, tables: [first, second, third], zoom: 1, onZoomChange: vi.fn(), joinedGroups: [{ id: "actual", tableIds: ["one", "two"], label: "M1 + M2" }, { id: "single", tableIds: ["three", "missing"], label: "M3" }] }));
+    expect(canvas.rects.get("floor-joined-outline-actual")!.stroke).toBe("#95664c");
+    expect(canvas.groups.has("floor-joined-group-single")).toBe(false);
+    expect(canvas.rects.get("floor-joined-outline-actual")!.width).toBe(172);
+  });
+
+  it("removes a dragged-away table from its live joined outline before the drop", () => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const second = { ...first, id: "two", label: "M2", x: 280 };
+    const third = { ...first, id: "three", label: "M3", x: 360 };
+    const onMove = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [first, second, third], zoom: 2, onZoomChange: vi.fn(), selectedIds: ["one"], draggableIds: ["one"], onMove, joinedGroups: [{ id: "joined", tableIds: ["one", "two", "three"], label: "M1 + M2 + M3" }] }));
+    expect(screen.getByTestId("floor-joined-group-joined")).toBeTruthy();
+    const position = { x: 200, y: 200 }; const node = { x: () => position.x, y: () => position.y };
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 100, y: 150 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(screen.queryByTestId("floor-joined-group-joined")).toBeNull();
+    const remainingId = "joined:three+two";
+    expect(screen.getByTestId(`floor-joined-group-${remainingId}`)).toBeTruthy();
+    expect(canvas.groups.get(`floor-joined-group-${remainingId}`)!.x).toBe(234);
+    expect(canvas.rects.get(`floor-joined-outline-${remainingId}`)!.width).toBe(172);
+    expect(canvas.texts.get(`floor-joined-label-${remainingId}`)!.text).toBe("Unidas · M2 + M3");
+    expect(onMove).not.toHaveBeenCalled();
   });
 
   it.each(["WALL", "BAR", "LABEL"] as const)("prioritizes placement over selecting a %s for both mouse clicks and touch taps", (type) => {

@@ -12,9 +12,11 @@ vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: FloorCanvasProps) => {
   const [pan, setPan] = useState(0);
   return createElement("div", { "data-testid": "table-board" },
     createElement("button", { type: "button", onClick: () => setPan((value) => value + 1) }, "Desplazar plano de prueba"),
+    props.onMove && createElement("button", { type: "button", onClick: () => props.onMove?.(props.selectedIds ?? [], { x: 20, y: 10 }) }, "Arrastrar seleccionadas"),
     props.onPlace && createElement("button", { type: "button", onClick: () => props.onPlace?.({ x: 440, y: 380 }, "window") }, "Colocar en el tablero"),
     props.tables.map((table) => createElement("button", { key: table.id, type: "button", "aria-label": `Mesa del plano ${table.id}`, onClick: () => props.onSelect?.(table.id, false), onContextMenu: (event) => { event.preventDefault(); props.onContextMenuTable?.(table.id, { x: event.clientX, y: event.clientY }); } }, table.label)),
     createElement("output", { "data-testid": "table-poses" }, JSON.stringify(props.tables)),
+    createElement("output", { "data-testid": "joined-groups" }, JSON.stringify(props.joinedGroups ?? [])),
     createElement("output", { "data-testid": "table-pan" }, String(pan)));
 } }));
 
@@ -31,6 +33,7 @@ const config = (currentRoom = structuredClone(room)): FloorConfigView => ({ rest
 const allocation = (source = "WALK_IN"): FloorAllocationView => ({ ...interval, id: "allocation", reservationId: "reservation", roomId: "room", locationId: "window", combinationId: null, capacity: 6, customerName: "Grupo de Julia", partySize: 2, date: "2099-11-01", time: "20:00", notes: "Cerca de la ventana", code: "BOOK", releasedAt: null, version: 2, reservationRevision: 7, source,
   poses: room.tables.map((table, index) => { const { id, active: _active, ...pose } = table; void _active; return { ...pose, tableId: id, x: 360 + index * 80, y: 300 }; }) });
 const poses = () => JSON.parse(screen.getByTestId("table-poses").textContent!) as { id: string; label: string; shape: string; x: number; y: number; rotation: number; width: number; height: number }[];
+const joinedGroups = () => JSON.parse(screen.getByTestId("joined-groups").textContent!) as { tableIds: string[]; label: string }[];
 
 function show(current = board(), readOnly = false) {
   return render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly, canManageWalkIns: true, initialBoard: current }));
@@ -81,7 +84,7 @@ describe("table actions on the operational board", () => {
     const menu = screen.getByRole("menu");
     expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Editar" }));
     fireEvent.keyDown(menu, { key: "End" });
-    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Mover" }));
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Separar mesa" }));
     fireEvent.keyDown(menu, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(trigger);
@@ -256,5 +259,70 @@ describe("table actions on the operational board", () => {
     expect(screen.getByTestId("table-pan").textContent).toBe("1");
     fireEvent.click(save);
     await waitFor(() => expect(api.reassign).toHaveBeenCalledWith("restaurant", "reservation", expect.objectContaining({ expectedRevision: 7, expectedAllocationVersion: 2 })));
+  });
+
+  it.each([false, true])("separates tables on the main board and saves them with rejoin=%s", async (rejoin) => {
+    api.save.mockResolvedValue({});
+    await startDraft(true);
+    const canvas = screen.getByTestId("table-board");
+    fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
+    expect(joinedGroups()).toEqual([expect.objectContaining({ tableIds: ["draft:one", "draft:two"] })]);
+    fireEvent.click(screen.getByRole("button", { name: "Separar seleccionadas" }));
+    expect(joinedGroups()).toEqual([]);
+    expect((screen.getByLabelText("Lugares útiles") as HTMLInputElement).value).toBe("8");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    if (rejoin) {
+      fireEvent.click(screen.getByRole("button", { name: "Unir seleccionadas" }));
+      expect(joinedGroups()).toEqual([expect.objectContaining({ tableIds: ["draft:one", "draft:two"] })]);
+      expect((screen.getByLabelText("Lugares útiles") as HTMLInputElement).value).toBe("6");
+    }
+    const visible = poses();
+    const save = screen.getByRole("button", { name: "Armar y ocupar mesas" }) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    await waitFor(() => expect(api.save).toHaveBeenCalledOnce());
+    expect(api.save.mock.calls[0][1]).toMatchObject({ action: "walk-in", assignment: { capacity: rejoin ? 6 : 8, customTables: visible.map((pose) => ({ tableId: pose.id.replace(/^draft:/, ""), x: pose.x, y: pose.y, rotation: pose.rotation })) } });
+    expect(screen.getAllByTestId("table-board")).toHaveLength(1);
+    expect(screen.getByTestId("table-board")).toBe(canvas);
+    expect(screen.getByTestId("table-pan").textContent).toBe("1");
+  });
+
+  it("moves and rotates only the selected pair while preserving another visual group and the viewport", async () => {
+    const value = options();
+    value.rooms[0].tables.push({ ...room.tables[0], id: "three", label: "M3" }, { ...room.tables[0], id: "four", label: "M4" });
+    value.options = buildFloorOptions(value.rooms[0]); api.options.mockResolvedValue(value);
+    await startDraft(true);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Cantidad de Cuadrada 80 × 80" }), { target: { value: "4" } });
+    const canvas = screen.getByTestId("table-board");
+    fireEvent.click(screen.getByRole("button", { name: "Desplazar plano de prueba" }));
+    fireEvent.click(screen.getByRole("button", { name: "Separar seleccionadas" }));
+    const toggle = (label: string) => fireEvent.click(screen.getByRole("button", { name: `Seleccionar mesa ${label}` }));
+    toggle("M3"); toggle("M4");
+    fireEvent.click(screen.getByRole("button", { name: "Unir seleccionadas" }));
+    toggle("M1"); toggle("M2"); toggle("M3"); toggle("M4");
+    fireEvent.click(screen.getByRole("button", { name: "Unir seleccionadas" }));
+    expect(joinedGroups()).toHaveLength(2);
+    const fixed = poses().filter((pose) => ["draft:one", "draft:two"].includes(pose.id));
+    const moving = poses().filter((pose) => ["draft:three", "draft:four"].includes(pose.id));
+    fireEvent.click(screen.getByRole("button", { name: "Mover grupo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arrastrar seleccionadas" }));
+    expect(poses()).toEqual(expect.arrayContaining(fixed));
+    for (const pose of moving) expect(poses().find((candidate) => candidate.id === pose.id)).toMatchObject({ x: pose.x + 20, y: pose.y + 10 });
+    fireEvent.click(screen.getByRole("button", { name: "Girar grupo 90°" }));
+    expect(poses()).toEqual(expect.arrayContaining(fixed));
+    for (const id of ["draft:three", "draft:four"]) expect(poses().find((pose) => pose.id === id)?.rotation).toBe(90);
+    expect(joinedGroups()).toHaveLength(2);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByTestId("table-board")).toBe(canvas);
+    expect(screen.getByTestId("table-pan").textContent).toBe("1");
+  });
+
+  it("keeps touching tables from different reservations out of a shared visual group", () => {
+    const current = board(); const first = allocation();
+    current.allocations = [{ ...first, poses: [first.poses[0]] }, { ...first, id: "other-allocation", reservationId: "other-reservation", customerName: "Otro grupo", poses: [first.poses[1]] }];
+    show(current, true);
+    expect(poses()).toHaveLength(2);
+    expect(poses()[1].x - poses()[0].x).toBe(80);
+    expect(joinedGroups()).toEqual([]);
   });
 });

@@ -99,14 +99,39 @@ export function validateRoomLayout(room: FloorRoomInput): string | null {
   }
   return null;
 }
-export function validateAssembly(poses: FloorPose[]): string | null {
-  if (!poses.length || new Set(poses.map((pose) => pose.tableId)).size !== poses.length) return "El armado debe usar mesas distintas.";
-  const connected = new Set([0]);
-  for (let pass = 0; pass < poses.length; pass++) for (let i = 0; i < poses.length; i++) for (const j of connected) {
-    if (i !== j && intersects(poses[i], poses[j])) return `Las mesas ${poses[i].label} y ${poses[j].label} se superponen.`;
-    if (intersects(poses[i], poses[j], epsilon)) connected.add(i);
+export function validateTableArrangement(poses: FloorPose[]): string | null {
+  if (!poses.length || poses.some((pose) => !pose.tableId) || new Set(poses.map((pose) => pose.tableId)).size !== poses.length) return "El armado debe usar mesas distintas.";
+  for (let i = 0; i < poses.length; i++) {
+    const pose = poses[i];
+    if (![pose.x, pose.y, pose.width, pose.height].every(Number.isFinite) || pose.width <= 0 || pose.height <= 0 || ![0, 90, 180, 270].includes(pose.rotation)) {
+      return `Las medidas o la posición de la mesa ${pose.label} no son válidas.`;
+    }
+    for (let j = 0; j < i; j++) if (intersects(pose, poses[j])) return `Las mesas ${pose.label} y ${poses[j].label} se superponen.`;
   }
-  return connected.size === poses.length ? null : "Las mesas del armado deben estar unidas por sus bordes.";
+  return null;
+}
+
+/** Visual groups are derived from touching tables, never persisted or inferred from presets. */
+export function getJoinedTableGroups(poses: FloorPose[]): FloorPose[][] {
+  const remaining = new Set(poses.map((_, index) => index));
+  const groups: FloorPose[][] = [];
+  for (let first = 0; first < poses.length; first++) {
+    if (!remaining.delete(first)) continue;
+    const members = [first];
+    for (let cursor = 0; cursor < members.length; cursor++) for (const candidate of remaining) {
+      if (!intersects(poses[members[cursor]], poses[candidate]) && intersects(poses[members[cursor]], poses[candidate], epsilon)) {
+        remaining.delete(candidate); members.push(candidate);
+      }
+    }
+    groups.push(members.sort((a, b) => a - b).map((index) => poses[index]));
+  }
+  return groups;
+}
+
+export function validateAssembly(poses: FloorPose[]): string | null {
+  const invalid = validateTableArrangement(poses);
+  if (invalid) return invalid;
+  return getJoinedTableGroups(poses).length === 1 ? null : "Las mesas del armado deben estar unidas por sus bordes.";
 }
 function validateSector(room: FloorRoom, lease: FloorLease): string | null {
   // Null identifies an allocation preserved from a previous schema generation.

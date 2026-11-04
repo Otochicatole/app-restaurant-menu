@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
-  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, toFloorRoom, transformPoses, validateFloorPlacement, findFloorPlacement, validateAssembly, restaurantLocalDateTime,
+  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, toFloorRoom, transformPoses, validateFloorPlacement, findFloorPlacement, validateTableArrangement, restaurantLocalDateTime,
   type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorInterval,
   type FloorLease, type FloorOptionsQuery, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation,
 } from "@/modules/floor-management/contracts";
@@ -173,7 +173,7 @@ export async function syncReservationAllocation(tx: Prisma.TransactionClient, re
         if (!table) throw new BadRequestError("El armado usa una mesa inexistente o inactiva.");
         return { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity, width: table.width, height: table.height, x: selected.x, y: selected.y, rotation: selected.rotation };
       });
-      const invalid = validateAssembly(poses); if (invalid) throw new BadRequestError(invalid);
+      const invalid = validateTableArrangement(poses); if (invalid) throw new BadRequestError(invalid);
       capacity = assignment.capacity;
       if (capacity > poses.reduce((sum, pose) => sum + pose.capacity, 0)) throw new BadRequestError("La capacidad útil supera la capacidad física del armado.");
       combinationId = null;

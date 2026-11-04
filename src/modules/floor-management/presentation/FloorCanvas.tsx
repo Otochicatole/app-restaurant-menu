@@ -15,9 +15,11 @@ export type FloorCanvasFixture = {
   id: string; type: "WALL" | "BAR" | "LABEL"; label: string;
   x: number; y: number; width: number; height: number; rotation: number;
 };
+export type FloorCanvasJoinedGroup = { id: string; tableIds: string[]; label: string };
 export type FloorCanvasProps = {
   room: { id: string; name: string; width: number; height: number; fixtures: FloorCanvasFixture[]; locations?: { id: string; name: string; x: number; y: number; width: number; height: number; rotation: number; active: boolean }[] };
   tables: FloorCanvasTable[];
+  joinedGroups?: FloorCanvasJoinedGroup[];
   selectedIds?: string[];
   selectedFixtureId?: string | null;
   selectedLocationId?: string | null;

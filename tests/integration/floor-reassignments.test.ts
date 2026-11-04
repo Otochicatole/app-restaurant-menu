@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { createSqlitePrismaClient } from "../../src/platform/database/sqlite-client";
 import { createWalkIn, releaseWalkIn } from "../../src/modules/reservation-management/infrastructure/floor-walk-ins";
 import { getFloorReassignmentOptions, reassignFloorAllocation } from "../../src/modules/reservation-management/infrastructure/floor-reassignments";
+import { PrismaFloorRepository } from "../../src/modules/floor-management/infrastructure/prisma-floor-repository";
 import type { FloorAssignmentInput } from "../../src/modules/floor-management/contracts";
 
 vi.mock("@/platform/database/prisma", () => ({ prisma: undefined }));
@@ -68,6 +69,38 @@ describe("atomic floor rearrangements on SQLite", () => {
     expect(after).toMatchObject({ revision: 1, customerName: before.customerName, notes: before.notes, source: "WALK_IN", customerPhone: "", customerEmail: "", status: "CONFIRMED" });
     expect(after.allocation).toMatchObject({ id: before.allocation!.id, version: 1, serviceStartAt: before.allocation!.serviceStartAt, serviceEndAt: before.allocation!.serviceEndAt, blockedFrom: before.allocation!.blockedFrom, blockedUntil: before.allocation!.blockedUntil });
     expect(after.allocation!.tables[0]).toMatchObject({ tableId: tables[0].id, x: 180, y: 100, rotation: 90 });
+  });
+
+  it("saves separated tables for the same reservation and can rejoin them without altering its interval or data", async () => {
+    const joined: FloorAssignmentInput = { ...assignment(), optionId: "custom", x: 200, capacity: 6,
+      customTables: [{ tableId: tables[0].id, x: 160, y: 100, rotation: 0 }, { tableId: tables[1].id, x: 240, y: 100, rotation: 0 }],
+    };
+    const current = await createWalkIn(first, restaurantId, { customerName: "Ana", partySize: 6, notes: "Ventana", durationMinutes: 90, assignment: joined }, () => arrival);
+    await first.tableReservation.update({ where: { id: current.reservationId }, data: { source: "ADMIN", customerEmail: "private@example.test", customerPhone: "123456", adminNotes: "Private" } });
+    const before = await stored(current.reservationId);
+    const separated: FloorAssignmentInput = { ...joined, x: 280, customTables: [joined.customTables![0], { ...joined.customTables![1], x: 400 }] };
+    await reassignFloorAllocation(first, restaurantId, command(current.reservationId, separated), () => later);
+    const after = await stored(current.reservationId);
+    expect(after).toMatchObject({ status: before.status, partySize: before.partySize, source: before.source, customerName: before.customerName, customerEmail: before.customerEmail, customerPhone: before.customerPhone, notes: before.notes, adminNotes: before.adminNotes, revision: 1 });
+    expect(after.allocation).toMatchObject({ id: before.allocation!.id, capacity: 6, version: 1, serviceStartAt: before.allocation!.serviceStartAt, serviceEndAt: before.allocation!.serviceEndAt, blockedFrom: before.allocation!.blockedFrom, blockedUntil: before.allocation!.blockedUntil });
+    expect(after.allocation!.tables.map((table) => table.x).sort((a, b) => a - b)).toEqual([160, 400]);
+    const overlap = { ...separated, customTables: [separated.customTables![0], { ...separated.customTables![1], x: 180 }] };
+    await expect(reassignFloorAllocation(first, restaurantId, { ...command(current.reservationId, overlap), expectedRevision: 1, expectedAllocationVersion: 1 }, () => later)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(await stored(current.reservationId)).toEqual(after);
+    await reassignFloorAllocation(first, restaurantId, { ...command(current.reservationId, joined), expectedRevision: 1, expectedAllocationVersion: 1 }, () => later);
+    const reunited = await stored(current.reservationId);
+    expect(reunited.revision).toBe(2); expect(reunited.allocation!.version).toBe(2);
+    expect(reunited.allocation!.tables.map((table) => table.x).sort((a, b) => a - b)).toEqual([160, 240]);
+    expect(reunited.allocation!.blockedUntil).toEqual(before.allocation!.blockedUntil);
+  });
+
+  it("continues rejecting disconnected predefined combinations", async () => {
+    const repository = new PrismaFloorRepository(first);
+    const room = (await repository.getConfig(restaurantId)).rooms.find((item) => item.id === roomId)!;
+    await expect(repository.saveRoom(restaurantId, { ...room, combinations: [{ id: randomUUID(), name: "Detached preset", active: true, capacity: 6,
+      members: [{ tableId: tables[0].id, x: -100, y: 0, rotation: 0 }, { tableId: tables[1].id, x: 100, y: 0, rotation: 0 }],
+    }] }, room.revision)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(await first.diningTableCombination.count({ where: { restaurantId } })).toBe(0);
   });
 
   it.each(["ADMIN", "LANDING", "WALK_IN"])("rearranges %s groups without exposing or changing their reservation data", async (source) => {
