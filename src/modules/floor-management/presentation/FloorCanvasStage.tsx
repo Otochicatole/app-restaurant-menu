@@ -7,7 +7,7 @@ import type { FloorCanvasProps, FloorCanvasTable } from "./FloorCanvas";
 import { FloorSectorResizeHandles, type FloorSectorResizePreview } from "./FloorSectorResizeHandles";
 import type { FloorSectorResizeGeometry } from "./floor-sector-resize";
 
-export default function FloorCanvasStage({ room, tables, selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
+export default function FloorCanvasStage({ room, tables, selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onContextMenuTable, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
   const layer = useRef<Konva.Layer>(null);
@@ -108,6 +108,7 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
         </Group>)}
         {tables.filter((table) => table.active || grid).map((table) => <Table key={table.id} table={table} selected={selectedIds.includes(table.id)} draggable={Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
           onSelect={(additive) => onSelect?.(table.id, additive)}
+          onContextMenu={onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
           onDragStart={(node) => {
             const ids = selectedIds.includes(table.id) ? selectedIds : [table.id];
             if (!selectedIds.includes(table.id)) onSelect?.(table.id, false);
@@ -134,13 +135,14 @@ export default function FloorCanvasStage({ room, tables, selectedIds = [], selec
   </div>;
 }
 
-function Table({ table, selected, draggable, onSelect, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; draggable: boolean; onSelect: (additive: boolean) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
+function Table({ table, selected, draggable, onSelect, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; draggable: boolean; onSelect: (additive: boolean) => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
   const reserved = table.state === "reserved";
   const unavailable = table.state === "unavailable" || !table.active;
   const fill = selected ? "#d6e8d4" : reserved ? "#f0d6c4" : unavailable ? "#e8e8e2" : "#e8dfc9";
   const stroke = selected ? "#255f46" : reserved ? "#95664c" : "#aaa28d";
   return <Group id={`floor-table-${table.id}`} x={table.x} y={table.y} rotation={table.rotation} opacity={unavailable ? 0.55 : 1} draggable={draggable && table.active}
-    onMouseDown={(event) => { event.cancelBubble = true; onSelect(event.evt.shiftKey); }} onTap={(event) => { event.cancelBubble = true; onSelect(false); }}
+    onMouseDown={(event) => { event.cancelBubble = true; if (event.evt.button !== 0) return; onSelect(event.evt.shiftKey); }} onTap={(event) => { event.cancelBubble = true; onSelect(false); }}
+    onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}
     onDragStart={(event) => { event.cancelBubble = true; onDragStart(event.target); }} onDragMove={(event) => { event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
     {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}
     <Group rotation={-table.rotation} listening={false}><Text x={-60} y={-8} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill="#313a2f" /></Group>

@@ -5,8 +5,8 @@ import { prisma } from "@/platform/database/prisma";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
-  calculateFloorInterval, floorRoomInputSchema, restaurantToday, toFloorRoom, validateFloorPlacement, validateRoomLayout, validateTimeZone,
-  type FloorAllocationView, type FloorBoardView, type FloorConfigView, type FloorLease, type FloorRoom, type FloorRoomInput, type FloorRotation,
+  calculateFloorInterval, floorRoomInputSchema, floorTableInventorySchema, restaurantToday, toFloorRoom, validateFloorPlacement, validateRoomLayout, validateTimeZone,
+  type FloorAllocationView, type FloorBoardView, type FloorConfigView, type FloorLease, type FloorRoom, type FloorRoomInput, type FloorRotation, type FloorTableInventoryInput,
 } from "../contracts";
 
 const roomInclude = { locations: { orderBy: { name: "asc" as const } }, tables: { orderBy: { label: "asc" as const } }, combinations: { include: { members: true }, orderBy: { name: "asc" as const } } } satisfies Prisma.DiningRoomInclude;
@@ -56,56 +56,76 @@ export class PrismaFloorRepository {
     if (invalid) throw new BadRequestError(invalid);
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new BadRequestError("La revisión del salón no es válida.");
     try {
+      return await withSqliteTransaction(this.database, (tx) => this.saveRoomInTransaction(tx, restaurantId, input, expectedRevision));
+    } catch (error) { return uniqueError(error); }
+  }
+
+  async saveTables(restaurantId: string, raw: FloorTableInventoryInput): Promise<FloorRoom> {
+    const command = floorTableInventorySchema.parse(raw);
+    try {
       return await withSqliteTransaction(this.database, async (tx) => {
-        const id = input.id || randomUUID();
-        const existing = await tx.diningRoom.findUnique({ where: { id }, include: roomInclude });
-        if (existing && existing.restaurantId !== restaurantId) throw new NotFoundError("Salón");
-        if ((existing?.revision ?? 0) !== expectedRevision) throw new ConflictError("El salón cambió en otra pestaña. Actualizalo antes de guardar.");
-        const future = existing ? (await tx.reservationAllocation.findMany({ where: {
-          restaurantId, roomId: id, blockedUntil: { gt: new Date() }, OR: [{ releasedAt: null }, { releasedAt: { gt: new Date() } }],
-        }, include: allocationInclude })).map(toAllocation) : [];
-        if (!input.active && future.length) throw new ConflictError("El salón tiene reservas futuras asignadas. Reasignalas antes de archivarlo.");
-        for (const old of existing?.tables ?? []) {
-          const next = input.tables.find((table) => table.id === old.id);
-          const committed = future.some((allocation) => allocation.poses.some((pose) => pose.tableId === old.id));
-          if (committed && (!next || !next.active || next.capacity !== old.capacity || next.shape !== old.shape || next.width !== old.width || next.height !== old.height)) {
-            throw new ConflictError(`La mesa ${old.label} tiene reservas futuras. Reasignala antes de cambiar su capacidad, forma o tamaño.`);
-          }
-        }
-        const candidate: FloorRoom = { ...input, id, restaurantId, revision: (existing?.revision ?? -1) + 1 };
-        const conflict = validateFloorPlacement(candidate, null, future);
-        if (conflict) throw new ConflictError(conflict);
-        // Client-generated IDs are accepted only if they do not belong to another room.
-        const [foreignTables, foreignCombinations, foreignLocations] = await Promise.all([
-          tx.diningTable.count({ where: { id: { in: input.tables.map((table) => table.id) }, NOT: { restaurantId, roomId: id } } }),
-          tx.diningTableCombination.count({ where: { id: { in: input.combinations.map((item) => item.id) }, NOT: { restaurantId, roomId: id } } }),
-          tx.diningRoomLocation.count({ where: { id: { in: input.locations.map((item) => item.id) }, NOT: { restaurantId, roomId: id } } }),
-        ]);
-        if (foreignTables || foreignCombinations || foreignLocations) throw new NotFoundError("Mesa, combinación o ubicación");
-        await tx.diningRoom.upsert({ where: { id }, create: { id, restaurantId, name: input.name, width: input.width, height: input.height,
-          fixturesJson: JSON.stringify(input.fixtures), active: input.active, revision: 0 },
-        update: { name: input.name, width: input.width, height: input.height, fixturesJson: JSON.stringify(input.fixtures), active: input.active, revision: { increment: 1 } } });
-        // Archive omitted records instead of deleting IDs referenced by historical bookings.
-        await tx.diningRoomLocation.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.locations.map((location) => location.id) } }, data: { active: false } });
-        for (const location of input.locations) {
-          const { id: locationId, ...data } = location;
-          await tx.diningRoomLocation.upsert({ where: { id: locationId }, create: { id: locationId, restaurantId, roomId: id, ...data }, update: data });
-        }
-        await tx.diningTable.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.tables.map((table) => table.id) } }, data: { active: false } });
-        for (const table of input.tables) {
-          const { id: tableId, ...data } = table;
-          await tx.diningTable.upsert({ where: { id: tableId }, create: { id: tableId, restaurantId, roomId: id, ...data }, update: data });
-        }
-        await tx.diningTableCombination.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.combinations.map((item) => item.id) } }, data: { active: false } });
-        for (const combination of input.combinations) {
-          const { id: combinationId, members, ...data } = combination;
-          await tx.diningTableCombination.upsert({ where: { id: combinationId }, create: { id: combinationId, restaurantId, roomId: id, ...data }, update: data });
-          await tx.diningTableCombinationMember.deleteMany({ where: { combinationId, restaurantId } });
-          await tx.diningTableCombinationMember.createMany({ data: members.map((member) => ({ ...member, combinationId, restaurantId, roomId: id })) });
-        }
-        return toFloorRoom(await tx.diningRoom.findUniqueOrThrow({ where: { id }, include: roomInclude }));
+        const existing = await tx.diningRoom.findFirst({ where: { id: command.roomId, restaurantId }, include: roomInclude });
+        if (!existing) throw new NotFoundError("Salón");
+        // The caller can send only table inventory. Plan geometry is read under the same transaction.
+        const input = floorRoomInputSchema.parse({ ...toFloorRoom(existing), tables: command.tables, combinations: command.combinations });
+        const invalid = validateRoomLayout(input);
+        if (invalid) throw new BadRequestError(invalid);
+        return this.saveRoomInTransaction(tx, restaurantId, input, command.expectedRevision, true);
       });
     } catch (error) { return uniqueError(error); }
+  }
+
+  private async saveRoomInTransaction(tx: Prisma.TransactionClient, restaurantId: string, input: FloorRoomInput, expectedRevision: number, tablesOnly = false): Promise<FloorRoom> {
+    const id = input.id || randomUUID();
+    const existing = await tx.diningRoom.findUnique({ where: { id }, include: roomInclude });
+    if (existing && existing.restaurantId !== restaurantId) throw new NotFoundError("Salón");
+    if ((existing?.revision ?? 0) !== expectedRevision) throw new ConflictError("El salón cambió en otra pestaña. Actualizalo antes de guardar.");
+    const future = existing ? (await tx.reservationAllocation.findMany({ where: {
+      restaurantId, roomId: id, blockedUntil: { gt: new Date() }, OR: [{ releasedAt: null }, { releasedAt: { gt: new Date() } }],
+    }, include: allocationInclude })).map(toAllocation) : [];
+    if (!input.active && future.length) throw new ConflictError("El salón tiene reservas futuras asignadas. Reasignalas antes de archivarlo.");
+    for (const old of existing?.tables ?? []) {
+      const next = input.tables.find((table) => table.id === old.id);
+      const committed = future.some((allocation) => allocation.poses.some((pose) => pose.tableId === old.id));
+      if (committed && (!next || !next.active || next.capacity !== old.capacity || next.shape !== old.shape || next.width !== old.width || next.height !== old.height)) {
+        throw new ConflictError(`La mesa ${old.label} tiene reservas futuras. Reasignala antes de cambiar su capacidad, forma o tamaño.`);
+      }
+    }
+    const candidate: FloorRoom = { ...input, id, restaurantId, revision: (existing?.revision ?? -1) + 1 };
+    const conflict = validateFloorPlacement(candidate, null, future);
+    if (conflict) throw new ConflictError(conflict);
+    // Client-generated IDs are accepted only if they do not belong to another room.
+    const [foreignTables, foreignCombinations, foreignLocations] = await Promise.all([
+      tx.diningTable.count({ where: { id: { in: input.tables.map((table) => table.id) }, NOT: { restaurantId, roomId: id } } }),
+      tx.diningTableCombination.count({ where: { id: { in: input.combinations.map((item) => item.id) }, NOT: { restaurantId, roomId: id } } }),
+      tx.diningRoomLocation.count({ where: { id: { in: input.locations.map((item) => item.id) }, NOT: { restaurantId, roomId: id } } }),
+    ]);
+    if (foreignTables || foreignCombinations || foreignLocations) throw new NotFoundError("Mesa, combinación o ubicación");
+    if (tablesOnly) await tx.diningRoom.update({ where: { id }, data: { revision: { increment: 1 } } });
+    else await tx.diningRoom.upsert({ where: { id }, create: { id, restaurantId, name: input.name, width: input.width, height: input.height,
+      fixturesJson: JSON.stringify(input.fixtures), active: input.active, revision: 0 },
+    update: { name: input.name, width: input.width, height: input.height, fixturesJson: JSON.stringify(input.fixtures), active: input.active, revision: { increment: 1 } } });
+    // Archive omitted records instead of deleting IDs referenced by historical bookings.
+    if (!tablesOnly) {
+      await tx.diningRoomLocation.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.locations.map((location) => location.id) } }, data: { active: false } });
+      for (const location of input.locations) {
+        const { id: locationId, ...data } = location;
+        await tx.diningRoomLocation.upsert({ where: { id: locationId }, create: { id: locationId, restaurantId, roomId: id, ...data }, update: data });
+      }
+    }
+    await tx.diningTable.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.tables.map((table) => table.id) } }, data: { active: false } });
+    for (const table of input.tables) {
+      const { id: tableId, ...data } = table;
+      await tx.diningTable.upsert({ where: { id: tableId }, create: { id: tableId, restaurantId, roomId: id, ...data }, update: data });
+    }
+    await tx.diningTableCombination.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.combinations.map((item) => item.id) } }, data: { active: false } });
+    for (const combination of input.combinations) {
+      const { id: combinationId, members, ...data } = combination;
+      await tx.diningTableCombination.upsert({ where: { id: combinationId }, create: { id: combinationId, restaurantId, roomId: id, ...data }, update: data });
+      await tx.diningTableCombinationMember.deleteMany({ where: { combinationId, restaurantId } });
+      await tx.diningTableCombinationMember.createMany({ data: members.map((member) => ({ ...member, combinationId, restaurantId, roomId: id })) });
+    }
+    return toFloorRoom(await tx.diningRoom.findUniqueOrThrow({ where: { id }, include: roomInclude }));
   }
 
   async archiveRoom(restaurantId: string, roomId: string, expectedRevision: number) {

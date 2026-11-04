@@ -23,6 +23,7 @@ export type FloorCanvasProps = {
   selectedLocationId?: string | null;
   draggableIds?: string[];
   onSelect?: (id: string, additive: boolean) => void;
+  onContextMenuTable?: (id: string, point: { x: number; y: number }) => void;
   onMove?: (ids: string[], delta: { x: number; y: number }) => void;
   onSelectFixture?: (id: string) => void;
   onMoveFixture?: (id: string, point: { x: number; y: number }) => void;

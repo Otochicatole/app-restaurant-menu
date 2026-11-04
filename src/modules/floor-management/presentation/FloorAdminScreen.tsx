@@ -8,12 +8,13 @@ import { AdminConfirmModal, AdminModal } from "@/ui/admin/AdminUI";
 import { useRegisterAdminNavigationGuard } from "@/ui/admin/AdminNavigationGuard";
 import { transientButtonProps } from "@/ui/button-state";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
-import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorConfigView, type FloorFixture, type FloorLocation, type FloorRoom, type FloorRotation, type FloorTable } from "../contracts";
+import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorConfigView, type FloorFixture, type FloorLocation, type FloorRoom, type FloorRotation } from "../contracts";
 import { FloorCanvas } from "./FloorCanvas";
 import { FloorSectorContextMenu } from "./FloorSectorContextMenu";
 import { CombinationPropertiesForm, FloorSettingsForm, InventoryForm, InventoryGroupForm, RoomDimensionsForm, SpatialPropertiesForm, TablePropertiesForm, type StockInput, type StockGroupInput } from "./FloorAdminForms";
 import { getFloorConfig, saveFloorAction } from "./floor-api";
 import { groupInventoryTables } from "./floor-table-groups";
+import { inventoryTables, resizeInventoryGroup } from "./floor-inventory";
 
 type EditorPanel = { kind: "dimensions" | "inventory" | "settings" | "combination" } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
 type ConfirmPanel = { kind: "confirm"; title: string; description: string; confirmLabel: string; run: () => void | Promise<void>; cancelTo?: EditorPanel };
@@ -32,13 +33,6 @@ function uniqueName(base: string, existing: string[]) {
   if (!existing.includes(base)) return base;
   let suffix = 2; while (existing.includes(`${base} ${suffix}`)) suffix += 1;
   return `${base} ${suffix}`;
-}
-function inventoryTables(quantity: number, fields: Pick<FloorTable, "shape" | "capacity" | "width" | "height">, existing: FloorTable[]): FloorTable[] {
-  const labels = new Set(existing.map((table) => table.label));
-  return Array.from({ length: quantity }, () => {
-    let number = 1; while (labels.has(`M${number}`)) number += 1; labels.add(`M${number}`);
-    return { ...fields, id: crypto.randomUUID(), label: `M${number}`, x: 0, y: 0, height: fields.shape === "RECTANGLE" ? fields.height : fields.width, rotation: 0, active: true };
-  });
 }
 function roomError(room: FloorRoom): string | null {
   const result = floorRoomInputSchema.safeParse(room);
@@ -171,22 +165,8 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   };
   const applyTableGroup = (key: string, fields: StockGroupInput): string | null => {
     if (!draft || busy) return "Esperá a que termine de guardar.";
-    if (!Number.isInteger(fields.quantity) || fields.quantity < 0 || fields.quantity > 200) return "Ingresá una cantidad entera entre 0 y 200.";
-    const group = groupInventoryTables(draft.tables).find((item) => item.key === key);
-    if (!group) return "El tipo de mesa ya no está disponible. Volvé al inventario.";
-    const referenced = new Set(draft.combinations.filter((item) => item.active).flatMap((item) => item.members.map((member) => member.tableId)));
-    const active = group.tables.filter((table) => table.active);
-    const protectedTables = active.filter((table) => referenced.has(table.id));
-    if (fields.quantity < protectedTables.length) return "Este tipo tiene mesas usadas por armados predefinidos. Modificá esos armados antes de reducir la cantidad.";
-    const candidates = [...protectedTables, ...active.filter((table) => !referenced.has(table.id)), ...group.tables.filter((table) => !table.active)];
-    const kept = new Set(candidates.slice(0, fields.quantity).map((table) => table.id));
-    const members = new Set(group.tables.map((table) => table.id));
-    const dimensions = { shape: fields.shape, width: fields.width, height: fields.shape === "RECTANGLE" ? fields.height : fields.width };
-    const tables = draft.tables.map((table) => members.has(table.id) ? { ...table, ...dimensions, active: kept.has(table.id) } : table);
-    const additional = Math.max(0, fields.quantity - group.tables.length);
-    if (tables.length + additional > 200) return "El salón admite hasta 200 mesas en el inventario.";
-    const capacity = active[0]?.capacity ?? group.tables[0].capacity;
-    tables.push(...inventoryTables(additional, { ...dimensions, capacity }, tables));
+    const tables = resizeInventoryGroup(draft, key, fields);
+    if (typeof tables === "string") return tables;
     return applyRoom({ ...draft, tables }, () => setPanel({ kind: "inventory" }));
   };
   const startCombination = (combination: FloorCombination) => { setSectorMenu(null); setCombinationMode({ combination: copy(combination), selectedIds: combination.members[0] ? [combination.members[0].tableId] : [] }); setSelection(null); setPanel(null); setFlyout(null); setPlacement(null); setError(null); };

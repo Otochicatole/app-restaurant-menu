@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { floorManagement, requireFloorReadAccess } from "@/modules/floor-management/server";
 import { floorRoomInputSchema } from "@/modules/floor-management/contracts";
-import { createWalkInSchema, floorWalkIns, getFloorAssignmentOptions, publicAvailabilityQuerySchema, walkInDurationSchema } from "@/modules/reservation-management/server";
+import { createWalkInSchema, floorReassignmentSchema, floorReassignments, floorWalkIns, getFloorAssignmentOptions, publicAvailabilityQuerySchema, walkInDurationSchema } from "@/modules/reservation-management/server";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { successResponse, handleApiError } from "@/platform/http/api-response";
 import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
@@ -23,6 +23,11 @@ export async function GET(request: NextRequest, { params }: Context) {
       const partySize = z.coerce.number().int().min(1).max(40).parse(request.nextUrl.searchParams.get("partySize") ?? 2);
       const durationMinutes = walkInDurationSchema.parse(request.nextUrl.searchParams.get("durationMinutes") ?? 120);
       return noStore(successResponse(await floorWalkIns.options(restaurantId, partySize, durationMinutes)));
+    }
+    if (mode === "reassign-options") {
+      await requireFloorReadAccess(restaurantId);
+      const reservationId = z.string().min(1).parse(request.nextUrl.searchParams.get("reservationId"));
+      return noStore(successResponse(await floorReassignments.options(restaurantId, reservationId)));
     }
     await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
     if (mode === "config") return noStore(successResponse(await floorManagement.getConfig(restaurantId)));
@@ -48,12 +53,18 @@ const writeSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("disable-staff") }),
   createWalkInSchema.extend({ action: z.literal("walk-in") }),
   z.object({ action: z.literal("release-walk-in"), reservationId: z.string().min(1), expectedRevision: revision }),
+  floorReassignmentSchema.extend({ action: z.literal("reassign") }),
 ]);
 export async function POST(request: NextRequest, { params }: Context) {
   try {
     if (!validateOrigin(request)) return csrfErrorResponse();
     const { restaurantId } = await params;
     const command = writeSchema.parse(await request.json());
+    if (command.action === "reassign") {
+      await requireFloorReadAccess(restaurantId);
+      await floorReassignments.reassign(restaurantId, command);
+      return noStore(successResponse(await floorManagement.getBoard(restaurantId)));
+    }
     if (command.action === "walk-in" || command.action === "release-walk-in") {
       await requireFloorReadAccess(restaurantId);
       if (command.action === "walk-in") await floorWalkIns.create(restaurantId, command);

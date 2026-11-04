@@ -30,6 +30,11 @@ export const floorCombinationSchema = z.object({
   active: z.boolean().default(true), members: z.array(combinationMemberSchema).min(2).max(40),
 });
 export type FloorCombination = z.infer<typeof floorCombinationSchema>;
+export const floorTableInventorySchema = z.object({
+  roomId: z.string().min(1), expectedRevision: z.number().int().nonnegative(),
+  tables: z.array(floorTableSchema).max(200), combinations: z.array(floorCombinationSchema).max(200),
+}).strict();
+export type FloorTableInventoryInput = z.infer<typeof floorTableInventorySchema>;
 export const floorRoomInputSchema = z.object({
   id: z.string().optional(), name: z.string().trim().min(1).max(100), width: dimension, height: dimension,
   fixtures: z.array(fixtureSchema).max(200), locations: z.array(floorLocationSchema).max(100).default([]), active: z.boolean().default(true),

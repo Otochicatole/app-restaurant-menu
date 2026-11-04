@@ -6,6 +6,7 @@ import { ForbiddenError, NotFoundError } from "@/platform/application/errors";
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(), operational: vi.fn(), board: vi.fn(), config: vi.fn(),
   create: vi.fn(), release: vi.fn(), options: vi.fn(), save: vi.fn(),
+  reassign: vi.fn(), reassignOptions: vi.fn(),
 }));
 vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: mocks.admin }));
 vi.mock("@/modules/floor-management/server", () => ({
@@ -14,7 +15,9 @@ vi.mock("@/modules/floor-management/server", () => ({
 }));
 vi.mock("@/modules/reservation-management/server", async () => {
   const actual = await import("@/modules/reservation-management/contracts");
-  return { ...actual, publicAvailabilityQuerySchema: z.object({}), floorWalkIns: { create: mocks.create, release: mocks.release, options: mocks.options } };
+  const { floorAssignmentSchema } = await import("@/modules/floor-management/contracts");
+  const floorReassignmentSchema = z.object({ reservationId: z.string(), expectedRevision: z.number(), expectedAllocationVersion: z.number(), assignment: floorAssignmentSchema });
+  return { ...actual, floorReassignmentSchema, publicAvailabilityQuerySchema: z.object({}), floorWalkIns: { create: mocks.create, release: mocks.release, options: mocks.options }, floorReassignments: { reassign: mocks.reassign, options: mocks.reassignOptions } };
 });
 vi.mock("@/platform/security/csrf", () => ({ validateOrigin: () => true, csrfErrorResponse: () => new Response(null, { status: 403 }) }));
 vi.mock("@/platform/database/prisma", () => ({ prisma: undefined }));
@@ -64,5 +67,38 @@ describe("floor operational permissions", () => {
     expect(response.status).toBe(404);
     expect(mocks.release).not.toHaveBeenCalled();
     expect(mocks.board).not.toHaveBeenCalled();
+  });
+
+  it("lets floor staff read arrangement options while ignoring arbitrary interval and party values", async () => {
+    mocks.reassignOptions.mockResolvedValue({ currentAllocation: { id: "allocation" }, options: [] });
+    const response = await GET(new NextRequest("https://restaurant.test/api/restaurants/own/floor?mode=reassign-options&reservationId=visit&walkInOnly=false&partySize=1&at=2099-01-01&excludeReservationId=foreign"), context);
+    expect(response.status).toBe(200);
+    expect(mocks.reassignOptions).toHaveBeenCalledWith("own", "visit");
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+  });
+
+  it.each([true, false])("saves table rearrangements for floor staff with readOnly=%s and returns only the board", async (readOnly) => {
+    mocks.operational.mockResolvedValue({ restaurantId: "own", readOnly });
+    const command = { action: "reassign", reservationId: "visit", expectedRevision: 2, expectedAllocationVersion: 3,
+      assignment: { roomId: "room", locationId: "location", optionId: "table:table", x: 100, y: 100, rotation: 90, expectedRoomRevision: 1 },
+    };
+    const response = await send({ ...command, walkInOnly: !readOnly, customerPhone: "secret", partySize: 1 });
+    expect(response.status).toBe(200);
+    expect(mocks.reassign).toHaveBeenCalledWith("own", command);
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(mocks.config).not.toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({ data: { allocations: [] } });
+  });
+
+  it("refuses inaccessible restaurants before looking up or changing an arrangement", async () => {
+    mocks.operational.mockRejectedValue(new NotFoundError("Restaurante"));
+    const response = await GET(new NextRequest("https://restaurant.test/api/restaurants/own/floor?mode=reassign-options&reservationId=foreign"), context);
+    expect(response.status).toBe(404);
+    expect(mocks.reassignOptions).not.toHaveBeenCalled();
+    const write = await send({ action: "reassign", reservationId: "foreign", expectedRevision: 0, expectedAllocationVersion: 0,
+      assignment: { roomId: "room", optionId: "table:table", x: 100, y: 100, rotation: 0, expectedRoomRevision: 0 } });
+    expect(write.status).toBe(404);
+    expect(mocks.reassign).not.toHaveBeenCalled();
   });
 });

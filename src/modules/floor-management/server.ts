@@ -28,6 +28,7 @@ export const floorManagement = {
   },
   getBoard: repository.getBoard.bind(repository),
   saveRoom: repository.saveRoom.bind(repository),
+  saveTables: repository.saveTables.bind(repository),
   archiveRoom: repository.archiveRoom.bind(repository),
   updateTimeZone: repository.updateTimeZone.bind(repository),
   setStaffAccount: repository.setStaffAccount.bind(repository),

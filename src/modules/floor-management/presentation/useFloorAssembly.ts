@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { FloorAssignmentInput, FloorAssignmentOption, FloorLocation, FloorOptionsView, FloorPose, FloorRoom, FloorRotation } from "../contracts";
-import { getFloorOptions } from "./floor-api";
+import { buildFloorOptions, type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorLocation, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation } from "../contracts";
+import { getFloorOptions, getFloorReassignmentOptions } from "./floor-api";
 import { assemblyPoses, changeAssemblyTables, containingLocation, customAssembly, type FloorAssemblyPoint, type FloorAssemblyTableUpdate } from "./floor-assembly";
 
 export type UseFloorAssemblyInput = {
   restaurantId: string; active: boolean; partySize: number; durationMinutes: number; roomId: string;
   value: FloorAssignmentInput | null; onChange: (value: FloorAssignmentInput | null) => void;
+  editingAllocation?: FloorAllocationView | null;
+  fallbackRoom?: FloorRoom;
 };
 export type FloorAssemblyController = {
   options: FloorOptionsView | null; room: FloorRoom | undefined; location: FloorLocation | undefined;
@@ -16,10 +18,13 @@ export type FloorAssemblyController = {
   selectLocation: (id: string) => void; setTableIds: (ids: string[]) => void; toggleTable: (id: string) => void; selectOption: (option: FloorAssignmentOption) => void;
   move: (dx: number, dy: number) => void; rotate: () => void; place: (point: FloorAssemblyPoint, locationId?: string) => void;
   setCapacity: (capacity: number) => void; updateTable: (tableId: string, partial: FloorAssemblyTableUpdate) => void;
+  replaceRoom: (room: FloorRoom, tableId: string, partial: FloorAssemblyTableUpdate) => void;
 };
 
-export function useFloorAssembly({ restaurantId, active, partySize, durationMinutes, roomId, value, onChange }: UseFloorAssemblyInput): FloorAssemblyController {
-  const [result, setResult] = useState<{ restaurantId: string; options: FloorOptionsView } | null>(null);
+export function useFloorAssembly({ restaurantId, active, partySize, durationMinutes, roomId, value, onChange, editingAllocation, fallbackRoom }: UseFloorAssemblyInput): FloorAssemblyController {
+  const selectionKey = editingAllocation?.id ?? "walk-in";
+  const reservationId = editingAllocation?.reservationId;
+  const [result, setResult] = useState<{ restaurantId: string; selectionKey: string; options: FloorOptionsView } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -32,16 +37,19 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     void (async () => {
       setPending(true); setError(null);
       try {
-        const options = await getFloorOptions(restaurantId, { date: "", time: "", partySize }, controller.signal, durationMinutes);
-        if (!controller.signal.aborted) setResult({ restaurantId, options });
+        const options = reservationId
+          ? await getFloorReassignmentOptions(restaurantId, reservationId, controller.signal)
+          : await getFloorOptions(restaurantId, { date: "", time: "", partySize }, controller.signal, durationMinutes);
+        if (!controller.signal.aborted) setResult({ restaurantId, selectionKey, options });
       } catch (failure) { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "No se pudo consultar el inventario. Volvé a actualizar."); }
       finally { if (!controller.signal.aborted) setPending(false); }
     })();
     return () => controller.abort();
-  }, [restaurantId, active, partySize, durationMinutes, attempt]);
+  }, [restaurantId, active, partySize, durationMinutes, attempt, reservationId, selectionKey]);
 
-  const options = result?.restaurantId === restaurantId ? result.options : null;
-  const room = options?.rooms.find((item) => item.id === roomId);
+  const options = result?.restaurantId === restaurantId && result.selectionKey === selectionKey ? result.options : null;
+  // The saved room is enough to preview a pose edit; availability still comes only from the server.
+  const room = options?.rooms.find((item) => item.id === roomId) ?? (editingAllocation && fallbackRoom?.id === roomId && fallbackRoom.restaurantId === restaurantId ? fallbackRoom : undefined);
   const locationId = value?.roomId === roomId && value.locationId ? value.locationId : sector.roomId === roomId ? sector.id : "";
   const location = room?.locations.find((item) => item.id === locationId && item.active);
   const selected = assemblyPoses(room, value, options?.options ?? []);
@@ -114,5 +122,21 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     const next = customAssembly(draft, poses, capacity);
     onChange({ ...next, x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
   };
-  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, setTableIds, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable };
+  const replaceRoom = (nextRoom: FloorRoom, tableId: string, partial: FloorAssemblyTableUpdate) => {
+    if (!options || nextRoom.id !== roomId || nextRoom.restaurantId !== restaurantId) return;
+    const previous = new Map(options.options.filter((item) => item.roomId === roomId).map((item) => [item.id, item]));
+    const nextOptions = buildFloorOptions(nextRoom).map((item) => {
+      const old = previous.get(item.id);
+      const resourceAvailable = old?.resourceAvailable ?? old?.available ?? false;
+      return { ...item, resourceAvailable, available: resourceAvailable && item.capacity >= partySize, ...(!resourceAvailable && old?.conflict ? { conflict: old.conflict } : {}) };
+    });
+    setResult({ restaurantId, selectionKey, options: { ...options, rooms: options.rooms.map((item) => item.id === roomId ? nextRoom : item), options: [...options.options.filter((item) => item.roomId !== roomId), ...nextOptions] } });
+    if (draft && selected.length) {
+      const poses = selected.map((pose) => pose.tableId === tableId ? { ...pose, ...partial } : pose);
+      onChange({ ...customAssembly(draft, poses, capacity), expectedRoomRevision: nextRoom.revision,
+        x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
+    }
+    setError(null);
+  };
+  return { options, room, location, locationId, value, selected, capacity, loading: active && pending, error, refresh, selectLocation, setTableIds, toggleTable, selectOption, move, rotate, place, setCapacity, updateTable, replaceRoom };
 }

@@ -215,6 +215,61 @@ describe("floor viewport dragging", () => {
     expect(onSelectLocation).not.toHaveBeenCalled();
   });
 
+  it("opens a table context menu at client coordinates without selecting or placing after zoom and pan", () => {
+    const onContextMenuTable = vi.fn(); const onContextMenuLocation = vi.fn(); const onSelect = vi.fn(); const onPlace = vi.fn();
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    render(createElement(FloorCanvasStage, { room: { ...room, locations: [resizable] }, tables: [table], zoom: 2, fullScreen: true, onZoomChange: vi.fn(), onContextMenuTable, onContextMenuLocation, onSelect, onPlace }));
+    act(() => { canvas.node.position({ x: 60, y: -40 }); canvas.dragEnd!({ target: canvas.node }); });
+    const before = offset();
+    const native = new MouseEvent("contextmenu", { button: 2, clientX: 630, clientY: 270, cancelable: true });
+    const event = { evt: native, target: {}, cancelBubble: false };
+    act(() => {
+      (canvas.groups.get("floor-table-one")!.onMouseDown as (event: unknown) => void)({ evt: new MouseEvent("mousedown", { button: 2 }), target: {}, cancelBubble: false });
+      (canvas.groups.get("floor-table-one")!.onContextMenu as (event: unknown) => void)(event);
+    });
+    expect(native.defaultPrevented).toBe(true); expect(event.cancelBubble).toBe(true);
+    expect(onContextMenuTable.mock.calls).toEqual([["one", { x: 630, y: 270 }]]);
+    expect(onContextMenuLocation).not.toHaveBeenCalled(); expect(onSelect).not.toHaveBeenCalled(); expect(onPlace).not.toHaveBeenCalled();
+    expect(offset()).toEqual(before);
+  });
+
+  it("keeps the native table context menu without a handler and selects tables only with the primary button or touch", () => {
+    const onSelect = vi.fn();
+    const table = { id: "one", label: "M1", shape: "CIRCLE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    render(createElement(FloorCanvasStage, { room, tables: [table], zoom: 1, onZoomChange: vi.fn(), onSelect }));
+    const group = canvas.groups.get("floor-table-one")!;
+    expect(group.onContextMenu).toBeUndefined();
+    act(() => {
+      for (const button of [1, 2]) (group.onMouseDown as (event: unknown) => void)({ evt: new MouseEvent("mousedown", { button }), target: {}, cancelBubble: false });
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    act(() => {
+      (group.onMouseDown as (event: unknown) => void)({ evt: new MouseEvent("mousedown", { button: 0, shiftKey: true }), target: {}, cancelBubble: false });
+      (group.onTap as (event: unknown) => void)({ target: {}, cancelBubble: false });
+    });
+    expect(onSelect.mock.calls).toEqual([["one", true], ["one", false]]);
+  });
+
+  it("moves an individually selected table without including neighboring tables in its drag", () => {
+    const onMove = vi.fn(); const onSelect = vi.fn();
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const second = { ...table, id: "two", label: "M2", x: 280 };
+    render(createElement(FloorCanvasStage, { room, tables: [table, second], zoom: 2, onZoomChange: vi.fn(), selectedIds: ["one"], draggableIds: ["one"], onMove, onSelect }));
+    expect(canvas.groups.get("floor-table-one")!.draggable).toBe(true);
+    expect(canvas.groups.get("floor-table-two")!.draggable).toBe(false);
+    const position = { x: 200, y: 200 };
+    const node = { x: () => position.x, y: () => position.y };
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 230.5, y: 245.25 });
+    act(() => {
+      (canvas.groups.get("floor-table-one")!.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false });
+      (canvas.groups.get("floor-table-one")!.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false });
+    });
+    expect(onMove.mock.calls).toEqual([[["one"], { x: 30.5, y: 45.25 }]]);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(canvas.groups.get("floor-table-two")!.x).toBe(280);
+  });
+
   it.each(["WALL", "BAR", "LABEL"] as const)("prioritizes placement over selecting a %s for both mouse clicks and touch taps", (type) => {
     const onPlace = vi.fn(); const onSelectFixture = vi.fn();
     const fixture = {id: "fixture", type, label: "Referencia", x: 500, y: 400, width: 120, height: 60, rotation: 90 as const};
