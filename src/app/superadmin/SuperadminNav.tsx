@@ -8,8 +8,8 @@ export function SuperadminNav() {
   const pathname = usePathname();
   const items = [
     { href: "/superadmin", label: "Resumen", icon: <LayoutDashboard size={15} /> },
-    { href: "/superadmin/clientes", label: "Clientes", icon: <Users size={15} /> },
-    { href: "/superadmin/plantillas", label: "Plantillas", icon: <PanelsTopLeft size={15} /> },
+    { href: "/superadmin/clients", label: "Clientes", icon: <Users size={15} /> },
+    { href: "/superadmin/templates", label: "Plantillas", icon: <PanelsTopLeft size={15} /> },
   ];
 
   return (

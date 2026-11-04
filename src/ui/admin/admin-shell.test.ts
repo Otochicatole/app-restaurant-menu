@@ -16,7 +16,7 @@ describe("administrative full-screen floor editor", () => {
   afterEach(cleanup);
 
   it("keeps the original sidebar visible beside the room editor without the CMS header or a second mobile menu", () => {
-    route.pathname = "/admin/restaurantes/restaurant/salones";
+    route.pathname = "/admin/restaurants/restaurant/rooms";
     const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
     expect(screen.getByTestId("editor")).toBeTruthy();
     expect(screen.getAllByRole("navigation", { name: "Navegación principal" })).toHaveLength(1);
@@ -28,7 +28,7 @@ describe("administrative full-screen floor editor", () => {
   });
 
   it("retains the existing administrative shell on other restaurant routes", () => {
-    route.pathname = "/admin/restaurantes/restaurant/settings";
+    route.pathname = "/admin/restaurants/restaurant/settings";
     const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
     expect(screen.getByTestId("editor")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Navegación principal" })).toBeTruthy();

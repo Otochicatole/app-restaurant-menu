@@ -36,7 +36,7 @@ export function proxy(req: NextRequest) {
     response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
 
-  const protectedArea = pathname.startsWith("/admin") && !pathname.startsWith("/admin/login") || pathname.startsWith("/superadmin") || pathname === "/sala" || pathname.startsWith("/sala/");
+  const protectedArea = pathname.startsWith("/admin") && !pathname.startsWith("/admin/login") || pathname.startsWith("/superadmin") || pathname === "/floor" || pathname.startsWith("/floor/");
   if (!protectedArea) return response;
 
   const token = req.cookies.get("session")?.value;

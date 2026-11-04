@@ -43,7 +43,7 @@ describe("identity forms", () => {
     await user.type(screen.getByLabelText("Correo electrónico"), "sala@example.test");
     await user.type(screen.getByLabelText("Contraseña"), "password123");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
-    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/sala"));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/floor"));
   });
 
   it("lets the user reveal and hide the login password", async () => {

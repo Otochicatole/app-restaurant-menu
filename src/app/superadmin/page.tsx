@@ -27,7 +27,7 @@ export default async function SuperAdminDashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          href="/superadmin/clientes"
+          href="/superadmin/clients"
           icon={<Store size={18} />}
           label="Organizaciones"
           value={tenants.length}
@@ -35,21 +35,21 @@ export default async function SuperAdminDashboardPage() {
           highlight
         />
         <SummaryCard
-          href="/superadmin/clientes"
+          href="/superadmin/clients"
           icon={<Store size={18} />}
           label="Suspendidos"
           value={tenants.length - active}
           detail="Sin acceso"
         />
         <SummaryCard
-          href="/superadmin/plantillas"
+          href="/superadmin/templates"
           icon={<PanelsTopLeft size={18} />}
           label="Plantillas"
           value={templates.total}
           detail="Sistema y comunidad"
         />
         <SummaryCard
-          href="/superadmin/plantillas"
+          href="/superadmin/templates"
           icon={<BarChart3 size={18} />}
           label="Pendientes"
           value={pending}

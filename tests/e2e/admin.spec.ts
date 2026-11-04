@@ -5,7 +5,7 @@ import { E2E, loginAs } from "./fixtures";
 
 test("tenant admin opens the Canvas editor and publishes a document", async ({ page }) => {
   await loginAs(page, E2E.tenantAdmin);
-  await expect(page).toHaveURL(/\/admin\/restaurantes\/e2e-restaurant-[^/]+$/);
+  await expect(page).toHaveURL(/\/admin\/restaurants\/e2e-restaurant-[^/]+$/);
   await expect(page.getByRole("heading", { name: "Editor de carta: E2E Café" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^(Publicar|Publicado)$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /panel de capas/i })).toBeVisible();

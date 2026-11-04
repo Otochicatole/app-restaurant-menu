@@ -13,7 +13,7 @@ async function run(operation: () => Promise<{ temporaryPassword?: string }>): Pr
   try {
     await requireSuperAdmin();
     const result = await operation();
-    revalidatePath("/superadmin"); revalidatePath("/superadmin/clientes"); revalidatePath("/admin", "layout");
+    revalidatePath("/superadmin"); revalidatePath("/superadmin/clients"); revalidatePath("/admin", "layout");
     revalidatePath("/m/[slug]", "page"); revalidatePath("/l/[slug]", "page");
     return actionSuccess(result);
   } catch (error) { return actionErrorResult(error, "No se pudo completar la operación"); }

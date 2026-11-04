@@ -7,7 +7,7 @@ import type { FloorConfigView, FloorFixture, FloorLocation, FloorRoom, FloorRoom
 const api = vi.hoisted(() => ({ config: vi.fn(), save: vi.fn(), push: vi.fn(), logout: vi.fn() }));
 const cursor = vi.hoisted(() => ({resize: {x: 420, y: 300, width: 640, height: 400}}));
 vi.mock("./floor-api", () => ({ getFloorConfig: api.config, saveFloorAction: api.save, floorInputClass: "input" }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }), usePathname: () => "/admin/restaurantes/restaurant/salones" }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }), usePathname: () => "/admin/restaurants/restaurant/rooms" }));
 vi.mock("next/image", () => ({ default: ({alt, src}: {alt: string; src: string}) => createElement("img", {alt, src}) }));
 vi.mock("@/modules/identity-access/ui", () => ({ LogoutButton: ({disabled, onBeforeLogout}: {disabled?: boolean; onBeforeLogout?: (proceed: () => Promise<void>) => void}) => createElement("button", {disabled, onClick: () => { if (onBeforeLogout) onBeforeLogout(api.logout); else void api.logout(); }}, "Cerrar sesión") }));
 vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: {
@@ -106,7 +106,7 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getAllByRole("navigation", {name: "Navegación principal"})).toHaveLength(1);
     expect(screen.queryByRole("navigation", {name: "Navegación del editor"})).toBeNull();
     const navigation = screen.getByRole("navigation", {name: "Navegación principal"});
-    const destinations = {Editor: "/admin/restaurantes/restaurant", Salones: "/admin/restaurantes/restaurant/salones", Landing: "/admin/restaurantes/restaurant/landing", Reservas: "/admin/restaurantes/restaurant/reservas", Configuración: "/admin/restaurantes/restaurant/settings", "Mi cuenta": "/admin/account", "Cambiar restaurante": "/admin/restaurantes"};
+    const destinations = {Editor: "/admin/restaurants/restaurant", Salones: "/admin/restaurants/restaurant/rooms", Landing: "/admin/restaurants/restaurant/landing", Reservas: "/admin/restaurants/restaurant/reservations", Configuración: "/admin/restaurants/restaurant/settings", "Mi cuenta": "/admin/account", "Cambiar restaurante": "/admin/restaurants"};
     for (const [name, href] of Object.entries(destinations)) {
       const link = within(navigation).getByRole("link", {name});
       expect(link.getAttribute("href")).toBe(href);
@@ -114,7 +114,7 @@ describe("fullscreen room editor workflows", () => {
     expect(within(navigation).getByRole("link", {name: "Salones"}).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", {name: "Cerrar sesión"})).toBeTruthy();
     expect(screen.getByRole("button", {name: "Agregar sector"})).toBeTruthy();
-    expect(screen.getByRole("link", {name: "Ver sala"}).getAttribute("href")).toBe("/sala?restaurantId=restaurant");
+    expect(screen.getByRole("link", {name: "Ver sala"}).getAttribute("href")).toBe("/floor?restaurantId=restaurant");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByLabelText("Ancho del plano")).toBeNull();
     expect(screen.queryByLabelText("Cantidad a agregar")).toBeNull();
@@ -498,7 +498,7 @@ describe("fullscreen room editor workflows", () => {
     expect(plan().width).toBe(1400);
     fireEvent.click(screen.getByRole("link", {name: "Ver sala"}));
     fireEvent.click(screen.getByRole("button", {name: "Descartar y continuar"}));
-    expect(api.push).toHaveBeenCalledWith("/sala?restaurantId=restaurant");
+    expect(api.push).toHaveBeenCalledWith("/floor?restaurantId=restaurant");
     expect(nativeConfirm).not.toHaveBeenCalled(); expect(api.save).not.toHaveBeenCalled();
   });
 

@@ -5,7 +5,7 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
   const actor = await getAuthenticatedAccount();
   if (!actor) redirect("/admin/login");
   if (actor.kind === "super-admin") redirect("/superadmin");
-  if (actor.kind === "waiter") redirect("/sala");
+  if (actor.kind === "waiter") redirect("/floor");
   if (actor.mustChangePassword) redirect("/admin/account/password");
   return children;
 }

@@ -32,7 +32,7 @@ describe("restaurant picker action feedback", () => {
   it.each(["select", "create"])("lets Next handle the %s redirect without displaying a connection error", async (operation) => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const onNavigation = vi.fn();
-    const navigate = vi.fn(async () => { redirect("/admin/restaurantes/restaurant-1"); });
+    const navigate = vi.fn(async () => { redirect("/admin/restaurants/restaurant-1"); });
     render(React.createElement(RouterBoundary, { onError: onNavigation },
       React.createElement(RestaurantPickerScreen, { workspace,
         selectRestaurant: operation === "select" ? navigate : success,

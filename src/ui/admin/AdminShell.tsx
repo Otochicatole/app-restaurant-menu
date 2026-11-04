@@ -36,18 +36,18 @@ function AdminShellContent({
   const router = useRouter();
   const { requestNavigation } = useAdminNavigationGuard();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const basePath = `/admin/restaurantes/${restaurantId}`;
-  const isMenusPage = pathname === "/admin/restaurantes";
+  const basePath = `/admin/restaurants/${restaurantId}`;
+  const isMenusPage = pathname === "/admin/restaurants";
   const isLandingPage = pathname === `${basePath}/landing`;
-  const isFloorEditorPage = pathname === `${basePath}/salones`;
+  const isFloorEditorPage = pathname === `${basePath}/rooms`;
 
   const navigation = [
     { label: "Editor", href: basePath, exact: true, icon: Layers3 },
-    { label: "Salones", href: `${basePath}/salones`, exact: true, icon: Map },
+    { label: "Salones", href: `${basePath}/rooms`, exact: true, icon: Map },
     ...(landingEnabled
       ? [
           { label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe },
-          { label: "Reservas", href: `${basePath}/reservas`, icon: CalendarDays },
+          { label: "Reservas", href: `${basePath}/reservations`, icon: CalendarDays },
         ]
       : []),
     { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
@@ -101,8 +101,8 @@ function AdminShellContent({
           {showMenuPickerLink && (
             <div className="group relative flex w-full items-center justify-center">
               <Link
-                href="/admin/restaurantes"
-                onClick={(event) => navigate(event, "/admin/restaurantes")}
+                href="/admin/restaurants"
+                onClick={(event) => navigate(event, "/admin/restaurants")}
                 aria-label="Cambiar restaurante"
                 aria-current={isMenusPage ? "page" : undefined}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${

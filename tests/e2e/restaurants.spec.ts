@@ -10,7 +10,7 @@ test("login selects a restaurant and keeps two browser tabs isolated", async ({ 
  try { await prisma.menuProject.updateMany({ where: { restaurantId: { in: [E2E.tenantAdmin.restaurantId, E2E.branch.restaurantId] } }, data: { draftRevision: 500 } }); }
  finally { await prisma.$disconnect(); }
  await loginAs(page, E2E.tenantAdmin, { openRestaurant: false });
- await expect(page).toHaveURL(/\/admin\/restaurantes$/);
+ await expect(page).toHaveURL(/\/admin\/restaurants$/);
  await page.screenshot({ path: "test-results/ui-qa/selector-desktop.png", fullPage: true });
  const cafe = page.locator("article").filter({ has: page.getByRole("heading", { name: "E2E Café", exact: true }) });
  const checkCafeNavigation = await watchSelectorNavigation(page);
@@ -27,7 +27,7 @@ test("login selects a restaurant and keeps two browser tabs isolated", async ({ 
  })).toBeGreaterThan(1);
  await page.screenshot({ path: "test-results/ui-qa/editor-organization-restaurant.png", fullPage: true });
  const otherPage = await context.newPage();
- await otherPage.goto("/admin/restaurantes");
+ await otherPage.goto("/admin/restaurants");
  const checkBranchNavigation = await watchSelectorNavigation(otherPage);
  await otherPage.locator("article").filter({ has: otherPage.getByRole("heading", { name: E2E.branch.name, exact: true }) }).getByRole("button", { name: "Abrir", exact: true }).click();
  await expect(otherPage).toHaveURL(restaurantPath(E2E.branch.restaurantId));
@@ -58,17 +58,17 @@ test("login selects a restaurant and keeps two browser tabs isolated", async ({ 
  expect((await browserApi(page, "/api/editor/project", "PUT", { baseRevision: 0, document: before.data.document })).status).toBe(410);
  await otherPage.close();
  await page.setViewportSize({ width: 390, height: 844 });
- await page.goto("/admin/restaurantes");
+ await page.goto("/admin/restaurants");
  await expect(page.getByRole("heading", { name: "Tus restaurantes" })).toBeVisible();
  await page.screenshot({ path: "test-results/ui-qa/selector-mobile.png", fullPage: true });
 });
 
 test("each restaurant displays its own landing and reservations", async ({ page }) => {
  await loginAs(page, E2E.tenantAdmin);
- await page.goto(restaurantPath(E2E.tenantAdmin.restaurantId) + "/reservas");
+ await page.goto(restaurantPath(E2E.tenantAdmin.restaurantId) + "/reservations");
  await expect(page.getByText("Cliente de E2E Café", { exact: true })).toBeVisible();
  await expect(page.getByText("Cliente de E2E Sucursal", { exact: true })).toHaveCount(0);
- await page.goto(restaurantPath(E2E.branch.restaurantId) + "/reservas");
+ await page.goto(restaurantPath(E2E.branch.restaurantId) + "/reservations");
  await expect(page.getByText("Cliente de E2E Sucursal", { exact: true })).toBeVisible();
  await expect(page.getByText("Cliente de E2E Café", { exact: true })).toHaveCount(0);
  await page.goto("/l/" + E2E.tenantAdmin.slug);
@@ -96,12 +96,12 @@ test("an empty organization can create and delete its last restaurant with its p
  await page.getByLabel("Slug público", { exact: true }).fill("e2e-selector-new-" + suffix);
  const checkCreatedRestaurantNavigation = await watchSelectorNavigation(page);
  await page.getByRole("button", { name: "Crear y abrir", exact: true }).click();
- await expect(page).toHaveURL(/\/admin\/restaurantes\/[^/]+$/);
+ await expect(page).toHaveURL(/\/admin\/restaurants\/[^/]+$/);
  await checkCreatedRestaurantNavigation();
  const restaurantId = new URL(page.url()).pathname.split("/").at(-1)!;
  const project = (await browserApi(page, editorApi(restaurantId) + "/project")).body;
  expect(project.data.document.nodes).toEqual([]);
- await page.goto("/admin/restaurantes");
+ await page.goto("/admin/restaurants");
  await page.getByRole("button", { name: "Eliminar E2E Restaurante nuevo", exact: true }).click();
  const dialog = page.getByRole("dialog", { name: "Eliminar restaurante", exact: true });
  await dialog.getByLabel("Contraseña actual").fill("Wrong-password-123");
@@ -112,7 +112,7 @@ test("an empty organization can create and delete its last restaurant with its p
  await expect(dialog).toBeHidden();
  await expect(page.getByRole("heading", { name: "Todavía no hay restaurantes" })).toBeVisible();
  await page.goto("/admin");
- await expect(page).toHaveURL(/\/admin\/restaurantes$/);
+ await expect(page).toHaveURL(/\/admin\/restaurants$/);
  await expect(page.getByRole("heading", { name: "Todavía no hay restaurantes" })).toBeVisible();
  const verify = createSqlitePrismaClient(requireDisposableTestDatabase().connectionString);
  try { expect(await verify.organization.count({ where: { id: organizationId } })).toBe(1); expect(await verify.restaurant.count({ where: { organizationId } })).toBe(0); }
@@ -185,7 +185,7 @@ async function watchSelectorNavigation(page: Page) {
  const stopEvent = storageKey + ":stop";
  // A Server Action can include the destination Flight tree in its response.
  // Delay its GET/RSC request, or newly requested destination JavaScript chunks.
- const destination = /\/(?:admin\/restaurantes\/|_next\/static\/chunks\/)/;
+ const destination = /\/(?:admin\/restaurants\/|_next\/static\/chunks\/)/;
  const delayDestination = async (route: Route) => {
   if (route.request().method() === "GET") await new Promise((resolve) => setTimeout(resolve, 300));
   await route.continue();

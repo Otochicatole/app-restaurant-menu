@@ -4,6 +4,6 @@ import { getAuthenticatedAccount } from "@/modules/identity-access/server";
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const actor = await getAuthenticatedAccount();
   if (!actor) redirect("/admin/login");
-  if (actor.kind === "waiter") redirect("/sala");
+  if (actor.kind === "waiter") redirect("/floor");
   return children;
 }

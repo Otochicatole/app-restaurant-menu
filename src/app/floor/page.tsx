@@ -7,7 +7,7 @@ export default async function DiningRoomPage({ searchParams }: { searchParams: P
   const requestedId = (await searchParams).restaurantId;
   const actor = await getAuthenticatedAccount();
   if (!actor) redirect("/admin/login");
-  if (actor.kind !== "waiter" && !requestedId) redirect(actor.kind === "super-admin" ? "/superadmin" : "/admin/restaurantes");
+  if (actor.kind !== "waiter" && !requestedId) redirect(actor.kind === "super-admin" ? "/superadmin" : "/admin/restaurants");
   const access = await requireFloorReadAccess(requestedId);
   const initialBoard = await floorManagement.getBoard(access.restaurantId);
   return <FloorBoardScreen key={access.restaurantId} restaurantId={access.restaurantId} restaurantName={access.restaurantName} readOnly={access.readOnly} canManageWalkIns={access.canManageWalkIns} initialBoard={initialBoard} />;

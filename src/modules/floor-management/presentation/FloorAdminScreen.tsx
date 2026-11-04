@@ -65,7 +65,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const panelSurface = useRef<HTMLDivElement>(null);
   const toolButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const hasUnsaved = dirty || combinationMode !== null;
-  const roomHref = `/sala?restaurantId=${encodeURIComponent(restaurantId)}`;
+  const roomHref = `/floor?restaurantId=${encodeURIComponent(restaurantId)}`;
 
   useEffect(() => {
     const controller = new AbortController();
