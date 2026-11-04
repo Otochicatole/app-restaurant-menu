@@ -11,11 +11,12 @@ export type FloorAssemblyGroupingProps = {
   onJoinTables?: () => void; onSeparateTables?: () => void;
   onMoveTableGroup?: () => void; onRotateTableGroup?: () => void;
   onTableActions?: (id: string, point: { x: number; y: number }) => void;
+  onGroupActions?: (ids: string[], point: { x: number; y: number }) => void;
 };
 
 const actionClass = "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs font-semibold leading-4 text-[var(--floor-ink,#263e23)] hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 
-export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled = false, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onMoveTableGroup, onRotateTableGroup, onTableActions }: FloorAssemblyGroupingProps) {
+export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled = false, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onMoveTableGroup, onRotateTableGroup, onTableActions, onGroupActions }: FloorAssemblyGroupingProps) {
   const groups = getJoinedTableGroups(tables);
   const selected = new Set(selectedTableIds.filter((id) => tables.some((table) => table.tableId === id)));
   const canJoin = selected.size >= 2;
@@ -46,6 +47,7 @@ export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled 
         return <li key={ids[0]} className={joined ? "col-span-2 min-w-0 border-b border-stone-200 pb-2 last:border-b-0 last:pb-0" : "min-w-0"}>
           {joined && <div className="flex min-h-11 min-w-0 items-center justify-between gap-2">
             <span title={`Unidas: ${labels}`} className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-xs font-medium text-[var(--floor-action,#2d603f)]"><Link2 size={14} className="shrink-0" /><span className="min-w-0 truncate">Unidas: {labels}</span></span>
+            {onGroupActions && <button {...transientButtonProps} type="button" aria-label={"Acciones del grupo " + labels} aria-haspopup="menu" disabled={disabled} onClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); onGroupActions(ids, { x: bounds.left, y: bounds.bottom + 4 }); }} onContextMenu={(event) => { event.preventDefault(); onGroupActions(ids, { x: event.clientX, y: event.clientY }); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:opacity-50"><MoreHorizontal size={16} /></button>}
             {onSelectTableGroup && <button {...transientButtonProps} type="button" aria-label={`Seleccionar grupo ${labels}`} aria-pressed={ids.every((id) => selected.has(id))} disabled={disabled} onClick={() => onSelectTableGroup(ids)} className="min-h-11 shrink-0 rounded-lg px-1 text-xs font-semibold text-[var(--floor-ink,#263e23)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50">Seleccionar grupo</button>}
           </div>}
           <div className={joined ? "grid grid-cols-2 gap-2" : undefined}>{group.map(tableCell)}</div>

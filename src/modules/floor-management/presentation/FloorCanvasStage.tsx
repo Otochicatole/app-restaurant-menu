@@ -14,7 +14,7 @@ const canvasPaint = {
 };
 type CanvasPaint = (typeof canvasPaint)[keyof typeof canvasPaint];
 
-export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onContextMenuTable, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
+export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectedIds = [], selectedFixtureId, selectedLocationId, draggableIds, onSelect, onContextMenuTable, onContextMenuGroup, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
   const paint = canvasPaint[appearance];
   const container = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
@@ -130,7 +130,7 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
           {fixture.type !== "LABEL" && <Rect x={-fixture.width / 2} y={-fixture.height / 2} width={fixture.width} height={fixture.height} fill={fixture.type === "WALL" ? paint.wall : paint.bar} stroke={selectedFixtureId === fixture.id ? paint.tableSelectedEdge : undefined} strokeWidth={3} cornerRadius={fixture.type === "BAR" ? 5 : 0} />}
           {fixture.label && <Text text={fixture.label} x={-fixture.width / 2} y={-8} width={fixture.width} align="center" fontSize={fixture.type === "LABEL" ? 18 : 13} fill={fixture.type === "WALL" ? "#ffffff" : paint.fixtureInk} fontStyle="bold" />}
         </Group>)}
-        {liveJoinedGroups.map(({ group, tables }) => <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} paint={paint} />)}
+        {liveJoinedGroups.map(({ group, tables }) => <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} paint={paint} onContextMenu={onContextMenuGroup ? (point) => onContextMenuGroup(group.tableIds, point) : undefined} />)}
         {liveTables.map((table) => <Table key={table.id} table={table} paint={paint} selected={selectedIds.includes(table.id)} draggable={Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
           onSelect={(additive) => onSelect?.(table.id, additive)}
           onContextMenu={onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
@@ -163,7 +163,7 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
   </div>;
 }
 
-function JoinedTables({ group, tables, selectedIds, paint }: { group: FloorCanvasJoinedGroup; tables: FloorCanvasTable[]; selectedIds: string[]; paint: CanvasPaint }) {
+function JoinedTables({ group, tables, selectedIds, paint, onContextMenu }: { group: FloorCanvasJoinedGroup; tables: FloorCanvasTable[]; selectedIds: string[]; paint: CanvasPaint; onContextMenu?: (point: { x: number; y: number }) => void }) {
   if (tables.length < 2) return null;
   const bounds = tables.map((table) => {
     const swapped = table.shape !== "CIRCLE" && Math.abs(table.rotation % 180) === 90;
@@ -180,10 +180,10 @@ function JoinedTables({ group, tables, selectedIds, paint }: { group: FloorCanva
   const stroke = selected ? paint.tableSelectedEdge : reserved ? "#95664c" : paint.joinEdge;
   const labelWidth = Math.max(width, 160);
   const labelX = (width - labelWidth) / 2;
-  return <Group id={`floor-joined-group-${group.id}`} x={left} y={top} listening={false}>
-    <Rect id={`floor-joined-outline-${group.id}`} width={width} height={height} stroke={stroke} strokeWidth={1.5} dash={[6, 4]} cornerRadius={9} listening={false} />
-    <Rect x={labelX} y={-25} width={labelWidth} height={21} fill={paint.board} cornerRadius={4} listening={false} />
-    <Text id={`floor-joined-label-${group.id}`} text={`Unidas · ${group.label}`} x={labelX + 5} y={-21} width={labelWidth - 10} height={16} wrap="none" ellipsis align="center" fontSize={12} fontStyle="bold" fill={stroke} listening={false} />
+  return <Group id={`floor-joined-group-${group.id}`} x={left} y={top} listening={Boolean(onContextMenu)} onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}>
+    <Rect id={`floor-joined-outline-${group.id}`} width={width} height={height} stroke={stroke} strokeWidth={1.5} dash={[6, 4]} cornerRadius={9} hitStrokeWidth={16} listening={Boolean(onContextMenu)} />
+    <Rect x={labelX} y={-25} width={labelWidth} height={21} fill={paint.board} cornerRadius={4} listening={Boolean(onContextMenu)} />
+    <Text id={`floor-joined-label-${group.id}`} text={`Unidas · ${group.label}`} x={labelX + 5} y={-21} width={labelWidth - 10} height={16} wrap="none" ellipsis align="center" fontSize={12} fontStyle="bold" fill={stroke} listening={Boolean(onContextMenu)} />
   </Group>;
 }
 

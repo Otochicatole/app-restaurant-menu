@@ -47,11 +47,7 @@ function toolId(panel: EditorPanel): string {
 function toolTitle(panel: EditorPanel): string {
   return panel.kind === "dimensions" ? "Medidas del salón" : panel.kind === "inventory" ? "Inventario de mesas" : panel.kind === "table-group" ? "Editar tipo de mesa" : panel.kind === "table" ? "Editar mesa" : panel.kind === "sector" ? "Propiedades del sector" : panel.kind === "fixture" ? "Propiedades del elemento" : panel.kind === "combination" ? "Armado predefinido" : panel.kind === "combination-layout" ? "Edición del armado" : "Configuración del restaurante";
 }
-function toolLauncherTitle(value: EditorTool): string {
-  const panel = value.panel;
-  const detail = panel.kind === "sector" ? panel.entity.name : panel.kind === "fixture" ? panel.entity.label : panel.kind === "combination" ? panel.entity.name : panel.kind === "table" ? (value.baseline as FloorRoom["tables"][number] | undefined)?.label : panel.kind === "table-group" && Array.isArray(value.baseline) ? groupInventoryTables(value.baseline)[0]?.label : undefined;
-  return toolTitle(panel) + (detail ? ` · ${detail}` : "");
-}
+
 function baseline(panel: EditorPanel, room: FloorRoom | null, combination: CombinationMode): unknown {
   if (!room) return undefined;
   if (panel.kind === "dimensions") return { name: room.name, width: room.width, height: room.height, active: room.active };
@@ -84,7 +80,6 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const flyoutSurface = useRef<HTMLDivElement>(null);
   const toolSurfaces = useRef(new Map<string, HTMLDivElement>());
   const toolButtons = useRef<(HTMLButtonElement | null)[]>([]);
-  const toolsLaunchers = useRef(new Map<string, HTMLButtonElement>());
   const windowsRef = useRef(tools.windows);
   const hasPendingRoomChanges = dirty || combinationMode !== null;
   const hasUnsaved = hasPendingRoomChanges || editedTools.size > 0;
@@ -137,9 +132,8 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const patch = (next: FloorRoom) => { if (busy) return; setSectorMenu(null); setDraft(next); setDirty(true); setNotice(null); setError(null); };
   const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); tools.clear(); setEditedTools(new Set()); setConfirmation(null); setError(null); };
   const clearToolEdit = (id: string) => setEditedTools((previous) => { if (!previous.has(id)) return previous; const next = new Set(previous); next.delete(id); return next; });
-  const closeTool = (id: string) => { if (!busy) { tools.close(id); clearToolEdit(id); } };
+  const closeTool = (id: string) => { if (!busy) { if (id.startsWith("combination-layout:")) setCombinationMode(null); tools.close(id); clearToolEdit(id); } };
   const markToolEdit = (id: string) => setEditedTools((previous) => previous.has(id) ? previous : new Set(previous).add(id));
-  const hideTool = (id: string) => { if (busy) return; tools.hide(id); window.requestAnimationFrame(() => toolsLaunchers.current.get(id)?.focus()); };
   const staleTool = (value: EditorTool): string | null => {
     if (!draft || value.roomId !== draft.id) return "El salón de esta ventana cambió. Cancelá y volvé a abrir la herramienta.";
     if (JSON.stringify(baseline(value.panel, draft, combinationMode)) !== JSON.stringify(value.baseline)) return "Estos datos cambiaron en otra herramienta. Cancelá y volvé a abrir las propiedades antes de aplicar.";
@@ -301,7 +295,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
       const table = pane.kind === "table" ? value.baseline as FloorRoom["tables"][number] | undefined : undefined;
       const layout = pane.kind === "combination-layout" && combinationMode?.combination.id === pane.id ? combinationMode : null;
       const icon = pane.kind === "inventory" || pane.kind === "table" || pane.kind === "table-group" ? <Package size={17} className="text-[#3d5934]" /> : pane.kind === "settings" ? <Settings2 size={17} className="text-[#3d5934]" /> : pane.kind === "dimensions" ? <Ruler size={17} className="text-[#3d5934]" /> : pane.kind === "combination-layout" ? <Layers3 size={17} className="text-[#3d5934]" /> : <Shapes size={17} className="text-[#3d5934]" />;
-      return <FloatingModalWindow key={entry.id} id={"room-tool-" + entry.id} title={layout?.combination.name ?? title} subtitle={pane.kind === "sector" ? pane.entity.name : pane.kind === "fixture" ? pane.entity.label : layout ? "Armado predefinido" : currentRoom?.name ?? config?.restaurantName} icon={icon} role={pane.kind === "combination-layout" ? "complementary" : "dialog"} ariaLabel={pane.kind === "combination-layout" ? "Edición del armado" : title} isOpen={entry.visible} activation={entry.activation} initialOffset={entry.offset} keepMounted onClose={() => hideTool(entry.id)} closeDisabled={busy} onFocus={() => tools.focus(entry.id)} initialAnchor="right" viewportInset={{ left: 64, bottom: 132 }} initialPosition={{ x: 80, y: 112 }} initialSize={pane.kind === "combination-layout" ? { width: 380, height: 420 } : { width: 420, height: 620 }} minWidth={300} minHeight={320} zIndex={entry.zIndex}>
+      return <FloatingModalWindow key={entry.id} id={"room-tool-" + entry.id} title={layout?.combination.name ?? title} subtitle={pane.kind === "sector" ? pane.entity.name : pane.kind === "fixture" ? pane.entity.label : layout ? "Armado predefinido" : currentRoom?.name ?? config?.restaurantName} icon={icon} role={pane.kind === "combination-layout" ? "complementary" : "dialog"} ariaLabel={pane.kind === "combination-layout" ? "Edición del armado" : title} isOpen={entry.visible} activation={entry.activation} initialOffset={entry.offset} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={busy} onFocus={() => tools.focus(entry.id)} initialAnchor="right" viewportInset={{ left: 64, bottom: 132 }} initialPosition={{ x: 80, y: 112 }} initialSize={pane.kind === "combination-layout" ? { width: 380, height: 420 } : { width: 420, height: 620 }} minWidth={300} minHeight={320} zIndex={entry.zIndex}>
         <div ref={(element) => { if (element) toolSurfaces.current.set(entry.id, element); else toolSurfaces.current.delete(entry.id); }} tabIndex={-1} onChangeCapture={() => markToolEdit(entry.id)} className="flex min-h-0 flex-1 flex-col outline-none">
           <fieldset disabled={busy} className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentRoom && pane.kind === "dimensions" && <RoomDimensionsForm room={value.baseline ? { ...currentRoom, ...value.baseline as Pick<FloorRoom, "name" | "width" | "height" | "active"> } : currentRoom} busy={busy} saved={!!config?.rooms.some((room) => room.id === currentRoom.id)} onApply={(fields) => check() ?? applyRoom({ ...currentRoom, ...fields }, finish)} onArchive={archiveRoom} onCancel={finish} />}
@@ -341,7 +335,6 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
         </div>
       </FloatingModalWindow>;
     })}
-    {tools.windows.some((entry) => !entry.visible) && <aside aria-label="Ventanas ocultas del salón" className="absolute bottom-40 right-3 z-30 flex max-w-[calc(100%_-_1.5rem)] flex-wrap justify-end gap-2 md:bottom-20 sm:right-6">{tools.windows.filter((entry) => !entry.visible).map((entry) => <button key={entry.id} {...transientButtonProps} ref={(element) => { if (element) toolsLaunchers.current.set(entry.id, element); else toolsLaunchers.current.delete(entry.id); }} type="button" aria-label={"Abrir ventana " + toolLauncherTitle(entry.value)} onClick={() => tools.open(entry.id, entry.value)} className={floatingButton + " w-auto px-3"}><Shapes size={17} /><span>{toolLauncherTitle(entry.value)}</span></button>)}</aside>}
     {confirmation && <AdminConfirmModal open title={confirmation.title} description={confirmation.description} confirmLabel={confirmation.confirmLabel} loading={busy} onClose={() => { if (!busy) setConfirmation(null); }} onConfirm={confirmation.run}>{error && <p role="alert" className="mb-4 text-sm text-red-800">{error}</p>}</AdminConfirmModal>}
   </main>;
 }

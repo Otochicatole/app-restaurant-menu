@@ -573,4 +573,18 @@ describe("floor viewport dragging", () => {
     expect(native.defaultPrevented).toBe(true); expect(event.cancelBubble).toBe(true);
     expect(onContextMenuLocation.mock.calls).toEqual([["window", { x: 480, y: 310 }]]);
   });
+  it("opens group actions from the joined outline without routing them to an individual table", () => {
+    const first = {id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true};
+    const second = {...first, id: "two", label: "M2", x: 280};
+    const groupAction = vi.fn(); const tableAction = vi.fn();
+    render(createElement(FloorCanvasStage, {room, tables: [first, second], joinedGroups: [{id: "joined", tableIds: ["one", "two"], label: "M1 + M2"}], zoom: 1, onZoomChange: vi.fn(), onContextMenuGroup: groupAction, onContextMenuTable: tableAction}));
+    const group = canvas.groups.get("floor-joined-group-joined")!;
+    expect(group.listening).toBe(true); expect(canvas.rects.get("floor-joined-outline-joined")!.hitStrokeWidth).toBe(16);
+    const native = new MouseEvent("contextmenu", {clientX: 320, clientY: 240, cancelable: true});
+    const event = {evt: native, cancelBubble: false};
+    act(() => { (group.onContextMenu as (event: unknown) => void)(event); });
+    expect(native.defaultPrevented).toBe(true); expect(event.cancelBubble).toBe(true);
+    expect(groupAction).toHaveBeenCalledWith(["one", "two"], {x: 320, y: 240}); expect(tableAction).not.toHaveBeenCalled();
+  });
+
 });

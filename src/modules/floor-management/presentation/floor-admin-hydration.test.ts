@@ -87,9 +87,10 @@ describe("floor editor hydration and client configuration", () => {
     for (const name of ["Cerrar ventana", "Minimizar ventana"]) expect(within(tool).getByRole("button", {name}).getAttribute("autocomplete")).toBe("off");
     fireEvent.click(within(tool).getByRole("button", {name: "Cerrar ventana"}));
     expect(dom.queryByRole("dialog", {name: "Medidas del salón"})).toBeNull();
-    fireEvent.click(dom.getByRole("button", {name: "Abrir ventana Medidas del salón"}));
-    expect(dom.getByRole("dialog", {name: "Medidas del salón"})).toBe(tool);
-    expect(input.value).toBe("Nombre pendiente"); expect(input.isConnected).toBe(true);
+    expect(input.isConnected).toBe(false);
+    expect(dom.queryByRole("button", {name: /Abrir ventana/})).toBeNull();
+    fireEvent.click(dom.getByRole("button", {name: "Medidas"}));
+    expect(dom.getByRole("dialog", {name: "Medidas del salón"})).not.toBe(tool);
     expect(dom.getByRole("img", {name: "Plano de Ventana"})).toBe(canvas);
     expect(errors).not.toHaveBeenCalled(); expect(recoverable).not.toHaveBeenCalled();
   });

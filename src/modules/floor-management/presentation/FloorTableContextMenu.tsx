@@ -8,9 +8,10 @@ export type FloorTableContextMenuProps = {
   name: string; point: { x: number; y: number }; disabled: boolean; reason?: string;
   onEdit: () => void; onRotate: () => void; onMove: () => void; onClose: () => void;
   onSeparate?: () => void; onMoveGroup?: () => void; onRotateGroup?: () => void;
+  scope?: "table" | "group"; onEditGroup?: () => void;
 };
 
-export function FloorTableContextMenu({ name, point, disabled, reason, onEdit, onRotate, onMove, onClose, onSeparate, onMoveGroup, onRotateGroup }: FloorTableContextMenuProps) {
+export function FloorTableContextMenu({ name, point, disabled, reason, onEdit, onRotate, onMove, onClose, onSeparate, onMoveGroup, onRotateGroup, scope = "table", onEditGroup }: FloorTableContextMenuProps) {
   const menu = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef(true);
@@ -32,7 +33,7 @@ export function FloorTableContextMenu({ name, point, disabled, reason, onEdit, o
     return () => {
       if (restoreFocus.current && element.contains(document.activeElement) && previousFocus.current?.isConnected) previousFocus.current.focus();
     };
-  }, [name, point.x, point.y, disabled, reason, hasGroupActions]);
+  }, [name, point.x, point.y, disabled, reason, hasGroupActions, scope]);
 
   useEffect(() => {
     const outside = (event: Event) => {
@@ -67,13 +68,13 @@ export function FloorTableContextMenu({ name, point, disabled, reason, onEdit, o
   };
   const itemClass = "flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 
-  return <div ref={menu} role="menu" aria-label={`Acciones de mesa ${name}`} aria-describedby={reason ? reasonId : undefined} tabIndex={-1} style={{ left: point.x, top: point.y }} onKeyDown={navigate} onContextMenu={(event) => event.preventDefault()} className="fixed z-[60] max-h-[calc(100dvh_-_1rem)] w-[min(15.5rem,calc(100vw_-_1rem))] overflow-y-auto overscroll-contain rounded-xl bg-[var(--floor-surface,#fff)] p-1.5 text-[var(--floor-ink,#263e23)] shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] outline-none">
-    <p className="mb-1 truncate px-2 py-1 text-sm font-semibold">Mesa {name}</p>
+  return <div ref={menu} role="menu" aria-label={scope === "group" ? `Acciones del grupo ${name}` : `Acciones de mesa ${name}`} aria-describedby={reason ? reasonId : undefined} tabIndex={-1} style={{ left: point.x, top: point.y }} onKeyDown={navigate} onContextMenu={(event) => event.preventDefault()} className="fixed z-[60] max-h-[calc(100dvh_-_1rem)] w-[min(15.5rem,calc(100vw_-_1rem))] overflow-y-auto overscroll-contain rounded-xl bg-[var(--floor-surface,#fff)] p-1.5 text-[var(--floor-ink,#263e23)] shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] outline-none">
+    <p className="mb-1 truncate px-2 py-1 text-sm font-semibold">{scope === "group" ? "Grupo" : "Mesa"} {name}</p>
     <div role="presentation" className="space-y-0.5">
-      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onEdit} className={itemClass}><Pencil size={15} className="shrink-0" />Editar</button>
-      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onRotateGroup ?? onRotate} className={itemClass}><RotateCw size={15} className="shrink-0" />{onRotateGroup ? "Girar grupo 90°" : "Girar"}</button>
-      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onMoveGroup ?? onMove} className={itemClass}><Move size={15} className="shrink-0" />{onMoveGroup ? "Mover grupo" : "Mover"}</button>
-      {onSeparate && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onSeparate} className={itemClass}><Unlink size={15} className="shrink-0" />Separar mesa</button>}
+      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={scope === "group" ? onEditGroup ?? onEdit : onEdit} className={itemClass}><Pencil size={15} className="shrink-0" />{scope === "group" ? "Editar grupo" : "Editar mesa"}</button>
+      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={scope === "group" ? onRotateGroup : onRotate} className={itemClass}><RotateCw size={15} className="shrink-0" />{scope === "group" ? "Girar grupo 90°" : "Girar"}</button>
+      <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={scope === "group" ? onMoveGroup : onMove} className={itemClass}><Move size={15} className="shrink-0" />{scope === "group" ? "Mover grupo" : "Mover"}</button>
+      {scope === "table" && onSeparate && <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onSeparate} className={itemClass}><Unlink size={15} className="shrink-0" />Separar mesa</button>}
     </div>
     {reason && <p id={reasonId} className="px-2 pb-2 pt-1 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{reason}</p>}
   </div>;

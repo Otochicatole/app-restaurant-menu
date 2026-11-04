@@ -389,29 +389,18 @@ describe("floor assignment interactions", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("hides an ordinary tool with Escape and restores its pending schedule without locking page scroll", async () => {
-    document.body.style.overflow = "clip";
-    render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true}));
-    await waitFor(() => expect(api.board).toHaveBeenCalled());
-    const trigger = screen.getByRole("button", {name: "Fecha y hora"});
-    trigger.focus(); fireEvent.click(trigger);
-    const dialog = screen.getByRole("dialog");
-    const date = within(dialog).getByLabelText("Fecha") as HTMLInputElement;
-    const time = within(dialog).getByLabelText("Hora") as HTMLInputElement;
-    fireEvent.change(date, {target: {value: "2099-12-01"}});
-    fireEvent.change(time, {target: {value: "22:15"}});
-    expect(dialog.getAttribute("aria-modal")).toBe("false");
-    expect(document.body.style.overflow).toBe("clip");
-    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
-    fireEvent.keyDown(dialog, {key: "Escape"});
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(dialog.isConnected).toBe(true);
-    const restore = screen.getByRole("button", {name: "Abrir ventana Fecha y hora"});
-    await waitFor(() => expect(document.activeElement).toBe(restore));
-    fireEvent.click(restore);
-    expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBe(dialog);
-    expect(within(dialog).getByLabelText("Fecha")).toBe(date); expect(date.value).toBe("2099-12-01");
-    expect(within(dialog).getByLabelText("Hora")).toBe(time); expect(time.value).toBe("22:15");
+  it("closes an ordinary tool with Escape without leaving a dock or locking scroll", async () => {
+    render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistr\u00F3", readOnly: true}));
+    await waitFor(() => expect(api.board).toHaveBeenCalled()); document.body.style.overflow = "clip";
+    fireEvent.click(screen.getByRole("button", {name: "Fecha y hora"}));
+    const dialog = screen.getByRole("dialog", {name: "Fecha y hora"});
+    const original = (within(dialog).getByLabelText("Hora") as HTMLInputElement).value;
+    fireEvent.change(within(dialog).getByLabelText("Hora"), {target: {value: "22:15"}});
+    fireEvent.keyDown(dialog, {key: "Escape"}); expect(dialog.isConnected).toBe(false);
+    expect(screen.queryByRole("button", {name: /Abrir ventana/})).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name: "Fecha y hora"}));
+    const reopened = screen.getByRole("dialog", {name: "Fecha y hora"}); expect(reopened).not.toBe(dialog);
+    expect((within(reopened).getByLabelText("Hora") as HTMLInputElement).value).toBe(original);
     expect(document.body.style.overflow).toBe("clip");
   });
 
@@ -466,8 +455,8 @@ describe("floor assignment interactions", () => {
     expect({ left: arrival.style.left, top: arrival.style.top, width: arrival.style.width, height: arrival.style.height }).toEqual(geometry);
     expect(scroller.scrollTop).toBe(115);
 
-    fireEvent.click(within(scheduleWindow).getByRole("button", { name: "Cerrar ventana" }));
-    expect(screen.queryByRole("dialog", { name: "Fecha y hora" })).toBeNull();
+    fireEvent.click(within(scheduleWindow).getByRole("button", { name: "Minimizar ventana" }));
+    expect(within(scheduleWindow).getByRole("button", { name: "Restaurar ventana" })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Atender sin reserva" })).toBe(arrival);
     expect(screen.getByRole("dialog", { name: "Reservas de Salón principal" })).toBe(reservations);
     fireEvent.click(screen.getByRole("button", { name: "Fecha y hora" }));
@@ -524,40 +513,30 @@ describe("floor assignment interactions", () => {
     expect(screen.getByRole("dialog", { name: "Reservas de Salón principal" })).toBe(reservations);
     fireEvent.click(details[0]);
     expect(screen.getAllByRole("dialog", { name: "Detalle de la reserva" })).toHaveLength(2);
-    expect(within(ana).getByRole("heading", { name: "Ana" })).toBeTruthy();
-    expect(ana.hidden).toBe(false);
-    expect(Number(ana.style.zIndex)).toBeGreaterThan(Number(bruno.style.zIndex));
+    const reopened = screen.getAllByRole("dialog", { name: "Detalle de la reserva" }).find((pane) => pane !== bruno)!;
+    expect(ana.isConnected).toBe(false); expect(within(reopened).getByRole("heading", { name: "Ana" })).toBeTruthy();
+    expect(Number(reopened.style.zIndex)).toBeGreaterThan(Number(bruno.style.zIndex));
   });
 
-  it("preserves a walk-in form, scroll and board viewport when closing, restoring and minimizing its window", async () => {
-    render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true}));
-    await waitFor(() => expect(api.board).toHaveBeenCalled());
-    const canvas = screen.getByTestId("floor-canvas");
-    fireEvent.click(screen.getByRole("button", {name: "Desplazar tablero"}));
+  it("minimizes a walk-in draft without losing data and discards only that window on X", async () => {
+    render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistr\u00F3", readOnly: true, canManageWalkIns: true}));
+    await waitFor(() => expect(api.board).toHaveBeenCalled()); const canvas = screen.getByTestId("floor-canvas");
     fireEvent.click(screen.getByRole("button", {name: "Atender sin reserva"}));
     const dialog = screen.getByRole("dialog", {name: "Atender sin reserva"});
-    const name = within(dialog).getByLabelText("Nombre del grupo") as HTMLInputElement;
-    fireEvent.change(name, {target: {value: "Julia y familia"}});
+    fireEvent.change(within(dialog).getByLabelText("Nombre del grupo"), {target: {value: "Julia y familia"}});
     fireEvent.change(within(dialog).getByLabelText("Personas"), {target: {value: "6"}});
-    fireEvent.change(within(dialog).getByLabelText("Notas de atención"), {target: {value: "Silla para bebé"}});
-    const scroller = name.closest<HTMLElement>(".overflow-y-auto")!;
-    scroller.scrollTop = 110;
-    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar ventana"}));
-    expect(screen.queryByRole("dialog", {name: "Atender sin reserva"})).toBeNull();
-    expect(dialog.isConnected).toBe(true);
-    fireEvent.click(screen.getByRole("button", {name: "Abrir ventana Atender sin reserva"}));
-    expect(screen.getByRole("dialog", {name: "Atender sin reserva"})).toBe(dialog);
-    expect(within(dialog).getByLabelText("Nombre del grupo")).toBe(name); expect(name.value).toBe("Julia y familia");
-    expect(scroller.scrollTop).toBe(110);
+    const scroller = dialog.querySelector<HTMLElement>(".overflow-y-auto")!; scroller.scrollTop = 110;
     fireEvent.click(within(dialog).getByRole("button", {name: "Minimizar ventana"}));
-    expect(within(dialog).queryByRole("textbox", {name: "Nombre del grupo"})).toBeNull();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar tablero"}));
-    fireEvent.click(within(dialog).getByRole("button", {name: "Restaurar ventana"}));
-    expect((within(dialog).getByLabelText("Personas") as HTMLInputElement).value).toBe("6");
-    expect((within(dialog).getByLabelText("Notas de atención") as HTMLTextAreaElement).value).toBe("Silla para bebé");
-    expect(name.value).toBe("Julia y familia"); expect(scroller.scrollTop).toBe(110);
-    expect(screen.getByTestId("floor-canvas")).toBe(canvas); expect(screen.getByTestId("canvas-pan").textContent).toBe("2");
-    expect(document.body.style.overflow).not.toBe("hidden"); expect(api.save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", {name: "Atender sin reserva"}));
+    expect(screen.getByRole("dialog", {name: "Atender sin reserva"})).toBe(dialog);
+    expect((within(dialog).getByLabelText("Personas") as HTMLInputElement).value).toBe("6"); expect(scroller.scrollTop).toBe(110);
+    fireEvent.click(screen.getByRole("button", {name: "Fecha y hora"})); const schedule = screen.getByRole("dialog", {name: "Fecha y hora"});
+    fireEvent.click(within(dialog).getByRole("button", {name: "Cerrar ventana"})); expect(dialog.isConnected).toBe(false);
+    expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBe(schedule); expect(screen.queryByRole("button", {name: /Abrir ventana/})).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name: "Atender sin reserva"}));
+    expect((within(screen.getByRole("dialog", {name: "Atender sin reserva"})).getByLabelText("Nombre del grupo") as HTMLInputElement).value).toBe("");
+    expect(screen.getByTestId("floor-canvas")).toBe(canvas); expect(api.save).not.toHaveBeenCalled();
   });
 
   it("preserves walk-in details while the room updates in the background", async () => {
