@@ -4,7 +4,7 @@ import { transientButtonProps } from "@/ui/button-state";
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { Expand, Hand, Minus, MoreHorizontal, MousePointer2, Plus } from "lucide-react";
+import { Expand, Hand, Minus, MousePointer2, Plus } from "lucide-react";
 
 export type FloorInteractionMode = "pan" | "select";
 
@@ -104,7 +104,6 @@ export function FloorCanvas(props: FloorCanvasProps) {
     </div>
     <div className={`absolute z-10 flex flex-col rounded-xl bg-[var(--floor-surface,#fff)] p-1 shadow-[0_6px_24px_-8px_rgba(30,40,25,0.28)] sm:flex-row ${props.fullScreen ? `${floatingModePosition} left-1/2 w-max max-w-[calc(100%_-_1.5rem)] -translate-x-1/2` : "bottom-16 left-3"}`} role="group" aria-label="Modo del plano">
       {([{ value: "select", label: "Seleccionar", icon: MousePointer2 }, { value: "pan", label: "Mover vista", icon: Hand }] as const).map(({ value, label, icon: Icon }) => <button key={value} {...transientButtonProps} type="button" aria-pressed={interactionMode === value} title={value === "pan" ? "Mover vista · mantené Espacio para mover temporalmente" : `Seleccionar · ${selectionHelp}`} onClick={() => changeMode(value)} className={`flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium sm:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] ${interactionMode === value ? "bg-[var(--floor-action,#3d5934)] text-white" : "text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)]"}`}><Icon size={17} aria-hidden="true" />{label}</button>)}
-      {Boolean(props.selectedIds?.length) && props.onContextMenuSelection && <button {...transientButtonProps} type="button" aria-label="Acciones de la selección" onClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); props.onContextMenuSelection?.({ x: bounds.left, y: bounds.top }); }} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)]"><MoreHorizontal size={18} aria-hidden="true" />Acciones ({props.selectedIds?.length})</button>}
     </div>
     <div className={`absolute z-10 flex items-center bg-[var(--floor-surface,#fff)] p-1 ${props.fullScreen ? `${floatingZoomPosition} left-[max(0.75rem,env(safe-area-inset-left,0px))] flex-col rounded-xl shadow-[0_6px_24px_-8px_rgba(30,40,25,0.28)] sm:left-[max(1.25rem,env(safe-area-inset-left,0px))]` : "bottom-3 left-3 rounded-lg border border-stone-200"}`} role="group" aria-label="Zoom del plano">
       <button {...transientButtonProps} type="button" aria-label="Alejar plano" disabled={zoom <= 1} onClick={() => { if (zoom / 1.25 <= 1) fitToScreen(); else setZoom((value) => value / 1.25); }} className={`${zoomButtonClass} ${props.fullScreen ? "order-3" : ""}`}><Minus size={props.fullScreen ? 19 : 16} /></button>

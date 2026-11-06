@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { createElement, useState } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FloorCanvasProps, FloorInteractionMode } from "./FloorCanvas";
 
@@ -45,16 +45,14 @@ describe("floor canvas mode controls", () => {
     expect(canvas.props.interactionMode).toBe("select");
   });
 
-  it("supports controlled modes and opens selection actions from a labelled touch target", () => {
+  it("keeps the toolbar limited to controlled modes with tables selected", () => {
     const onInteractionModeChange = vi.fn(); const onContextMenuSelection = vi.fn();
     render(createElement(FloorCanvas, { room, tables: [], selectedIds: ["one", "two"], interactionMode: "pan", onInteractionModeChange, onContextMenuSelection }));
     fireEvent.click(screen.getByRole("button", { name: "Seleccionar" }));
     expect(onInteractionModeChange).toHaveBeenCalledWith("select"); expect(canvas.props.interactionMode).toBe("pan");
-    const actions = screen.getByRole("button", { name: "Acciones de la selección" });
-    expect(actions.textContent).toContain("Acciones (2)");
-    vi.spyOn(actions, "getBoundingClientRect").mockReturnValue({ x: 100, y: 120, left: 100, top: 120, right: 220, bottom: 164, width: 120, height: 44, toJSON: () => ({}) });
-    fireEvent.click(actions);
-    expect(onContextMenuSelection).toHaveBeenCalledWith({ x: 100, y: 120 });
+    const toolbar = screen.getByRole("group", { name: "Modo del plano" });
+    expect(within(toolbar).getAllByRole("button").map((button) => button.textContent)).toEqual(["Seleccionar", "Mover vista"]);
+    expect(canvas.props.onContextMenuSelection).toBe(onContextMenuSelection);
   });
 
   it("activates placement from pan mode without resetting zoom or the stage, then still allows deliberate panning", () => {
