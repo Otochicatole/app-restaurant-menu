@@ -32,8 +32,9 @@ describe("reservation floor confirmation flow", () => {
   beforeEach(() => { vi.resetAllMocks(); actions.updateReservationStatusAction.mockResolvedValue({ success: true, data: { ...reservation, status: "CONFIRMED", revision: 4 } }); });
   afterEach(cleanup);
 
-  it("asks for an assignment before sending a pending confirmation", async () => {
+  it.each(["agenda", "tabla"])("asks for an assignment before sending a pending confirmation from %s", async (view) => {
     render(createElement(ReservationCmsScreen, { initialData: data({ ...reservation, adminNotes: "Sector preferido: Ventana · Salón principal" }) }));
+    if (view === "tabla") fireEvent.click(screen.getByRole("button", { name: "Vista tabla" }));
     fireEvent.click(screen.getByRole("button", { name: /^Confirmar$/ }));
     const modal = screen.getByRole("dialog", { name: "Confirmar reserva TEST" });
     expect(within(modal).getByText("Ventana · Salón principal")).toBeTruthy();
@@ -64,7 +65,8 @@ describe("reservation floor confirmation flow", () => {
     const modal = screen.getByRole("dialog", { name: "Modificar Reserva" });
     fireEvent.click(within(modal).getByRole("button", { name: "Asignar mesas antes de activar salones" }));
     fireEvent.click(within(modal).getByRole("button", { name: "Elegir mesa de prueba" }));
-    fireEvent.submit(modal.querySelector("form")!);
+    fireEvent.click(within(modal).getByRole("button", { name: "Guardar cambios" }));
     await waitFor(() => expect(actions.updateReservationAction).toHaveBeenCalledWith("restaurant", expect.objectContaining({ assignment, expectedRevision: 3, status: "CONFIRMED" })));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

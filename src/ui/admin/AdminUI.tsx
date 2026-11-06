@@ -10,6 +10,7 @@ export function AdminModal({
   description,
   onClose,
   children,
+  footer,
   wide = false,
 }: {
   open: boolean;
@@ -17,6 +18,7 @@ export function AdminModal({
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   wide?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -102,18 +104,21 @@ export function AdminModal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl outline-none sm:rounded-3xl sm:p-8 ${wide ? "max-w-2xl" : "max-w-lg"}`}
+        className={`max-h-[92vh] w-full rounded-t-3xl bg-white shadow-2xl outline-none sm:rounded-3xl ${wide ? "max-w-2xl" : "max-w-lg"} ${footer ? "flex flex-col overflow-hidden" : "overflow-y-auto p-6 sm:p-8"}`}
       >
-        <div className="mb-6 flex items-start justify-between gap-5">
-          <div>
-            <h2 id={titleId} className="text-xl font-semibold text-zinc-950">{title}</h2>
-            {description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>}
+        <div className={footer ? "min-h-0 overflow-y-auto p-6 sm:p-8" : undefined}>
+          <div className="mb-6 flex items-start justify-between gap-5">
+            <div>
+              <h2 id={titleId} className="text-xl font-semibold text-zinc-950">{title}</h2>
+              {description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>}
+            </div>
+            <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Cerrar">
+              <X size={20} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Cerrar">
-            <X size={20} />
-          </button>
+          {children}
         </div>
-        {children}
+        {footer}
       </div>
     </div>
   );
