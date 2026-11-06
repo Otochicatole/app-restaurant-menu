@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FloorLease, FloorPose, FloorRoom } from "../contracts";
-import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, getJoinedTableGroups, leaseOverlaps, transformPoses, validateAssembly, validateFloorPlacement, validateRoomLayout, validateTableArrangement } from "./floor-policy";
+import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, getJoinedTableGroups, leaseOverlaps, transformPoses, usableTableCapacity, validateAssembly, validateFloorPlacement, validateRoomLayout, validateTableArrangement } from "./floor-policy";
 
 function room(overrides: Partial<FloorRoom> = {}): FloorRoom {
   return { id: "room", restaurantId: "restaurant", name: "Main", width: 800, height: 600, fixtures: [], locations: [{ id: "window", name: "Ventana", x: 400, y: 300, width: 800, height: 600, rotation: 0, active: true }], active: true,
@@ -120,6 +120,51 @@ describe("independent tables and visual groups", () => {
   it("does not join overlapping pieces or bridge a visible gap", () => {
     expect(getJoinedTableGroups([pose("a"), pose("b", { x: 120 })])).toHaveLength(2);
     expect(getJoinedTableGroups([pose("a"), pose("b", { x: 180.1 })])).toHaveLength(2);
+  });
+});
+
+describe("usable capacity from table contacts", () => {
+  it("deducts one place from each shared side and restores both when separated", () => {
+    const a = pose("a");
+    const b = pose("b", { x: 180 });
+    expect(usableTableCapacity([a, b])).toBe(6);
+    expect(usableTableCapacity([a, { ...b, x: 204 }])).toBe(8);
+    expect(usableTableCapacity([a, { ...b, y: 180 }])).toBe(8);
+  });
+
+  it("counts all four shared edges of a two-by-two arrangement", () => {
+    const pieces = [pose("a"), pose("b", { x: 180 }), pose("c", { y: 180 }), pose("d", { x: 180, y: 180 })];
+    expect(usableTableCapacity(pieces)).toBe(8);
+  });
+
+  it("deducts once from a side touching two different tables", () => {
+    const pieces = [pose("a", { shape: "RECTANGLE", height: 160 }), pose("b", { x: 180, y: 55 }), pose("c", { x: 180, y: 145 })];
+    expect(usableTableCapacity(pieces)).toBe(9);
+    expect(usableTableCapacity([...pieces].reverse())).toBe(9);
+  });
+
+  it("uses rotated dimensions and preserves capacity when the whole layout rotates", () => {
+    const pieces = [pose("a", { shape: "RECTANGLE", width: 120, height: 60, rotation: 90 }), pose("b", { x: 170 })];
+    expect(usableTableCapacity(pieces)).toBe(6);
+    expect(usableTableCapacity(transformPoses(pieces, 200, 200, 90))).toBe(6);
+  });
+
+  it("deducts round-table tangencies and only deducts a straight side when it is touched", () => {
+    const square = pose("a");
+    const circle = pose("b", { shape: "CIRCLE", x: 180 });
+    const corner = 140 + 40 / Math.sqrt(2);
+    expect(usableTableCapacity([square, circle])).toBe(6);
+    expect(usableTableCapacity([square, { ...circle, x: corner, y: corner }])).toBe(7);
+    expect(usableTableCapacity([{ ...square, shape: "CIRCLE" }, circle])).toBe(6);
+    expect(usableTableCapacity([{ ...square, shape: "CIRCLE" }, { ...circle, x: 175, y: 175 }])).toBe(8);
+  });
+
+  it("caps the losses at each table's own capacity", () => {
+    const a = pose("a", { capacity: 1 });
+    const b = pose("b", { x: 180, capacity: 1 });
+    expect(usableTableCapacity([a, b])).toBe(0);
+    expect(usableTableCapacity([a, pose("c", { x: 20 }), pose("d", { x: 180 })])).toBe(6);
+    expect(usableTableCapacity([])).toBe(0);
   });
 });
 

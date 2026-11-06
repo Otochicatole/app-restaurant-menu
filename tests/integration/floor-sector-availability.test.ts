@@ -79,6 +79,14 @@ describe("sector-aware public availability on SQLite", () => {
     expect(await database.reservationAllocation.count({ where: { restaurantId } })).toBe(0);
   });
 
+  it("offers all eight seats when two four-seat tables fit with space between them", async () => {
+    await database.diningRoomLocation.update({ where: { id: locationId }, data: { x: 92, width: 184 } });
+    const options = await getFloorAssignmentOptions(database, restaurantId, { date, time: "20:00", partySize: 8 });
+    expect(options.hasAvailability).toBe(true);
+    expect(await getPhysicalAvailability(database, restaurantId, { dates: [date], times: ["20:00"], partySize: 8 })).toEqual({ [date]: ["20:00"] });
+    expect(await repository.createReservation(restaurantId, pending(8), randomUUID())).toMatchObject({ status: "PENDING" });
+  });
+
   it("requires free sector surface even when unused physical inventory remains", async () => {
     const spare = await database.diningTable.create({ data: { restaurantId, roomId, label: "Spare", shape: "SQUARE", capacity: 4, x: 0, y: 0, width: 80, height: 80 } });
     await repository.createReservation(restaurantId, adminCreateReservationSchema.parse({ ...pending(), status: "CONFIRMED", source: "ADMIN", assignment: {

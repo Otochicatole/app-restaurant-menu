@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
-  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, toFloorRoom, transformPoses, validateFloorPlacement, findFloorPlacement, validateTableArrangement, restaurantLocalDateTime,
+  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, floorTableSeparationGap, toFloorRoom, transformPoses, usableTableCapacity,
+  validateFloorPlacement, findFloorPlacement, validateTableArrangement, restaurantLocalDateTime,
   type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorInterval,
   type FloorLease, type FloorOptionsQuery, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation,
 } from "@/modules/floor-management/contracts";
@@ -89,6 +90,7 @@ export async function getFloorAssignmentOptions(database: Database, restaurantId
   const allocations = state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId));
   const current = query.excludeReservationId ? await database.reservationAllocation.findUnique({ where: { reservationId: query.excludeReservationId }, include: allocationInclude }) : null;
   const currentAllocation = current?.restaurantId === restaurantId ? allocationToView(current) : null;
+  if (currentAllocation) currentAllocation.capacity = Math.min(currentAllocation.capacity, usableTableCapacity(currentAllocation.poses));
   // Administrators may organize a draft event before publication.
   const events = event && !state.events.some((item) => item.id === event.id) ? [...state.events, event] : state.events;
   const options = evaluateOptions(state.rooms, allocations, events, interval, query.partySize, query.eventId, query.excludeReservationId);
@@ -117,19 +119,23 @@ export async function getPhysicalAvailability(database: Database, restaurantId: 
 
 function hasCustomCapacity(room: FloorRoom, options: FloorAssignmentOption[], partySize: number, interval: FloorInterval, allocations: FloorLease[]): boolean {
   const inventory = options.filter((option) => option.roomId === room.id && option.id.startsWith("table:") && option.resourceAvailable);
-  // Check a bounded set of adjacent assemblies, without inferring or saving combinations.
+  // Try bounded rows of tables, with and without the gap used to separate tables on the floor.
   for (const direction of [1, -1]) {
-    const ordered = [...inventory].sort((a, b) => direction * (a.capacity - b.capacity));
-    const members: FloorPose[] = [];
-    let totalCapacity = 0; let width = 0;
-    for (const option of ordered.slice(0, 40)) {
-      const table = option.poses[0];
-      members.push({ ...table, x: width + table.width / 2, y: 0, rotation: 0 });
-      width += table.width; totalCapacity += table.capacity;
-      const capacity = totalCapacity - Math.max(0, members.length - 1) * 2;
-      if (members.length < 2 || capacity < partySize) continue;
-      const candidate: FloorAssignmentOption = { id: "custom", roomId: room.id, label: "Armado a medida", capacity, x: width / 2, y: 0, rotation: 0, poses: members, available: true };
-      if (findFloorPlacement(room, candidate, interval, allocations)) return true;
+    const ordered = [...inventory].sort((a, b) => direction * (a.capacity - b.capacity)).slice(0, 40);
+    for (const gap of [0, floorTableSeparationGap]) {
+      const members: FloorPose[] = [];
+      let width = 0;
+      for (const option of ordered) {
+        const table = option.poses[0];
+        const left = width + (members.length ? gap : 0);
+        members.push({ ...table, x: left + table.width / 2, y: 0, rotation: 0 });
+        width = left + table.width;
+        if (members.length < 2) continue;
+        const capacity = usableTableCapacity(members);
+        if (capacity < partySize) continue;
+        const candidate: FloorAssignmentOption = { id: "custom", roomId: room.id, label: "Armado a medida", capacity, x: width / 2, y: 0, rotation: 0, poses: members, available: true };
+        if (findFloorPlacement(room, candidate, interval, allocations)) return true;
+      }
     }
   }
   return false;
@@ -183,7 +189,7 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
       });
       const invalid = validateTableArrangement(poses); if (invalid) throw new BadRequestError(invalid);
       capacity = assignment.capacity;
-      if (capacity > poses.reduce((sum, pose) => sum + pose.capacity, 0)) throw new BadRequestError("La capacidad útil supera la capacidad física del armado.");
+      if (capacity > usableTableCapacity(poses)) throw new BadRequestError("La capacidad útil supera los lugares disponibles con esa disposición de mesas.");
       combinationId = null;
     } else {
       const option = options.options.find((item) => item.id === assignment!.optionId && item.roomId === room!.id);
@@ -191,7 +197,7 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
       const relative = option.poses.map((pose) => ({ ...pose, x: pose.x - option.x, y: pose.y - option.y }));
       const delta = ((assignment.rotation - option.rotation + 360) % 360) as FloorRotation;
       poses = transformPoses(relative, assignment.x, assignment.y, delta);
-      capacity = option.capacity;
+      capacity = Math.min(option.capacity, usableTableCapacity(poses));
       combinationId = option.id.startsWith("combination:") ? option.id.slice("combination:".length) : null;
     }
     if (capacity < reservation.partySize) throw new ConflictError("La capacidad útil no alcanza para este grupo.");
@@ -200,9 +206,10 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
     room = options.rooms.find((item) => item.id === existing!.roomId);
     if (!room) throw new ConflictError("El salón asignado ya no está disponible.");
     if (assignment && (assignment.roomId !== room.id || assignment.expectedRoomRevision !== room.revision)) throw new ConflictError("El plano cambió. Actualizalo antes de conservar la asignación.");
-    capacity = existing!.capacity; combinationId = existing!.combinationId;
-    locationId = existing!.locationId;
-    poses = allocationToView(existing!).poses;
+    combinationId = existing.combinationId;
+    locationId = existing.locationId;
+    poses = allocationToView(existing).poses;
+    capacity = Math.min(existing.capacity, usableTableCapacity(poses));
     if (capacity < reservation.partySize) throw new ConflictError("El grupo supera la capacidad de las mesas asignadas.");
     if (reservation.eventId) {
       const eventRoom = await tx.restaurantEventRoom.findFirst({ where: { eventId: reservation.eventId, restaurantId: reservation.restaurantId, roomId: room.id } });

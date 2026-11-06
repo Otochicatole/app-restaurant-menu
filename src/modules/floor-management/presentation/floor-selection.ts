@@ -2,7 +2,7 @@ import {
   floorAssignmentSchema, getJoinedTableGroups, validateFloorPlacement, validateTableArrangement,
   type FloorAllocationView, type FloorAssignmentInput, type FloorInterval, type FloorLease, type FloorPose, type FloorRoom, type FloorTable,
 } from "../contracts";
-import { defaultLayoutCapacity, separateLayoutTables } from "./floor-table-layout";
+import { capacityAfterLayout, separateLayoutTables } from "./floor-table-layout";
 
 export type FloorSelectionState = {
   room: FloorRoom;
@@ -52,10 +52,6 @@ function selectionMembers(state: FloorSelectionState, ids: string[]): SelectionR
   return distinct.length && selected.length === distinct.length ? selected : "La selección cambió. Volvé a seleccionar las mesas.";
 }
 
-function capacityAfterLayout(capacity: number, before: FloorPose[], after: FloorPose[]): number {
-  return capacity === defaultLayoutCapacity(before) ? defaultLayoutCapacity(after) : capacity;
-}
-
 /** Build one complete proposal per affected reservation; only selected coordinates may change. */
 export function buildSelectionLayout(state: FloorSelectionState, ids: string[], nextTables: FloorTable[]): FloorSelectionLayout | string {
   const selected = selectionMembers(state, ids);
@@ -81,11 +77,11 @@ export function buildSelectionLayout(state: FloorSelectionState, ids: string[], 
     const invalid = validateTableArrangement(poses);
     if (invalid) return invalid;
     const capacity = capacityAfterLayout(allocation.capacity, before, poses);
-    if (capacity < allocation.partySize) return "La capacidad útil no alcanza para este grupo.";
+    if (capacity < allocation.partySize) return `La capacidad útil no alcanza: el armado tiene ${capacity} lugares para ${allocation.partySize} personas.`;
     const assignment = floorAssignmentSchema.safeParse({ roomId: state.room.id, locationId: allocation.locationId, optionId: "custom", customTables: poses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation })), capacity,
       x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length,
       rotation: 0, expectedRoomRevision: state.room.revision, retainExisting: false });
-    if (!assignment.success || capacity > poses.reduce((sum, pose) => sum + pose.capacity, 0)) return "Revisá la posición y la capacidad útil de las mesas seleccionadas.";
+    if (!assignment.success) return "Revisá la posición y la capacidad útil de las mesas seleccionadas.";
     proposals.push({ ...allocation, poses });
     result.updates.push({ reservationId: allocation.reservationId, expectedRevision: allocation.reservationRevision!, expectedAllocationVersion: allocation.version, assignment: assignment.data });
   }
@@ -100,7 +96,6 @@ export function buildSelectionLayout(state: FloorSelectionState, ids: string[], 
     const invalid = validateTableArrangement(poses);
     if (invalid) return invalid;
     const capacity = capacityAfterLayout(state.draft.capacity, before, poses);
-    if (!Number.isInteger(capacity) || capacity < 1 || capacity > poses.reduce((sum, pose) => sum + pose.capacity, 0)) return "Revisá la capacidad útil del armado.";
     let identity = "__floor-selection-draft";
     while (state.allocations.some((allocation) => allocation.id === identity || allocation.reservationId === identity)) identity += ":draft";
     proposals.push({ ...state.draft.interval, id: identity, reservationId: identity, roomId: state.room.id, locationId: state.draft.locationId, poses, releasedAt: null });

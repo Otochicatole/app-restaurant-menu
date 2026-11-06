@@ -21,8 +21,12 @@ export function createAssembly(room: FloorRoom, location: FloorLocation, ids: st
   const tables = room.tables.filter((table) => table.active && ids.includes(table.id));
   if (!tables.length) return null;
   let cursor = anchor.x - tables.reduce((sum, table) => sum + table.width, 0) / 2;
-  const customTables = tables.map((table) => { const x = cursor + table.width / 2; cursor += table.width; return { tableId: table.id, x, y: anchor.y, rotation: 0 as FloorRotation }; });
-  return { roomId: room.id, locationId: location.id, optionId: "custom", x: anchor.x, y: anchor.y, rotation: 0, customTables, capacity: Math.max(1, tables.reduce((sum, table) => sum + table.capacity, 0) - Math.max(0, tables.length - 1) * 2), expectedRoomRevision: room.revision, retainExisting: false };
+  const poses = tables.map((table): FloorPose => {
+    const x = cursor + table.width / 2;
+    cursor += table.width;
+    return { ...table, tableId: table.id, x, y: anchor.y, rotation: 0 };
+  });
+  return customAssembly({ roomId: room.id, locationId: location.id, optionId: "custom", x: anchor.x, y: anchor.y, rotation: 0, expectedRoomRevision: room.revision, retainExisting: false }, poses);
 }
 
 export function changeAssemblyTables(room: FloorRoom, location: FloorLocation, ids: string[], value: FloorAssignmentInput | null, selected: FloorPose[], anchor: FloorAssemblyPoint = value ?? location): FloorAssignmentInput | null {
@@ -39,8 +43,7 @@ export function changeAssemblyTables(room: FloorRoom, location: FloorLocation, i
     poses.push({ tableId: table.id, label: table.label, capacity: table.capacity, shape: table.shape, width: table.width, height: table.height,
       x: right(last) + width / 2, y: last.y, rotation: last.rotation });
   }
-  const capacity = defaultLayoutCapacity(poses);
-  return { ...customAssembly(value, poses, capacity), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length };
+  return { ...customAssembly(value, poses), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length };
 }
 
 export function containingLocation(room: FloorRoom, point: FloorAssemblyPoint): FloorLocation | undefined {
@@ -53,6 +56,7 @@ export function containingLocation(room: FloorRoom, point: FloorAssemblyPoint): 
   });
 }
 
-export function customAssembly(value: FloorAssignmentInput, poses: FloorPose[], capacity: number): FloorAssignmentInput {
-  return { ...value, optionId: "custom", rotation: 0, capacity, customTables: poses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation })), retainExisting: false };
+export function customAssembly(value: FloorAssignmentInput, poses: FloorPose[], capacity?: number): FloorAssignmentInput {
+  const maximum = defaultLayoutCapacity(poses);
+  return { ...value, optionId: "custom", rotation: 0, capacity: Math.min(capacity ?? maximum, maximum), customTables: poses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation })), retainExisting: false };
 }

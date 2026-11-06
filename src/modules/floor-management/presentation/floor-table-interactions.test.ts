@@ -81,9 +81,10 @@ function multiPartyBoard() {
 function show(current = board(), readOnly = false) {
   return render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly, canManageWalkIns: true, initialBoard: current }));
 }
-async function startDraft(readOnly = false, current = board(), count = 2) {
+async function startDraft(readOnly = false, current = board(), count = 2, partySize = 2) {
   show(current, readOnly);
   fireEvent.click(screen.getByRole("button", { name: "Atender sin reserva" }));
+  if (partySize !== 2) fireEvent.change(screen.getByLabelText("Personas"), { target: { value: String(partySize) } });
   fireEvent.click(screen.getByRole("button", { name: "Elegir mesas" }));
   const sector = await screen.findByLabelText("Sector del salón") as HTMLSelectElement;
   await waitFor(() => expect(sector.disabled).toBe(false));
@@ -356,6 +357,23 @@ describe("table actions on the operational board", () => {
     const current = board(); current.allocations = [allocation()]; mockSelectionSave(current); show(current); fireEvent.click(within(openGroup("one")).getByRole("menuitem", { name: "Separar" }));
     await waitFor(() => expect(api.reassignSelection).toHaveBeenCalledOnce()); await waitFor(() => expect(joinedGroups()).toEqual([])); const menu = openTable("one");
     expect((within(menu).getByRole("menuitem", { name: "Separar" }) as HTMLButtonElement).disabled).toBe(true); expect(selectionCommand().updates).toHaveLength(1); expect(api.reassign).not.toHaveBeenCalled();
+  });
+
+  it("blocks a seven-person group while two four-seat tables are joined and frees those places when separated", async () => {
+    await startDraft(false, board(), 2, 7);
+    const save = screen.getByRole("button", { name: "Armar y ocupar mesas" }) as HTMLButtonElement;
+    expect(screen.getByText("6 lugares útiles")).toBeTruthy();
+    expect(screen.getByText(/Falta 1 lugar/)).toBeTruthy();
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Separar seleccionadas" }));
+    expect(screen.getByText("8 lugares útiles")).toBeTruthy();
+    expect(save.disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unir seleccionadas" }));
+    expect(screen.getByText("6 lugares útiles")).toBeTruthy();
+    expect(save.disabled).toBe(true);
+    expect(api.save).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("separates tables on the main board and saves them with rejoin=%s", async (rejoin) => {

@@ -1,5 +1,14 @@
-import type { FloorRoom, FloorTable } from "../contracts";
+import type { FloorCombination, FloorPose, FloorRoom, FloorTable } from "../contracts";
 import { groupInventoryTables } from "./floor-table-groups";
+
+export function combinationPoses(tables: readonly FloorTable[], members: FloorCombination["members"]): FloorPose[] {
+  return members.flatMap((member) => {
+    const table = tables.find((item) => item.id === member.tableId);
+    if (!table) return [];
+    const { label, capacity, shape, width, height } = table;
+    return [{ ...member, label, capacity, shape, width, height }];
+  });
+}
 
 export function inventoryTables(quantity: number, fields: Pick<FloorTable, "shape" | "capacity" | "width" | "height">, existing: FloorTable[]): FloorTable[] {
   const labels = new Set(existing.map((table) => table.label));

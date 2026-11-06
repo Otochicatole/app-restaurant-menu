@@ -1,6 +1,7 @@
 import type { FloorAssignmentOption, FloorInterval, FloorLease, FloorPose, FloorRoom, FloorRoomInput, FloorRotation, FloorTable } from "../contracts";
 
 const epsilon = 0.001;
+export const floorTableSeparationGap = 24;
 type Footprint = { x: number; y: number; width: number; height: number; rotation: number; shape?: string };
 function basePose(table: FloorTable): FloorPose {
   return { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity,
@@ -24,6 +25,60 @@ function intersects(a: Footprint, b: Footprint, margin = -epsilon): boolean {
   const x = bounds(a); const y = bounds(b);
   return x.left < y.right + margin && x.right > y.left - margin && x.top < y.bottom + margin && x.bottom > y.top - margin;
 }
+
+type RectangleSide = "left" | "right" | "top" | "bottom";
+
+function sharedRectangleSides(a: ReturnType<typeof bounds>, b: ReturnType<typeof bounds>): [RectangleSide, RectangleSide] | undefined {
+  if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > epsilon) {
+    if (Math.abs(a.right - b.left) <= epsilon) return ["right", "left"];
+    if (Math.abs(a.left - b.right) <= epsilon) return ["left", "right"];
+  }
+  if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > epsilon) {
+    if (Math.abs(a.bottom - b.top) <= epsilon) return ["bottom", "top"];
+    if (Math.abs(a.top - b.bottom) <= epsilon) return ["top", "bottom"];
+  }
+}
+
+function tangentRectangleSide(circle: FloorPose, rect: ReturnType<typeof bounds>): RectangleSide | undefined {
+  if (circle.y > rect.top + epsilon && circle.y < rect.bottom - epsilon) {
+    if (circle.x <= rect.left) return "left";
+    if (circle.x >= rect.right) return "right";
+  }
+  if (circle.x > rect.left + epsilon && circle.x < rect.right - epsilon) {
+    if (circle.y <= rect.top) return "top";
+    if (circle.y >= rect.bottom) return "bottom";
+  }
+}
+
+/** The inventory stores total seats. Each blocked straight side or round-table tangency costs one seat. */
+export function usableTableCapacity(poses: readonly FloorPose[]): number {
+  const tables = poses.map((pose) => ({ pose, box: bounds(pose), blockedSides: new Set<RectangleSide>(), circularContacts: 0 }));
+  for (let index = 0; index < tables.length; index++) {
+    const a = tables[index];
+    for (let other = 0; other < index; other++) {
+      const b = tables[other];
+      if (a.pose.shape === "CIRCLE" || b.pose.shape === "CIRCLE") {
+        if (intersects(a.pose, b.pose) || !intersects(a.pose, b.pose, epsilon)) continue;
+        for (const [table, neighbor] of [[a, b], [b, a]]) {
+          if (table.pose.shape === "CIRCLE") {
+            table.circularContacts++;
+          } else {
+            const side = tangentRectangleSide(neighbor.pose, table.box);
+            if (side) table.blockedSides.add(side);
+          }
+        }
+      } else {
+        const sides = sharedRectangleSides(a.box, b.box);
+        if (sides) {
+          a.blockedSides.add(sides[0]);
+          b.blockedSides.add(sides[1]);
+        }
+      }
+    }
+  }
+  return tables.reduce((total, table) => total + Math.max(0, table.pose.capacity - table.blockedSides.size - table.circularContacts), 0);
+}
+
 function validatePoses(room: Pick<FloorRoom, "width" | "height" | "fixtures">, poses: FloorPose[]): string | null {
   for (let i = 0; i < poses.length; i++) {
     const pose = poses[i]; const box = bounds(pose);
@@ -55,7 +110,7 @@ export function buildFloorOptions(room: FloorRoom): FloorAssignmentOption[] {
     const { x, y } = anchor;
     const relative = members.map(({ member, table }): FloorPose => ({ tableId: member.tableId, label: table!.label, shape: table!.shape,
       width: table!.width, height: table!.height, capacity: table!.capacity, x: member.x, y: member.y, rotation: member.rotation }));
-    return [{ id: `combination:${combination.id}`, roomId: room.id, label: combination.name, capacity: combination.capacity,
+    return [{ id: `combination:${combination.id}`, roomId: room.id, label: combination.name, capacity: Math.min(combination.capacity, usableTableCapacity(relative)),
       x, y, rotation: 0, poses: transformPoses(relative, x, y, 0), available: true }];
   });
   return [...singles, ...combinations];

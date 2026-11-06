@@ -137,11 +137,11 @@ describe("floor assignment interactions", () => {
     expect(await screen.findByLabelText("Sector del salón")).toBeTruthy();
   });
 
-  it("keeps idle inventory off the plan and joins arbitrary tables with explicit useful capacity", async () => {
+  it("keeps idle inventory off the plan and updates useful capacity when tables join or separate", async () => {
     const value = options();
     value.options = value.options.slice(0, 2).map((option) => ({ ...option, available: false, resourceAvailable: true }));
     api.options.mockResolvedValue(value);
-    render(createElement(Picker));
+    render(createElement(Picker, { input: { ...query, partySize: 7 } }));
     fireEvent.change(await screen.findByLabelText("Sector del salón"), { target: { value: "window" } });
     await waitFor(() => expect(screen.getByTestId("canvas-tables").textContent).toBe("[]"));
     selectQuantity(2);
@@ -149,8 +149,25 @@ describe("floor assignment interactions", () => {
     expect(chosen).toMatchObject({ optionId: "custom", locationId: "window", capacity: 6, customTables: [{tableId: "one", x: 360, y: 300}, {tableId: "two", x: 440, y: 300}] });
     expect(new Set(chosen!.customTables!.map((pose) => pose.tableId)).size).toBe(2);
     expect(screen.getByTestId("canvas-tables").textContent).toBe('["one","two"]');
+    expect(screen.getByRole("status", { name: "Capacidad del armado" }).textContent).toContain("6 lugares útiles para 7 personas. Falta 1 lugar.");
     fireEvent.change(screen.getByLabelText("Lugares útiles"), { target: { value: "7" } });
-    expect(JSON.parse(screen.getByTestId("assignment").textContent!).capacity).toBe(7);
+    expect(assignment()!.capacity).toBe(6);
+
+    fireEvent.click(screen.getByText("Ajustar cada mesa"));
+    fireEvent.change(screen.getByLabelText("Mesa 2 X"), { target: { value: "460" } });
+    expect(assignment()!.capacity).toBe(8);
+    expect(screen.getByRole("status", { name: "Capacidad del armado" }).textContent).toBe("8 lugares útiles para 7 personas.");
+    fireEvent.click(screen.getByRole("button", { name: "Unir mesas" }));
+    expect(assignment()!.capacity).toBe(6);
+    fireEvent.click(screen.getByRole("button", { name: "Separar mesas" }));
+    expect(assignment()!.capacity).toBe(8);
+    expect(assignment()!.customTables!.map((pose) => pose.tableId)).toEqual(["one", "two"]);
+
+    fireEvent.change(screen.getByLabelText("Lugares útiles"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Unir mesas" }));
+    expect(assignment()!.capacity).toBe(5);
+    fireEvent.click(screen.getByRole("button", { name: "Separar mesas" }));
+    expect(assignment()!.capacity).toBe(5);
   });
 
   it("keeps fractional table edges joined when moving and rotating a grouped selection", async () => {
@@ -190,7 +207,7 @@ describe("floor assignment interactions", () => {
     selectQuantity(1);
     fireEvent.change(screen.getByLabelText("Centro X"), {target: {value: "460"}});
     fireEvent.change(screen.getByLabelText("Centro Y"), {target: {value: "330"}});
-    fireEvent.click(screen.getByRole("button", {name: "Girar unión 90°"}));
+    fireEvent.click(screen.getByRole("button", {name: "Girar armado 90°"}));
     const first = assignment()!.customTables![0];
     expect(first).toMatchObject({tableId: "one", x: 460, y: 330, rotation: 90});
     selectQuantity(1, "Cuadrada 100 × 100");

@@ -16,7 +16,8 @@ import { FloorSectorContextMenu } from "./FloorSectorContextMenu";
 import { CombinationPropertiesForm, FloorSettingsForm, InventoryForm, InventoryGroupForm, RoomDimensionsForm, SpatialPropertiesForm, TablePropertiesForm, type StockInput, type StockGroupInput } from "./FloorAdminForms";
 import { getFloorConfig, saveFloorAction } from "./floor-api";
 import { groupInventoryTables } from "./floor-table-groups";
-import { inventoryTables, resizeInventoryGroup } from "./floor-inventory";
+import { combinationPoses, inventoryTables, resizeInventoryGroup } from "./floor-inventory";
+import { capacityAfterLayout, defaultLayoutCapacity } from "./floor-table-layout";
 
 type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "combination"; entity: FloorCombination } | { kind: "combination-layout"; id: string } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
 type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
@@ -259,11 +260,11 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     const tables = draft.tables.filter((table) => table.active && ids.includes(table.id)); if (tables.length < 2) return;
     let cursor = -tables.reduce((sum, table) => sum + (table.rotation % 180 ? table.height : table.width), 0) / 2;
     const members = tables.map((table) => { const width = table.rotation % 180 ? table.height : table.width; const x = cursor + width / 2; cursor += width; return { tableId: table.id, x, y: 0, rotation: table.rotation }; });
-    startCombination({ id: crypto.randomUUID(), name: uniqueName(tables.map((table) => table.label).join(" + "), draft.combinations.map((item) => item.name)), capacity: Math.max(1, tables.reduce((sum, table) => sum + table.capacity, 0) - (tables.length - 1) * 2), members, active: true });
+    startCombination({ id: crypto.randomUUID(), name: uniqueName(tables.map((table) => table.label).join(" + "), draft.combinations.map((item) => item.name)), capacity: defaultLayoutCapacity(combinationPoses(tables, members)), members, active: true });
   };
   const applyCombination = () => {
-    if (!draft || !combinationMode || busy) return;
-    const combination = combinationMode.combination;
+    if (!draft || !combinationMode || busy || combinationCapacity <= 0) return;
+    const combination = { ...combinationMode.combination, capacity: combinationCapacity };
     const combinations = draft.combinations.some((item) => item.id === combination.id) ? draft.combinations.map((item) => item.id === combination.id ? combination : item) : [...draft.combinations, combination];
     const invalid = applyRoom({ ...draft, combinations }, () => { setCombinationMode(null); closeTool(`combination-layout:${combination.id}`); });
     if (invalid) setError(invalid);
@@ -303,6 +304,9 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const canvasTables = draft && combinationMode ? combinationMode.combination.members.flatMap((member) => {
     const table = draft.tables.find((item) => item.id === member.tableId); return table ? [{ ...table, x: draft.width / 2 + member.x, y: draft.height / 2 + member.y, rotation: member.rotation }] : [];
   }) : [];
+  const combinationCapacity = draft && combinationMode
+    ? Math.min(combinationMode.combination.capacity, defaultLayoutCapacity(combinationPoses(draft.tables, combinationMode.combination.members)))
+    : 0;
   const canSelectPlan = interactive && !placement && !combinationMode;
   const canSelectTables = interactive && Boolean(combinationMode);
   const selectCombinationTables = (ids: string[], additive = false) => {
@@ -319,12 +323,18 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
         : [...current.selectedIds, id],
     } : null);
   };
+  const updateCombinationMembers = (update: (current: NonNullable<CombinationMode>) => FloorCombination["members"]) => {
+    if (!draft) return;
+    setCombinationMode((current) => {
+      if (!current) return null;
+      const members = update(current);
+      const capacity = capacityAfterLayout(current.combination.capacity, combinationPoses(draft.tables, current.combination.members), combinationPoses(draft.tables, members));
+      return { ...current, combination: { ...current.combination, members, capacity } };
+    });
+  };
   const moveCombinationTables = (ids: string[], delta: { x: number; y: number }) => {
-    setCombinationMode((current) => current ? {
-      ...current,
-      combination: { ...current.combination, members: current.combination.members.map((member) =>
-        ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member) },
-    } : null);
+    updateCombinationMembers(({ combination }) => combination.members.map((member) =>
+      ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member));
   };
   const selectionCount = combinationMode?.selectedIds.length ?? selectedElements.length;
   let status = "Preparando el plano…";
@@ -445,11 +455,14 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
           {layout && <>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 text-[#263e23]">
               <p className="text-xs leading-relaxed text-[#52634b]">Arrastrá sus mesas para unirlas. Este armado no cambia las ubicaciones del salón.</p>
+              <p role="status" className={`text-sm tabular-nums ${combinationCapacity > 0 ? "text-[#263e23]" : "text-red-800"}`}>
+                <strong>{combinationCapacity} {combinationCapacity === 1 ? "lugar útil" : "lugares útiles"}</strong>{combinationCapacity === 0 && ". Mové las mesas para liberar lugares."}
+              </p>
               <div role="group" aria-label="Mesas del armado predefinido" className="grid grid-cols-3 gap-2">{layout.combination.members.map((member) => <button key={member.tableId} {...transientButtonProps} type="button" aria-pressed={layout.selectedIds.includes(member.tableId)} disabled={busy} className={"min-h-11 truncate rounded-lg border px-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d5934] disabled:opacity-50 " + (layout.selectedIds.includes(member.tableId) ? "border-[#7e9272] bg-[#edf2e9]" : "border-stone-200 hover:bg-[#edf2e9]" )} onClick={() => setCombinationMode((current) => current ? { ...current, selectedIds: current.selectedIds.includes(member.tableId) ? current.selectedIds.filter((id) => id !== member.tableId) : [...current.selectedIds, member.tableId] } : null)}>{currentRoom?.tables.find((item) => item.id === member.tableId)?.label}</button>)}</div>
-              <button {...transientButtonProps} type="button" disabled={busy || !layout.selectedIds.length} className={adminSecondaryButtonClass + " w-full text-xs"} onClick={() => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => current.selectedIds.includes(member.tableId) ? { ...member, rotation: nextRotation(member.rotation) } : member) } } : null)}><RotateCw size={15} />Girar mesas seleccionadas</button>
+              <button {...transientButtonProps} type="button" disabled={busy || !layout.selectedIds.length} className={adminSecondaryButtonClass + " w-full text-xs"} onClick={() => updateCombinationMembers(({ combination, selectedIds }) => combination.members.map((member) => selectedIds.includes(member.tableId) ? { ...member, rotation: nextRotation(member.rotation) } : member))}><RotateCw size={15} />Girar mesas seleccionadas</button>
               <button {...transientButtonProps} type="button" disabled={busy} className="min-h-11 w-full rounded-lg px-2 text-left text-xs font-semibold underline underline-offset-4 hover:bg-[#edf2e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d5934]" onClick={() => openPanel({ kind: "combination", entity: copy(layout.combination) })}>Propiedades del armado</button>
             </div>
-            <footer className="flex shrink-0 gap-2 border-t border-stone-200 bg-white px-4 py-3"><button {...transientButtonProps} type="button" disabled={busy} onClick={() => { setCombinationMode(null); setError(null); finish(); }} className={adminSecondaryButtonClass + " min-h-11 px-3 text-xs"}>Cancelar armado</button><button {...transientButtonProps} type="button" disabled={busy} onClick={applyCombination} className={adminPrimaryButtonClass + " min-h-11 flex-1 px-3 text-xs"}>Aplicar armado</button></footer>
+            <footer className="flex shrink-0 gap-2 border-t border-stone-200 bg-white px-4 py-3"><button {...transientButtonProps} type="button" disabled={busy} onClick={() => { setCombinationMode(null); setError(null); finish(); }} className={adminSecondaryButtonClass + " min-h-11 px-3 text-xs"}>Cancelar armado</button><button {...transientButtonProps} type="button" disabled={busy || combinationCapacity <= 0} onClick={applyCombination} className={adminPrimaryButtonClass + " min-h-11 flex-1 px-3 text-xs"}>Aplicar armado</button></footer>
           </>}
           {!currentRoom && pane.kind !== "settings" && <p role="alert" className="p-4 text-sm text-red-800">El salón de esta ventana ya no está disponible. Cerrala y volvé a abrir la herramienta.</p>}
           </fieldset>

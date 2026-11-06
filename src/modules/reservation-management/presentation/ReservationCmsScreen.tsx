@@ -319,6 +319,8 @@ export function ReservationCmsScreen({
     source: "ADMIN",
     eventId: null,
   });
+  const resAssignmentTooSmall = resForm.status === "CONFIRMED" && resAssignment?.capacity !== undefined && resAssignment.capacity < resForm.partySize;
+  const quickAssignmentTooSmall = Boolean(assigningReservation && quickAssignment?.capacity !== undefined && quickAssignment.capacity < assigningReservation.partySize);
 
   const [eventForm, setEventForm] = useState<UpsertRestaurantEventCommand>({
     title: "",
@@ -386,6 +388,10 @@ export function ReservationCmsScreen({
     e.preventDefault();
     if (data.floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment) {
       showFeedback("error", "Seleccioná y ubicá las mesas antes de confirmar la reserva.");
+      return;
+    }
+    if (resAssignmentTooSmall) {
+      showFeedback("error", "El armado necesita más lugares útiles para esta reserva.");
       return;
     }
     startTransition(async () => {
@@ -2609,7 +2615,7 @@ export function ReservationCmsScreen({
         <div className="space-y-4">
           {feedback?.type === "error" && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{feedback.message}</p>}
           <FloorAssignmentPicker restaurantId={data.restaurantId} query={{ date: assigningReservation.date, time: assigningReservation.time, partySize: assigningReservation.partySize, eventId: assigningReservation.eventId, excludeReservationId: assigningReservation.id }} value={quickAssignment} onChange={setQuickAssignment} />
-          <div className="flex justify-end gap-2"><button type="button" className={adminSecondaryButtonClass} onClick={() => setAssigningReservation(null)} disabled={isPending}>Cancelar</button><button type="button" className={adminPrimaryButtonClass} disabled={isPending || !quickAssignment} onClick={() => { if (quickAssignment) handleQuickStatusChange(assigningReservation.id, "CONFIRMED", quickAssignment); }}>{isPending && <Loader2 size={15} className="animate-spin" />}Confirmar y asignar mesas</button></div>
+          <div className="flex justify-end gap-2"><button type="button" className={adminSecondaryButtonClass} onClick={() => setAssigningReservation(null)} disabled={isPending}>Cancelar</button><button type="button" className={adminPrimaryButtonClass} disabled={isPending || !quickAssignment || quickAssignmentTooSmall} onClick={() => { if (quickAssignment && !quickAssignmentTooSmall) handleQuickStatusChange(assigningReservation.id, "CONFIRMED", quickAssignment); }}>{isPending && <Loader2 size={15} className="animate-spin" />}Confirmar y asignar mesas</button></div>
         </div>
       </AdminModal>}
 
@@ -2837,7 +2843,7 @@ export function ReservationCmsScreen({
             </button>
             <button
               type="submit"
-              disabled={isPending || (data.floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment)}
+              disabled={isPending || resAssignmentTooSmall || (data.floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment)}
               className={adminPrimaryButtonClass}
             >
               {isPending && <Loader2 size={16} className="animate-spin" />}

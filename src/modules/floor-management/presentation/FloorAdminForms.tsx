@@ -6,7 +6,9 @@ import { floorPrimaryButtonClass as adminPrimaryButtonClass, floorSecondaryButto
 import { transientButtonProps } from "@/ui/button-state";
 import type { FloorCombination, FloorConfigView, FloorFixture, FloorLocation, FloorRoom, FloorRotation, FloorTable } from "../contracts";
 import { floorInputClass } from "./floor-api";
+import { combinationPoses } from "./floor-inventory";
 import { groupInventoryTables, selectTableGroupQuantity, type FloorTableGroup } from "./floor-table-groups";
+import { capacityAfterLayout, defaultLayoutCapacity } from "./floor-table-layout";
 
 const copy = <T,>(value: T): T => structuredClone(value);
 const formClass = "flex min-h-0 min-w-0 flex-1 flex-col";
@@ -27,8 +29,8 @@ function RotationField({ value, onChange }: { value: FloorRotation; onChange: (v
   return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">Rotación<select className={`${floorInputClass} min-h-11 px-2`} value={value} onChange={(event) => onChange(Number(event.target.value) as FloorRotation)}>{[0, 90, 180, 270].map((rotation) => <option key={rotation} value={rotation}>{rotation}°</option>)}</select></label>;
 }
 function FormError({ message }: { message: string | null }) { return message ? <p role="alert" className="text-sm leading-relaxed text-red-800">{message}</p> : null; }
-function Actions({ label, onCancel, error }: { label: string; onCancel: () => void; error?: string | null }) {
-  return <footer className={footerClass}><FormError message={error ?? null} /><div className="flex flex-wrap justify-end gap-2"><button {...transientButtonProps} type="button" onClick={onCancel} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}>Cancelar</button><button {...transientButtonProps} type="submit" className={`${adminPrimaryButtonClass} min-h-11 px-3 text-xs`}>{label}</button></div></footer>;
+function Actions({ label, onCancel, error, disabled }: { label: string; onCancel: () => void; error?: string | null; disabled?: boolean }) {
+  return <footer className={footerClass}><FormError message={error ?? null} /><div className="flex flex-wrap justify-end gap-2"><button {...transientButtonProps} type="button" onClick={onCancel} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}>Cancelar</button><button {...transientButtonProps} type="submit" disabled={disabled} className={`${adminPrimaryButtonClass} min-h-11 px-3 text-xs`}>{label}</button></div></footer>;
 }
 
 export function RoomDimensionsForm({ room, saved, busy, onApply, onArchive, onCancel }: { room: FloorRoom; saved: boolean; busy: boolean; onApply: (fields: Pick<FloorRoom, "name" | "width" | "height" | "active">) => string | null; onArchive: () => void; onCancel: () => void }) {
@@ -147,15 +149,39 @@ export function SpatialPropertiesForm({ entity, kind, onApply, onCancel }: { ent
 export function CombinationPropertiesForm({ combination, room, onApply, onCancel }: { combination: FloorCombination; room: FloorRoom; onApply: (combination: FloorCombination) => string | null; onCancel: () => void }) {
   const [fields, setFields] = useState(() => copy(combination));
   const [error, setError] = useState<string | null>(null);
-  return <form className={formClass} onSubmit={(event) => { event.preventDefault(); setError(onApply(fields)); }}>
+  const maximum = defaultLayoutCapacity(combinationPoses(room.tables, fields.members));
+  const capacity = Math.min(fields.capacity, maximum);
+  const updateMember = (tableId: string, change: Partial<Omit<FloorCombination["members"][number], "tableId">>) => {
+    setFields((value) => {
+      const members = value.members.map((member) => member.tableId === tableId ? { ...member, ...change } : member);
+      const capacity = capacityAfterLayout(value.capacity, combinationPoses(room.tables, value.members), combinationPoses(room.tables, members));
+      return { ...value, members, capacity };
+    });
+  };
+  return <form className={formClass} onSubmit={(event) => { event.preventDefault(); if (capacity > 0) setError(onApply({ ...fields, capacity })); }}>
     <div className={bodyClass}>
       <FloorTextField label="Nombre del armado" value={fields.name} maxLength={80} onChange={(name) => setFields((value) => ({ ...value, name }))} />
-      <FloorNumberField label="Lugares útiles al unir" value={fields.capacity} min={1} max={500} onChange={(capacity) => setFields((value) => ({ ...value, capacity }))} />
+      <div className="space-y-1">
+        <p role="status" className={`text-xs leading-relaxed ${maximum > 0 ? "text-[var(--floor-muted,#52634b)]" : "text-red-800"}`}>Máximo del armado {maximum} {maximum === 1 ? "lugar útil" : "lugares útiles"}.{maximum === 0 && " Mové las mesas para liberar lugares."}</p>
+        {maximum > 0 && <FloorNumberField label="Lugares útiles al unir" value={capacity} min={1} max={maximum} step={1} onChange={(capacity) => {
+          if (Number.isInteger(capacity) && capacity >= 1 && capacity <= maximum) setFields((value) => ({ ...value, capacity }));
+        }} />}
+      </div>
       <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[var(--floor-focus,#3d5934)]" checked={fields.active} onChange={(event) => setFields((value) => ({ ...value, active: event.target.checked }))} />Disponible para nuevas reservas</label>
       <p className="text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">Las posiciones son relativas al centro del armado. Las mesas deben quedar unidas por sus bordes.</p>
-      {fields.members.map((member) => <fieldset key={member.tableId} className="min-w-0 border-t border-stone-200 pt-2"><legend className="max-w-full break-words pr-2 text-xs font-semibold">Mesa {room.tables.find((table) => table.id === member.tableId)?.label}</legend><div className="grid grid-cols-3 gap-2"><FloorNumberField label={`X relativa ${room.tables.find((table) => table.id === member.tableId)?.label}`} value={member.x} onChange={(x) => setFields((value) => ({ ...value, members: value.members.map((item) => item.tableId === member.tableId ? { ...item, x } : item) }))} /><FloorNumberField label={`Y relativa ${room.tables.find((table) => table.id === member.tableId)?.label}`} value={member.y} onChange={(y) => setFields((value) => ({ ...value, members: value.members.map((item) => item.tableId === member.tableId ? { ...item, y } : item) }))} /><RotationField value={member.rotation} onChange={(rotation) => setFields((value) => ({ ...value, members: value.members.map((item) => item.tableId === member.tableId ? { ...item, rotation } : item) }))} /></div></fieldset>)}
+      {fields.members.map((member) => {
+        const label = room.tables.find((table) => table.id === member.tableId)?.label;
+        return <fieldset key={member.tableId} className="min-w-0 border-t border-stone-200 pt-2">
+          <legend className="max-w-full break-words pr-2 text-xs font-semibold">Mesa {label}</legend>
+          <div className="grid grid-cols-3 gap-2">
+            <FloorNumberField label={`X relativa ${label}`} value={member.x} onChange={(x) => updateMember(member.tableId, { x })} />
+            <FloorNumberField label={`Y relativa ${label}`} value={member.y} onChange={(y) => updateMember(member.tableId, { y })} />
+            <RotationField value={member.rotation} onChange={(rotation) => updateMember(member.tableId, { rotation })} />
+          </div>
+        </fieldset>;
+      })}
     </div>
-    <Actions label="Aplicar propiedades" onCancel={onCancel} error={error} />
+    <Actions label="Aplicar propiedades" onCancel={onCancel} error={error} disabled={capacity <= 0} />
   </form>;
 }
 

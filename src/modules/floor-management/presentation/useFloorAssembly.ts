@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { buildFloorOptions, type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorLocation, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation } from "../contracts";
 import { getFloorOptions, getFloorReassignmentOptions } from "./floor-api";
 import { assemblyPoses, changeAssemblyTables, containingLocation, customAssembly, type FloorAssemblyPoint, type FloorAssemblyTableUpdate } from "./floor-assembly";
-import { defaultLayoutCapacity, joinLayoutTables, separateLayoutTables } from "./floor-table-layout";
+import { capacityAfterLayout, defaultLayoutCapacity, joinLayoutTables, separateLayoutTables } from "./floor-table-layout";
 
 export type UseFloorAssemblyInput = {
   restaurantId: string; active: boolean; partySize: number; durationMinutes: number; roomId: string;
@@ -57,7 +57,8 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
   const location = room?.locations.find((item) => item.id === locationId && item.active);
   const selected = assemblyPoses(room, value, options?.options ?? []);
   const option = options?.options.find((item) => item.id === value?.optionId && item.roomId === roomId);
-  const capacity = value?.optionId === "custom" ? value.capacity ?? 0 : option?.capacity ?? 0;
+  const maximum = defaultLayoutCapacity(selected);
+  const capacity = Math.min(value?.optionId === "custom" ? value.capacity ?? maximum : option?.capacity ?? 0, maximum);
   const draft = value?.roomId === roomId ? value : null;
 
   const move = (dx: number, dy: number) => {
@@ -114,12 +115,12 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     onChange({ ...draft, locationId: target.id, x: point.x, y: point.y, customTables: draft.customTables?.map((pose) => ({ ...pose, x: pose.x + dx, y: pose.y + dy })), retainExisting: false });
   };
   const setCapacity = (number: number) => {
-    if (!draft || !selected.length || !Number.isInteger(number) || number < 1 || number > 500) return;
+    if (!draft || !selected.length || !Number.isInteger(number) || number < 1 || number > maximum) return;
     onChange(customAssembly(draft, selected, number));
   };
   const applyLayout = (poses: FloorPose[]) => {
     if (!draft || !poses.length) return;
-    const nextCapacity = capacity === defaultLayoutCapacity(selected) ? defaultLayoutCapacity(poses) : capacity;
+    const nextCapacity = capacityAfterLayout(capacity, selected, poses);
     onChange({ ...customAssembly(draft, poses, nextCapacity), x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
   };
   const updateTable = (tableId: string, partial: FloorAssemblyTableUpdate) => {
@@ -164,7 +165,9 @@ export function useFloorAssembly({ restaurantId, active, partySize, durationMinu
     setResult({ restaurantId, selectionKey, options: { ...options, rooms: options.rooms.map((item) => item.id === roomId ? nextRoom : item), options: [...options.options.filter((item) => item.roomId !== roomId), ...nextOptions] } });
     if (draft && selected.length) {
       const poses = selected.map((pose) => pose.tableId === tableId ? { ...pose, ...partial } : pose);
-      onChange({ ...customAssembly(draft, poses, capacity), expectedRoomRevision: nextRoom.revision,
+      const nextDraft = customAssembly(draft, poses, capacity);
+      const nextPoses = assemblyPoses(nextRoom, nextDraft, nextOptions);
+      onChange({ ...nextDraft, capacity: capacityAfterLayout(capacity, selected, nextPoses), expectedRoomRevision: nextRoom.revision,
         x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length });
     }
     setError(null);

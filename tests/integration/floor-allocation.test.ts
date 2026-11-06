@@ -88,16 +88,52 @@ describe("SQLite physical reservation allocations", () => {
     expect(await first.tableReservation.count({ where: { restaurantId: owner.restaurant.id, status: "PENDING", revision: 0 } })).toBe(1);
   }, 30_000);
 
-  it("uses configured useful capacity six for two four-seat tables, rejecting seven", async () => {
+  it("limits a legacy eight-seat preset to six when two four-seat tables touch", async () => {
     const owner = await fixture();
+    await first.diningTableCombination.update({ where: { id: owner.combination.id }, data: { capacity: 8 } });
+    const repository = new FloorRepository(first);
+    const room = (await repository.getConfig(owner.restaurant.id)).rooms.find((item) => item.id === owner.room.id)!;
+    const saved = await repository.saveRoom(owner.restaurant.id, { ...room, name: "Updated room" }, room.revision);
     const six = await booking(owner, { partySize: 6 }); const seven = await booking(owner, { partySize: 7 });
-    const selected = { roomId: owner.room.id, locationId: owner.location.id, optionId: `combination:${owner.combination.id}`, expectedRoomRevision: 0, x: 275, y: 150, rotation: 0 as const };
+    const selected = { roomId: owner.room.id, locationId: owner.location.id, optionId: `combination:${owner.combination.id}`, expectedRoomRevision: saved.revision, x: 275, y: 150, rotation: 0 as const };
     const options = await getFloorAssignmentOptions(first, owner.restaurant.id, { date, time: "20:00", partySize: 7 });
     expect(options.options.find((option) => option.id === selected.optionId)).toMatchObject({ capacity: 6, available: false });
     await expect(confirm(first, seven.id, selected)).rejects.toMatchObject({ code: "CONFLICT" });
     await confirm(first, six.id, selected);
     const allocation = await first.reservationAllocation.findUniqueOrThrow({ where: { reservationId: six.id }, include: { tables: true } });
     expect(allocation.capacity).toBe(6); expect(allocation.tables.map((table) => table.capacitySnapshot)).toEqual([4, 4]);
+  });
+
+  it("rejects inflated custom capacity and accepts a lower manual limit once tables are separated", async () => {
+    const owner = await fixture();
+    const reservation = await booking(owner, { partySize: 7 });
+    const selected = {
+      ...assignment(owner), optionId: "custom", capacity: 8,
+      customTables: [{ tableId: owner.a.id, x: 150, y: 150, rotation: 0 }, { tableId: owner.b.id, x: 230, y: 150, rotation: 0 }],
+    } satisfies FloorAssignmentInput;
+    await expect(confirm(first, reservation.id, selected)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(confirm(first, reservation.id, { ...selected, capacity: 6 })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await first.reservationAllocation.findUnique({ where: { reservationId: reservation.id } })).toBeNull();
+    await confirm(first, reservation.id, {
+      ...selected, capacity: 7,
+      customTables: [selected.customTables[0], { ...selected.customTables[1], x: 254 }],
+    });
+    expect(await first.reservationAllocation.findUnique({ where: { reservationId: reservation.id } })).toMatchObject({ capacity: 7 });
+  });
+
+  it("validates retention against the geometry in a legacy allocation's snapshots", async () => {
+    const owner = await fixture();
+    const reservation = await booking(owner, { partySize: 6 });
+    await confirm(first, reservation.id, { ...assignment(owner), optionId: `combination:${owner.combination.id}` });
+    await first.reservationAllocation.update({ where: { reservationId: reservation.id }, data: { capacity: 8 } });
+    const options = await getFloorAssignmentOptions(first, owner.restaurant.id, { date, time: "20:00", partySize: 7, excludeReservationId: reservation.id });
+    expect(options.currentAllocation).toMatchObject({ capacity: 6 });
+    await withSqliteTransaction(first, async (tx) => {
+      const current = await tx.tableReservation.findUniqueOrThrow({ where: { id: reservation.id } });
+      await expect(syncReservationAllocation(tx, { ...current, partySize: 7 })).rejects.toMatchObject({ code: "CONFLICT" });
+      await syncReservationAllocation(tx, current);
+    });
+    expect(await first.reservationAllocation.findUnique({ where: { reservationId: reservation.id } })).toMatchObject({ capacity: 6 });
   });
 
   it("retains a single-table assignment when another member of a configured combination is occupied", async () => {

@@ -159,10 +159,11 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   const continueOnBoard = (event: React.FormEvent) => { event.preventDefault(); setWalkInError(null); setQuery({ date: "", time: "" }); setAssembling(true); setSelectedResourceIds([]); discardWindow("walk-in"); tools.open("assembly", { kind: "assembly" }); setPanel(null); window.requestAnimationFrame(() => boardSurface.current?.focus()); };
 
   const createWalkIn = async () => {
-    if (!assignment || !assembly.options || assemblyConflict || assembly.loading || assembly.error) return;
+    if (!assignment || !assembly.options || assemblyConflict || assembly.loading || assembly.error || assembly.capacity < walkIn.partySize) return;
     setSaving(true); setOperationError(null);
     try {
-      await saveFloorAction(restaurantId, { action: "walk-in", ...walkIn, customerName: walkIn.customerName.trim() || "Sin reserva", assignment });
+      await saveFloorAction(restaurantId, { action: "walk-in", ...walkIn, customerName: walkIn.customerName.trim() || "Sin reserva",
+        assignment: assignment.optionId === "custom" ? { ...assignment, capacity: assembly.capacity } : assignment });
       cancelAssembly();
       void refresh();
     } catch (failure) { setOperationError(failure instanceof Error ? failure.message : "No se pudo armar la mesa. Volvé a consultar disponibilidad."); }

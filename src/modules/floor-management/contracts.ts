@@ -88,4 +88,4 @@ export function toFloorRoom(value: unknown): FloorRoom {
 }
 
 export { calculateFloorInterval, restaurantToday, restaurantLocalDateTime, validateTimeZone } from "./domain/time-policy";
-export { buildFloorOptions, composeRoomPoses, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, validateAssembly, validateTableArrangement, getJoinedTableGroups } from "./domain/floor-policy";
+export { buildFloorOptions, composeRoomPoses, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, floorTableSeparationGap, validateAssembly, validateTableArrangement, getJoinedTableGroups, usableTableCapacity } from "./domain/floor-policy";

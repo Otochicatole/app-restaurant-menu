@@ -1,4 +1,4 @@
-import { getJoinedTableGroups, validateTableArrangement, type FloorLocation, type FloorPose } from "../contracts";
+import { floorTableSeparationGap, getJoinedTableGroups, usableTableCapacity, validateTableArrangement, type FloorLocation, type FloorPose } from "../contracts";
 
 function box(pose: Pick<FloorPose, "x" | "y" | "width" | "height" | "rotation">) {
   const width = pose.rotation % 180 ? pose.height : pose.width;
@@ -49,7 +49,8 @@ export function separateLayoutTables(poses: FloorPose[], ids: string[], area: Fl
   for (const group of getJoinedTableGroups(poses)) {
     if (group.length < 2 || !group.some((pose) => wanted.has(pose.tableId))) continue;
     if (group.every((pose) => wanted.has(pose.tableId))) {
-      const packed = pack(next, group.map((pose) => pose.tableId), 24, false, area) ?? pack(next, group.map((pose) => pose.tableId), 24, true, area);
+      const ids = group.map((pose) => pose.tableId);
+      const packed = pack(next, ids, floorTableSeparationGap, false, area) ?? pack(next, ids, floorTableSeparationGap, true, area);
       if (!packed) return "No hay espacio para separar esas mesas en el sector. Mové el grupo y volvé a intentar.";
       next = packed;
       continue;
@@ -58,10 +59,10 @@ export function separateLayoutTables(poses: FloorPose[], ids: string[], area: Fl
       const current = next.find((pose) => pose.tableId === source.tableId)!;
       const others = group.filter((pose) => pose.tableId !== source.tableId).map((pose) => box(next.find((item) => item.tableId === pose.tableId)!));
       const size = box(current);
-      const candidates = [{ x: Math.min(...others.map((item) => item.left)) - 24 - size.width / 2, y: current.y },
-        { x: Math.max(...others.map((item) => item.right)) + 24 + size.width / 2, y: current.y },
-        { x: current.x, y: Math.min(...others.map((item) => item.top)) - 24 - size.height / 2 },
-        { x: current.x, y: Math.max(...others.map((item) => item.bottom)) + 24 + size.height / 2 }]
+      const candidates = [{ x: Math.min(...others.map((item) => item.left)) - floorTableSeparationGap - size.width / 2, y: current.y },
+        { x: Math.max(...others.map((item) => item.right)) + floorTableSeparationGap + size.width / 2, y: current.y },
+        { x: current.x, y: Math.min(...others.map((item) => item.top)) - floorTableSeparationGap - size.height / 2 },
+        { x: current.x, y: Math.max(...others.map((item) => item.bottom)) + floorTableSeparationGap + size.height / 2 }]
         .sort((a, b) => Math.hypot(a.x - current.x, a.y - current.y) - Math.hypot(b.x - current.x, b.y - current.y));
       const candidate = candidates.map((point) => next.map((pose) => pose.tableId === current.tableId ? { ...pose, ...point } : pose))
         .find((items) => fits(items, area) && getJoinedTableGroups(items).some((items) => items.length === 1 && items[0].tableId === current.tableId));
@@ -72,6 +73,11 @@ export function separateLayoutTables(poses: FloorPose[], ids: string[], area: Fl
   return next;
 }
 
-export function defaultLayoutCapacity(poses: FloorPose[]): number {
-  return Math.max(1, getJoinedTableGroups(poses).reduce((sum, group) => sum + Math.max(1, group.reduce((capacity, pose) => capacity + pose.capacity, 0) - (group.length - 1) * 2), 0));
+export function defaultLayoutCapacity(poses: readonly FloorPose[]): number {
+  return Math.min(500, usableTableCapacity(poses));
+}
+
+export function capacityAfterLayout(capacity: number, before: readonly FloorPose[], after: readonly FloorPose[]): number {
+  const maximum = defaultLayoutCapacity(after);
+  return capacity > 0 && capacity < defaultLayoutCapacity(before) ? Math.min(capacity, maximum) : maximum;
 }

@@ -7,8 +7,9 @@ import { transientButtonProps } from "@/ui/button-state";
 import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorRoom } from "../contracts";
 import { CombinationPropertiesForm, InventoryForm, InventoryGroupForm, TablePropertiesForm } from "./FloorAdminForms";
 import { groupInventoryTables } from "./floor-table-groups";
-import { inventoryTables, resizeInventoryGroup } from "./floor-inventory";
+import { combinationPoses, inventoryTables, resizeInventoryGroup } from "./floor-inventory";
 import { saveFloorTables } from "./floor-api";
+import { defaultLayoutCapacity } from "./floor-table-layout";
 
 type View = { kind: "inventory" } | { kind: "group"; key: string } | { kind: "table"; id: string } | { kind: "combination"; value: FloorCombination };
 
@@ -38,7 +39,7 @@ export function FloorInventoryPanel({ restaurantId, room, onSaved, onClose, onDi
     const baseName = tables.map((table) => table.label).join(" + ");
     let name = baseName; let suffix = 2;
     while (draft.combinations.some((item) => item.name === name)) name = `${baseName} ${suffix++}`;
-    setView({ kind: "combination", value: { id: crypto.randomUUID(), name, members, active: true, capacity: Math.max(1, tables.reduce((sum, table) => sum + table.capacity, 0) - (tables.length - 1) * 2) } });
+    setView({ kind: "combination", value: { id: crypto.randomUUID(), name, members, active: true, capacity: defaultLayoutCapacity(combinationPoses(tables, members)) } });
   };
   const save = async () => {
     if (busy || !dirty) return;
