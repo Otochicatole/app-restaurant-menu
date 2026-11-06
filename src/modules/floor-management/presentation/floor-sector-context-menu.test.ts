@@ -4,14 +4,14 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FloorSectorContextMenu } from "./FloorSectorContextMenu";
 
-const actions = { edit: vi.fn(), rotate: vi.fn(), archive: vi.fn() };
+const actions = { edit: vi.fn(), rotate: vi.fn(), remove: vi.fn() };
 const viewport = { width: window.innerWidth, height: window.innerHeight };
 function Harness({ point = { x: 420, y: 300 }, disabled = false }: { point?: { x: number; y: number }; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   return createElement("div", null,
     createElement("button", { onClick: () => setOpen(true) }, "Sector"),
     createElement("button", null, "Otra acción"),
-    open ? createElement(FloorSectorContextMenu, { name: "Ventana", point, disabled, onEdit: actions.edit, onRotate: actions.rotate, onArchive: actions.archive, onClose: () => setOpen(false) }) : null);
+    open ? createElement(FloorSectorContextMenu, { name: "Ventana", point, disabled, onEdit: actions.edit, onRotate: actions.rotate, onDelete: actions.remove, onClose: () => setOpen(false) }) : null);
 }
 function open() {
   const trigger = screen.getByRole("button", { name: "Sector" }); trigger.focus(); fireEvent.click(trigger);
@@ -31,7 +31,7 @@ describe("sector actions at the cursor", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: viewport.height });
   });
 
-  it.each([["Editar", "edit"], ["Girar", "rotate"], ["Archivar", "archive"]] as const)("offers %s for the selected sector", (label, action) => {
+  it.each([["Editar", "edit"], ["Girar", "rotate"], ["Eliminar", "remove"]] as const)("offers %s for the selected sector", (label, action) => {
     render(createElement(Harness)); open();
     expect(screen.getByText("Ventana")).toBeTruthy();
     const item = screen.getByRole("menuitem", { name: label });
@@ -44,9 +44,9 @@ describe("sector actions at the cursor", () => {
     render(createElement(Harness)); const menu = open();
     const edit = screen.getByRole("menuitem", { name: "Editar" });
     const rotate = screen.getByRole("menuitem", { name: "Girar" });
-    const archive = screen.getByRole("menuitem", { name: "Archivar" });
+    const remove = screen.getByRole("menuitem", { name: "Eliminar" });
     expect(document.activeElement).toBe(edit);
-    for (const [key, target] of [["ArrowRight", rotate], ["ArrowDown", archive], ["ArrowRight", edit], ["End", archive], ["ArrowUp", rotate], ["Home", edit], ["ArrowLeft", archive]] as const) {
+    for (const [key, target] of [["ArrowRight", rotate], ["ArrowDown", remove], ["ArrowRight", edit], ["End", remove], ["ArrowUp", rotate], ["Home", edit], ["ArrowLeft", remove]] as const) {
       fireEvent.keyDown(menu, { key }); expect(document.activeElement).toBe(target);
     }
   });
@@ -84,6 +84,6 @@ describe("sector actions at the cursor", () => {
     render(createElement(Harness, { disabled: true })); const menu = open();
     expect(document.activeElement).toBe(menu);
     for (const item of screen.getAllByRole("menuitem")) { expect((item as HTMLButtonElement).disabled).toBe(true); fireEvent.click(item); }
-    expect(actions.edit).not.toHaveBeenCalled(); expect(actions.rotate).not.toHaveBeenCalled(); expect(actions.archive).not.toHaveBeenCalled();
+    expect(actions.edit).not.toHaveBeenCalled(); expect(actions.rotate).not.toHaveBeenCalled(); expect(actions.remove).not.toHaveBeenCalled();
   });
 });

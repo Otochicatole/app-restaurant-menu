@@ -512,7 +512,7 @@ describe("fullscreen room editor workflows", () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("opens sector actions at the pointer and saves rotation and confirmed archival", async () => {
+  it("opens sector actions at the pointer and removes the sector from the plan on confirmation", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
     fireEvent.click(screen.getByRole("button", {name: "Seleccionar sector Ventana"}));
@@ -520,17 +520,17 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.queryByRole("complementary", {name: "Selección del plano"})).toBeNull();
     const menu = sectorMenu();
     expect(menu.style.left).toBe("420px"); expect(menu.style.top).toBe("300px");
-    for (const name of ["Editar", "Girar", "Archivar"]) expect(within(menu).getByRole("menuitem", {name})).toBeTruthy();
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Girar", "Eliminar"]);
     fireEvent.click(within(menu).getByRole("menuitem", {name: "Girar"}));
     expect(screen.queryByRole("menu")).toBeNull();
     expect(plan().locations[0].rotation).toBe(90);
-    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Archivar"}));
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Eliminar"}));
     expect(screen.queryByRole("menu")).toBeNull();
-    const confirmation = screen.getByRole("dialog", {name: "Archivar sector"});
+    const confirmation = screen.getByRole("dialog", {name: "Eliminar sector"});
     expect(plan().locations[0].active).toBe(true);
     expect(api.save).not.toHaveBeenCalled();
-    fireEvent.click(within(confirmation).getByRole("button", {name: "Archivar sector"}));
-    expect(plan().locations[0]).toMatchObject({active: false, rotation: 90});
+    fireEvent.click(within(confirmation).getByRole("button", {name: "Eliminar sector"}));
+    expect(plan().locations).toEqual([]);
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", expect.objectContaining({action: "save-room", expectedRevision: 4, room: expect.objectContaining({locations: [expect.objectContaining({id: "window", active: false, rotation: 90})]})})));
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);

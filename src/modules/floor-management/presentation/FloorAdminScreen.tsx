@@ -291,7 +291,21 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   };
   const removeSelection = () => {
     if (!draft || !selection || busy) return;
-    setConfirmation({ title: selectedSector ? "Archivar sector" : "Eliminar elemento", description: selectedSector ? "El sector dejará de estar disponible. Las asignaciones futuras se comprobarán al guardar." : "El elemento se quitará del plano cuando guardes los cambios.", confirmLabel: selectedSector ? "Archivar sector" : "Eliminar elemento", run: () => { patch(selectedSector ? { ...draft, locations: draft.locations.map((item) => item.id === selection.id ? { ...item, active: false } : item) } : { ...draft, fixtures: draft.fixtures.filter((item) => item.id !== selection.id) }); setSelection(null); setConfirmation(null); } });
+    const title = selectedSector ? "Eliminar sector" : "Eliminar elemento";
+    setConfirmation({
+      title,
+      description: selectedSector
+        ? "El sector se quitará del plano al guardar. Si tiene asignaciones vigentes o futuras, primero tendrás que reasignarlas."
+        : "El elemento se quitará del plano cuando guardes los cambios.",
+      confirmLabel: title,
+      run: () => {
+        patch(selectedSector
+          ? { ...draft, locations: draft.locations.map((item) => item.id === selection.id ? { ...item, active: false } : item) }
+          : { ...draft, fixtures: draft.fixtures.filter((item) => item.id !== selection.id) });
+        setSelection(null);
+        setConfirmation(null);
+      },
+    });
   };
   const archiveRoom = () => {
     if (!draft || busy) return;
@@ -357,7 +371,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     <div role="region" aria-label="Editor del salón" className="absolute inset-0">
       {draft && <FloorCanvas
         key={draft.id} fullScreen editorMode grid
-        room={combinationMode ? { ...draft, fixtures: [], locations: [] } : draft}
+        room={combinationMode ? { ...draft, fixtures: [], locations: [] } : { ...draft, locations: draft.locations.filter((location) => location.active) }}
         tables={canvasTables}
         selectedIds={combinationMode?.selectedIds ?? []}
         selectedElements={selectedElements}
@@ -382,7 +396,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     <header className="pointer-events-none absolute inset-x-0 top-[max(1rem,env(safe-area-inset-top,0px))] z-10 flex items-start justify-between gap-3 px-3 sm:px-6"><div className="pointer-events-auto flex min-w-0 items-start gap-2"><div className="min-w-0 rounded-xl bg-white px-3 py-2 shadow-[0_3px_16px_rgba(24,38,24,0.12)]"><p className="max-w-[32vw] truncate text-[11px] text-[#52634b] sm:max-w-64">{config?.restaurantName ?? "Restaurante"}</p><p className="max-w-[32vw] truncate text-sm font-semibold text-[#263e23] sm:max-w-64">{draft?.name ?? "Salones"}{draft && !draft.active && " · Archivado"}</p></div></div><div className="pointer-events-auto flex shrink-0 gap-2"><Link href={roomHref} aria-label="Ver sala" title="Ver sala" aria-disabled={busy || undefined} onClick={(event) => guardLink(event, roomHref)} className={floatingButton}><LayoutGrid size={18} /><span className="hidden lg:inline">Ver sala</span></Link><button {...transientButtonProps} type="button" aria-label="Guardar plano" title="Guardar plano" disabled={!draft || !dirty || busy || !!combinationMode} onClick={() => { void save(); }} className={`${buttonBase} bg-[#182618] text-white hover:bg-[#2d4628]`}>{busy ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}<span className="hidden lg:inline">Guardar plano</span></button></div></header>
     <div className="pointer-events-none absolute left-3 right-3 top-[calc(max(1rem,env(safe-area-inset-top,0px))+4rem)] z-10 max-w-xl space-y-2 sm:left-6"><p role="status" className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]">{status}</p>{error && <div role="alert" className="pointer-events-auto flex items-start justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"><span>{error}</span>{!config ? <button {...transientButtonProps} type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="font-semibold underline underline-offset-4">Reintentar</button> : <button {...transientButtonProps} type="button" aria-label="Cerrar error" onClick={() => setError(null)}><X size={16} /></button>}</div>}{notice && <p role="status" className="w-fit rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">{notice}</p>}{placement && <button {...transientButtonProps} type="button" onClick={() => setPlacement(null)} className={`${adminSecondaryButtonClass} pointer-events-auto`}>Cancelar ubicación</button>}</div>
     {selectedFixture && !combinationMode && <aside aria-label="Selección del plano" className={`${sideActionPosition} max-w-[calc(100%_-_6rem)] rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)]`}><p className="mb-2 truncate text-sm font-semibold">{selectedLabel || (selectedFixture?.type === "WALL" ? "Pared" : "Elemento del salón")}</p><div className="flex flex-wrap gap-1"><button {...transientButtonProps} type="button" disabled={busy} onClick={editSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><Pencil size={15} />Editar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={rotateSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><RotateCw size={15} />Girar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={removeSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={15} />{selectedSector ? "Archivar" : "Eliminar"}</button></div></aside>}
-    {sectorMenu && selectedSector && !busy && !confirmation && !placement && !combinationMode && <FloorSectorContextMenu name={selectedSector.name} point={sectorMenu.point} disabled={busy} onEdit={() => { setSectorMenu(null); editSelection(); }} onRotate={() => { setSectorMenu(null); rotateSelection(); }} onArchive={() => { setSectorMenu(null); removeSelection(); }} onClose={() => setSectorMenu(null)} />}
+    {sectorMenu && selectedSector && !busy && !confirmation && !placement && !combinationMode && <FloorSectorContextMenu name={selectedSector.name} point={sectorMenu.point} disabled={busy} onEdit={() => { setSectorMenu(null); editSelection(); }} onRotate={() => { setSectorMenu(null); rotateSelection(); }} onDelete={() => { setSectorMenu(null); removeSelection(); }} onClose={() => setSectorMenu(null)} />}
     <nav ref={toolbar} aria-label="Herramientas del editor" className="absolute bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-1/2 z-30 grid w-[calc(100%_-_1.5rem)] max-w-lg -translate-x-1/2 grid-cols-4 items-center gap-1.5 md:max-w-3xl md:grid-cols-7 lg:flex lg:w-max lg:max-w-[calc(100%_-_1.5rem)]">
       {toolLabels.map((label, index) => {
         const Icon = toolIcons[index];
