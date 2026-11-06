@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Building2, CalendarClock, Clock, List, Loader2, Move, Package, RefreshCw, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, CalendarClock, Clock, List, Loader2, Package, RefreshCw, Users } from "lucide-react";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
 import { useFloatingWindows } from "@/ui/useFloatingWindows";
@@ -9,22 +9,23 @@ import { transientButtonProps } from "@/ui/button-state";
 import { floorPrimaryButtonClass as adminPrimaryButtonClass, floorSecondaryButtonClass as adminSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import styles from "./floor-operations.module.css";
 import { calculateFloorInterval, composeRoomPoses, restaurantLocalDateTime, getJoinedTableGroups, validateTableArrangement, validateFloorPlacement, validateRoomLayout, type FloorAllocationView, type FloorAssignmentInput, type FloorBoardView, type FloorLease, type FloorRoom, type FloorTable } from "../contracts";
-import { FloorCanvas } from "./FloorCanvas";
+import { FloorCanvas, type FloorInteractionMode } from "./FloorCanvas";
 import { FloorAssemblyControls } from "./FloorAssemblyControls";
 import { FloorBoardToolbar } from "./FloorBoardToolbar";
 import { FloorTableContextMenu } from "./FloorTableContextMenu";
-import { FloorTableEditor } from "./FloorTableEditor";
+import { FloorSelectionEditor, type FloorSelectionEditorMode } from "./FloorSelectionEditor";
+import { buildSelectionLayout, canSeparateFloorSelection, contextFloorSelection, resolveFloorSelection, separateFloorSelection, type FloorSelectionLayout, type FloorSelectionState } from "./floor-selection";
 import { FloorInventoryPanel } from "./FloorInventoryPanel";
 import { FloorTableSummary } from "./FloorTableSummary";
 import { summarizeFloorTables } from "./floor-table-summary";
-import { defaultLayoutCapacity, separateLayoutTables } from "./floor-table-layout";
 import { useFloorAssembly } from "./useFloorAssembly";
-import { floorInputClass, getFloorBoard, reassignFloorTables, saveFloorAction, saveFloorTables } from "./floor-api";
+import { floorInputClass, getFloorBoard, reassignFloorSelection, saveFloorAction, saveFloorTables } from "./floor-api";
 
 type Panel = "rooms" | "schedule" | "reservations" | "walk-in" | "detail" | "release" | "table" | "inventory" | null;
-type ToolWindow = { kind: Exclude<Panel, "rooms" | "release" | null> | "assembly"; allocation?: FloorAllocationView; table?: FloorTable; room?: FloorRoom };
-const toolId = (tool: ToolWindow) => tool.kind === "detail" ? `detail:${tool.allocation!.id}` : tool.kind === "table" ? `table:${tool.table!.id}` : tool.kind === "inventory" ? `inventory:${tool.room!.id}` : tool.kind;
-const toolTitle = (tool: ToolWindow, roomName: string) => tool.kind === "assembly" ? "Armar mesas" : tool.kind === "inventory" ? "Inventario de mesas" : tool.kind === "table" ? `Editar mesa ${tool.table?.label ?? ""}` : tool.kind === "schedule" ? "Fecha y hora" : tool.kind === "reservations" ? `Reservas de ${roomName}` : tool.kind === "walk-in" ? "Atender sin reserva" : "Detalle de la reserva";
+type SelectionSnapshot = { ids: string[]; tables: FloorTable[]; stamp: string; roomId: string };
+type ToolWindow = { kind: Exclude<Panel, "rooms" | "release" | null> | "assembly"; allocation?: FloorAllocationView; selection?: SelectionSnapshot; room?: FloorRoom };
+const toolId = (tool: ToolWindow) => tool.kind === "detail" ? `detail:${tool.allocation!.id}` : tool.kind === "table" ? "selection:" + tool.selection!.ids.slice().sort().map(encodeURIComponent).join("+") : tool.kind === "inventory" ? `inventory:${tool.room!.id}` : tool.kind;
+const toolTitle = (tool: ToolWindow, roomName: string) => tool.kind === "assembly" ? "Armar mesas" : tool.kind === "inventory" ? "Inventario de mesas" : tool.kind === "table" ? (tool.selection?.tables.length === 1 ? "Editar mesa " + tool.selection.tables[0].label : "Editar selección (" + (tool.selection?.tables.length ?? 0) + " mesas)") : tool.kind === "schedule" ? "Fecha y hora" : tool.kind === "reservations" ? `Reservas de ${roomName}` : tool.kind === "walk-in" ? "Atender sin reserva" : "Detalle de la reserva";
 const emptyWalkIn = { customerName: "", partySize: 2, notes: "", durationMinutes: 120 };
 const floatingButton = "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-[var(--floor-ink,#263e23)] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--floor-focus,#3d5934)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -39,7 +40,6 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   const tools = useFloatingWindows<ToolWindow>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<FloorAllocationView | null>(null);
   const [releaseTarget, setReleaseTarget] = useState<FloorAllocationView | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(() => initialBoard ? new Date(initialBoard.updatedAt) : null);
   const [assembling, setAssembling] = useState(false);
@@ -49,18 +49,16 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   const [operationError, setOperationError] = useState<string | null>(null);
   const [walkInError, setWalkInError] = useState<string | null>(null);
   const [releaseError, setReleaseError] = useState<string | null>(null);
-  const [editingAllocation, setEditingAllocation] = useState<FloorAllocationView | null>(null);
-  const [tableMenu, setTableMenu] = useState<{ id: string; point: { x: number; y: number }; scope?: "table" | "group" } | null>(null);
+  const [tableMenu, setTableMenu] = useState<{ ids: string[]; point: { x: number; y: number } } | null>(null);
+  const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>([]);
+  const [interactionMode, setInteractionMode] = useState<FloorInteractionMode>("select");
+  const [layoutPreview, setLayoutPreview] = useState<Record<string, Pick<FloorTable, "x" | "y" | "rotation">> | null>(null);
   const [tableErrors, setTableErrors] = useState<Record<string, string | null>>({});
-  const [focusedTableId, setFocusedTableId] = useState<string | null>(null);
-  const [movingTableId, setMovingTableId] = useState<string | null>(null);
-  const [selectedTableIds, setSelectedTableIds] = useState<string[] | null>(null);
-  const [movingGroupIds, setMovingGroupIds] = useState<string[]>([]);
   const [inventoryDirty, setInventoryDirty] = useState(false);
   const [dirtyWindows, setDirtyWindows] = useState<Record<string, boolean>>({});
   const currentBoard = useRef(board);
   const pending = useRef<AbortController | null>(null);
-  const panelContent = useRef<HTMLDivElement>(null);
+  const selectionMutation = useRef(false);
   const boardSurface = useRef<HTMLDivElement>(null);
   const attendButton = useRef<HTMLButtonElement>(null);
   const discardWindow = (id: string) => { tools.close(id); setDirtyWindows((current) => ({ ...current, [id]: false })); setTableErrors((current) => current[id] ? { ...current, [id]: null } : current); };
@@ -72,12 +70,12 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
     tools.open(id, tool);
     window.requestAnimationFrame(() => document.getElementById(`floor-content-${id}`)?.focus({ preventScroll: true }));
   };
-  const changeAssignment = useCallback((value: FloorAssignmentInput | null) => { setAssignment(value); setOperationError(null); }, []);
+  const changeAssignment = useCallback((value: FloorAssignmentInput | null) => { setAssignment(value); setOperationError(null); const ids = (value?.customTables ?? []).map((table) => "draft:" + table.tableId); setSelectedResourceIds((current) => { const kept = current.filter((id) => !id.startsWith("draft:") || ids.includes(id)); return kept.some((id) => id.startsWith("draft:")) || !ids.length ? kept : ids; }); }, []);
   const hasPendingInputs = tools.windows.some((entry) => dirtyWindows[entry.id]);
   const hasPendingChanges = inventoryDirty || assembling || hasPendingInputs;
-  const assemblyPartySize = editingAllocation?.partySize ?? walkIn.partySize;
-  const assemblyDuration = editingAllocation ? Math.max(15, Math.round((Date.parse(editingAllocation.serviceEndAt) - Date.parse(editingAllocation.serviceStartAt)) / 60_000)) : walkIn.durationMinutes;
-  const assembly = useFloorAssembly({ restaurantId, active: assembling, partySize: assemblyPartySize, durationMinutes: assemblyDuration, roomId, value: assignment, onChange: changeAssignment, editingAllocation, fallbackRoom: board?.rooms.find((item) => item.id === roomId) });
+  const assemblyPartySize = walkIn.partySize;
+  const assemblyDuration = walkIn.durationMinutes;
+  const assembly = useFloorAssembly({ restaurantId, active: assembling, partySize: assemblyPartySize, durationMinutes: assemblyDuration, roomId, value: assignment, onChange: changeAssignment, fallbackRoom: board?.rooms.find((item) => item.id === roomId) });
   useEffect(() => { currentBoard.current = board; }, [board]);
   useEffect(() => {
     if (!hasPendingChanges) return;
@@ -87,6 +85,7 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   }, [hasPendingChanges]);
 
   const refresh = useCallback(async () => {
+    if (selectionMutation.current) return;
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
@@ -117,30 +116,28 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   const tableCounts = board && savedRoom ? summarizeFloorTables(savedRoom, board.allocations, board.at) : null;
   const allocations = board?.allocations.filter((item) => item.roomId === roomId) ?? [];
   const local = board ? restaurantLocalDateTime(board.timeZone, new Date(board.at)) : { date: "", time: "" };
-  const otherAllocations = board?.allocations.filter((item) => item.id !== editingAllocation?.id) ?? [];
+  const otherAllocations = board?.allocations ?? [];
   const draft = assembling ? assembly.selected : [];
-  const focusedDraftId = draft.some((pose) => pose.tableId === focusedTableId) ? focusedTableId : null;
-  const selectionIds = selectedTableIds ? selectedTableIds.filter((id) => draft.some((pose) => pose.tableId === id)) : focusedDraftId ? [focusedDraftId] : draft.map((pose) => pose.tableId);
-  const poses = room && board ? composeRoomPoses(room, editingAllocation && draft.length ? otherAllocations : board.allocations, board.at) : [];
-  const draftIds = draft.map((pose) => `draft:${pose.tableId}`);
-  const tables = [...poses.map((pose) => ({ ...pose, id: pose.tableId, active: true, state: "reserved" as const })),
-    ...draft.map((pose) => ({ ...pose, id: `draft:${pose.tableId}`, active: true, state: "selected" as const }))];
-  const joinedGroups = [...allocations.filter((allocation) => !editingAllocation || !draft.length || allocation.id !== editingAllocation.id).flatMap((allocation) =>
+  const poses = room && board ? composeRoomPoses(room, board.allocations, board.at) : [];
+  const baseTables = [...poses.map((pose) => ({ ...pose, id: pose.tableId, active: true, state: "reserved" as const })), ...draft.map((pose) => ({ ...pose, id: "draft:" + pose.tableId, active: true, state: "available" as const }))];
+  const tables = baseTables.map((table) => layoutPreview?.[table.id] ? { ...table, ...layoutPreview[table.id] } : table);
+  const selectionState: FloorSelectionState | null = room ? { room, allocations: board?.allocations ?? [], draft: assembling && assembly.options ? { poses: draft, interval: assembly.options.interval, capacity: assembly.capacity, locationId: assembly.locationId || undefined } : null } : null;
+  const availableIds = selectionState ? resolveFloorSelection(selectionState, baseTables.map((table) => table.id)).map((item) => item.resourceId) : [];
+  const selection = selectedResourceIds.filter((id) => availableIds.includes(id));
+  const draftOnlySelection = selection.length > 0 && selection.every((id) => id.startsWith("draft:"));
+  const selectionIds = selection.filter((id) => id.startsWith("draft:")).map((id) => id.slice(6));
+  const joinedGroups = [...allocations.flatMap((allocation) =>
     getJoinedTableGroups(allocation.poses).filter((group) => group.length > 1).map((group) => ({ id: `${allocation.id}:${group.map((pose) => pose.tableId).sort().join(":")}`, tableIds: group.map((pose) => pose.tableId), label: group.map((pose) => pose.label).join(" + ") }))),
     ...getJoinedTableGroups(draft).filter((group) => group.length > 1).map((group) => ({ id: `draft:${group.map((pose) => pose.tableId).sort().join(":")}`, tableIds: group.map((pose) => `draft:${pose.tableId}`), label: group.map((pose) => pose.label).join(" + ") }))];
   let assemblyConflict: string | null = null;
   if (assembling && assignment && room && assembly.options && draft.length) {
     const unavailable = assembly.options.options.find((option) => option.roomId === room.id && option.id.startsWith("table:") && !(option.resourceAvailable ?? option.available) && draft.some((pose) => option.id === `table:${pose.tableId}`));
-    const proposal: FloorLease = { ...assembly.options.interval, id: "draft", reservationId: editingAllocation?.reservationId ?? "draft", roomId: room.id, locationId: assignment.locationId, poses: draft, releasedAt: null };
+    const proposal: FloorLease = { ...assembly.options.interval, id: "draft", reservationId: "draft", roomId: room.id, locationId: assignment.locationId, poses: draft, releasedAt: null };
     const inventoryChanged = draft.some((pose) => !room.tables.some((table) => table.id === pose.tableId && table.active) || !assembly.options!.options.some((option) => option.roomId === room.id && option.id === `table:${pose.tableId}`));
-    const current = assembly.options.currentAllocation;
-    const changed = editingAllocation && (!current || current.version !== editingAllocation.version || current.reservationRevision !== editingAllocation.reservationRevision);
-    assemblyConflict = changed ? "La asignación cambió. Cancelá esta edición y volvé a abrirla desde la mesa."
-      : assignment.expectedRoomRevision !== room.revision ? "El salón cambió. Volvé a elegir las mesas para actualizar el armado."
+    assemblyConflict = assignment.expectedRoomRevision !== room.revision ? "El salón cambió. Volvé a elegir las mesas para actualizar el armado."
       : inventoryChanged ? "El inventario cambió. Elegí las mesas del armado nuevamente."
       : unavailable?.conflict ?? validateTableArrangement(draft) ?? validateFloorPlacement(room, proposal, otherAllocations);
   }
-  const currentSelection = selected ? board?.allocations.find((allocation) => allocation.id === selected.id) : null;
   const canRelease = (allocation: FloorAllocationView) => canManageWalkIns && !query.date && allocation.source === "WALK_IN" && !allocation.releasedAt;
   const canManageTables = !readOnly || canManageWalkIns;
   const canArrange = (allocation: FloorAllocationView) => canManageTables && !allocation.releasedAt && Date.parse(allocation.blockedUntil) > Date.parse(board?.updatedAt ?? "");
@@ -154,20 +151,18 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
   const closePanel = () => { if (!saving) setPanel(null); };
   const requestTool = (next: Panel, prepare?: () => void) => { if (!saving) { prepare?.(); openPanel(next); } };
   const openSchedule = () => requestTool("schedule", () => { if (!tools.windows.some((window) => window.id === "schedule")) { setSchedule({ date: query.date || local.date, time: query.time || local.time }); setScheduleError(null); } });
-  const showDetails = (allocation: FloorAllocationView) => { if (!saving) { setSelected(allocation); openPanel("detail", { kind: "detail", allocation }); } };
+  const showDetails = (allocation: FloorAllocationView) => { if (!saving) { openPanel("detail", { kind: "detail", allocation }); } };
   const askRelease = (allocation: FloorAllocationView) => { setReleaseTarget(allocation); setReleaseError(null); openPanel("release"); };
   const openWalkIn = () => requestTool("walk-in", () => { if (!tools.windows.some((window) => window.id === "walk-in")) setWalkInError(null); });
   const focusAttend = () => { window.requestAnimationFrame(() => attendButton.current?.focus()); };
-  const cancelAssembly = () => { if (!editingAllocation) { setWalkIn(emptyWalkIn); discardWindow("walk-in"); } discardWindow("assembly"); tools.windows.filter((window) => window.value.kind === "table").forEach((window) => discardWindow(window.id)); setAssembling(false); setAssignment(null); setEditingAllocation(null); setSelectedTableIds(null); setMovingGroupIds([]); setFocusedTableId(null); setMovingTableId(null); setTableMenu(null); setOperationError(null); setPanel(null); focusAttend(); };
-  const continueOnBoard = (event: React.FormEvent) => { event.preventDefault(); if (editingAllocation) { setWalkInError("Terminá o cancelá el armado actual antes de atender otro grupo."); return; } setWalkInError(null); setQuery({ date: "", time: "" }); setAssembling(true); discardWindow("walk-in"); tools.open("assembly", { kind: "assembly" }); setPanel(null); window.requestAnimationFrame(() => boardSurface.current?.focus()); };
+  const cancelAssembly = () => { setWalkIn(emptyWalkIn); discardWindow("walk-in"); discardWindow("assembly"); tools.windows.filter((window) => window.value.selection?.ids.some((id) => id.startsWith("draft:"))).forEach((window) => discardWindow(window.id)); setAssembling(false); setAssignment(null); setSelectedResourceIds((current) => current.filter((id) => !id.startsWith("draft:"))); setTableMenu(null); setOperationError(null); setPanel(null); focusAttend(); };
+  const continueOnBoard = (event: React.FormEvent) => { event.preventDefault(); setWalkInError(null); setQuery({ date: "", time: "" }); setAssembling(true); setSelectedResourceIds([]); discardWindow("walk-in"); tools.open("assembly", { kind: "assembly" }); setPanel(null); window.requestAnimationFrame(() => boardSurface.current?.focus()); };
 
   const createWalkIn = async () => {
     if (!assignment || !assembly.options || assemblyConflict || assembly.loading || assembly.error) return;
-    if (editingAllocation && editingAllocation.reservationRevision === undefined) { setOperationError("Actualizá la sala antes de guardar este armado."); return; }
     setSaving(true); setOperationError(null);
     try {
-      if (editingAllocation) await reassignFloorTables(restaurantId, editingAllocation.reservationId, { expectedRevision: editingAllocation.reservationRevision ?? -1, expectedAllocationVersion: editingAllocation.version, assignment });
-      else await saveFloorAction(restaurantId, { action: "walk-in", ...walkIn, customerName: walkIn.customerName.trim() || "Sin reserva", assignment });
+      await saveFloorAction(restaurantId, { action: "walk-in", ...walkIn, customerName: walkIn.customerName.trim() || "Sin reserva", assignment });
       cancelAssembly();
       void refresh();
     } catch (failure) { setOperationError(failure instanceof Error ? failure.message : "No se pudo armar la mesa. Volvé a consultar disponibilidad."); }
@@ -178,7 +173,7 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
     setSaving(true); setReleaseError(null);
     try {
       await saveFloorAction(restaurantId, { action: "release-walk-in", reservationId: releaseTarget.reservationId, expectedRevision: releaseTarget.reservationRevision });
-      setSelected(null); setReleaseTarget(null); openPanel(null); await refresh();
+      setReleaseTarget(null); openPanel(null); await refresh();
     } catch (failure) { setReleaseError(failure instanceof Error ? failure.message : "No se pudieron liberar las mesas. Actualizá la sala y volvé a intentar."); }
     finally { setSaving(false); }
   };
@@ -187,121 +182,123 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
     try {
       if (assembling) { setScheduleError("Terminá o cancelá el armado antes de cambiar el horario."); return; }
       calculateFloorInterval({ ...schedule, timeZone: board?.timeZone ?? "America/Argentina/Buenos_Aires" });
-      setQuery({ ...schedule }); setScheduleError(null); setSelected(null); discardWindow("schedule"); setPanel(null);
+      setQuery({ ...schedule }); setScheduleError(null); discardWindow("schedule"); setPanel(null);
     } catch (failure) { setScheduleError(failure instanceof Error ? failure.message : "Revisá la fecha y hora elegidas."); }
   };
 
   const closeTableMenu = useCallback(() => setTableMenu(null), []);
-  const openTableMenu = (id: string, point: { x: number; y: number }) => {
+  const selectTables = (ids: string[], additive = false) => {
     if (saving) return;
-    setTableMenu({ id, point, scope: "table" }); setMovingTableId(null); setMovingGroupIds([]);
-    if (id.startsWith("draft:")) setSelectedTableIds([id.slice(6)]);
-    if (id.startsWith("draft:")) setFocusedTableId(id.slice(6));
+    const chosen = [...new Set(ids)].filter((id) => availableIds.includes(id));
+    setSelectedResourceIds((current) => additive ? [...new Set([...current, ...chosen])] : chosen);
+    setTableMenu(null);
   };
-  const openGroupMenu = (ids: string[], point: { x: number; y: number }) => { if (!ids[0] || saving) return; setTableMenu({ id: ids[0], point, scope: "group" }); setMovingTableId(null); setMovingGroupIds([]); };
-  const actOnTable = (action: "edit-group" | "edit" | "rotate" | "move" | "separate" | "move-group" | "rotate-group") => {
-    if (!tableMenu || !room || saving) return;
-    const isDraft = tableMenu.id.startsWith("draft:");
-    const tableId = isDraft ? tableMenu.id.slice(6) : tableMenu.id;
-    const allocation = isDraft ? null : allocations.find((item) => item.poses.some((pose) => pose.tableId === tableId));
-    if (!isDraft && (!allocation || !canArrange(allocation) || assembling)) return;
-    const pose = isDraft ? draft.find((item) => item.tableId === tableId) : allocation?.poses.find((item) => item.tableId === tableId);
-    const stock = room.tables.find((item) => item.id === tableId);
-    if (!pose || !stock) return;
-    const members = getJoinedTableGroups(isDraft ? draft : allocation?.poses ?? []).find((group) => group.some((item) => item.tableId === tableId)) ?? [pose];
-    const memberIds = members.map((item) => item.tableId);
-    const groupAction = action === "edit-group" || action === "move-group" || action === "rotate-group";
-    setTableMenu(null); setSelectedTableIds(groupAction ? memberIds : [tableId]); setFocusedTableId(groupAction ? null : tableId); setOperationError(null);
-    if (allocation) {
-      let nextPoses = allocation.poses;
-      if (action === "rotate-group") {
-        const x = members.reduce((sum, item) => sum + item.x, 0) / members.length;
-        const y = members.reduce((sum, item) => sum + item.y, 0) / members.length;
-        nextPoses = allocation.poses.map((item) => memberIds.includes(item.tableId) ? { ...item, x: x - (item.y - y), y: y + (item.x - x), rotation: ((item.rotation + 90) % 360) as FloorTable["rotation"] } : item);
-      } else if (action === "rotate") nextPoses = allocation.poses.map((item) => item.tableId === tableId ? { ...item, rotation: ((item.rotation + 90) % 360) as FloorTable["rotation"] } : item);
-      else if (action === "separate") {
-        const location = room.locations.find((item) => item.id === allocation.locationId && item.active);
-        const result = location ? separateLayoutTables(allocation.poses, [tableId], location) : "Elegí un sector para separar las mesas.";
-        if (typeof result === "string") setOperationError(result); else nextPoses = result;
-      }
-      const customTables = nextPoses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation }));
-      const capacity = allocation.capacity === defaultLayoutCapacity(allocation.poses) ? defaultLayoutCapacity(nextPoses) : allocation.capacity;
-      setAssignment({ roomId: room.id, locationId: allocation.locationId ?? undefined, optionId: "custom", customTables, capacity,
-        x: customTables.reduce((sum, item) => sum + item.x, 0) / customTables.length, y: customTables.reduce((sum, item) => sum + item.y, 0) / customTables.length,
-        rotation: 0, expectedRoomRevision: room.revision, retainExisting: false });
-      setEditingAllocation(allocation); setAssembling(true); setSelected(allocation);
-
-    } else if (action === "rotate") assembly.updateTable(tableId, { rotation: ((pose.rotation + 90) % 360) as FloorTable["rotation"] });
-    else if (action === "separate") setOperationError(assembly.separateTables([tableId]));
-    else if (action === "rotate-group") assembly.rotateTables(memberIds);
-    tools.open("assembly", { kind: "assembly" });
-    if (action === "edit") { openPanel("table", { kind: "table", table: { ...stock, x: pose.x, y: pose.y, rotation: pose.rotation } }); }
-    else { openPanel(null); if (action === "move") setMovingTableId(tableId); if (action === "move-group") setMovingGroupIds(memberIds); window.requestAnimationFrame(() => boardSurface.current?.focus()); }
-  };
-  const editAllocation = (allocation: FloorAllocationView, sourceWindowId?: string) => {
-    if (!canArrange(allocation) || assembling || !allocation.poses.length) return;
-    // Open the same table actions used on the canvas, accessible from the list.
-    const bounds = (sourceWindowId ? document.getElementById("floor-content-" + sourceWindowId) : panelContent.current)?.getBoundingClientRect();
-    openPanel(null); setTableMenu({ id: allocation.poses[0].tableId, point: { x: bounds?.left ?? 16, y: bounds?.top ?? 120 } });
-  };
-  const applyTable = async (next: FloorTable, original: FloorTable, windowId: string) => {
-    const source = room?.tables.find((item) => item.id === next.id);
-    if (!room || !source || !assignment || !draft.some((item) => item.tableId === next.id) || saving || assembly.loading) return;
-    const setTableError = (message: string | null) => setTableErrors((current) => ({ ...current, [windowId]: message }));
-    setTableError(null);
-    if ((["label", "shape", "width", "height", "capacity", "active"] as const).some((key) => source[key] !== original[key])) { setTableError("La mesa cambió desde que abriste esta ventana. Cerrala y volvé a abrirla antes de aplicar."); return; }
-    const stock = { ...source, label: next.label, shape: next.shape, width: next.width, height: next.height, capacity: next.capacity, active: next.active };
-    const inventoryChanged = (["label", "shape", "width", "height", "capacity", "active"] as const).some((key) => stock[key] !== source[key]);
-    const partial = { x: next.x, y: next.y, rotation: next.rotation };
-    if (inventoryChanged && !canManageTables) { setTableError("No tenés permiso para modificar las mesas."); return; }
-    if (inventoryChanged && !assembly.options) { setTableError("Actualizá la disponibilidad del armado antes de guardar cambios en el inventario."); return; }
-    if (inventoryChanged) {
-      const candidate = { ...room, tables: room.tables.map((item) => item.id === next.id ? stock : item) };
-      const invalid = validateRoomLayout(candidate);
-      if (invalid) { setTableError(invalid); return; }
-      setSaving(true);
-      try {
-        const { room: savedRoom } = await saveFloorTables(restaurantId, { roomId: room.id, tables: candidate.tables, combinations: candidate.combinations, expectedRevision: room.revision });
-        assembly.replaceRoom(savedRoom, next.id, partial);
-        setBoard((previous) => previous ? { ...previous, rooms: previous.rooms.map((item) => item.id === savedRoom.id ? savedRoom : item) } : previous);
-        discardWindow(windowId); assembly.refresh();
-      } catch (failure) { setTableError(failure instanceof Error ? failure.message : "No se pudo guardar la mesa. Volvé a intentar."); }
-      finally { setSaving(false); }
-    } else { assembly.updateTable(next.id, partial); discardWindow(windowId); }
-  };
-  const tableEditorsOpen = tools.windows.some((entry) => entry.value.kind === "table");
-  const assemblyWindow = tools.windows.find((entry) => entry.value.kind === "assembly");
-  const menuTable = tables.find((item) => item.id === tableMenu?.id);
-  const menuAllocation = tableMenu && !tableMenu.id.startsWith("draft:") ? allocations.find((item) => item.poses.some((pose) => pose.tableId === tableMenu.id)) : null;
-  const menuTableId = tableMenu?.id.replace(/^draft:/, "");
-  const menuMembers = getJoinedTableGroups(tableMenu?.id.startsWith("draft:") ? draft : menuAllocation?.poses ?? []).find((group) => group.some((pose) => pose.tableId === menuTableId)) ?? [];
-  const menuJoined = menuMembers.length > 1;
-  const menuDisabled = saving || (tableMenu?.id.startsWith("draft:") ? assembly.loading : !menuAllocation || !canArrange(menuAllocation) || assembling);
-  const selectTables = (ids: string[]) => { setSelectedTableIds(ids); setFocusedTableId(null); setMovingTableId(null); setMovingGroupIds([]); };
   const selectTable = (id: string, additive: boolean) => {
-    const ids = additive ? selectionIds.includes(id) ? selectionIds.filter((selected) => selected !== id) : [...selectionIds, id]
-      : getJoinedTableGroups(draft).find((group) => group.some((pose) => pose.tableId === id))?.map((pose) => pose.tableId) ?? [id];
-    selectTables(ids);
+    if (saving || !availableIds.includes(id)) return;
+    setSelectedResourceIds((current) => additive ? current.includes(id) ? current.filter((item) => item !== id) : [...current, id] : [id]);
+    setTableMenu(null);
   };
-  const moveSelection = () => { setMovingTableId(null); setMovingGroupIds(selectionIds); window.requestAnimationFrame(() => boardSurface.current?.focus()); };
-  const moveTable = (point: { x: number; y: number }, locationId?: string) => {
-    if (movingTableId) { assembly.updateTable(movingTableId, point); setMovingTableId(null); }
-    else if (movingGroupIds.length) {
-      const moving = draft.filter((pose) => movingGroupIds.includes(pose.tableId));
-      if (moving.length) assembly.moveTables(movingGroupIds, point.x - moving.reduce((sum, pose) => sum + pose.x, 0) / moving.length, point.y - moving.reduce((sum, pose) => sum + pose.y, 0) / moving.length);
-      setMovingGroupIds([]);
-    } else { setFocusedTableId(null); setSelectedTableIds(null); assembly.place(point, locationId); }
+  const clearSelection = () => { setSelectedResourceIds([]); setTableMenu(null); };
+  const openContext = (hit: string[], point: { x: number; y: number }) => {
+    if (saving) return;
+    const ids = contextFloorSelection(selection, interactionMode === "pan" ? [] : hit, availableIds);
+    if (!ids.length) { setTableMenu(null); return; }
+    setSelectedResourceIds(ids); setTableMenu({ ids, point }); setOperationError(null);
   };
+  const openTableMenu = (id: string, point: { x: number; y: number }) => openContext([id], point);
+  const openGroupMenu = (ids: string[], point: { x: number; y: number }) => openContext(ids, point);
+  const sourceStamp = (ids: string[]) => selectionState ? JSON.stringify(resolveFloorSelection(selectionState, ids).map((item) => ({ resourceId: item.resourceId, table: item.table, version: item.allocation?.version, revision: item.allocation?.reservationRevision }))) : "";
+  const editableResources = (ids: string[]) => {
+    if (!selectionState || !canManageTables || !ids.length) return false;
+    const resources = resolveFloorSelection(selectionState, ids);
+    return resources.length === ids.length && resources.every((item) => item.allocation ? canArrange(item.allocation) : !assembly.loading);
+  };
+  const openSelectionEditor = (ids = selection) => {
+    if (saving || !selectionState || !editableResources(ids)) { setOperationError("La selección ya no se puede modificar. Actualizá la sala y volvé a seleccionar las mesas."); return; }
+    const selected = resolveFloorSelection(selectionState, ids);
+    const snapshot: SelectionSnapshot = { ids: selected.map((item) => item.resourceId), tables: selected.map((item) => item.table), stamp: sourceStamp(ids), roomId: roomId };
+    setSelectedResourceIds(snapshot.ids); setTableMenu(null);
+    openPanel("table", { kind: "table", selection: snapshot });
+  };
+  const applyDraftLayout = (next: NonNullable<FloorSelectionLayout["draft"]>) => {
+    if (!assignment) return;
+    const customTables = next.poses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation }));
+    changeAssignment({ ...assignment, optionId: "custom", customTables, capacity: next.capacity, rotation: 0, retainExisting: false,
+      x: next.poses.reduce((sum, pose) => sum + pose.x, 0) / next.poses.length, y: next.poses.reduce((sum, pose) => sum + pose.y, 0) / next.poses.length });
+  };
+  const selectionError = (message: string | null, windowId?: string) => { if (windowId) setTableErrors((current) => ({ ...current, [windowId]: message })); else setOperationError(message); };
+  const commitLayout = async (plan: FloorSelectionLayout | string, windowId?: string) => {
+    if (typeof plan === "string") { selectionError(plan, windowId); return; }
+    if (!board || saving) return;
+    const preview: Record<string, Pick<FloorTable, "x" | "y" | "rotation">> = {};
+    for (const update of plan.updates) for (const pose of update.assignment.customTables ?? []) preview[pose.tableId] = { x: pose.x, y: pose.y, rotation: pose.rotation };
+    for (const pose of plan.draft?.poses ?? []) preview["draft:" + pose.tableId] = { x: pose.x, y: pose.y, rotation: pose.rotation };
+    selectionError(null, windowId); setTableMenu(null);
+    if (!plan.updates.length) { if (plan.draft) applyDraftLayout(plan.draft); if (windowId) discardWindow(windowId); return; }
+    selectionMutation.current = true; pending.current?.abort(); setLoading(false); setSaving(true); setLayoutPreview(preview);
+    try {
+      const next = await reassignFloorSelection(restaurantId, { updates: plan.updates }, board.at);
+      setBoard(next); setRefreshedAt(new Date(next.updatedAt));
+      if (plan.draft) applyDraftLayout(plan.draft);
+      if (windowId) discardWindow(windowId);
+    } catch (failure) { selectionError(failure instanceof Error ? failure.message : "No se pudo guardar la selección. Se conservaron todos los armados.", windowId); }
+    finally { selectionMutation.current = false; setLayoutPreview(null); setSaving(false); }
+  };
+  const applySelection = async (nextTables: FloorTable[], mode: FloorSelectionEditorMode, snapshot: SelectionSnapshot, windowId: string) => {
+    if (saving || !room || !selectionState) return;
+    if (snapshot.roomId !== roomId || snapshot.stamp !== sourceStamp(snapshot.ids) || !editableResources(snapshot.ids)) { selectionError("La selección cambió desde que abriste esta ventana. Cerrala y volvé a abrirla antes de aplicar.", windowId); return; }
+    if (nextTables.length !== snapshot.ids.length || new Set(nextTables.map((table) => table.id)).size !== snapshot.ids.length || nextTables.some((table) => !snapshot.ids.includes(table.id))) { selectionError("La selección cambió. Volvé a abrir el editor.", windowId); return; }
+    if (mode === "layout") {
+      if (nextTables.every((table) => { const old = snapshot.tables.find((item) => item.id === table.id)!; return table.x === old.x && table.y === old.y && table.rotation === old.rotation; })) { discardWindow(windowId); return; }
+      await commitLayout(buildSelectionLayout(selectionState, snapshot.ids, nextTables), windowId); return;
+    }
+    const changes = new Map<string, FloorTable>();
+    for (const table of nextTables) {
+      const id = table.id.replace(/^draft:/, "");
+      const old = changes.get(id);
+      if (old && (["label", "shape", "width", "height", "capacity", "active"] as const).some((key) => old[key] !== table[key])) { selectionError("Una misma mesa tiene cambios diferentes. Volvé a seleccionar las mesas.", windowId); return; }
+      changes.set(id, table);
+    }
+    const tables = room.tables.map((table) => { const next = changes.get(table.id); return next ? { ...table, label: next.label, shape: next.shape, width: next.width, height: next.height, capacity: next.capacity, active: next.active } : table; });
+    if (tables.every((table, index) => (["label", "shape", "width", "height", "capacity", "active"] as const).every((key) => table[key] === room.tables[index][key]))) { discardWindow(windowId); return; }
+    const invalid = validateRoomLayout({ ...room, tables }); if (invalid) { selectionError(invalid, windowId); return; }
+    selectionMutation.current = true; pending.current?.abort(); setLoading(false); setSaving(true); selectionError(null, windowId);
+    try {
+      const { room: nextRoom } = await saveFloorTables(restaurantId, { roomId: room.id, expectedRevision: room.revision, tables, combinations: room.combinations });
+      setBoard((previous) => previous ? { ...previous, rooms: previous.rooms.map((item) => item.id === nextRoom.id ? nextRoom : item) } : previous);
+      if (assembling) { assembly.replaceRoom(nextRoom, "", {}); assembly.refresh(); }
+      discardWindow(windowId);
+    } catch (failure) { selectionError(failure instanceof Error ? failure.message : "No se pudo guardar el inventario de la selección. Volvé a intentar.", windowId); }
+    finally { selectionMutation.current = false; setSaving(false); }
+  };
+  const moveSelected = (ids: string[], delta: { x: number; y: number }) => {
+    if (saving || !selectionState || !editableResources(ids)) return;
+    if (!delta.x && !delta.y) return;
+    const next = resolveFloorSelection(selectionState, ids).map(({ table }) => ({ ...table, x: table.x + delta.x, y: table.y + delta.y }));
+    void commitLayout(buildSelectionLayout(selectionState, ids, next));
+  };
+  const separateSelected = (ids: string[]) => { if (!saving && selectionState && editableResources(ids)) void commitLayout(separateFloorSelection(selectionState, ids)); };
+  const editAllocation = (allocation: FloorAllocationView) => { const ids = allocation.poses.map((pose) => pose.tableId); setSelectedResourceIds(ids); openSelectionEditor(ids); };
+  const tableEditorsOpen = tools.windows.some((entry) => entry.value.kind === "table" && entry.value.selection?.ids.some((id) => id.startsWith("draft:")));
+  const assemblyWindow = tools.windows.find((entry) => entry.value.kind === "assembly");
+  const menuResources = selectionState && tableMenu ? resolveFloorSelection(selectionState, tableMenu.ids) : [];
+  const menuName = menuResources.length === 1 ? "Mesa " + menuResources[0].table.label : menuResources.length + " mesas seleccionadas";
+  const menuDisabled = saving || !tableMenu || !editableResources(tableMenu.ids);
+  const menuCanSeparate = selectionState && tableMenu && canSeparateFloorSelection(selectionState, tableMenu.ids);
 
   const when = query.date && board ? new Intl.DateTimeFormat("es-AR", { timeZone: board.timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(board.at)) : `Ahora${local.time ? ` · ${local.time}` : ""}`;
 
   return <main data-admin-panel data-floor-operations className={`${styles.screen} fixed inset-0 isolate h-dvh overflow-hidden`}>
     <h1 className="sr-only">Sala · {restaurantName}</h1>
-    <div ref={boardSurface} tabIndex={-1} role="region" aria-label="Tablero principal de sala" className="absolute inset-0 outline-none" onKeyDown={(event) => { if (event.key === "Escape" && (movingTableId || movingGroupIds.length)) { event.preventDefault(); setMovingTableId(null); setMovingGroupIds([]); } }}>
-      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectedIds={assembling ? selectionIds.map((id) => `draft:${id}`) : currentSelection?.poses.map((pose) => pose.tableId) ?? []} selectedLocationId={assembling ? assembly.locationId : undefined} draggableIds={assembling && !saving && !assembly.loading && !tableEditorsOpen && panel !== "release" ? draftIds : []} onContextMenuTable={openTableMenu} onContextMenuGroup={openGroupMenu} onMove={assembling && !saving && !assembly.loading && !tableEditorsOpen && panel !== "release" ? (ids, delta) => { assembly.moveTables(ids.map((id) => id.replace(/^draft:/, "")), delta.x, delta.y); setMovingTableId(null); setMovingGroupIds([]); } : undefined} onPlace={assembling && !saving && !assembly.loading && !tableEditorsOpen && panel !== "release" ? moveTable : undefined} onSelect={(id, additive) => { if (assembling) { if (id.startsWith("draft:")) selectTable(id.slice(6), additive); return; } const allocation = allocations.find((item) => item.poses.some((pose) => pose.tableId === id)); if (allocation) showDetails(allocation); }} />}
+    <div ref={boardSurface} tabIndex={-1} role="region" aria-label="Tablero principal de sala" className="absolute inset-0 outline-none">
+      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectedIds={selection} selectedLocationId={assembling ? assembly.locationId : undefined}
+        interactionMode={interactionMode} onInteractionModeChange={(mode) => { setInteractionMode(mode); setTableMenu(null); }}
+        draggableIds={!saving ? availableIds.filter((id) => editableResources([id])) : []}
+        onSelect={selectTable} onSelectMany={selectTables} onClearSelection={clearSelection}
+        onContextMenuTable={openTableMenu} onContextMenuGroup={openGroupMenu} onContextMenuSelection={(point) => openContext([], point)}
+        onMove={!saving ? moveSelected : undefined} onPlace={assembling && !assembly.locationId && !saving ? assembly.place : undefined} />}
     </div>
-    {tableMenu && menuTable && panel !== "release" && <FloorTableContextMenu name={tableMenu.scope === "group" ? menuMembers.map((member) => member.label).join(" + ") : menuTable.label} scope={tableMenu.scope} point={tableMenu.point} disabled={Boolean(menuDisabled)} reason={menuDisabled && !saving ? assembling && menuAllocation ? "Terminá el armado actual antes de modificar otro grupo." : "Esta asignación ya no está vigente o no tenés permiso para modificar mesas." : undefined} onEdit={() => actOnTable("edit")} onEditGroup={() => actOnTable("edit-group")} onRotate={() => actOnTable("rotate")} onMove={() => actOnTable("move")} onSeparate={menuJoined ? () => actOnTable("separate") : undefined} onMoveGroup={menuJoined ? () => actOnTable("move-group") : undefined} onRotateGroup={menuJoined ? () => actOnTable("rotate-group") : undefined} onClose={closeTableMenu} />}
-    {(movingTableId || movingGroupIds.length > 0) && !panel && <div role="status" className="absolute bottom-24 left-1/2 z-30 flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 rounded-xl bg-[var(--floor-action,#182618)] p-3 text-sm text-white shadow-lg"><Move size={18} className="shrink-0" /><span>{movingTableId ? `Elegí el destino de la mesa ${draft.find((item) => item.tableId === movingTableId)?.label} o arrastrala.` : "Elegí el destino del grupo o arrastralo."}</span><button {...transientButtonProps} type="button" aria-label="Cancelar movimiento" onClick={() => { setMovingTableId(null); setMovingGroupIds([]); }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2"><X size={18} /></button></div>}
+    {tableMenu && menuResources.length > 0 && panel !== "release" && <FloorTableContextMenu name={menuName} point={tableMenu.point} disabled={menuDisabled} reason={menuDisabled && !saving ? "La selección ya no se puede modificar o no tenés permiso. Actualizá la sala para continuar." : undefined} onEdit={() => openSelectionEditor(tableMenu.ids)} onSeparate={menuCanSeparate ? () => separateSelected(tableMenu.ids) : undefined} onClose={closeTableMenu} />}
     {!room && <div className="absolute inset-0 grid place-items-center p-8"><div className="max-w-sm text-center"><Building2 size={30} className="mx-auto mb-4 text-[#607054]" /><h2 className="text-lg font-semibold">{board ? "No hay salones activos" : "Preparando la sala…"}</h2><p className="mt-2 text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">{board ? "Usá la botonera para administrar los salones o volvé a actualizar." : "Cargando sectores y mesas asignadas."}</p></div></div>}
 
     <header className="pointer-events-none absolute inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-10 flex items-start justify-between gap-3 px-4 sm:px-6">
@@ -315,42 +312,44 @@ export function FloorBoardScreen({ restaurantId, restaurantName, readOnly, canMa
       <div className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]"><span className="font-semibold">{when}</span><span className="ml-2 text-[var(--floor-muted,#52634b)]" role="status">{refreshedAt ? `Actualizado ${new Intl.DateTimeFormat("es-AR", { timeZone: board?.timeZone ?? "America/Argentina/Buenos_Aires", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(refreshedAt)}` : "Consultando…"}</span></div>
       {tableCounts && <FloorTableSummary counts={tableCounts} />}
       {error && (!panel || panel === "rooms") && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}{board && " Se conserva la última vista disponible."}</p>}
+      {operationError && !assemblyWindow && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{operationError}</p>}
       {board && !board.enabled && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">La asignación de mesas todavía no está activada.</p>}
     </div>
 
-    <FloorBoardToolbar rooms={board?.rooms ?? []} roomId={roomId} roomsOpen={panel === "rooms"} onRoomsOpenChange={(open) => { if (open) { closeTableMenu(); setMovingTableId(null); setMovingGroupIds([]); setPanel("rooms"); } else if (panel === "rooms") setPanel(null); }} onSelectRoom={(id) => { if (id !== roomId) { if (hasPendingChanges && !window.confirm("Hay cambios sin guardar en las ventanas o en el armado. ¿Querés descartarlos y cambiar de salón?")) return; tools.clear(); if (assembling) tools.open("assembly", { kind: "assembly" }); else { setWalkIn(emptyWalkIn); setWalkInError(null); } setDirtyWindows({}); setTableErrors({}); setInventoryDirty(false); changeAssignment(null); setSelectedTableIds(null); setFocusedTableId(null); setMovingTableId(null); setMovingGroupIds([]); } setRoomId(id); setSelected(null); openPanel(null); }} onSchedule={openSchedule} onReservations={() => requestTool("reservations")} onAttend={openWalkIn} onTables={canManageTables && savedRoom ? () => { closeTableMenu(); openPanel("inventory", { kind: "inventory", room: savedRoom }); } : undefined} attendButtonRef={attendButton} readOnly={readOnly} canManageWalkIns={canManageWalkIns} enabled={board?.enabled ?? false} hasBoard={Boolean(board)} assembling={assembling} saving={saving} reservationCount={allocations.length} restaurantId={restaurantId} openPanels={tools.windows.filter((entry) => entry.visible).map((entry) => entry.value.kind)} hasPendingChanges={hasPendingChanges} />
+    <FloorBoardToolbar rooms={board?.rooms ?? []} roomId={roomId} roomsOpen={panel === "rooms"} onRoomsOpenChange={(open) => { if (open) { closeTableMenu();  setPanel("rooms"); } else if (panel === "rooms") setPanel(null); }} onSelectRoom={(id) => { if (id !== roomId) { if (hasPendingChanges && !window.confirm("Hay cambios sin guardar en las ventanas o en el armado. ¿Querés descartarlos y cambiar de salón?")) return; tools.clear(); if (assembling) tools.open("assembly", { kind: "assembly" }); else { setWalkIn(emptyWalkIn); setWalkInError(null); } setDirtyWindows({}); setTableErrors({}); setInventoryDirty(false); changeAssignment(null); setSelectedResourceIds([]); setLayoutPreview(null); } setRoomId(id); setSelectedResourceIds([]); openPanel(null); }} onSchedule={openSchedule} onReservations={() => requestTool("reservations")} onAttend={() => { if (assembling) { tools.open("assembly", { kind: "assembly" }); setPanel(null); } else openWalkIn(); }} onTables={canManageTables && savedRoom ? () => { closeTableMenu(); openPanel("inventory", { kind: "inventory", room: savedRoom }); } : undefined} attendButtonRef={attendButton} readOnly={readOnly} canManageWalkIns={canManageWalkIns} enabled={board?.enabled ?? false} hasBoard={Boolean(board)} assembling={assembling} saving={saving} reservationCount={allocations.length} restaurantId={restaurantId} openPanels={tools.windows.filter((entry) => entry.visible).map((entry) => entry.value.kind)} hasPendingChanges={hasPendingChanges} />
 
-    {assembling && assemblyWindow && <FloorAssemblyControls controller={{ ...assembly, refresh: () => { setOperationError(null); assembly.refresh(); void refresh(); } }} partySize={assemblyPartySize} customerName={editingAllocation?.customerName ?? (walkIn.customerName.trim() || "Sin reserva")} durationMinutes={assemblyDuration} saving={saving} interactionLocked={tableEditorsOpen} floatingWindow={{ visible: assemblyWindow.visible, zIndex: assemblyWindow.zIndex, offset: assemblyWindow.offset, activation: assemblyWindow.activation, onFocus: () => tools.focus(assemblyWindow.id), onHide: () => discardWindow(assemblyWindow.id) }} conflict={assemblyConflict} error={operationError} selectedTableIds={selectionIds} onSelectTable={selectTable} onSelectTableGroup={selectTables} onJoinTables={() => setOperationError(assembly.joinTables(selectionIds))} onSeparateTables={() => setOperationError(assembly.separateTables(selectionIds))} onMoveTableGroup={moveSelection} onRotateTableGroup={() => assembly.rotateTables(selectionIds)} onConfirm={() => void createWalkIn()} onCancel={cancelAssembly} onEditData={() => editingAllocation ? showDetails(editingAllocation) : openWalkIn()} editDataLabel={editingAllocation ? "Ver datos" : undefined} confirmLabel={editingAllocation ? "Guardar armado" : undefined} onTableActions={(id, point) => openTableMenu(`draft:${id}`, point)} onGroupActions={(ids, point) => openGroupMenu(ids.map((id) => "draft:" + id), point)} onChooseRoom={() => openPanel("rooms")} />}
+    {assembling && assemblyWindow && <FloorAssemblyControls controller={{ ...assembly, refresh: () => { setOperationError(null); assembly.refresh(); void refresh(); } }} partySize={assemblyPartySize} customerName={walkIn.customerName.trim() || "Sin reserva"} durationMinutes={assemblyDuration} saving={saving} interactionLocked={tableEditorsOpen} floatingWindow={{ visible: assemblyWindow.visible, zIndex: assemblyWindow.zIndex, offset: assemblyWindow.offset, activation: assemblyWindow.activation, onFocus: () => tools.focus(assemblyWindow.id), onHide: () => discardWindow(assemblyWindow.id) }} conflict={assemblyConflict} error={operationError} selectedTableIds={selectionIds} onSelectTable={(id, additive) => { setInteractionMode("select"); selectTable("draft:" + id, additive); }} onSelectTableGroup={(ids) => { setInteractionMode("select"); selectTables(ids.map((id) => "draft:" + id)); }} selectionNotice={selection.length && !draftOnlySelection ? "La selección incluye mesas de otras reservas. Usá Acciones en el tablero para editarlas juntas." : undefined} onJoinTables={draftOnlySelection ? () => setOperationError(assembly.joinTables(selectionIds)) : undefined} onSeparateTables={draftOnlySelection ? () => separateSelected(selection) : undefined} onEditSelection={draftOnlySelection ? () => openSelectionEditor(selection) : undefined} onConfirm={() => void createWalkIn()} onCancel={cancelAssembly} onEditData={openWalkIn} onChooseRoom={() => openPanel("rooms")} />}
 
     {tools.windows.filter((entry) => entry.value.kind !== "assembly").map((entry) => {
       const panel = entry.value.kind;
       const title = toolTitle(entry.value, room?.name ?? "la sala");
-      const tableEditor = entry.value.table ?? null;
+      const snapshot = entry.value.selection;
+      const staleSelection = snapshot ? snapshot.roomId !== roomId || snapshot.stamp !== sourceStamp(snapshot.ids) : false;
       const inventoryRoom = entry.value.room ?? null;
       const currentSelection = entry.value.allocation ? board?.allocations.find((allocation) => allocation.id === entry.value.allocation!.id) : null;
       const selectedAllocation = currentSelection ?? entry.value.allocation;
-      const tableError = tableErrors[entry.id];
+      const tableError = staleSelection ? "La selección cambió desde que abriste esta ventana. Cerrala y volvé a abrirla antes de aplicar." : tableErrors[entry.id];
       const closePanel = () => closeTool(entry.id);
       return (
-    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={room?.name ?? restaurantName} icon={panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="right" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 620 }} minWidth={320} minHeight={320} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.table) setFocusedTableId(entry.value.table.id); if (entry.value.allocation) setSelected(entry.value.allocation); }}>
-      <div id={"floor-content-" + entry.id} ref={panelContent} tabIndex={-1} onChangeCapture={() => setDirtyWindows((current) => current[entry.id] ? current : { ...current, [entry.id]: true })} className="flex min-h-0 flex-1 flex-col outline-none">
+    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={room?.name ?? restaurantName} icon={panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="right" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 620 }} minWidth={320} minHeight={320} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.selection) setSelectedResourceIds(entry.value.selection.ids); }}>
+      <fieldset disabled={saving} id={"floor-content-" + entry.id} tabIndex={-1} onChangeCapture={() => setDirtyWindows((current) => current[entry.id] ? current : { ...current, [entry.id]: true })} className="flex min-h-0 flex-1 flex-col outline-none">
         {panel === "inventory" && inventoryRoom && canManageTables && <FloorInventoryPanel key={inventoryRoom.id} restaurantId={restaurantId} room={inventoryRoom} onDirtyChange={setInventoryDirty} onBusyChange={setSaving} onClose={closePanel} onSaved={(next) => { setBoard((previous) => previous ? { ...previous, rooms: previous.rooms.map((item) => item.id === next.id ? next : item) } : previous); setInventoryDirty(false); discardWindow(entry.id); }} />}
-        {panel === "table" && tableEditor && <FloorTableEditor key={tableEditor.id} table={tableEditor} inventoryEditable={canManageTables} busy={saving || assembly.loading} error={tableError || assembly.error} onApply={(next) => { void applyTable(next, tableEditor, entry.id); }} onCancel={closePanel} />}
+        {panel === "table" && snapshot && <FloorSelectionEditor disabled={staleSelection} tables={snapshot.tables} inventoryEditable={canManageTables} positionsEditable={canManageTables} busy={saving} error={tableError} onApply={(next, mode) => { void applySelection(next, mode, snapshot, entry.id); }} onCancel={closePanel} />}
         {error && <p role="alert" className="shrink-0 bg-red-50 px-4 py-2 text-xs text-red-800">{error}{board && " Se conserva la última vista disponible."}</p>}
-        {panel === "schedule" && <form className="flex min-h-0 flex-1 flex-col" onSubmit={applySchedule}><div className={floorWindowBodyClass}><p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">Consultá el armado del salón para un momento específico. Los horarios corresponden a {board?.timeZone}.</p><div className="grid grid-cols-2 gap-3"><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Fecha<input type="date" required value={schedule.date} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, date: event.target.value }))} /></label><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Hora<input type="time" required value={schedule.time} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, time: event.target.value }))} /></label></div>{scheduleError && <p role="alert" className="text-sm text-red-800">{scheduleError}</p>}</div><footer className={`${floorWindowFooterClass} flex flex-wrap justify-between gap-2`}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => { setQuery({ date: "", time: "" }); setSelected(null); discardWindow(entry.id); setPanel(null); }}><Clock size={16} />Volver a ahora</button><button {...transientButtonProps} type="submit" className={adminPrimaryButtonClass}>Ver este horario</button></footer></form>}
+        {panel === "schedule" && <form className="flex min-h-0 flex-1 flex-col" onSubmit={applySchedule}><div className={floorWindowBodyClass}><p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">Consultá el armado del salón para un momento específico. Los horarios corresponden a {board?.timeZone}.</p><div className="grid grid-cols-2 gap-3"><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Fecha<input type="date" required value={schedule.date} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, date: event.target.value }))} /></label><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Hora<input type="time" required value={schedule.time} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, time: event.target.value }))} /></label></div>{scheduleError && <p role="alert" className="text-sm text-red-800">{scheduleError}</p>}</div><footer className={`${floorWindowFooterClass} flex flex-wrap justify-between gap-2`}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => { setQuery({ date: "", time: "" }); setSelectedResourceIds([]); discardWindow(entry.id); setPanel(null); }}><Clock size={16} />Volver a ahora</button><button {...transientButtonProps} type="submit" className={adminPrimaryButtonClass}>Ver este horario</button></footer></form>}
 
-        {panel === "reservations" && <section aria-label="Reservas del salón" className={floorWindowBodyClass}><p className="text-sm text-[var(--floor-muted,#52525b)]">{when} · {allocations.length} grupos con mesas asignadas.</p>{!allocations.length ? <p className="py-6 text-sm text-[var(--floor-muted,#52525b)]">No hay mesas armadas para este horario. Elegí otro momento o atendé una llegada desde el tablero.</p> : allocations.map((allocation) => <AllocationCard key={allocation.id} allocation={allocation} onDetails={() => showDetails(allocation)} onEdit={!assembling && canArrange(allocation) ? () => editAllocation(allocation, entry.id) : undefined} onRelease={canRelease(allocation) ? () => askRelease(allocation) : undefined} />)}</section>}
+        {panel === "reservations" && <section aria-label="Reservas del salón" className={floorWindowBodyClass}><p className="text-sm text-[var(--floor-muted,#52525b)]">{when} · {allocations.length} grupos con mesas asignadas.</p>{!allocations.length ? <p className="py-6 text-sm text-[var(--floor-muted,#52525b)]">No hay mesas armadas para este horario. Elegí otro momento o atendé una llegada desde el tablero.</p> : allocations.map((allocation) => <AllocationCard key={allocation.id} allocation={allocation} onDetails={() => showDetails(allocation)} onEdit={canArrange(allocation) ? () => editAllocation(allocation) : undefined} onRelease={canRelease(allocation) ? () => askRelease(allocation) : undefined} />)}</section>}
 
-        {panel === "detail" && selectedAllocation && <div className="flex min-h-0 flex-1 flex-col"><div className={floorWindowBodyClass}>{!currentSelection && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Esta asignación ya no ocupa mesas en el horario consultado.</p>}<AllocationCard allocation={selectedAllocation} onEdit={!assembling && currentSelection && canArrange(currentSelection) ? () => editAllocation(currentSelection, entry.id) : undefined} onRelease={!assembling && currentSelection && canRelease(currentSelection) ? () => askRelease(currentSelection) : undefined} /></div><footer className={floorWindowFooterClass}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => openPanel("reservations")}><ArrowLeft size={15} />Ver todas las reservas</button></footer></div>}
+        {panel === "detail" && selectedAllocation && <div className="flex min-h-0 flex-1 flex-col"><div className={floorWindowBodyClass}>{!currentSelection && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Esta asignación ya no ocupa mesas en el horario consultado.</p>}<AllocationCard allocation={selectedAllocation} onEdit={currentSelection && canArrange(currentSelection) ? () => editAllocation(currentSelection) : undefined} onRelease={!assembling && currentSelection && canRelease(currentSelection) ? () => askRelease(currentSelection) : undefined} /></div><footer className={floorWindowFooterClass}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => openPanel("reservations")}><ArrowLeft size={15} />Ver todas las reservas</button></footer></div>}
 
 
         {panel === "walk-in" && <form className="flex min-h-0 flex-1 flex-col" onSubmit={continueOnBoard}><div className={floorWindowBodyClass}>
           <p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">Completá los datos del grupo. Después elegís y acomodás sus mesas sobre el tablero principal.</p>
           {walkInError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{walkInError}</p>}
           <label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Nombre del grupo<input value={walkIn.customerName} maxLength={100} placeholder="Sin reserva" className={floorInputClass} onChange={(event) => setWalkIn((value) => ({ ...value, customerName: event.target.value }))} /></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Personas<input type="number" min={1} max={40} required value={walkIn.partySize} className={floorInputClass} onChange={(event) => setWalkIn((value) => ({ ...value, partySize: Number(event.target.value) }))} /></label><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Estadía prevista (minutos)<input type="number" min={15} max={720} step={15} required value={walkIn.durationMinutes} className={floorInputClass} onChange={(event) => setWalkIn((value) => ({ ...value, durationMinutes: Number(event.target.value) }))} /></label></div><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Notas de atención<textarea maxLength={500} rows={3} value={walkIn.notes} className={floorInputClass} onChange={(event) => setWalkIn((value) => ({ ...value, notes: event.target.value }))} /></label><p className="text-xs leading-relaxed text-[var(--floor-muted,#52525b)]">El bloqueo empieza al ocupar las mesas. Podés liberarlas antes cuando el grupo se retire.</p>
-          </div><footer className={`${floorWindowFooterClass} flex flex-wrap justify-between gap-2`}><button {...transientButtonProps} type="button" disabled={saving} className={adminSecondaryButtonClass} onClick={() => { if (!assembling || editingAllocation) setWalkIn(emptyWalkIn); closePanel(); }}>{assembling ? "Volver al tablero" : "Cancelar"}</button><button {...transientButtonProps} type="submit" className={adminPrimaryButtonClass}>Elegir mesas<ArrowRight size={16} /></button></footer>
+          </div><footer className={`${floorWindowFooterClass} flex flex-wrap justify-between gap-2`}><button {...transientButtonProps} type="button" disabled={saving} className={adminSecondaryButtonClass} onClick={() => { if (!assembling) setWalkIn(emptyWalkIn); closePanel(); }}>{assembling ? "Volver al tablero" : "Cancelar"}</button><button {...transientButtonProps} type="submit" className={adminPrimaryButtonClass}>Elegir mesas<ArrowRight size={16} /></button></footer>
         </form>}
-      </div>
+      </fieldset>
     </FloatingModalWindow>
       );
     })}

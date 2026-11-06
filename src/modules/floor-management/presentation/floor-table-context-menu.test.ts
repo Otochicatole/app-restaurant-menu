@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FloorTableContextMenu } from "./FloorTableContextMenu";
 
 const viewport = { width: window.innerWidth, height: window.innerHeight };
-const actions = { edit: vi.fn(), editGroup: vi.fn(), rotate: vi.fn(), move: vi.fn(), separate: vi.fn(), moveGroup: vi.fn(), rotateGroup: vi.fn(), close: vi.fn() };
-const props = () => ({ name: "M1", point: { x: 1000, y: 760 }, disabled: false, onEdit: actions.edit, onRotate: actions.rotate, onMove: actions.move, onClose: actions.close });
-const groupActions = { onSeparate: actions.separate, onMoveGroup: actions.moveGroup, onRotateGroup: actions.rotateGroup };
+const actions = { edit: vi.fn(), separate: vi.fn(), close: vi.fn() };
+const props = () => ({ name: "Mesa M1", point: { x: 1000, y: 760 }, disabled: false, onEdit: actions.edit, onClose: actions.close });
+const groupActions = { onSeparate: actions.separate };
 
 describe("joined table menu actions", () => {
   beforeEach(() => {
@@ -25,29 +25,22 @@ describe("joined table menu actions", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: viewport.height });
   });
 
-  it("keeps table and group editing in separate vertical menus", () => {
+  it("offers the same vertical selection actions for one or many tables", () => {
     const view = render(createElement(FloorTableContextMenu, { ...props(), ...groupActions }));
-    const menu = screen.getByRole("menu", { name: "Acciones de mesa M1" });
-    expect(menu.style.top).toBe("540px");
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar mesa", "Girar", "Mover", "Separar mesa"]);
-    expect(screen.queryByRole("menuitem", { name: "Editar grupo" })).toBeNull();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Editar mesa" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Girar" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Mover" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Separar mesa" }));
-    for (const action of [actions.edit, actions.rotate, actions.move, actions.separate]) expect(action).toHaveBeenCalledOnce();
-    expect(actions.moveGroup).not.toHaveBeenCalled(); expect(actions.rotateGroup).not.toHaveBeenCalled();
-    view.rerender(createElement(FloorTableContextMenu, { ...props(), ...groupActions, scope: "group", onEditGroup: actions.editGroup }));
-    expect(menu.style.top).toBe("584px"); expect(menu.style.left).toBe("768px");
-    expect(screen.getByRole("menu", { name: "Acciones del grupo M1" })).toBe(menu);
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar grupo", "Girar grupo 90°", "Mover grupo"]);
-    expect(screen.queryByRole("menuitem", { name: "Editar mesa" })).toBeNull();
-    fireEvent.keyDown(menu, { key: "End" }); expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mover grupo" }));
-    fireEvent.keyDown(menu, { key: "ArrowRight" }); expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Editar grupo" }));
-    for (const [label, callback] of [["Editar grupo", actions.editGroup], ["Mover grupo", actions.moveGroup], ["Girar grupo 90°", actions.rotateGroup]] as const) {
-      const button = screen.getByRole("menuitem", { name: label }); expect(button.getAttribute("autocomplete")).toBe("off"); fireEvent.click(button); expect(callback).toHaveBeenCalledOnce();
+    const menu = screen.getByRole("menu", { name: "Acciones de Mesa M1" });
+    expect(menu.style.top).toBe("628px"); expect(menu.style.left).toBe("768px");
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Separar"]);
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Editar" }));
+    fireEvent.keyDown(menu, { key: "End" }); expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Separar" }));
+    fireEvent.keyDown(menu, { key: "ArrowDown" }); expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Editar" }));
+    for (const [label, callback] of [["Editar", actions.edit], ["Separar", actions.separate]] as const) {
+      const button = screen.getByRole("menuitem", { name: label });
+      expect(button.getAttribute("autocomplete")).toBe("off"); fireEvent.click(button); expect(callback).toHaveBeenCalledOnce();
     }
-    expect(actions.edit).toHaveBeenCalledOnce(); expect(actions.move).toHaveBeenCalledOnce(); expect(actions.rotate).toHaveBeenCalledOnce();
+    view.rerender(createElement(FloorTableContextMenu, { ...props(), name: "3 mesas seleccionadas" }));
+    expect(screen.getByRole("menu", { name: "Acciones de 3 mesas seleccionadas" })).toBe(menu);
+    expect((screen.getByRole("menuitem", { name: "Separar" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(menu, { key: "End" }); expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Editar" }));
   });
 
   it("keeps individual and group mutations disabled together when permission is missing", () => {
@@ -56,7 +49,7 @@ describe("joined table menu actions", () => {
     expect(document.activeElement).toBe(menu);
     expect(menu.getAttribute("aria-describedby")).toBe(screen.getByText("No tenés permiso para cambiar este armado.").id);
     for (const item of screen.getAllByRole("menuitem")) { expect((item as HTMLButtonElement).disabled).toBe(true); fireEvent.click(item); }
-    for (const callback of [actions.edit, actions.rotate, actions.move, actions.moveGroup, actions.rotateGroup, actions.separate]) expect(callback).not.toHaveBeenCalled();
+    for (const callback of [actions.edit, actions.separate]) expect(callback).not.toHaveBeenCalled();
     fireEvent.keyDown(menu, { key: "End" }); expect(document.activeElement).toBe(menu);
     fireEvent.keyDown(menu, { key: "Escape" }); expect(actions.close).toHaveBeenCalledOnce();
   });

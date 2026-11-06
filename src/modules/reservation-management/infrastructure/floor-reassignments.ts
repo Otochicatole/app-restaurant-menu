@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { floorAssignmentSchema, type FloorInterval } from "@/modules/floor-management/contracts";
+import { floorAssignmentSchema, validateFloorPlacement, type FloorInterval } from "@/modules/floor-management/contracts";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
-import { getFloorAssignmentOptions, syncReservationAllocation } from "./floor-allocations";
+import { getFloorAssignmentOptions, persistPreparedReservationAllocation, prepareReservationAllocation, syncReservationAllocation } from "./floor-allocations";
 
 export const floorReassignmentSchema = z.object({
   reservationId: z.string().min(1),
@@ -12,6 +12,12 @@ export const floorReassignmentSchema = z.object({
   assignment: floorAssignmentSchema,
 });
 export type FloorReassignmentCommand = z.infer<typeof floorReassignmentSchema>;
+export const floorBatchReassignmentSchema = z.object({
+  updates: z.array(floorReassignmentSchema).min(1).max(40),
+}).refine(({ updates }) => new Set(updates.map((update) => update.reservationId)).size === updates.length, {
+  message: "Cada reserva debe aparecer una sola vez en la selección.", path: ["updates"],
+});
+export type FloorBatchReassignmentCommand = z.infer<typeof floorBatchReassignmentSchema>;
 
 async function currentAssignment(tx: Prisma.TransactionClient, restaurantId: string, reservationId: string, now: Date) {
   const restaurant = await tx.restaurant.findUnique({ where: { id: restaurantId }, select: {
@@ -60,5 +66,38 @@ export async function reassignFloorAllocation(database: PrismaClient, restaurant
     }
     const updated = await tx.tableReservation.update({ where: { id: reservation.id }, data: { revision: { increment: 1 } } });
     await syncReservationAllocation(tx, updated, command.assignment, now, interval);
+  });
+}
+
+/** Validate the final selection together, then commit all reservation revisions and poses in one transaction. */
+export async function reassignFloorAllocations(database: PrismaClient, restaurantId: string, raw: FloorBatchReassignmentCommand, clock = () => new Date()) {
+  const command = floorBatchReassignmentSchema.parse(raw);
+  return withSqliteTransaction(database, async (tx) => {
+    const now = clock();
+    const selectedIds = command.updates.map((update) => update.reservationId);
+    const selected = [];
+    for (const update of command.updates) {
+      const current = await currentAssignment(tx, restaurantId, update.reservationId, now);
+      if (current.reservation.revision !== update.expectedRevision || current.allocation.version !== update.expectedAllocationVersion) {
+        throw new ConflictError("El armado cambió en otra pantalla. Actualizá la sala antes de guardar.");
+      }
+      selected.push({ ...current, assignment: update.assignment });
+    }
+    const proposals = [];
+    for (const current of selected) {
+      proposals.push(await prepareReservationAllocation(tx, current.reservation, current.assignment, current.interval, selectedIds));
+    }
+    if (proposals.reduce((count, proposal) => count + proposal.poses.length, 0) > 200) {
+      throw new BadRequestError("La selección puede modificar hasta 200 mesas a la vez.");
+    }
+    const leases = proposals.map(({ proposal }) => proposal);
+    for (const { room, proposal } of proposals) {
+      const invalid = validateFloorPlacement(room, proposal, leases);
+      if (invalid) throw new ConflictError(invalid);
+    }
+    for (const prepared of proposals) {
+      await tx.tableReservation.update({ where: { id: prepared.reservationId }, data: { revision: { increment: 1 } } });
+      await persistPreparedReservationAllocation(tx, prepared);
+    }
   });
 }

@@ -5,7 +5,7 @@ import { createClient } from "@libsql/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqlitePrismaClient } from "../../src/platform/database/sqlite-client";
 import { createWalkIn, releaseWalkIn } from "../../src/modules/reservation-management/infrastructure/floor-walk-ins";
-import { getFloorReassignmentOptions, reassignFloorAllocation } from "../../src/modules/reservation-management/infrastructure/floor-reassignments";
+import { getFloorReassignmentOptions, reassignFloorAllocation, reassignFloorAllocations } from "../../src/modules/reservation-management/infrastructure/floor-reassignments";
 import { PrismaFloorRepository } from "../../src/modules/floor-management/infrastructure/prisma-floor-repository";
 import type { FloorAssignmentInput } from "../../src/modules/floor-management/contracts";
 
@@ -180,5 +180,94 @@ describe("atomic floor rearrangements on SQLite", () => {
     const after = await stored(current.reservationId);
     expect(after.revision).toBe(1); expect(after.allocation!.version).toBe(1);
     expect([180, 260]).toContain(after.allocation!.tables[0].x);
+  }, 30_000);
+
+  it("moves two groups into each other's former positions without merging their reservations or changing intervals", async () => {
+    const one = await visit(0, 100); const two = await visit(1, 260);
+    await first.tableReservation.update({ where: { id: two.reservationId }, data: { source: "LANDING", customerName: "Bruno", customerEmail: "private@example.test", adminNotes: "Private" } });
+    const before = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    await reassignFloorAllocations(first, restaurantId, { updates: [command(one.reservationId, assignment(0, 260)), command(two.reservationId, { ...assignment(1, 100), rotation: 90 })] }, () => later);
+    const after = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    for (let index = 0; index < 2; index += 1) {
+      expect(after[index]).toMatchObject({ id: before[index].id, revision: 1, source: before[index].source, customerName: before[index].customerName, customerEmail: before[index].customerEmail, customerPhone: before[index].customerPhone, notes: before[index].notes, adminNotes: before[index].adminNotes, partySize: before[index].partySize, status: before[index].status });
+      expect(after[index].allocation).toMatchObject({ id: before[index].allocation!.id, version: 1, capacity: 4, serviceStartAt: before[index].allocation!.serviceStartAt, serviceEndAt: before[index].allocation!.serviceEndAt, blockedFrom: before[index].allocation!.blockedFrom, blockedUntil: before[index].allocation!.blockedUntil });
+    }
+    expect(after[0].allocation!.tables[0]).toMatchObject({ tableId: tables[0].id, x: 260 });
+    expect(after[1].allocation!.tables[0]).toMatchObject({ tableId: tables[1].id, x: 100, rotation: 90 });
+  });
+
+  it.each(["expectedRevision", "expectedAllocationVersion"] as const)("rejects the complete selection when a later group's %s is stale", async (field) => {
+    const one = await visit(0, 100); const two = await visit(1, 260);
+    const before = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    await expect(reassignFloorAllocations(first, restaurantId, { updates: [command(one.reservationId, assignment(0, 180)), { ...command(two.reservationId, assignment(1, 340)), [field]: 1 }] }, () => later)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await Promise.all([stored(one.reservationId), stored(two.reservationId)])).toEqual(before);
+  });
+
+  it.each(["position", "table"])("rejects proposals that conflict with each other's %s before changing either reservation", async (conflict) => {
+    const one = await visit(0, 100); const two = await visit(1, 260);
+    const before = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    const secondAssignment = conflict === "table" ? assignment(0, 340) : assignment(1, 180);
+    await expect(reassignFloorAllocations(first, restaurantId, { updates: [command(one.reservationId, assignment(0, 180)), command(two.reservationId, secondAssignment)] }, () => later)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await Promise.all([stored(one.reservationId), stored(two.reservationId)])).toEqual(before);
+  });
+
+  it("rejects the complete selection if another lease blocks one final proposal", async () => {
+    const one = await visit(0, 100); const two = await visit(1, 260); await visit(2, 420);
+    const before = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    await expect(reassignFloorAllocations(first, restaurantId, { updates: [command(one.reservationId, assignment(0, 180)), command(two.reservationId, assignment(1, 420))] }, () => later)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await Promise.all([stored(one.reservationId), stored(two.reservationId)])).toEqual(before);
+  });
+
+  it("rejects invalid capacity, room revisions and foreign restaurant batches without changing any group", async () => {
+    const one = await visit(0, 100); const two = await visit(1, 260);
+    const before = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    const insufficient: FloorAssignmentInput = { ...assignment(1, 340), optionId: "custom", capacity: 1, customTables: [{ tableId: tables[1].id, x: 340, y: 100, rotation: 0 }] };
+    for (const invalid of [insufficient, { ...assignment(1, 340), expectedRoomRevision: 1 }]) {
+      await expect(reassignFloorAllocations(first, restaurantId, { updates: [command(one.reservationId, assignment(0, 180)), command(two.reservationId, invalid)] }, () => later)).rejects.toMatchObject({ code: "CONFLICT" });
+    }
+    await expect(reassignFloorAllocations(first, otherRestaurantId, { updates: [command(one.reservationId), command(two.reservationId)] }, () => later)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(await Promise.all([stored(one.reservationId), stored(two.reservationId)])).toEqual(before);
+  });
+
+  it("requires distinct reservations and between one and forty updates", async () => {
+    const one = await visit();
+    const before = await stored(one.reservationId);
+    for (const updates of [[], [command(one.reservationId), command(one.reservationId)], Array.from({ length: 41 }, (_, index) => command(`reservation-${index}`))]) {
+      await expect(reassignFloorAllocations(first, restaurantId, { updates }, () => later)).rejects.toMatchObject({ name: "ZodError" });
+    }
+    expect(await stored(one.reservationId)).toEqual(before);
+  });
+
+  it("keeps unselected members when the two edited reservations retain more than forty poses", async () => {
+    const inventory = await first.diningTable.createManyAndReturn({ data: Array.from({ length: 42 }, (_, index) => ({ restaurantId, roomId, label: `Small-${index}`, shape: "SQUARE" as const, capacity: 1, x: 0, y: 0, width: 10, height: 10 })) });
+    const group = (index: number): FloorAssignmentInput => ({ ...assignment(), optionId: "custom", capacity: 21,
+      customTables: inventory.slice(index * 21, (index + 1) * 21).map((table, member) => ({ tableId: table.id, x: 50 + index * 200 + member % 7 * 20, y: 50 + Math.floor(member / 7) * 20, rotation: 0 })),
+    });
+    const groups = [group(0), group(1)];
+    const reservations = [];
+    for (const current of groups) reservations.push(await createWalkIn(first, restaurantId, { customerName: "Ana", partySize: 2, notes: "", durationMinutes: 90, assignment: current }, () => arrival));
+    const updates = reservations.map((reservation, index) => command(reservation.reservationId, { ...groups[index], customTables: groups[index].customTables!.map((pose, member) => member === 0 ? { ...pose, y: pose.y - 20 } : pose) }));
+    await reassignFloorAllocations(first, restaurantId, { updates }, () => later);
+    for (let index = 0; index < reservations.length; index += 1) {
+      const after = await stored(reservations[index].reservationId);
+      expect(after.revision).toBe(1); expect(after.allocation!.version).toBe(1);
+      expect(after.allocation!.capacity).toBe(21); expect(after.allocation!.tables).toHaveLength(21);
+      expect(after.allocation!.tables.find((pose) => pose.tableId === groups[index].customTables![0].tableId)?.y).toBe(30);
+      expect(after.allocation!.tables.filter((pose) => pose.tableId !== groups[index].customTables![0].tableId).map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation })).sort((a, b) => a.tableId.localeCompare(b.tableId)))
+        .toEqual(groups[index].customTables!.slice(1).sort((a, b) => a.tableId.localeCompare(b.tableId)));
+    }
+  });
+
+  it("commits only one of two concurrent selections with the same expected versions", async () => {
+    const one = await visit(0, 100); const two = await visit(1, 260);
+    const batch = { updates: [command(one.reservationId, assignment(0, 260)), command(two.reservationId, assignment(1, 100))] };
+    const results = await Promise.allSettled([
+      reassignFloorAllocations(first, restaurantId, batch, () => later),
+      reassignFloorAllocations(second, restaurantId, batch, () => later),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toMatchObject([{ reason: { code: "CONFLICT" } }]);
+    const after = await Promise.all([stored(one.reservationId), stored(two.reservationId)]);
+    expect(after.map((row) => [row.revision, row.allocation!.version])).toEqual([[1, 1], [1, 1]]);
   }, 30_000);
 });

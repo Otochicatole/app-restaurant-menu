@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Building2, Check, Layers3, LayoutGrid, Loader2, MapPin, Package, Pencil, Plus, RotateCw, Ruler, Save, Settings2, Shapes, Trash2, X } from "lucide-react";
 import { AdminConfirmModal } from "@/ui/admin/AdminUI";
 import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
@@ -11,7 +11,7 @@ import { useRegisterAdminNavigationGuard } from "@/ui/admin/AdminNavigationGuard
 import { transientButtonProps } from "@/ui/button-state";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { floorRoomInputSchema, validateRoomLayout, type FloorCombination, type FloorConfigView, type FloorFixture, type FloorLocation, type FloorRoom, type FloorRotation } from "../contracts";
-import { FloorCanvas } from "./FloorCanvas";
+import { FloorCanvas, type FloorCanvasElement } from "./FloorCanvas";
 import { FloorSectorContextMenu } from "./FloorSectorContextMenu";
 import { CombinationPropertiesForm, FloorSettingsForm, InventoryForm, InventoryGroupForm, RoomDimensionsForm, SpatialPropertiesForm, TablePropertiesForm, type StockInput, type StockGroupInput } from "./FloorAdminForms";
 import { getFloorConfig, saveFloorAction } from "./floor-api";
@@ -22,14 +22,16 @@ type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "
 type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
 type ConfirmPanel = { title: string; description: string; confirmLabel: string; run: () => void | Promise<void> };
 type Flyout = "rooms" | "sectors" | "elements" | null;
-type Selection = { kind: "sector" | "fixture"; id: string } | null;
 type CombinationMode = { combination: FloorCombination; selectedIds: string[] } | null;
 const copy = <T,>(value: T): T => structuredClone(value);
 const nextRotation = (rotation: number): FloorRotation => ((rotation + 90) % 360) as FloorRotation;
 const buttonBase = "flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:px-3";
 const floatingButton = `${buttonBase} bg-white text-[#263e23] hover:bg-[#edf2e9]`;
+const editorToolButtonClass = "flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-semibold shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:h-11 md:gap-0.5 lg:flex-row lg:gap-2 lg:px-3 lg:text-sm";
 const toolIcons = [Building2, Ruler, Package, MapPin, Shapes, Settings2];
+const sideActionPosition = "absolute right-3 z-20 bottom-[calc(env(safe-area-inset-bottom,0px)+16.5rem)] sm:right-6 sm:bottom-[calc(env(safe-area-inset-bottom,0px)+13.75rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+8.75rem)]";
 const toolLabels = ["Salones", "Medidas", "Inventario", "Sectores", "Elementos", "Configuración"];
+const sameElement = (a: FloorCanvasElement, b: FloorCanvasElement) => a.kind === b.kind && a.id === b.id;
 
 function uniqueName(base: string, existing: string[]) {
   if (!existing.includes(base)) return base;
@@ -73,7 +75,8 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const [editedTools, setEditedTools] = useState<Set<string>>(() => new Set());
   const [flyout, setFlyout] = useState<Flyout>(null);
   const [placement, setPlacement] = useState<"sector" | FloorFixture["type"] | null>(null);
-  const [selection, setSelection] = useState<Selection>(null);
+  const [selectedElements, setSelectedElements] = useState<FloorCanvasElement[]>([]);
+  const selection = selectedElements.length === 1 ? selectedElements[0] : null;
   const [sectorMenu, setSectorMenu] = useState<{ id: string; point: { x: number; y: number } } | null>(null);
   const [combinationMode, setCombinationMode] = useState<CombinationMode>(null);
   const toolbar = useRef<HTMLElement>(null);
@@ -130,6 +133,38 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   }, [activationKey]);
 
   const patch = (next: FloorRoom) => { if (busy) return; setSectorMenu(null); setDraft(next); setDirty(true); setNotice(null); setError(null); };
+  const setSelection = (element: FloorCanvasElement | null) => setSelectedElements(element ? [element] : []);
+  const selectCanvasElement = (element: FloorCanvasElement, additive = false) => {
+    setSectorMenu(null);
+    setFlyout(null);
+    if (!additive) { setSelection(element); return; }
+    setSelectedElements((current) => current.some((item) => sameElement(item, element))
+      ? current.filter((item) => !sameElement(item, element))
+      : [...current, element]);
+  };
+  const selectCanvasElements = (elements: FloorCanvasElement[], additive: boolean) => {
+    setSectorMenu(null);
+    setFlyout(null);
+    setSelectedElements((current) => additive
+      ? [...current, ...elements.filter((element) => !current.some((item) => sameElement(item, element)))]
+      : elements);
+  };
+  const moveCanvasElement = (element: FloorCanvasElement, point: { x: number; y: number }) => {
+    if (!draft || !interactive || placement || combinationMode) return;
+    const anchor = (element.kind === "sector" ? draft.locations : draft.fixtures).find((item) => item.id === element.id);
+    if (!anchor) return;
+    const dx = point.x - anchor.x;
+    const dy = point.y - anchor.y;
+    if (!dx && !dy) return;
+    const moving = selectedElements.some((item) => sameElement(item, element)) ? selectedElements : [element];
+    const move = <T extends { id: string; x: number; y: number },>(item: T, kind: FloorCanvasElement["kind"]): T =>
+      moving.some((selected) => selected.kind === kind && selected.id === item.id) ? { ...item, x: item.x + dx, y: item.y + dy } : item;
+    const next = { ...draft, locations: draft.locations.map((item) => move(item, "sector")), fixtures: draft.fixtures.map((item) => move(item, "fixture")) };
+    if (moving.length === 1) { patch(next); return; }
+    const invalid = roomError(next);
+    if (invalid) setError(invalid);
+    else patch(next);
+  };
   const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); tools.clear(); setEditedTools(new Set()); setConfirmation(null); setError(null); };
   const clearToolEdit = (id: string) => setEditedTools((previous) => { if (!previous.has(id)) return previous; const next = new Set(previous); next.delete(id); return next; });
   const closeTool = (id: string) => { if (!busy) { if (id.startsWith("combination-layout:")) setCombinationMode(null); tools.close(id); clearToolEdit(id); } };
@@ -268,19 +303,105 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   const canvasTables = draft && combinationMode ? combinationMode.combination.members.flatMap((member) => {
     const table = draft.tables.find((item) => item.id === member.tableId); return table ? [{ ...table, x: draft.width / 2 + member.x, y: draft.height / 2 + member.y, rotation: member.rotation }] : [];
   }) : [];
+  const canSelectPlan = interactive && !placement && !combinationMode;
+  const canSelectTables = interactive && Boolean(combinationMode);
+  const selectCombinationTables = (ids: string[], additive = false) => {
+    setCombinationMode((current) => current ? {
+      ...current,
+      selectedIds: additive ? [...new Set([...current.selectedIds, ...ids])] : ids,
+    } : null);
+  };
+  const selectCombinationTable = (id: string, additive: boolean) => {
+    setCombinationMode((current) => current ? {
+      ...current,
+      selectedIds: !additive ? [id] : current.selectedIds.includes(id)
+        ? current.selectedIds.filter((selected) => selected !== id)
+        : [...current.selectedIds, id],
+    } : null);
+  };
+  const moveCombinationTables = (ids: string[], delta: { x: number; y: number }) => {
+    setCombinationMode((current) => current ? {
+      ...current,
+      combination: { ...current.combination, members: current.combination.members.map((member) =>
+        ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member) },
+    } : null);
+  };
+  const selectionCount = combinationMode?.selectedIds.length ?? selectedElements.length;
+  let status = "Preparando el plano…";
+  if (placement) {
+    const target = placement === "sector" ? "el sector" : placement === "WALL" ? "la pared" : placement === "BAR" ? "la barra" : "el texto";
+    status = "Tocá dentro del salón para ubicar " + target + ".";
+  } else if (selectionCount > 1) {
+    status = selectionCount + (combinationMode ? " mesas seleccionadas. Arrastrá una para moverlas juntas." : " elementos seleccionados. Arrastrá uno para moverlos juntos.");
+  } else if (combinationMode) {
+    status = "Editando armado: " + combinationMode.combination.name;
+  } else if (hasUnsaved) {
+    status = "Cambios sin guardar";
+  } else if (selectedSector) {
+    status = "Arrastrá los bordes o las esquinas para ajustar el tamaño del sector.";
+  } else if (draft) {
+    status = "Arrastrá desde un espacio libre para seleccionar varios elementos. Shift permite sumar.";
+  }
   return <main data-admin-panel className={`fixed inset-y-0 left-16 right-0 isolate h-dvh overflow-hidden bg-[#f5f2e9] text-zinc-950 selection:bg-[#d6e8d4] ${confirmation ? "z-50" : ""}`}>
     <h1 className="sr-only">Editor de salones · {config?.restaurantName ?? "Restaurante"}</h1>
-    <div role="region" aria-label="Editor del salón" className="absolute inset-0">{draft && <FloorCanvas key={draft.id} fullScreen editorMode grid room={combinationMode ? { ...draft, fixtures: [], locations: [] } : draft} tables={canvasTables} selectedIds={combinationMode?.selectedIds ?? []} selectedLocationId={selection?.kind === "sector" ? selection.id : undefined} selectedFixtureId={selection?.kind === "fixture" ? selection.id : undefined} draggableIds={interactive && combinationMode ? canvasTables.map((table) => table.id) : []} onSelect={interactive && combinationMode ? (id, additive) => setCombinationMode((current) => current ? { ...current, selectedIds: additive ? current.selectedIds.includes(id) ? current.selectedIds.filter((item) => item !== id) : [...current.selectedIds, id] : [id] } : null) : undefined} onMove={interactive && combinationMode ? (ids, delta) => setCombinationMode((current) => current ? { ...current, combination: { ...current.combination, members: current.combination.members.map((member) => ids.includes(member.tableId) ? { ...member, x: member.x + delta.x, y: member.y + delta.y } : member) } } : null) : undefined} onPlace={!busy && !confirmation && placement ? place : undefined} onSelectLocation={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "sector", id }); setFlyout(null); } : undefined} onContextMenuLocation={interactive && !placement && !combinationMode ? openSectorMenu : undefined} onResizeLocation={interactive && !placement && !combinationMode ? resizeSector : undefined} onMoveLocation={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, locations: draft.locations.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} onSelectFixture={interactive && !placement && !combinationMode ? (id) => { setSectorMenu(null); setSelection({ kind: "fixture", id }); setFlyout(null); } : undefined} onMoveFixture={interactive && !placement && !combinationMode ? (id, point) => patch({ ...draft, fixtures: draft.fixtures.map((item) => item.id === id ? { ...item, ...point } : item) }) : undefined} />}</div>
+    <div role="region" aria-label="Editor del salón" className="absolute inset-0">
+      {draft && <FloorCanvas
+        key={draft.id} fullScreen editorMode grid
+        room={combinationMode ? { ...draft, fixtures: [], locations: [] } : draft}
+        tables={canvasTables}
+        selectedIds={combinationMode?.selectedIds ?? []}
+        selectedElements={selectedElements}
+        selectedLocationId={selectedSector?.id}
+        selectedFixtureId={selectedFixture?.id}
+        draggableIds={canSelectTables ? canvasTables.map((table) => table.id) : []}
+        onSelect={canSelectTables ? selectCombinationTable : undefined}
+        onSelectMany={canSelectTables ? selectCombinationTables : undefined}
+        onMove={canSelectTables ? moveCombinationTables : undefined}
+        onClearSelection={canSelectTables ? () => selectCombinationTables([]) : canSelectPlan ? () => selectCanvasElements([], false) : undefined}
+        onSelectElements={canSelectPlan ? selectCanvasElements : undefined}
+        onPlace={!busy && !confirmation && placement ? place : undefined}
+        onSelectLocation={canSelectPlan ? (id, additive) => selectCanvasElement({ kind: "sector", id }, additive) : undefined}
+        onContextMenuLocation={canSelectPlan ? openSectorMenu : undefined}
+        onResizeLocation={canSelectPlan ? resizeSector : undefined}
+        onMoveLocation={canSelectPlan ? (id, point) => moveCanvasElement({ kind: "sector", id }, point) : undefined}
+        onSelectFixture={canSelectPlan ? (id, additive) => selectCanvasElement({ kind: "fixture", id }, additive) : undefined}
+        onMoveFixture={canSelectPlan ? (id, point) => moveCanvasElement({ kind: "fixture", id }, point) : undefined}
+      />}
+    </div>
     {!draft && <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><Building2 size={30} className="mx-auto mb-4 text-[#607054]" /><h2 className="text-lg font-semibold">{config ? "Creá tu primer salón" : "Cargando salones…"}</h2><p className="mt-2 text-sm leading-relaxed text-[#52634b]">{config ? "Definí las medidas, cargá tu inventario y dibujá los sectores sobre este tablero." : "Preparando el editor del restaurante."}</p>{config && <button {...transientButtonProps} type="button" disabled={busy} onClick={createRoom} className={`${adminPrimaryButtonClass} mt-5`}><Plus size={16} />Crear salón</button>}</div></div>}
     <header className="pointer-events-none absolute inset-x-0 top-[max(1rem,env(safe-area-inset-top,0px))] z-10 flex items-start justify-between gap-3 px-3 sm:px-6"><div className="pointer-events-auto flex min-w-0 items-start gap-2"><div className="min-w-0 rounded-xl bg-white px-3 py-2 shadow-[0_3px_16px_rgba(24,38,24,0.12)]"><p className="max-w-[32vw] truncate text-[11px] text-[#52634b] sm:max-w-64">{config?.restaurantName ?? "Restaurante"}</p><p className="max-w-[32vw] truncate text-sm font-semibold text-[#263e23] sm:max-w-64">{draft?.name ?? "Salones"}{draft && !draft.active && " · Archivado"}</p></div></div><div className="pointer-events-auto flex shrink-0 gap-2"><Link href={roomHref} aria-label="Ver sala" title="Ver sala" aria-disabled={busy || undefined} onClick={(event) => guardLink(event, roomHref)} className={floatingButton}><LayoutGrid size={18} /><span className="hidden lg:inline">Ver sala</span></Link><button {...transientButtonProps} type="button" aria-label="Guardar plano" title="Guardar plano" disabled={!draft || !dirty || busy || !!combinationMode} onClick={() => { void save(); }} className={`${buttonBase} bg-[#182618] text-white hover:bg-[#2d4628]`}>{busy ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}<span className="hidden lg:inline">Guardar plano</span></button></div></header>
-    <div className="pointer-events-none absolute left-3 right-3 top-[calc(max(1rem,env(safe-area-inset-top,0px))+4rem)] z-10 max-w-xl space-y-2 sm:left-6"><p role="status" className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]">{placement ? `Tocá dentro del salón para ubicar ${placement === "sector" ? "el sector" : placement === "WALL" ? "la pared" : placement === "BAR" ? "la barra" : "el texto"}.` : combinationMode ? `Editando armado: ${combinationMode.combination.name}` : hasUnsaved ? "Cambios sin guardar" : selectedSector ? "Arrastrá los bordes o las esquinas para ajustar el tamaño del sector." : config ? "Clic derecho en un sector para ver sus acciones." : "Preparando el plano…"}</p>{error && <div role="alert" className="pointer-events-auto flex items-start justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"><span>{error}</span>{!config ? <button {...transientButtonProps} type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="font-semibold underline underline-offset-4">Reintentar</button> : <button {...transientButtonProps} type="button" aria-label="Cerrar error" onClick={() => setError(null)}><X size={16} /></button>}</div>}{notice && <p role="status" className="w-fit rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">{notice}</p>}{placement && <button {...transientButtonProps} type="button" onClick={() => setPlacement(null)} className={`${adminSecondaryButtonClass} pointer-events-auto`}>Cancelar ubicación</button>}</div>
-    {draft && !placement && !combinationMode && !selectedFixture && <button {...transientButtonProps} type="button" disabled={busy} onClick={() => beginPlacement("sector")} className={`${adminPrimaryButtonClass} absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+8.5rem)] right-3 z-20 shadow-[0_3px_16px_rgba(24,38,24,0.12)] md:bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+4.5rem)] sm:right-6`}><Plus size={18} />Agregar sector</button>}
-    {selectedFixture && !combinationMode && <aside aria-label="Selección del plano" className="absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+8.5rem)] right-3 z-20 md:bottom-[calc(max(1rem,env(safe-area-inset-bottom,0px))+4.5rem)] max-w-[calc(100%_-_6rem)] rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] sm:right-6"><p className="mb-2 truncate text-sm font-semibold">{selectedLabel || (selectedFixture?.type === "WALL" ? "Pared" : "Elemento del salón")}</p><div className="flex flex-wrap gap-1"><button {...transientButtonProps} type="button" disabled={busy} onClick={editSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><Pencil size={15} />Editar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={rotateSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><RotateCw size={15} />Girar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={removeSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={15} />{selectedSector ? "Archivar" : "Eliminar"}</button></div></aside>}
+    <div className="pointer-events-none absolute left-3 right-3 top-[calc(max(1rem,env(safe-area-inset-top,0px))+4rem)] z-10 max-w-xl space-y-2 sm:left-6"><p role="status" className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]">{status}</p>{error && <div role="alert" className="pointer-events-auto flex items-start justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"><span>{error}</span>{!config ? <button {...transientButtonProps} type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="font-semibold underline underline-offset-4">Reintentar</button> : <button {...transientButtonProps} type="button" aria-label="Cerrar error" onClick={() => setError(null)}><X size={16} /></button>}</div>}{notice && <p role="status" className="w-fit rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">{notice}</p>}{placement && <button {...transientButtonProps} type="button" onClick={() => setPlacement(null)} className={`${adminSecondaryButtonClass} pointer-events-auto`}>Cancelar ubicación</button>}</div>
+    {selectedFixture && !combinationMode && <aside aria-label="Selección del plano" className={`${sideActionPosition} max-w-[calc(100%_-_6rem)] rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)]`}><p className="mb-2 truncate text-sm font-semibold">{selectedLabel || (selectedFixture?.type === "WALL" ? "Pared" : "Elemento del salón")}</p><div className="flex flex-wrap gap-1"><button {...transientButtonProps} type="button" disabled={busy} onClick={editSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><Pencil size={15} />Editar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={rotateSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-[#edf2e9]"><RotateCw size={15} />Girar</button><button {...transientButtonProps} type="button" disabled={busy} onClick={removeSelection} className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={15} />{selectedSector ? "Archivar" : "Eliminar"}</button></div></aside>}
     {sectorMenu && selectedSector && !busy && !confirmation && !placement && !combinationMode && <FloorSectorContextMenu name={selectedSector.name} point={sectorMenu.point} disabled={busy} onEdit={() => { setSectorMenu(null); editSelection(); }} onRotate={() => { setSectorMenu(null); rotateSelection(); }} onArchive={() => { setSectorMenu(null); removeSelection(); }} onClose={() => setSectorMenu(null)} />}
-    <nav ref={toolbar} aria-label="Herramientas del editor" className="absolute bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-1/2 z-30 grid w-[calc(100%_-_1.5rem)] max-w-lg -translate-x-1/2 grid-cols-3 items-center gap-1.5 md:flex md:w-max md:max-w-[calc(100%_-_1.5rem)]">{toolLabels.map((label, index) => { const Icon = toolIcons[index]; return <button key={label} {...transientButtonProps} ref={(element) => { toolButtons.current[index] = element; }} type="button" aria-label={label} title={label} aria-haspopup={index === 1 || index === 2 || index === 5 ? "dialog" : undefined} aria-expanded={index === 0 ? flyout === "rooms" : index === 3 ? flyout === "sectors" : index === 4 ? flyout === "elements" : tools.isVisible(index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings")} disabled={!config || busy || ((index === 1 || index === 2 || index === 3 || index === 4) && !draft)} onClick={() => { setSectorMenu(null); if (index === 0 || index === 3 || index === 4) { const next = index === 0 ? "rooms" : index === 3 ? "sectors" : "elements"; setFlyout((current) => current === next ? null : next); setPlacement(null); } else openPanel({ kind: index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings" }); }} className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-white px-1 text-[10px] font-semibold text-[#263e23] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[#edf2e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:h-11 md:flex-row md:gap-2 md:px-3 md:text-xs lg:text-sm"><Icon size={18} /><span className="whitespace-nowrap">{label}</span></button>; })}
+    <nav ref={toolbar} aria-label="Herramientas del editor" className="absolute bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-1/2 z-30 grid w-[calc(100%_-_1.5rem)] max-w-lg -translate-x-1/2 grid-cols-4 items-center gap-1.5 md:max-w-3xl md:grid-cols-7 lg:flex lg:w-max lg:max-w-[calc(100%_-_1.5rem)]">
+      {toolLabels.map((label, index) => {
+        const Icon = toolIcons[index];
+        const flyoutKind = index === 0 ? "rooms" : index === 3 ? "sectors" : index === 4 ? "elements" : null;
+        const panelKind = index === 1 ? "dimensions" : index === 2 ? "inventory" : "settings";
+        return <Fragment key={label}>
+          <button {...transientButtonProps} ref={(element) => { toolButtons.current[index] = element; }} type="button" aria-label={label} title={label}
+            aria-haspopup={flyoutKind ? undefined : "dialog"}
+            aria-expanded={flyoutKind ? flyout === flyoutKind : tools.isVisible(panelKind)}
+            disabled={!config || busy || ((index >= 1 && index <= 4) && !draft)}
+            onClick={() => {
+              setSectorMenu(null);
+              if (flyoutKind) {
+                setFlyout((current) => current === flyoutKind ? null : flyoutKind);
+                setPlacement(null);
+              } else openPanel({ kind: panelKind });
+            }}
+            className={editorToolButtonClass + " bg-white text-[#263e23] hover:bg-[#edf2e9]" + (index === 5 ? " col-span-2 md:col-span-1" : "")}>
+            <Icon size={18} /><span className="leading-tight lg:whitespace-nowrap">{label}</span>
+          </button>
+          {index === 3 && <button {...transientButtonProps} type="button" disabled={!draft || busy || Boolean(placement || combinationMode)}
+            onClick={() => beginPlacement("sector")} className={editorToolButtonClass + " bg-[#182618] text-white hover:bg-[#2d4628]"}>
+            <Plus size={18} /><span className="leading-tight lg:whitespace-nowrap">Agregar sector</span>
+          </button>}
+        </Fragment>;
+      })}
       {flyout && <div ref={flyoutSurface} className="absolute bottom-[calc(100%_+_0.75rem)] left-1/2 max-h-[min(26rem,calc(100dvh_-_7rem))] w-[min(21rem,calc(100vw_-_1.5rem))] -translate-x-1/2 overflow-y-auto rounded-xl bg-white p-3 shadow-[0_6px_28px_-8px_rgba(24,38,24,0.24)] lg:left-0 lg:translate-x-0">
         {flyout === "rooms" && <nav aria-label="Salones del restaurante" className="space-y-1">{config?.rooms.map((room) => <button key={room.id} {...transientButtonProps} type="button" aria-pressed={draft?.id === room.id} onClick={() => selectRoom(room)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]"><span>{room.name}{!room.active && " · Archivado"}</span>{draft?.id === room.id && <Check size={16} />}</button>)}<button {...transientButtonProps} type="button" onClick={createRoom} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#2d4628] hover:bg-[#edf2e9]"><Plus size={16} />Nuevo salón</button></nav>}
-        {flyout === "sectors" && <nav aria-label="Sectores del salón" className="space-y-1"><button {...transientButtonProps} type="button" onClick={() => { beginPlacement("sector"); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-[#edf2e9]"><Plus size={16} />Nuevo sector</button>{draft?.locations.map((location) => <button key={location.id} {...transientButtonProps} type="button" aria-pressed={selection?.id === location.id} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); }} onContextMenu={(event) => { event.preventDefault(); openSectorMenu(location.id, { x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); } }} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]">{location.name}{!location.active && " · Archivado"}</button>)}</nav>}
+        {flyout === "sectors" && <nav aria-label="Sectores del salón" className="space-y-1"><button {...transientButtonProps} type="button" onClick={() => { beginPlacement("sector"); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-[#edf2e9]"><Plus size={16} />Nuevo sector</button>{draft?.locations.map((location) => <button key={location.id} {...transientButtonProps} type="button" aria-pressed={selectedElements.some((item) => item.kind === "sector" && item.id === location.id)} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); }} onContextMenu={(event) => { event.preventDefault(); openSectorMenu(location.id, { x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openSectorMenu(location.id, { x: rect.left, y: rect.bottom }); } }} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]">{location.name}{!location.active && " · Archivado"}</button>)}</nav>}
         {flyout === "elements" && <nav aria-label="Elementos del salón" className="space-y-1">{([['WALL', 'Pared'], ['BAR', 'Barra'], ['LABEL', 'Texto']] as const).map(([type, label]) => <button key={type} {...transientButtonProps} type="button" onClick={() => { beginPlacement(type); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-[#edf2e9]"><Plus size={16} />{label}</button>)}{draft?.fixtures.map((fixture, index) => <button key={fixture.id} {...transientButtonProps} type="button" onClick={() => { setSelection({ kind: "fixture", id: fixture.id }); setFlyout(null); }} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-[#edf2e9]">{fixture.label || `${fixture.type === "WALL" ? "Pared" : "Elemento"} ${index + 1}`}</button>)}</nav>}
       </div>}
     </nav>

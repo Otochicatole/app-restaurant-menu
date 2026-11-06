@@ -4,19 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConflictError } from "@/platform/application/errors";
 import type { FloorAllocationView, FloorAssignmentInput, FloorBoardView, FloorOptionsView, FloorRoom, FloorTableInventoryInput } from "../contracts";
 
-const services = vi.hoisted(() => ({ access: vi.fn(), admin: vi.fn(), options: vi.fn(), reassign: vi.fn(), board: vi.fn(), tables: vi.fn() }));
+const services = vi.hoisted(() => ({ access: vi.fn(), admin: vi.fn(), options: vi.fn(), reassign: vi.fn(), reassignMany: vi.fn(), board: vi.fn(), tables: vi.fn() }));
 vi.mock("@/modules/floor-management/server", () => ({ requireFloorReadAccess: services.access, floorManagement: { getBoard: services.board, saveTables: services.tables } }));
 vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: services.admin }));
 vi.mock("@/modules/reservation-management/server", async () => {
   const contracts = await import("@/modules/reservation-management/contracts");
   const { floorAssignmentSchema } = await import("@/modules/floor-management/contracts");
-  return { ...contracts, floorReassignmentSchema: z.object({ reservationId: z.string().min(1), expectedRevision: z.number().int().nonnegative(), expectedAllocationVersion: z.number().int().nonnegative(), assignment: floorAssignmentSchema }),
-    floorReassignments: { options: services.options, reassign: services.reassign }, floorWalkIns: {} };
+  const floorReassignmentSchema = z.object({ reservationId: z.string().min(1), expectedRevision: z.number().int().nonnegative(), expectedAllocationVersion: z.number().int().nonnegative(), assignment: floorAssignmentSchema });
+  const floorBatchReassignmentSchema = z.object({ updates: z.array(floorReassignmentSchema).min(1).max(40) }).refine(({ updates }) => new Set(updates.map((update) => update.reservationId)).size === updates.length, "Cada reserva debe aparecer una sola vez.");
+  return { ...contracts, floorReassignmentSchema, floorBatchReassignmentSchema,
+    floorReassignments: { options: services.options, reassign: services.reassign, reassignMany: services.reassignMany }, floorWalkIns: {} };
 });
 
 import { GET, PUT as putAssignment } from "@/app/api/restaurants/[restaurantId]/floor/assignments/[reservationId]/route";
+import { PUT as putSelection } from "@/app/api/restaurants/[restaurantId]/floor/assignments/route";
 import { PUT as putTables } from "@/app/api/restaurants/[restaurantId]/floor/tables/route";
-import { getFloorReassignmentOptions, reassignFloorTables, saveFloorTables } from "./floor-api";
+import { getFloorReassignmentOptions, reassignFloorSelection, reassignFloorTables, saveFloorTables } from "./floor-api";
 
 const origin = "https://restaurant.test";
 const assignment: FloorAssignmentInput = { roomId: "room", locationId: "window", optionId: "custom", x: 240.5, y: 200, rotation: 0, expectedRoomRevision: 4, capacity: 4,
@@ -37,13 +40,14 @@ const tableInput: FloorTableInventoryInput = { roomId: room.id, expectedRevision
 function connectClientToRoute() {
   const fetchRoute = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input), origin);
-    const match = /^\/api\/restaurants\/([^/]+)\/floor\/(?:assignments\/([^/]+)|(tables))$/.exec(url.pathname);
+    const match = /^\/api\/restaurants\/([^/]+)\/floor\/(?:assignments(?:\/([^/]+))?|(tables))$/.exec(url.pathname);
     if (!match) throw new Error(`Unexpected API URL: ${url.pathname}`);
     const headers = new Headers(init?.headers);
     headers.set("sec-fetch-site", "same-origin");
     const request = new NextRequest(url, { ...init, signal: init?.signal ?? undefined, headers });
     const restaurantId = decodeURIComponent(match[1]);
     if (match[3] === "tables") return putTables(request, { params: Promise.resolve({ restaurantId }) });
+    if (!match[2]) return putSelection(request, { params: Promise.resolve({ restaurantId }) });
     const context = { params: Promise.resolve({ restaurantId, reservationId: decodeURIComponent(match[2]) }) };
     return request.method === "PUT" ? putAssignment(request, context) : GET(request, context);
   });
@@ -81,6 +85,33 @@ describe("floor reassignment client and route protocol", () => {
     await expect(reassignFloorTables("restaurant one", allocation.reservationId, command)).rejects.toThrow("El armado cambió en otra pantalla. Actualizá la sala.");
     expect(services.reassign).toHaveBeenCalledWith("restaurant one", { ...command, reservationId: allocation.reservationId });
     expect(services.board).not.toHaveBeenCalled();
+  });
+
+  it("serializes all selected reservation updates in one PUT and preserves the displayed instant", async () => {
+    const fetchRoute = connectClientToRoute();
+    const updates = [{ ...command, reservationId: allocation.reservationId }, { ...command, reservationId: "other reservation", expectedRevision: 11, expectedAllocationVersion: 3 }];
+    const saved = await reassignFloorSelection("restaurant one", { updates }, allocation.serviceStartAt);
+    const url = new URL(String(fetchRoute.mock.calls[0][0]), origin);
+    expect(url.pathname).toBe("/api/restaurants/restaurant%20one/floor/assignments");
+    expect(url.searchParams.get("at")).toBe(allocation.serviceStartAt);
+    expect(fetchRoute.mock.calls[0][1]).toMatchObject({ method: "PUT", cache: "no-store", credentials: "same-origin" });
+    expect(JSON.parse(String(fetchRoute.mock.calls[0][1]?.body))).toEqual({ updates });
+    expect(services.reassignMany).toHaveBeenCalledOnce(); expect(services.reassignMany).toHaveBeenCalledWith("restaurant one", { updates });
+    expect(services.board).toHaveBeenCalledWith("restaurant one", allocation.serviceStartAt);
+    expect(saved).toEqual(board); expect(services.reassign).not.toHaveBeenCalled(); expect(services.admin).not.toHaveBeenCalled();
+  });
+
+  it("rejects a batch conflict without issuing separate reservation writes or returning a board", async () => {
+    connectClientToRoute(); services.reassignMany.mockRejectedValue(new ConflictError("Otra reserva cambió. No se guardó la selección."));
+    await expect(reassignFloorSelection("restaurant one", { updates: [{ ...command, reservationId: allocation.reservationId }] }, allocation.serviceStartAt)).rejects.toThrow("No se guardó la selección");
+    expect(services.reassignMany).toHaveBeenCalledOnce(); expect(services.reassign).not.toHaveBeenCalled(); expect(services.board).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty or duplicate reservation batches before calling the transactional service", async () => {
+    connectClientToRoute(); const update = { ...command, reservationId: allocation.reservationId };
+    await expect(reassignFloorSelection("restaurant one", { updates: [] })).rejects.toThrow();
+    await expect(reassignFloorSelection("restaurant one", { updates: [update, update] })).rejects.toThrow();
+    expect(services.reassignMany).not.toHaveBeenCalled(); expect(services.board).not.toHaveBeenCalled();
   });
 
   it("allows staff inventory edits through the table endpoint while rejecting room and sector mutations", async () => {

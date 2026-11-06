@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { buildFloorOptions, validateAssembly, type FloorAssignmentInput, type FloorBoardView, type FloorOptionsQuery, type FloorOptionsView, type FloorPose, type FloorRoom } from "../contracts";
 
-const api = vi.hoisted(() => ({ options: vi.fn(), board: vi.fn(), config: vi.fn(), save: vi.fn() }));
-vi.mock("./floor-api", () => ({ getFloorOptions: api.options, getFloorBoard: api.board, getFloorConfig: api.config, saveFloorAction: api.save, floorInputClass: "input" }));
+const api = vi.hoisted(() => ({ options: vi.fn(), board: vi.fn(), config: vi.fn(), save: vi.fn(), reassignSelection: vi.fn() }));
+vi.mock("./floor-api", () => ({ getFloorOptions: api.options, getFloorBoard: api.board, getFloorConfig: api.config, saveFloorAction: api.save, reassignFloorSelection: api.reassignSelection, floorInputClass: "input" }));
 vi.mock("@/modules/identity-access/ui", () => ({ LogoutButton: ({className, disabled}: {className?: string; disabled?: boolean}) => createElement("button", {className, disabled}, "Cerrar sesión") }));
 vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: {
   onMove?: (ids: string[], delta: { x: number; y: number }) => void;
   onPlace?: (point: { x: number; y: number }, locationId?: string) => void;
+  onSelect?: (id: string, additive: boolean) => void;
+  onContextMenuTable?: (id: string, point: { x: number; y: number }) => void;
   room?: {id: string}; selectedIds?: string[]; tables: { id: string; x?: number; y?: number; rotation?: number }[];
 }) => {
   const [pan, setPan] = useState(0);
@@ -17,6 +19,7 @@ vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: {
     createElement("button", { type: "button", onClick: () => props.onMove?.(props.selectedIds ?? [], { x: 20, y: 10 }) }, "Mover unión"),
     props.onPlace && createElement("button", {type: "button", onClick: () => props.onPlace?.({x: 500, y: 350}, "window")}, "Ubicar armado"),
     createElement("button", {type: "button", onClick: () => setPan((current) => current + 1)}, "Desplazar tablero"),
+    props.onSelect && props.tables.map((table) => createElement("button", { key: table.id, type: "button", "aria-label": `Mesa para editar ${table.id}`, onClick: () => props.onSelect?.(table.id, false), onContextMenu: (event) => { event.preventDefault(); props.onContextMenuTable?.(table.id, { x: event.clientX, y: event.clientY }); } }, table.id)),
     createElement("output", {"data-testid": "canvas-pan"}, String(pan)),
     createElement("output", {"data-testid": "canvas-poses"}, JSON.stringify(props.tables)),
     createElement("output", { "data-testid": "canvas-tables" }, JSON.stringify(props.tables.map((table) => table.id))));
@@ -41,6 +44,14 @@ function Picker({ input = query, walkIn = false }: { input?: FloorOptionsQuery; 
 }
 function selectQuantity(quantity: number, type = "Cuadrada 80 × 80") {
   fireEvent.change(screen.getByRole("spinbutton", {name: `Cantidad de ${type}`}), {target: {value: String(quantity)}});
+}
+function positionBoardDraft() {
+  const summary = screen.getByText("Ajustes del armado", { selector: "summary" });
+  const details = summary.closest("details")!; const wasOpen = details.open;
+  if (!wasOpen) fireEvent.click(summary);
+  fireEvent.change(screen.getByLabelText("Centro X"), { target: { value: "500" } });
+  fireEvent.change(screen.getByLabelText("Centro Y"), { target: { value: "350" } });
+  if (!wasOpen) fireEvent.click(summary);
 }
 const assignment = (): FloorAssignmentInput | null => JSON.parse(screen.getByTestId("assignment").textContent!);
 
@@ -263,7 +274,7 @@ describe("floor assignment interactions", () => {
     expect((screen.getByRole("button", {name: "Reservas"}) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
     selectQuantity(1);
-    fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
+    positionBoardDraft();
     fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
     fireEvent.click(screen.getByText("Ajustes del armado", {selector: "summary"}));
     fireEvent.click(screen.getByRole("button", {name: "Girar armado 90°"}));
@@ -296,7 +307,7 @@ describe("floor assignment interactions", () => {
     fireEvent.change(await screen.findByLabelText("Sector del salón"), {target: {value: "window"}});
     expect((screen.getByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"}) as HTMLInputElement).max).toBe("2");
     selectQuantity(2);
-    fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
+    positionBoardDraft();
     fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
     const poses = () => JSON.parse(screen.getByTestId("canvas-poses").textContent!) as {id: string; x: number; y: number; rotation: number}[];
     const positioned = poses();
@@ -309,10 +320,14 @@ describe("floor assignment interactions", () => {
     expect(poses()).toHaveLength(2);
     expect(screen.queryByRole("alert")).toBeNull();
     expect((screen.getByRole("button", {name: "Armar y ocupar mesas"}) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByText("Ajustes del armado", {selector: "summary"}));
-    fireEvent.click(screen.getByText("Ajustar cada mesa"));
     const adjacentX = positioned[0].x + 40 + 50;
-    fireEvent.change(screen.getByLabelText("Mesa Grande X"), {target: {value: String(adjacentX)}});
+    const target = screen.getByRole("button", { name: "Mesa para editar draft:large" });
+    fireEvent.click(target); fireEvent.contextMenu(target, { clientX: 300, clientY: 240 });
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Editar" }));
+    const editor = screen.getByRole("dialog", { name: "Editar mesa Grande" });
+    fireEvent.change(within(editor).getByLabelText("Centro X"), {target: {value: String(adjacentX)}});
+    fireEvent.click(within(editor).getByRole("button", { name: "Aplicar cambios" }));
+    expect(editor.isConnected).toBe(false);
     fireEvent.click(screen.getByRole("button", {name: "Armar y ocupar mesas"}));
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
     const command = api.save.mock.calls[0][1];
@@ -571,7 +586,7 @@ describe("floor assignment interactions", () => {
     fireEvent.change(sector, {target: {value: "window"}});
     await screen.findByRole("spinbutton", {name: "Cantidad de Cuadrada 80 × 80"});
     selectQuantity(2);
-    fireEvent.click(screen.getByRole("button", {name: "Ubicar armado"}));
+    positionBoardDraft();
     fireEvent.click(screen.getByRole("button", {name: "Mover unión"}));
     const positioned = screen.getByTestId("canvas-poses").textContent;
     const refreshed = board(); refreshed.at = "2026-11-01T23:02:00Z";

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, MoreHorizontal, Move, RotateCw, Unlink2 } from "lucide-react";
+import { Check, Link2, MoreHorizontal, Move, Pencil, RotateCw, Unlink2 } from "lucide-react";
 import { transientButtonProps } from "@/ui/button-state";
 import { getJoinedTableGroups, type FloorPose } from "../contracts";
 
@@ -9,19 +9,19 @@ export type FloorAssemblyGroupingProps = {
   onSelectTable?: (id: string, additive: boolean) => void;
   onSelectTableGroup?: (ids: string[]) => void;
   onJoinTables?: () => void; onSeparateTables?: () => void;
-  onMoveTableGroup?: () => void; onRotateTableGroup?: () => void;
+  onEditSelection?: () => void; onMoveTableGroup?: () => void; onRotateTableGroup?: () => void;
   onTableActions?: (id: string, point: { x: number; y: number }) => void;
   onGroupActions?: (ids: string[], point: { x: number; y: number }) => void;
 };
 
 const actionClass = "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs font-semibold leading-4 text-[var(--floor-ink,#263e23)] hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 
-export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled = false, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onMoveTableGroup, onRotateTableGroup, onTableActions, onGroupActions }: FloorAssemblyGroupingProps) {
+export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled = false, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onEditSelection, onMoveTableGroup, onRotateTableGroup, onTableActions, onGroupActions }: FloorAssemblyGroupingProps) {
   const groups = getJoinedTableGroups(tables);
   const selected = new Set(selectedTableIds.filter((id) => tables.some((table) => table.tableId === id)));
   const canJoin = selected.size >= 2;
   const canSeparate = groups.some((group) => group.length > 1 && group.some((table) => selected.has(table.tableId)));
-  const hasGroupActions = Boolean(onJoinTables || onSeparateTables || onMoveTableGroup || onRotateTableGroup);
+  const hasGroupActions = Boolean(onEditSelection || onJoinTables || onSeparateTables || onMoveTableGroup || onRotateTableGroup);
   const openActions = (id: string, element: HTMLElement) => {
     const bounds = element.getBoundingClientRect();
     onTableActions?.(id, { x: bounds.left, y: bounds.bottom + 4 });
@@ -36,8 +36,9 @@ export function FloorAssemblyGrouping({ tables, selectedTableIds = [], disabled 
     {hasGroupActions && <div role="group" aria-label="Acciones para las mesas seleccionadas" className="grid grid-cols-2 gap-1.5">
       {onJoinTables && <button {...transientButtonProps} type="button" disabled={disabled || !canJoin} onClick={onJoinTables} className={actionClass}><Link2 size={15} className="shrink-0" /><span className="min-w-0">Unir seleccionadas</span></button>}
       {onSeparateTables && <button {...transientButtonProps} type="button" disabled={disabled || !canSeparate} onClick={onSeparateTables} className={actionClass}><Unlink2 size={15} className="shrink-0" /><span className="min-w-0">Separar seleccionadas</span></button>}
-      {onMoveTableGroup && <button {...transientButtonProps} type="button" disabled={disabled || !canJoin} onClick={onMoveTableGroup} className={actionClass}><Move size={15} className="shrink-0" /><span className="min-w-0">Mover grupo</span></button>}
-      {onRotateTableGroup && <button {...transientButtonProps} type="button" disabled={disabled || !canJoin} onClick={onRotateTableGroup} className={actionClass}><RotateCw size={15} className="shrink-0" /><span className="min-w-0">Girar grupo 90°</span></button>}
+      {onEditSelection && <button {...transientButtonProps} type="button" disabled={disabled || !selected.size} onClick={onEditSelection} className={actionClass}><Pencil size={15} className="shrink-0" /><span className="min-w-0">Editar selección</span></button>}
+      {!onEditSelection && onMoveTableGroup && <button {...transientButtonProps} type="button" disabled={disabled || !canJoin} onClick={onMoveTableGroup} className={actionClass}><Move size={15} className="shrink-0" /><span className="min-w-0">Mover grupo</span></button>}
+      {!onEditSelection && onRotateTableGroup && <button {...transientButtonProps} type="button" disabled={disabled || !canJoin} onClick={onRotateTableGroup} className={actionClass}><RotateCw size={15} className="shrink-0" /><span className="min-w-0">Girar grupo 90°</span></button>}
     </div>}
     <ul className="grid grid-cols-2 gap-x-2 gap-y-2">
       {groups.map((group) => {

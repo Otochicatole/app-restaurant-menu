@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FloorBoardView } from "../contracts";
 
 const api = vi.hoisted(() => ({ board: vi.fn() }));
-vi.mock("./floor-api", () => ({ getFloorBoard: api.board, saveFloorAction: vi.fn(), floorInputClass: "input" }));
+vi.mock("./floor-api", () => ({ getFloorBoard: api.board, saveFloorAction: vi.fn(), reassignFloorSelection: vi.fn(), floorInputClass: "input" }));
 vi.mock("./FloorCanvas", () => ({ FloorCanvas: ({ room }: { room: { name: string } }) => createElement("div", { role: "img", "aria-label": `Plano de ${room.name}` }) }));
 vi.mock("./FloorAssignmentPicker", () => ({ FloorAssignmentPicker: () => null }));
 vi.mock("@/modules/identity-access/ui", () => ({ LogoutButton: () => createElement("button", null, "Cerrar sesión") }));

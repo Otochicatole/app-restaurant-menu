@@ -3,9 +3,10 @@ import { createElement, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FloorConfigView, FloorFixture, FloorLocation, FloorRoom, FloorRoomInput } from "../contracts";
+import type { FloorCanvasElement } from "./FloorCanvas";
 
 const api = vi.hoisted(() => ({ config: vi.fn(), save: vi.fn(), push: vi.fn(), logout: vi.fn() }));
-const cursor = vi.hoisted(() => ({resize: {x: 420, y: 300, width: 640, height: 400}}));
+const cursor = vi.hoisted(() => ({resize: {x: 420, y: 300, width: 640, height: 400}, move: {x: 460, y: 310}}));
 vi.mock("./floor-api", () => ({ getFloorConfig: api.config, saveFloorAction: api.save, floorInputClass: "input" }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }), usePathname: () => "/admin/restaurants/restaurant/rooms" }));
 vi.mock("next/image", () => ({ default: ({alt, src}: {alt: string; src: string}) => createElement("img", {alt, src}) }));
@@ -14,6 +15,9 @@ vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: {
   room: {id: string; width: number; height: number; locations?: FloorLocation[]; fixtures: FloorFixture[]};
   tables: {id: string; label: string; x: number; y: number}[]; selectedIds?: string[]; selectedLocationId?: string | null; fullScreen?: boolean; editorMode?: boolean;
   onSelect?: (id: string, additive: boolean) => void; onMove?: (ids: string[], delta: {x: number; y: number}) => void;
+  onSelectMany?: (ids: string[], additive: boolean) => void;
+  onSelectElements?: (elements: FloorCanvasElement[], additive: boolean) => void;
+  onClearSelection?: () => void;
   onPlace?: (point: {x: number; y: number}) => void;
   onSelectLocation?: (id: string) => void; onMoveLocation?: (id: string, point: {x: number; y: number}) => void;
   onContextMenuLocation?: (id: string, point: {x: number; y: number}) => void;
@@ -28,11 +32,16 @@ vi.mock("./FloorCanvas", () => ({ FloorCanvas: (props: {
       createElement("button", {type: "button", onClick: () => props.onSelectLocation?.(location.id)}, `Seleccionar sector ${location.name}`),
       createElement("button", {type: "button", disabled: !props.onContextMenuLocation, onContextMenu: (event: {preventDefault: () => void}) => { event.preventDefault(); props.onContextMenuLocation?.(location.id, {x: 420, y: 300}); }}, `Menú del sector ${location.name}`),
       createElement("button", {type: "button", disabled: !props.onResizeLocation || props.selectedLocationId !== location.id, onClick: () => props.onResizeLocation?.(location.id, {...cursor.resize})}, `Redimensionar sector ${location.name}`),
-      createElement("button", {type: "button", onClick: () => props.onMoveLocation?.(location.id, {x: 460, y: 310})}, `Arrastrar sector ${location.name}`))),
+      createElement("button", {type: "button", onClick: () => props.onMoveLocation?.(location.id, cursor.move)}, `Arrastrar sector ${location.name}`))),
     ...props.room.fixtures.map((fixture) => createElement("div", {key: fixture.id},
       createElement("button", {type: "button", onClick: () => props.onSelectFixture?.(fixture.id)}, `Seleccionar elemento ${fixture.label}`),
       createElement("button", {type: "button", onClick: () => props.onMoveFixture?.(fixture.id, {x: 620, y: 440})}, `Arrastrar elemento ${fixture.label}`))),
-    createElement("button", {type: "button", onClick: () => props.tables.forEach((table, index) => props.onSelect?.(table.id, index > 0))}, "Seleccionar todas las mesas"),
+    createElement("button", {type: "button", onClick: () => props.onSelectMany?.(props.tables.map((table) => table.id), false)}, "Seleccionar todas las mesas"),
+    createElement("button", {type: "button", onClick: () => props.onSelectElements?.([
+      ...(props.room.locations ?? []).slice(0, 1).map((location) => ({kind: "sector" as const, id: location.id})),
+      ...props.room.fixtures.slice(0, 1).map((fixture) => ({kind: "fixture" as const, id: fixture.id})),
+    ], false)}, "Seleccionar con recuadro"),
+    createElement("button", {type: "button", onClick: props.onClearSelection}, "Limpiar selección"),
     createElement("button", {type: "button", onClick: () => props.onMove?.(props.selectedIds ?? [], {x: 20, y: 10})}, "Mover armado"),
     createElement("output", {"data-testid": "admin-pan"}, String(pan)),
     createElement("output", {"data-testid": "admin-interaction"}, JSON.stringify({place: Boolean(props.onPlace), selectSector: Boolean(props.onSelectLocation), dragSector: Boolean(props.onMoveLocation), selectElement: Boolean(props.onSelectFixture), dragElement: Boolean(props.onMoveFixture)})),
@@ -79,6 +88,7 @@ describe("fullscreen room editor workflows", () => {
   beforeEach(() => {
     vi.resetAllMocks(); document.body.style.overflow = "";
     Object.assign(cursor.resize, {x: 420, y: 300, width: 640, height: 400});
+    Object.assign(cursor.move, {x: 460, y: 310});
     api.logout.mockResolvedValue(undefined);
     const current = config();
     api.config.mockResolvedValue(current);
@@ -98,7 +108,7 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getByTestId("admin-canvas").getAttribute("data-editor-mode")).toBe("true");
     expect(tables()).toEqual([]);
     const toolbar = screen.getByRole("navigation", {name: "Herramientas del editor"});
-    for (const name of ["Salones", "Medidas", "Inventario", "Sectores", "Elementos", "Configuración"]) {
+    for (const name of ["Salones", "Medidas", "Inventario", "Sectores", "Agregar sector", "Elementos", "Configuración"]) {
       const button = within(toolbar).getByRole("button", {name});
       const text = within(button).getByText(name);
       expect(text.closest("[hidden], [aria-hidden='true'], .hidden, .sr-only")).toBeNull();
@@ -113,7 +123,6 @@ describe("fullscreen room editor workflows", () => {
     }
     expect(within(navigation).getByRole("link", {name: "Salones"}).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", {name: "Cerrar sesión"})).toBeTruthy();
-    expect(screen.getByRole("button", {name: "Agregar sector"})).toBeTruthy();
     expect(screen.getByRole("link", {name: "Ver sala"}).getAttribute("href")).toBe("/floor?restaurantId=restaurant");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByLabelText("Ancho del plano")).toBeNull();
@@ -446,6 +455,29 @@ describe("fullscreen room editor workflows", () => {
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
     expect(api.save.mock.calls[0][1]).toMatchObject({expectedRevision: 4, room: {tables: plan().tables}});
+  });
+
+  it("moves a marquee selection together and rejects a move that places any member outside the room", async () => {
+    const value = config();
+    const entrance = {id: "entry", type: "LABEL" as const, label: "Entrada", x: 100, y: 100, width: 80, height: 20, rotation: 0 as const};
+    value.rooms[0].fixtures.push(entrance);
+    api.config.mockResolvedValue(value);
+    await editor();
+    fireEvent.click(screen.getByRole("button", {name: "Seleccionar con recuadro"}));
+    expect(screen.getByText(/^2 elementos seleccionados/).getAttribute("role")).toBe("status");
+    expect((screen.getByRole("button", {name: "Redimensionar sector Ventana"}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", {name: "Arrastrar sector Ventana"}));
+    const moved = plan();
+    expect(moved.locations[0]).toMatchObject({x: 460, y: 310});
+    expect(moved.fixtures[0]).toMatchObject({x: 710, y: 460});
+    expect(moved.fixtures[1]).toEqual(entrance);
+
+    Object.assign(cursor.move, {x: 530, y: 310});
+    fireEvent.click(screen.getByRole("button", {name: "Arrastrar sector Ventana"}));
+    expect(screen.getByRole("alert").textContent).toContain("La referencia Barra queda fuera del salón");
+    expect(plan()).toEqual(moved);
+    fireEvent.click(screen.getByRole("button", {name: "Limpiar selección"}));
+    expect(screen.getByText("Cambios sin guardar").getAttribute("role")).toBe("status");
   });
 
   it("selects and drags sectors and fixtures on the main canvas while canceled property edits stay local", async () => {

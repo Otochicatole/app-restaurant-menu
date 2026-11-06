@@ -79,19 +79,20 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
   }));
 }
 
-export async function getFloorAssignmentOptions(database: Database, restaurantId: string, query: FloorOptionsQuery, intervalOverride?: FloorInterval): Promise<FloorOptionsView> {
+export async function getFloorAssignmentOptions(database: Database, restaurantId: string, query: FloorOptionsQuery, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = []): Promise<FloorOptionsView> {
   const settings = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { timeZone: true } });
   if (!settings) throw new NotFoundError("Restaurante");
   const event = query.eventId ? await database.restaurantEvent.findFirst({ where: { id: query.eventId, restaurantId }, include: { rooms: true } }) : null;
   if (query.eventId && !event) throw new NotFoundError("Evento");
   const interval = intervalOverride ?? calculateFloorInterval({ ...query, timeZone: settings.timeZone, event });
   const state = await loadFloorState(database, restaurantId, new Date(interval.blockedFrom), new Date(interval.blockedUntil));
+  const allocations = state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId));
   const current = query.excludeReservationId ? await database.reservationAllocation.findUnique({ where: { reservationId: query.excludeReservationId }, include: allocationInclude }) : null;
   const currentAllocation = current?.restaurantId === restaurantId ? allocationToView(current) : null;
   // Administrators may organize a draft event before publication.
   const events = event && !state.events.some((item) => item.id === event.id) ? [...state.events, event] : state.events;
-  const options = evaluateOptions(state.rooms, state.allocations, events, interval, query.partySize, query.eventId, query.excludeReservationId);
-  const hasAvailability = options.some((option) => option.available) || state.rooms.some((room) => hasCustomCapacity(room, options, query.partySize, interval, state.allocations.filter((lease) => lease.reservationId !== query.excludeReservationId)));
+  const options = evaluateOptions(state.rooms, allocations, events, interval, query.partySize, query.eventId, query.excludeReservationId);
+  const hasAvailability = options.some((option) => option.available) || state.rooms.some((room) => hasCustomCapacity(room, options, query.partySize, interval, allocations.filter((lease) => lease.reservationId !== query.excludeReservationId)));
   return { rooms: state.rooms, options, interval, currentAllocation, hasAvailability };
 }
 
@@ -148,13 +149,20 @@ export async function syncReservationAllocation(tx: Prisma.TransactionClient, re
     return;
   }
   if (!settings.floorManagementEnabled && !assignment && !existing) return;
+  const prepared = await prepareReservationAllocation(tx, reservation, assignment, intervalOverride, [], existing);
+  await persistPreparedReservationAllocation(tx, prepared);
+}
+
+/** Resolve and validate an assignment without changing reservation or allocation rows. */
+export async function prepareReservationAllocation(tx: Prisma.TransactionClient, reservation: Prisma.TableReservationGetPayload<object>, assignment?: FloorAssignmentInput, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = [], current?: Allocation | null) {
+  const existing = current === undefined ? await tx.reservationAllocation.findUnique({ where: { reservationId: reservation.id }, include: allocationInclude }) : current;
   if (!assignment && (!existing || existing.releasedAt)) throw new BadRequestError("Elegí un salón y sus mesas antes de confirmar la reserva.");
   if (assignment) assignment = floorAssignmentSchema.parse(assignment);
   const retainedWalkInInterval = reservation.source === "WALK_IN" && existing ? allocationToView(existing) : undefined;
   const options = await getFloorAssignmentOptions(tx, reservation.restaurantId, {
     date: reservation.date, time: reservation.time, partySize: reservation.partySize,
     eventId: reservation.eventId, excludeReservationId: reservation.id,
-  }, intervalOverride ?? retainedWalkInInterval);
+  }, intervalOverride ?? retainedWalkInInterval, excludedReservationIds);
   let room: FloorRoom | undefined;
   let poses: FloorPose[];
   let capacity: number;
@@ -208,13 +216,18 @@ export async function syncReservationAllocation(tx: Prisma.TransactionClient, re
   const unavailable = options.options.find((option) => option.id.startsWith("table:") && option.roomId === room!.id && !option.resourceAvailable && poses.some((pose) => option.poses.some((member) => member.tableId === pose.tableId)));
   if (unavailable) throw new ConflictError(unavailable.conflict ?? "Una mesa del armado ya no está disponible.");
   const proposal: FloorLease = { ...options.interval, id: existing?.id ?? "new", reservationId: reservation.id, roomId: room.id, locationId, releasedAt: null, poses };
-  const invalid = validateFloorPlacement(room, proposal, state.allocations);
+  const invalid = validateFloorPlacement(room, proposal, state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId)));
   if (invalid) throw new ConflictError(invalid);
   const fields = { restaurantId: reservation.restaurantId, roomId: room.id, locationId, combinationId, capacity,
     timeZone: options.interval.timeZone, serviceStartAt: new Date(options.interval.serviceStartAt), serviceEndAt: new Date(options.interval.serviceEndAt),
     blockedFrom: new Date(options.interval.blockedFrom), blockedUntil: new Date(options.interval.blockedUntil), releasedAt: null, roomRevision: room.revision };
-  if (existing) {
-    await tx.reservationAllocationTable.deleteMany({ where: { allocationId: existing.id } });
-    await tx.reservationAllocation.update({ where: { id: existing.id }, data: { ...fields, version: { increment: 1 }, tables: { create: poseRows(poses) } } });
-  } else await tx.reservationAllocation.create({ data: { id: randomUUID(), reservationId: reservation.id, ...fields, tables: { create: poseRows(poses) } } });
+  return { reservationId: reservation.id, existingId: existing?.id, fields, poses, room, proposal };
+}
+
+export async function persistPreparedReservationAllocation(tx: Prisma.TransactionClient, prepared: Awaited<ReturnType<typeof prepareReservationAllocation>>) {
+  const { reservationId, existingId, fields, poses } = prepared;
+  if (existingId) {
+    await tx.reservationAllocationTable.deleteMany({ where: { allocationId: existingId } });
+    await tx.reservationAllocation.update({ where: { id: existingId }, data: { ...fields, version: { increment: 1 }, tables: { create: poseRows(poses) } } });
+  } else await tx.reservationAllocation.create({ data: { id: randomUUID(), reservationId, ...fields, tables: { create: poseRows(poses) } } });
 }

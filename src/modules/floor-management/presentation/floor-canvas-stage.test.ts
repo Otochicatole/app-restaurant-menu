@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { StrictMode, createElement, useState } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const canvas = vi.hoisted(() => {
@@ -199,11 +199,13 @@ describe("floor viewport dragging", () => {
     const onContextMenuLocation = vi.fn(); const onSelectLocation = vi.fn(); const onMoveLocation = vi.fn();
     const location = {id: "window", name: "Ventana", x: 400, y: 300, width: 600, height: 400, rotation: 0 as const, active: true};
     render(createElement(FloorCanvasStage, {room: {...room, locations: [location]}, tables: [], zoom: 1, onZoomChange: vi.fn(), onContextMenuLocation, onSelectLocation, onMoveLocation}));
+    const node = {x: () => 460, y: () => 310};
     act(() => {
       (canvas.groups.get("400,300")!.onClick as (event: unknown) => void)({evt: new MouseEvent("click", {button: 0}), target: {}, cancelBubble: false});
-      (canvas.groups.get("400,300")!.onDragEnd as (event: unknown) => void)({target: {x: () => 460, y: () => 310}, cancelBubble: false});
+      (canvas.groups.get("400,300")!.onDragStart as (event: unknown) => void)({target: node, cancelBubble: false});
+      (canvas.groups.get("400,300")!.onDragEnd as (event: unknown) => void)({target: node, cancelBubble: false});
     });
-    expect(onSelectLocation.mock.calls).toEqual([["window"]]);
+    expect(onSelectLocation.mock.calls).toEqual([["window"], ["window"]]);
     expect(onMoveLocation.mock.calls).toEqual([["window", {x: 460, y: 310}]]);
     expect(onContextMenuLocation).not.toHaveBeenCalled();
   });
@@ -585,6 +587,231 @@ describe("floor viewport dragging", () => {
     act(() => { (group.onContextMenu as (event: unknown) => void)(event); });
     expect(native.defaultPrevented).toBe(true); expect(event.cancelBubble).toBe(true);
     expect(groupAction).toHaveBeenCalledWith(["one", "two"], {x: 320, y: 240}); expect(tableAction).not.toHaveBeenCalled();
+  });
+
+  it("pans at 100% from table surfaces without selecting or moving resources and preserves that viewport across modes and refreshes", () => {
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const onMove = vi.fn(); const onSelect = vi.fn(); const onSelectFixture = vi.fn(); const onSelectLocation = vi.fn();
+    const props = { room: { ...room, locations: [resizable], fixtures: [{ id: "bar", type: "BAR" as const, label: "Barra", x: 100, y: 100, width: 100, height: 40, rotation: 0 }] }, tables: [table], zoom: 1, onZoomChange: vi.fn(), onMove, onSelect, onSelectFixture, onSelectLocation, onMoveLocation: vi.fn(), onMoveFixture: vi.fn() };
+    const view = render(createElement(FloorCanvasStage, { ...props, interactionMode: "pan" }));
+    expect(canvas.stageEvents.draggable).toBe(true);
+    expect(canvas.groups.get("floor-table-one")!.draggable).toBe(false);
+    expect(canvas.groups.get("400,300")!.draggable).toBe(false);
+    expect(canvas.groups.get("100,100")!.draggable).toBe(false);
+    const event = { evt: new MouseEvent("mousedown", { button: 0 }), cancelBubble: false };
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseDown as (event: unknown) => void)(event); });
+    expect(event.cancelBubble).toBe(false);
+    const before = offset();
+    act(() => { canvas.node.position({ x: 70, y: -25 }); canvas.dragEnd!({ target: canvas.node }); });
+    expect(offset()).toEqual({ x: before.x + 70, y: before.y - 25 });
+    view.rerender(createElement(FloorCanvasStage, { ...props, room: { ...props.room }, interactionMode: "select" }));
+    expect(canvas.stageEvents.draggable).toBe(false);
+    expect(offset()).toEqual({ x: before.x + 70, y: before.y - 25 });
+    expect(onMove).not.toHaveBeenCalled(); expect(onSelect).not.toHaveBeenCalled(); expect(onSelectFixture).not.toHaveBeenCalled(); expect(onSelectLocation).not.toHaveBeenCalled();
+  });
+
+  it.each(["shiftKey", "ctrlKey", "metaKey"])("toggles a table once with %s and preserves the selection for right-click", (modifier) => {
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const onSelect = vi.fn(); const onContextMenuTable = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [table], selectedIds: ["one"], zoom: 1, onZoomChange: vi.fn(), onSelect, onContextMenuTable }));
+    const group = canvas.groups.get("floor-table-one")!;
+    for (const name of ["onMouseDown", "onClick"]) act(() => { (group[name] as (event: unknown) => void)({ evt: new MouseEvent("click", { button: 0, [modifier]: true }), cancelBubble: false }); });
+    expect(onSelect.mock.calls).toEqual([["one", true]]);
+    const native = new MouseEvent("contextmenu", { button: 2, clientX: 50, clientY: 60, cancelable: true });
+    for (const name of ["onMouseDown", "onClick", "onContextMenu"]) act(() => { (group[name] as (event: unknown) => void)({ evt: native, cancelBubble: false }); });
+    expect(onSelect.mock.calls).toEqual([["one", true]]);
+    expect(onContextMenuTable).toHaveBeenCalledWith("one", { x: 50, y: 60 });
+  });
+
+  it("keeps a selected group intact when dragging one member and only moves active allowed resource IDs", () => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const onSelect = vi.fn(); const onMove = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [first, { ...first, id: "two", x: 280 }, { ...first, id: "inactive", active: false }, { ...first, id: "blocked" }], selectedIds: ["one", "two", "inactive", "missing", "blocked"], draggableIds: ["one", "two"], zoom: 2, onZoomChange: vi.fn(), onSelect, onMove }));
+    const group = canvas.groups.get("floor-table-one")!;
+    const position = { x: 200, y: 200 }; const node = { x: () => position.x, y: () => position.y };
+    act(() => { (group.onMouseDown as (event: unknown) => void)({ evt: new MouseEvent("mousedown", { button: 0 }), cancelBubble: false }); (group.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 230, y: 240 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onMove.mock.calls).toEqual([[["one", "two"], { x: 30, y: 40 }]]);
+  });
+
+  it.each([
+    { name: "square physical edge without its center", shape: "SQUARE" as const, rotation: 0, width: 80, height: 80, from: { x: 235, y: 195 }, to: { x: 245, y: 205 }, expected: ["one"] },
+    { name: "rotated rectangular physical edge", shape: "RECTANGLE" as const, rotation: 90, width: 140, height: 40, from: { x: 215, y: 240 }, to: { x: 225, y: 260 }, expected: ["one"] },
+    { name: "space outside a circle's rendered diameter", shape: "CIRCLE" as const, rotation: 0, width: 80, height: 800, from: { x: 195, y: 250 }, to: { x: 205, y: 260 }, expected: [] },
+  ])("selects by $name after zoom and pan and suppresses the trailing blank click", ({ shape, rotation, width, height, from, to, expected }) => {
+    const table = { id: "one", label: "M1", shape, capacity: 4, x: 200, y: 200, width, height, rotation, active: true };
+    const onSelectMany = vi.fn(); const onClearSelection = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [table, { ...table, id: "inactive", active: false }], grid: true, zoom: 2, onZoomChange: vi.fn(), onSelectMany, onClearSelection }));
+    act(() => { canvas.node.position({ x: 60, y: -40 }); canvas.dragEnd!({ target: canvas.node }); });
+    const before = offset();
+    pointAt(from.x, from.y);
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0, metaKey: true }) }); });
+    pointAt(to.x, to.y);
+    act(() => { stageEvent("onMouseMove"); });
+    expect(canvas.rects.get("floor-selection-marquee")!.width).toBeCloseTo(Math.abs(to.x - from.x));
+    act(() => { stageEvent("onMouseUp"); stageEvent("onClick", { target: canvas.node, evt: new MouseEvent("click", { button: 0 }) }); });
+    expect(onSelectMany.mock.calls).toEqual([[expected, true]]);
+    expect(onClearSelection).not.toHaveBeenCalled(); expect(offset()).toEqual(before);
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0 }) }); stageEvent("onMouseUp"); stageEvent("onClick", { target: canvas.node, evt: new MouseEvent("click", { button: 0 }) }); });
+    expect(onClearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("starts marquee selection over operational sectors and selects joined outlines with modifiers", () => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const onSelectMany = vi.fn(); const onSelectLocation = vi.fn();
+    render(createElement(FloorCanvasStage, { room: { ...room, locations: [resizable] }, tables: [first, { ...first, id: "two", x: 280 }], joinedGroups: [{ id: "joined", tableIds: ["one", "two"], label: "M1 + M2" }], zoom: 1, onZoomChange: vi.fn(), onSelectMany, onSelectLocation }));
+    pointAt(150, 150);
+    act(() => { (canvas.groups.get("400,300")!.onMouseDown as (event: unknown) => void)({ evt: new MouseEvent("mousedown", { button: 0 }), cancelBubble: false }); });
+    pointAt(325, 245);
+    act(() => { stageEvent("onMouseMove"); stageEvent("onMouseUp"); (canvas.groups.get("400,300")!.onClick as (event: unknown) => void)({ evt: new MouseEvent("click", { button: 0 }), cancelBubble: false }); });
+    expect(onSelectMany.mock.calls).toEqual([[["one", "two"], false]]); expect(onSelectLocation).not.toHaveBeenCalled();
+    act(() => { (canvas.groups.get("floor-joined-group-joined")!.onClick as (event: unknown) => void)({ evt: new MouseEvent("click", { button: 0, ctrlKey: true }), cancelBubble: false }); });
+    expect(onSelectMany).toHaveBeenLastCalledWith(["one", "two"], true);
+  });
+
+  it("selects active sectors and rotated fixtures touched by the editor marquee", () => {
+    const rotated = { ...resizable, id: "rotated", x: 400, y: 300, rotation: 90 as const };
+    const wall = { id: "wall", type: "WALL" as const, label: "Pared", x: 490, y: 350, width: 20, height: 160, rotation: 90 };
+    const onSelectElements = vi.fn(); const onClearSelection = vi.fn();
+    render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [
+        rotated,
+        { ...rotated, id: "archived", active: false },
+        { ...resizable, id: "partial", x: 430, width: 400 },
+        { ...resizable, id: "edge", x: 550, width: 200 },
+        { ...resizable, id: "outside", x: 551, width: 200 },
+      ], fixtures: [wall] },
+      tables: [], grid: true, zoom: 2, onZoomChange: vi.fn(), onSelectElements, onClearSelection,
+    }));
+    act(() => { canvas.node.position({ x: 55, y: 25 }); canvas.dragEnd!({ target: canvas.node }); });
+    pointAt(450, 400);
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0 }) }); });
+    pointAt(350, 200);
+    act(() => { stageEvent("onMouseMove"); });
+    const marquee = canvas.rects.get("floor-selection-marquee");
+    expect(marquee?.width).toBeCloseTo(100);
+    expect(marquee?.height).toBeCloseTo(200);
+    act(() => { stageEvent("onMouseUp"); stageEvent("onClick", { target: canvas.node, evt: new MouseEvent("click", { button: 0 }) }); });
+    expect(onSelectElements.mock.calls).toEqual([[[
+      { kind: "sector", id: "rotated" }, { kind: "sector", id: "partial" },
+      { kind: "sector", id: "edge" }, { kind: "fixture", id: "wall" },
+    ], false]]);
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it.each(["sector", "fixture"] as const)("uses a modifier to draw over a draggable %s without moving or clicking it", (kind) => {
+    const label = { id: "label", type: "LABEL" as const, label: "Entrada", x: 430, y: 310, width: 50, height: 20, rotation: 0 };
+    const onSelectElements = vi.fn(); const onSelectElement = vi.fn();
+    render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [resizable], fixtures: [label] }, tables: [], zoom: 1, onZoomChange: vi.fn(),
+      onSelectElements, onSelectLocation: onSelectElement, onSelectFixture: onSelectElement, onMoveLocation: vi.fn(), onMoveFixture: vi.fn(),
+    }));
+    const surface = canvas.groups.get(kind === "sector" ? "400,300" : "430,310")!;
+    const stopDrag = vi.fn();
+    const mouse = (handler: string, native: MouseEvent) => act(() => {
+      (surface[handler] as (event: unknown) => void)({ currentTarget: { stopDrag }, evt: native, cancelBubble: false });
+    });
+    pointAt(420, 305);
+    mouse("onMouseDown", new MouseEvent("mousedown", { button: 0, shiftKey: true }));
+    pointAt(460, 335);
+    act(() => { stageEvent("onMouseMove"); stageEvent("onMouseUp"); });
+    mouse("onClick", new MouseEvent("click", { button: 0, shiftKey: true }));
+    expect(stopDrag).toHaveBeenCalledOnce();
+    expect(onSelectElements.mock.calls).toEqual([[[{ kind: "sector", id: "window" }, { kind: "fixture", id: "label" }], true]]);
+    expect(onSelectElement).not.toHaveBeenCalled();
+
+    mouse("onMouseDown", new MouseEvent("mousedown", { button: 0, ctrlKey: true }));
+    act(() => { stageEvent("onMouseUp"); });
+    mouse("onClick", new MouseEvent("click", { button: 0, ctrlKey: true }));
+    expect(onSelectElement).toHaveBeenCalledWith(kind === "sector" ? "window" : "label", true);
+  });
+
+  it("previews a mixed drag from a selected label and restores the group if its drop is rejected", () => {
+    const label = { id: "label", type: "LABEL" as const, label: "Entrada", x: 430, y: 310, width: 50, height: 20, rotation: 0 };
+    const onMoveFixture = vi.fn(); const onSelectFixture = vi.fn();
+    const view = render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [resizable], fixtures: [label] }, tables: [], zoom: 1, onZoomChange: vi.fn(),
+      selectedElements: [{ kind: "sector", id: "window" }, { kind: "fixture", id: "label" }], onSelectElements: vi.fn(),
+      onSelectFixture, onMoveLocation: vi.fn(), onMoveFixture,
+    }));
+    const position = { x: 430, y: 310 };
+    const node = { x: () => position.x, y: () => position.y };
+    const event = { target: node, cancelBubble: false };
+    const group = canvas.groups.get("430,310")!;
+    const drag = (handler: string) => act(() => { (group[handler] as (event: unknown) => void)(event); });
+    drag("onDragStart");
+    Object.assign(position, { x: 455, y: 345 });
+    drag("onDragMove");
+    expect(view.container.querySelector('[data-konva-group][data-x="425"][data-y="335"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-konva-group][data-x="455"][data-y="345"]')).not.toBeNull();
+    expect(canvas.rects.get("floor-label-selection-label")).toMatchObject({ listening: false });
+    expect(onSelectFixture).not.toHaveBeenCalled();
+    drag("onDragEnd");
+    expect(onMoveFixture).toHaveBeenCalledWith("label", { x: 455, y: 345 });
+    expect(view.container.querySelector('[data-konva-group][data-x="400"][data-y="300"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-konva-group][data-x="430"][data-y="310"]')).not.toBeNull();
+  });
+
+  it("clears selection from blank operational sector clicks and taps, preserving modifiers and Admin selection and placement", () => {
+    const onClearSelection = vi.fn(); const onSelectLocation = vi.fn(); const onPlace = vi.fn();
+    const props = { room: { ...room, locations: [resizable] }, tables: [], zoom: 1, onZoomChange: vi.fn(), onClearSelection };
+    const view = render(createElement(FloorCanvasStage, props));
+    const sectorEvent = (handler: string, native = new MouseEvent("click", { button: 0 })) => { act(() => { (canvas.groups.get("400,300")![handler] as (event: unknown) => void)({ evt: native, cancelBubble: false }); }); };
+    sectorEvent("onClick"); sectorEvent("onTap");
+    expect(onClearSelection).toHaveBeenCalledTimes(2);
+    for (const modifier of ["shiftKey", "ctrlKey", "metaKey"]) sectorEvent("onClick", new MouseEvent("click", { button: 0, [modifier]: true }));
+    expect(onClearSelection).toHaveBeenCalledTimes(2);
+    view.rerender(createElement(FloorCanvasStage, { ...props, onSelectLocation }));
+    sectorEvent("onClick"); sectorEvent("onTap");
+    expect(onSelectLocation.mock.calls).toEqual([["window"], ["window"]]); expect(onClearSelection).toHaveBeenCalledTimes(2);
+    view.rerender(createElement(FloorCanvasStage, { ...props, onPlace }));
+    pointAt(400, 300); sectorEvent("onClick"); sectorEvent("onTap");
+    expect(onPlace).toHaveBeenCalledTimes(2); expect(onClearSelection).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens current-selection actions on blank right-click without clearing or replacing the selection", () => {
+    const onContextMenuSelection = vi.fn(); const onClearSelection = vi.fn(); const onSelectMany = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [], selectedIds: ["one", "two"], zoom: 1, onZoomChange: vi.fn(), onContextMenuSelection, onClearSelection, onSelectMany }));
+    const native = new MouseEvent("contextmenu", { button: 2, clientX: 320, clientY: 240, cancelable: true });
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: native }); stageEvent("onContextMenu", { target: canvas.node, evt: native }); stageEvent("onClick", { target: canvas.node, evt: native }); });
+    expect(native.defaultPrevented).toBe(true); expect(onContextMenuSelection).toHaveBeenCalledWith({ x: 320, y: 240 });
+    expect(onSelectMany).not.toHaveBeenCalled(); expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("opens current-selection actions for an unhandled right-click bubbling from an operational sector surface", () => {
+    const onContextMenuSelection = vi.fn(); const onClearSelection = vi.fn();
+    render(createElement(FloorCanvasStage, { room: { ...room, locations: [resizable] }, tables: [], selectedIds: ["one", "two"], zoom: 1, onZoomChange: vi.fn(), onContextMenuSelection, onClearSelection }));
+    const native = new MouseEvent("contextmenu", { button: 2, clientX: 400, clientY: 300, cancelable: true });
+    const sectorSurface = {};
+    expect(canvas.groups.get("400,300")!.onContextMenu).toBeUndefined();
+    act(() => { stageEvent("onContextMenu", { target: sectorSurface, evt: native }); });
+    expect(native.defaultPrevented).toBe(true);
+    expect(onContextMenuSelection).toHaveBeenCalledWith({ x: 400, y: 300 });
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("cancels an active marquee or table drag before Escape clears the selection", () => {
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const onClearSelection = vi.fn(); const onSelectMany = vi.fn(); const onMove = vi.fn();
+    render(createElement(FloorCanvasStage, { room, tables: [table], selectedIds: ["one"], zoom: 1, onZoomChange: vi.fn(), onClearSelection, onSelectMany, onMove }));
+    pointAt(100, 100);
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0 }) }); });
+    pointAt(300, 300);
+    act(() => { stageEvent("onMouseMove"); });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    act(() => { stageEvent("onMouseUp"); });
+    expect(onClearSelection).not.toHaveBeenCalled(); expect(onSelectMany).not.toHaveBeenCalled();
+    const position = { x: 200, y: 200 }; const node = { x: () => position.x, y: () => position.y };
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 240, y: 240 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(onMove).not.toHaveBeenCalled(); expect(onClearSelection).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onClearSelection).toHaveBeenCalledOnce();
   });
 
 });
