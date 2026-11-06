@@ -216,7 +216,7 @@ export function createLandingUseCases(repository: LandingRepository) {
           restaurantName: restaurant.name,
           restaurantSlug: restaurant.landingSlug,
           menuSlug: restaurant.slug,
-          html: compiledHtml,
+          html: upgradePublishedReservationRuntime(compiledHtml).html,
         };
       }
 

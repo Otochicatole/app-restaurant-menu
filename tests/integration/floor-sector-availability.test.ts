@@ -4,7 +4,8 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqlitePrismaClient } from "../../src/platform/database/sqlite-client";
-import { adminCreateReservationSchema } from "../../src/modules/reservation-management/contracts";
+import { ReservationManagementService } from "../../src/modules/reservation-management/application/reservation-use-cases";
+import { adminCreateReservationSchema, publicCreateTableReservationSchema } from "../../src/modules/reservation-management/contracts";
 import { getFloorAssignmentOptions, getPhysicalAvailability } from "../../src/modules/reservation-management/infrastructure/floor-allocations";
 import { PrismaReservationRepository } from "../../src/modules/reservation-management/infrastructure/prisma-reservation-repository";
 
@@ -109,6 +110,40 @@ describe("sector-aware public availability on SQLite", () => {
     await database.diningRoomLocation.updateMany({ where: { restaurantId }, data: { active: false } });
     expect(await getPhysicalAvailability(database, restaurantId, { dates: [date], times: ["20:00"], partySize: 2 })).toEqual({ [date]: [] });
     await expect(repository.createReservation(restaurantId, pending(2), randomUUID())).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("offers only active sectors of the public restaurant and saves a preference without reserving its capacity", async () => {
+    const restaurant = await database.restaurant.update({ where: { id: restaurantId }, data: { landingEnabled: true, landingPage: { create: { published: true } } } });
+    const terrace = await createRoom("Terraza", 0);
+    const archivedRoom = await createRoom("Salón archivado", 0);
+    const archivedSector = await createRoom("Sector archivado", 0);
+    await database.diningRoom.update({ where: { id: archivedRoom.id }, data: { active: false } });
+    await database.diningRoomLocation.update({ where: { id: archivedSector.locations[0].id }, data: { active: false } });
+    const other = await database.restaurant.create({ data: {
+      organizationId, name: "Other", slug: randomUUID(), landingSlug: randomUUID(),
+      landingEnabled: true, landingPage: { create: { published: true } },
+    } });
+    const foreignRoom = await createRoom("Otro restaurante", 2, other.id);
+    const service = new ReservationManagementService(repository);
+    const availability = await service.getPublicTableAvailability(restaurant.landingSlug, { date, partySize: 2 });
+    expect(availability.sectors).toEqual([
+      { id: terrace.locations[0].id, name: "Terraza", roomName: "Terraza" },
+      { id: locationId, name: "Ventana", roomName: "Ventana" },
+    ]);
+    expect(availability.dates[0].availableSlots.map((slot) => slot.time)).toEqual(["20:00"]);
+
+    const notes = "a".repeat(500);
+    const request = publicCreateTableReservationSchema.parse({ ...pending(2), notes, preferredSectorId: terrace.locations[0].id });
+    const reservation = await service.createPublicTableReservation(restaurant.landingSlug, request);
+    await expect(repository.getReservationById(restaurantId, reservation.id)).resolves.toMatchObject({
+      status: "PENDING", notes, adminNotes: "Sector preferido: Terraza · Terraza",
+    });
+    expect(await database.reservationAllocation.count({ where: { restaurantId } })).toBe(0);
+
+    for (const preferredSectorId of [archivedRoom.locations[0].id, archivedSector.locations[0].id, foreignRoom.locations[0].id, "unknown"]) {
+      await expect(service.createPublicTableReservation(restaurant.landingSlug, { ...request, preferredSectorId })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect(await database.tableReservation.count({ where: { restaurantId } })).toBe(1);
   });
 
   it("limits dynamic event assemblies and exclusive blocks to the event's selected rooms", async () => {

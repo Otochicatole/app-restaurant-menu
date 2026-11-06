@@ -7,11 +7,11 @@ import { inspectPublishedReservationRuntime, upgradePublishedReservationRuntime 
 import { createLandingUseCases } from "../../src/modules/landing-management/application/landing-use-cases";
 import type { LandingRepository } from "../../src/modules/landing-management/application/ports";
 
-async function publication(moduleKey: string, legacy = true) {
+async function publication(moduleKey: string, legacyVersion: 1 | 2 | false = 1) {
   const definition = BUILTIN_LANDING_MODULES.find((entry) => entry.moduleKey === moduleKey)!;
   const block = createBlockFromBuiltinModule(definition);
   block.name = 'Reservas "Terraza" & patio';
-  if (legacy) block.jsTemplate = await readFile(path.resolve("tests/fixtures/landing-runtime", `${moduleKey}-v1.txt`), "utf8");
+  if (legacyVersion) block.jsTemplate = await readFile(path.resolve("tests/fixtures/landing-runtime", `${moduleKey}-v${legacyVersion}.txt`), "utf8");
   const document = createDefaultLandingDocument("Compatibilidad", "compatibilidad");
   document.blocks.push(block);
   document.globalJs = `\n// Módulo: un nombre personalizado no delimita código administrado\nwindow.customPublication = { exact: "Sólo publicado, nunca el borrador" };\n`;
@@ -19,10 +19,17 @@ async function publication(moduleKey: string, legacy = true) {
 }
 
 describe("published managed reservation runtime compatibility", () => {
-  it.each(["reservations-table", "reservations-booking", "reservations-events"])("recognizes the frozen legacy %s body and preserves publication content", async (key) => {
-    const { compiled, document } = await publication(key);
+  it.each([
+    { key: "reservations-table", version: 1 },
+    { key: "reservations-table", version: 2 },
+    { key: "reservations-booking", version: 1 },
+    { key: "reservations-events", version: 1 },
+  ] as const)("recognizes $key v$version and preserves publication content", async ({ key, version }) => {
+    const { compiled, document, block } = await publication(key, version);
     const result = upgradePublishedReservationRuntime(compiled.fullHtml);
     expect(result.compatibility).toEqual({ status: "compatible", hasManagedReservations: true });
+    expect(result.html).not.toContain(block.jsTemplate.trim());
+    if (key === "reservations-table") expect(result.html).toContain("preferredSectorId:");
     expect(result.html).toContain(document.globalJs.trim());
     expect(result.html).toContain(compiled.htmlContent);
     expect(result.html).toContain(compiled.cssContent);

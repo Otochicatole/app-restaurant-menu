@@ -173,31 +173,11 @@ export const publicCreateReservationSchema = z.object({
   time: z.string().trim().regex(timeStringRegex, "Horario inválido (HH:mm)"),
   notes: z.string().trim().max(500).optional().default(""),
   eventId: z.string().trim().nullable().optional(),
+  preferredSectorId: z.string().trim().min(1).optional(),
 });
 export type PublicCreateReservationCommand = z.infer<typeof publicCreateReservationSchema>;
 
-export const publicCreateTableReservationSchema = z.object({
-  customerName: z.string().trim().min(2, "Ingresá tu nombre y apellido").max(100),
-  customerEmail: z
-    .string()
-    .trim()
-    .max(120)
-    .refine(
-      (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-      "Correo electrónico inválido",
-    )
-    .optional()
-    .default(""),
-  customerPhone: z
-    .string()
-    .trim()
-    .min(6, "Ingresá un número de teléfono o WhatsApp válido")
-    .max(40),
-  partySize: z.coerce.number().int().min(1, "Mínimo 1 persona").max(40, "Máximo 40 personas").default(2),
-  date: isoDateSchema,
-  time: z.string().trim().regex(timeStringRegex, "Horario inválido (HH:mm)"),
-  notes: z.string().trim().max(500).optional().default(""),
-});
+export const publicCreateTableReservationSchema = publicCreateReservationSchema.omit({ eventId: true });
 export type PublicCreateTableReservationCommand = z.infer<typeof publicCreateTableReservationSchema>;
 
 export const publicCreateEventReservationSchema = z.object({
@@ -223,7 +203,7 @@ export const publicCreateEventReservationSchema = z.object({
 });
 export type PublicCreateEventReservationCommand = z.infer<typeof publicCreateEventReservationSchema>;
 
-export const adminCreateReservationSchema = publicCreateReservationSchema.extend({
+export const adminCreateReservationSchema = publicCreateReservationSchema.omit({ preferredSectorId: true }).extend({
   adminNotes: z.string().trim().max(500).optional().default(""),
   status: reservationStatusSchema.default("CONFIRMED"),
   source: z.enum(["ADMIN", "LANDING"]).default("ADMIN"),
@@ -251,6 +231,8 @@ export const floorReservationStatusOptionsSchema = z.object({
   assignment: floorAssignmentSchema.optional(), expectedRevision: z.number().int().nonnegative().optional(),
 });
 export type ReservationStatusOptions = { assignment?: FloorAssignmentInput; expectedRevision?: number };
+
+export const reservationSectorNotePrefix = "Sector preferido: ";
 
 export type ReservationView = {
   id: string;
@@ -283,6 +265,8 @@ export const publicAvailabilityQuerySchema = z.object({
   partySize: z.coerce.number().int().min(1).max(40).optional(),
 });
 export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuerySchema>;
+
+export type PublicReservationSectorView = { id: string; name: string; roomName: string };
 
 // ---------------------------------------------------------------------------
 // Vista Completa del CMS (Panel Admin)

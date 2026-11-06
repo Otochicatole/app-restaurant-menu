@@ -47,6 +47,7 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     getEventById: vi.fn().mockResolvedValue(null),
     getAvailabilityEvents: vi.fn().mockResolvedValue(defaultEvents),
     getPhysicalAvailability: vi.fn().mockResolvedValue({}),
+    getPublicSectors: vi.fn().mockResolvedValue([]),
     hasEventPhysicalAvailability: vi.fn().mockResolvedValue(true),
     upsertEvent: vi.fn(),
     deleteEvent: vi.fn(),
@@ -99,6 +100,7 @@ describe("ReservationManagementService", () => {
     await expect(service.createPublicReservation("unknown", publicCommand)).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(service.createPublicEventReservation("unknown", { ...publicCommand, eventId: "event-a" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(repo.getReservations).not.toHaveBeenCalled();
+    expect(repo.getPublicSectors).not.toHaveBeenCalled();
     expect(repo.createReservation).not.toHaveBeenCalled();
   });
 
@@ -112,6 +114,7 @@ describe("ReservationManagementService", () => {
     await expect(service.getPublicAvailability("resto", {})).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(service.createPublicEventReservation("resto", { ...publicCommand, eventId: "event-a" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(repo.getReservations).not.toHaveBeenCalled();
+    expect(repo.getPublicSectors).not.toHaveBeenCalled();
   });
 
   it("rejects past reservation dates without consulting availability or writing a booking", async () => {
@@ -130,6 +133,24 @@ describe("ReservationManagementService", () => {
       await expect(service.createPublicEventReservation("bistro-test", { ...publicCommand, eventId })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
     await expect(service.createPublicReservation("bistro-test", { ...publicCommand, eventId: "other-restaurant-event" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(repo.createReservation).not.toHaveBeenCalled();
+  });
+
+  it("includes the current restaurant's sectors in both availability responses", async () => {
+    const sectors = [{ id: "window", name: "Ventana", roomName: "Salón" }];
+    const repo = createMockRepo({ getPublicSectors: vi.fn().mockResolvedValue(sectors) });
+    const service = new ReservationManagementService(repo);
+    await expect(service.getPublicAvailability("bistro-test", { date: publicCommand.date })).resolves.toMatchObject({ sectors });
+    await expect(service.getPublicTableAvailability("bistro-test", { date: publicCommand.date })).resolves.toMatchObject({ sectors });
+    expect(repo.getPublicSectors).toHaveBeenCalledWith("t1");
+  });
+
+  it("rejects a sector preference on a public event reservation", async () => {
+    const repo = createMockRepo();
+    const service = new ReservationManagementService(repo);
+    await expect(service.createPublicReservation("bistro-test", {
+      ...publicCommand, eventId: "event-a", preferredSectorId: "window",
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(repo.createReservation).not.toHaveBeenCalled();
   });
 

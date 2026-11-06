@@ -61,6 +61,7 @@ import {
   upsertRestaurantEventAction,
   upsertTimeSlotAction,
 } from "./actions";
+import { reservationSectorNotePrefix } from "../contracts";
 import type {
   AdminCreateReservationCommand,
   ReservationCmsData,
@@ -176,6 +177,19 @@ type NoteTag = {
   iconType: "wheat" | "leaf" | "heart" | "sun" | "users" | "shield";
   color: string;
 };
+
+function preferredSectorLabel(reservation: Pick<ReservationView, "notes" | "adminNotes">): string {
+  const firstLine = reservation.adminNotes.split(/\r?\n/, 1)[0] ?? "";
+  if (firstLine.startsWith(reservationSectorNotePrefix)) return firstLine.slice(reservationSectorNotePrefix.length).trim();
+  return /^\[Espacio:\s*([^\]]+)\]/.exec(reservation.notes)?.[1]?.trim() ?? "";
+}
+
+function PreferredSector({ label }: { label: string }) {
+  if (!label) return null;
+  return <p className="mb-1 flex flex-wrap items-baseline gap-x-1.5 text-xs text-zinc-700">
+    <span>Sector preferido</span><strong className="break-words font-semibold text-zinc-950">{label}</strong>
+  </p>;
+}
 
 function extractNoteTags(notes: string): NoteTag[] {
   if (!notes) return [];
@@ -1650,6 +1664,7 @@ export function ReservationCmsScreen({
                   <tbody className="divide-y divide-zinc-100 font-medium">
                     {filteredReservations.map((res) => {
                       const noteTags = extractNoteTags(res.notes);
+                      const preferredSector = preferredSectorLabel(res);
                       const waLink = buildWhatsAppLink(
                         res.customerPhone,
                         res.customerName,
@@ -1707,6 +1722,7 @@ export function ReservationCmsScreen({
                             )}
                           </td>
                           <td className="py-3 px-3 max-w-xs">
+                            <PreferredSector label={preferredSector} />
                             {noteTags.length > 0 ? (
                               <div className="flex items-center gap-1 flex-wrap">
                                 {noteTags.map((t) => (
@@ -1722,7 +1738,7 @@ export function ReservationCmsScreen({
                               <span className="text-[11px] text-zinc-600 truncate block max-w-xs" title={res.notes}>
                                 {res.notes}
                               </span>
-                            ) : (
+                            ) : !preferredSector && (
                               <span className="text-zinc-400 text-[11px]">—</span>
                             )}
                           </td>
@@ -2614,6 +2630,7 @@ export function ReservationCmsScreen({
       {assigningReservation && <AdminModal open title={`Confirmar reserva ${assigningReservation.code}`} description={`${assigningReservation.customerName} · ${assigningReservation.partySize} personas · ${assigningReservation.date} ${assigningReservation.time}`} wide onClose={() => { if (!isPending) setAssigningReservation(null); }}>
         <div className="space-y-4">
           {feedback?.type === "error" && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{feedback.message}</p>}
+          <PreferredSector label={preferredSectorLabel(assigningReservation)} />
           <FloorAssignmentPicker restaurantId={data.restaurantId} query={{ date: assigningReservation.date, time: assigningReservation.time, partySize: assigningReservation.partySize, eventId: assigningReservation.eventId, excludeReservationId: assigningReservation.id }} value={quickAssignment} onChange={setQuickAssignment} />
           <div className="flex justify-end gap-2"><button type="button" className={adminSecondaryButtonClass} onClick={() => setAssigningReservation(null)} disabled={isPending}>Cancelar</button><button type="button" className={adminPrimaryButtonClass} disabled={isPending || !quickAssignment || quickAssignmentTooSmall} onClick={() => { if (quickAssignment && !quickAssignmentTooSmall) handleQuickStatusChange(assigningReservation.id, "CONFIRMED", quickAssignment); }}>{isPending && <Loader2 size={15} className="animate-spin" />}Confirmar y asignar mesas</button></div>
         </div>
@@ -2792,13 +2809,16 @@ export function ReservationCmsScreen({
           </div>
 
           {!data.floorManagementEnabled && resForm.status === "CONFIRMED" && !optionalAssignment && <button type="button" className={adminSecondaryButtonClass} onClick={() => setOptionalAssignment(true)}><LayoutGrid size={15} />Asignar mesas antes de activar salones</button>}
-          {(data.floorManagementEnabled || optionalAssignment) && resForm.status === "CONFIRMED" && <FloorAssignmentPicker
-            key={editingReservation?.id ?? "new-reservation"}
-            restaurantId={data.restaurantId}
-            query={{ date: resForm.date, time: resForm.time, partySize: resForm.partySize, eventId: resForm.eventId, ...(editingReservation ? { excludeReservationId: editingReservation.id } : {}) }}
-            value={resAssignment}
-            onChange={setResAssignment}
-          />}
+          {(data.floorManagementEnabled || optionalAssignment) && resForm.status === "CONFIRMED" && <>
+            {editingReservation && <PreferredSector label={preferredSectorLabel(resForm)} />}
+            <FloorAssignmentPicker
+              key={editingReservation?.id ?? "new-reservation"}
+              restaurantId={data.restaurantId}
+              query={{ date: resForm.date, time: resForm.time, partySize: resForm.partySize, eventId: resForm.eventId, ...(editingReservation ? { excludeReservationId: editingReservation.id } : {}) }}
+              value={resAssignment}
+              onChange={setResAssignment}
+            />
+          </>}
 
           <div>
             <label className="block text-xs font-semibold text-zinc-700 mb-1">

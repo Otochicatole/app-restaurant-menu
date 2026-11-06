@@ -1,6 +1,8 @@
 import type {
   AdminCreateReservationCommand,
   BlockedDateView,
+  PublicCreateReservationCommand,
+  PublicReservationSectorView,
   RecurringClosureView,
   ReservationStatus,
   ReservationStatusOptions,
@@ -12,6 +14,8 @@ import type {
   UpsertTimeSlotCommand,
 } from "../contracts";
 import type { DomainRestaurantEvent } from "../domain/availability-engine";
+
+export type ReservationCreateCommand = AdminCreateReservationCommand & Pick<PublicCreateReservationCommand, "preferredSectorId">;
 
 export interface ReservationRepositoryPort {
   isLandingEnabled(restaurantId: string): Promise<boolean>;
@@ -58,6 +62,7 @@ export interface ReservationRepositoryPort {
     restaurantId: string,
     query: { dates: string[]; times: string[]; partySize: number },
   ): Promise<Record<string, string[]>>;
+  getPublicSectors(restaurantId: string): Promise<PublicReservationSectorView[]>;
   hasEventPhysicalAvailability(restaurantId: string, eventId: string, partySize: number): Promise<boolean>;
   upsertEvent(restaurantId: string, cmd: UpsertRestaurantEventCommand): Promise<RestaurantEventView>;
   deleteEvent(restaurantId: string, eventId: string): Promise<void>;
@@ -70,7 +75,7 @@ export interface ReservationRepositoryPort {
   getReservationById(restaurantId: string, reservationId: string): Promise<ReservationView | null>;
   createReservation(
     restaurantId: string,
-    cmd: AdminCreateReservationCommand,
+    cmd: ReservationCreateCommand,
     code: string,
   ): Promise<ReservationView>;
   updateReservation(restaurantId: string, cmd: UpdateReservationCommand): Promise<ReservationView>;

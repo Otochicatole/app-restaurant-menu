@@ -6,9 +6,10 @@ import { getDayOfWeekFromIsoDate, type DomainRestaurantEvent } from "../domain/a
 import { generateReservationCode } from "../domain/reservation-code";
 import { calculateFloorInterval, restaurantLocalDateTime } from "@/modules/floor-management/contracts";
 import { getFloorAssignmentOptions, getPhysicalAvailability, syncReservationAllocation } from "./floor-allocations";
+import { reservationSectorNotePrefix } from "../contracts";
 import type {
-  AdminCreateReservationCommand,
   BlockedDateView,
+  PublicReservationSectorView,
   RecurringClosureView,
   ReservationStatus,
   ReservationStatusOptions,
@@ -19,9 +20,26 @@ import type {
   UpsertRestaurantEventCommand,
   UpsertTimeSlotCommand,
 } from "../contracts";
-import type { ReservationRepositoryPort } from "../application/ports";
+import type { ReservationCreateCommand, ReservationRepositoryPort } from "../application/ports";
 
 const occupyingStatuses = ["PENDING", "CONFIRMED", "COMPLETED"] as const;
+const publicSectorSelect = { id: true, name: true, room: { select: { name: true } } } satisfies Prisma.DiningRoomLocationSelect;
+
+function publicSectorFilter(restaurantId: string): Prisma.DiningRoomLocationWhereInput {
+  return {
+    restaurantId,
+    active: true,
+    room: {
+      active: true,
+      restaurant: {
+        status: "ACTIVE",
+        landingEnabled: true,
+        organization: { status: "ACTIVE" },
+        landingPage: { published: true },
+      },
+    },
+  };
+}
 
 type ReservationRecord = Prisma.TableReservationGetPayload<{
   include: { event: { select: { title: true } } };
@@ -186,6 +204,15 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       floorManagementEnabled: restaurant.floorManagementEnabled,
       timeZone: restaurant.timeZone,
     };
+  }
+
+  async getPublicSectors(restaurantId: string): Promise<PublicReservationSectorView[]> {
+    const sectors = await this.database.diningRoomLocation.findMany({
+      where: publicSectorFilter(restaurantId),
+      select: publicSectorSelect,
+      orderBy: [{ room: { name: "asc" } }, { name: "asc" }],
+    });
+    return sectors.map(({ id, name, room }) => ({ id, name, roomName: room.name }));
   }
 
   // ---------------------------------------------------------------------------
@@ -604,7 +631,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
 
   async createReservation(
     restaurantId: string,
-    cmd: AdminCreateReservationCommand,
+    cmd: ReservationCreateCommand,
     code: string,
   ): Promise<ReservationView> {
     let reservationCode = code;
@@ -631,11 +658,24 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
             const available = await getFloorAssignmentOptions(tx, restaurantId, { date, time, partySize: cmd.partySize, eventId: cmd.eventId });
             if (!available.hasAvailability) throw new ConflictError("No hay mesas disponibles para ese grupo en el horario seleccionado.");
           }
+          let adminNotes = cmd.adminNotes || "";
+          if (cmd.preferredSectorId !== undefined) {
+            if (cmd.source !== "LANDING" || cmd.eventId) {
+              throw new BadRequestError("La preferencia de sector solo se puede indicar en reservas de mesa desde la página pública.");
+            }
+            const sector = await tx.diningRoomLocation.findFirst({
+              where: { ...publicSectorFilter(restaurantId), id: cmd.preferredSectorId },
+              select: publicSectorSelect,
+            });
+            if (!sector) throw new BadRequestError("El sector preferido ya no está disponible. Elegí otro sector o continuá sin preferencia.");
+            const preference = `${reservationSectorNotePrefix}${sector.name} · ${sector.room.name}`.replace(/[\r\n\u2028\u2029]+/g, " ");
+            adminNotes = [preference, adminNotes].filter(Boolean).join("\n");
+          }
           const created = await tx.tableReservation.create({
             data: {
               restaurantId, code: reservationCode, date, time, eventId: cmd.eventId || null,
               customerName: cmd.customerName, customerEmail: cmd.customerEmail || "", customerPhone: cmd.customerPhone,
-              partySize: cmd.partySize, notes: cmd.notes || "", adminNotes: cmd.adminNotes || "", status: cmd.status, source: cmd.source,
+              partySize: cmd.partySize, notes: cmd.notes || "", adminNotes, status: cmd.status, source: cmd.source,
             },
             include: { event: { select: { title: true } } },
           });

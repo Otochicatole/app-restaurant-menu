@@ -23,6 +23,7 @@ import type {
   PublicCreateReservationCommand,
   PublicCreateTableReservationCommand,
   PublicCreateEventReservationCommand,
+  PublicReservationSectorView,
   RecurringClosureView,
   ReservationCmsData,
   ReservationStatus,
@@ -34,7 +35,7 @@ import type {
   UpsertRestaurantEventCommand,
   UpsertTimeSlotCommand,
 } from "../contracts";
-import type { ReservationRepositoryPort } from "./ports";
+import type { ReservationCreateCommand, ReservationRepositoryPort } from "./ports";
 
 function getTodayIsoString(): string {
   const now = new Date();
@@ -209,6 +210,7 @@ export class ReservationManagementService {
     from: string;
     to: string;
     recurringClosedDays: number[];
+    sectors: PublicReservationSectorView[];
     dates: DateAvailabilityView[];
     events: PublicEventAvailabilityView[];
     availability: AvailabilityResult;
@@ -235,12 +237,13 @@ export class ReservationManagementService {
 
     const datesList = generateDatesInRange(fromIso, toIso);
 
-    const [timeSlots, recurringClosures, blockedDates, events] =
+    const [timeSlots, recurringClosures, blockedDates, events, sectors] =
       await Promise.all([
         this.repo.getTimeSlots(context.restaurantId),
         this.repo.getRecurringClosures(context.restaurantId),
         this.repo.getBlockedDates(context.restaurantId),
         this.repo.getAvailabilityEvents(context.restaurantId, { from: fromIso, to: toIso }),
+        this.repo.getPublicSectors(context.restaurantId),
       ]);
 
     const activeSlots: DomainTimeSlot[] = timeSlots
@@ -304,6 +307,7 @@ export class ReservationManagementService {
       from: fromIso,
       to: toIso,
       recurringClosedDays: recurringClosures.map((c) => c.dayOfWeek),
+      sectors,
       dates: availability.dates,
       events: availability.events,
       availability,
@@ -324,6 +328,7 @@ export class ReservationManagementService {
       from: full.from,
       to: full.to,
       recurringClosedDays: full.recurringClosedDays,
+      sectors: full.sectors,
       dates: full.availability.dates,
       availability: full.availability,
     };
@@ -388,6 +393,9 @@ export class ReservationManagementService {
 
     let reservationCommand = cmd;
     if (cmd.eventId) {
+      if (cmd.preferredSectorId !== undefined) {
+        throw new BadRequestError("La preferencia de sector solo se puede indicar en reservas de mesa.");
+      }
       const event = await this.repo.getEventById(context.restaurantId, cmd.eventId);
       if (!event || event.status !== "PUBLISHED") {
         throw new NotFoundError("El evento seleccionado no existe o no está publicado.");
@@ -438,13 +446,13 @@ export class ReservationManagementService {
     }
 
     const code = generateReservationCode();
-    const adminCommand: AdminCreateReservationCommand = {
+    const createCommand: ReservationCreateCommand = {
       ...reservationCommand,
       adminNotes: "",
       status: "PENDING",
       source: "LANDING",
     };
 
-    return this.repo.createReservation(context.restaurantId, adminCommand, code);
+    return this.repo.createReservation(context.restaurantId, createCommand, code);
   }
 }

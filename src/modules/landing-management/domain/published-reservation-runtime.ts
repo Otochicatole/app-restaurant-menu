@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import type { ManagedReservationRuntimeCompatibility } from "../contracts";
 import { BUILTIN_LANDING_MODULES } from "./landing-module-catalog";
 
-// These fingerprints describe the last embedded built-in runtimes before
-// physical table scheduling. Keep them fixed when the current catalog changes.
-const legacyRuntimes: Record<string, { length: number; sha256: string }> = {
-  "reservations-table": { length: 33758, sha256: "07d0f05ed8573d5f8eaeb142a4452624587b38c6c07c5199ff31d11f1789b2e1" },
-  "reservations-booking": { length: 38681, sha256: "0e83c97d442a3c1af2503fd0f7843de9d1b6c18822ec00396fec823aad52e5ad" },
-  "reservations-events": { length: 13008, sha256: "ddabe754943d1447db506887670a48353cea975864b4c1b2c841d7f2868a0d38" },
+// These fingerprints are frozen for runtimes already embedded in published landings.
+const legacyRuntimes: Record<string, { length: number; sha256: string }[]> = {
+  "reservations-table": [
+    { length: 33758, sha256: "07d0f05ed8573d5f8eaeb142a4452624587b38c6c07c5199ff31d11f1789b2e1" },
+    { length: 35099, sha256: "d545317ec5606b7f1072735e13c68a6f9efd2b9d3f05a7b333eac7d62ce3120e" },
+  ],
+  "reservations-booking": [{ length: 38681, sha256: "0e83c97d442a3c1af2503fd0f7843de9d1b6c18822ec00396fec823aad52e5ad" }],
+  "reservations-events": [{ length: 13008, sha256: "ddabe754943d1447db506887670a48353cea975864b4c1b2c841d7f2868a0d38" }],
 };
 const generatedStart = "(function() {\n  function __initModuleScripts() {\n";
 const generatedEnd = "\n  }\n  window.__initLandingModuleScripts = __initModuleScripts;\n  if (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', __initModuleScripts);\n  } else {\n    __initModuleScripts();\n  }\n})();";
@@ -80,9 +82,10 @@ export function upgradePublishedReservationRuntime(html: string): {
     if (normalized.startsWith(current, cursor)) {
       cursor += current.length;
     } else {
-      const legacy = legacyRuntimes[block.key];
-      const candidate = legacy ? normalized.slice(cursor, cursor + legacy.length) : "";
-      if (!legacy || createHash("sha256").update(candidate).digest("hex") !== legacy.sha256) {
+      const legacy = legacyRuntimes[block.key]?.find(({ length, sha256 }) =>
+        createHash("sha256").update(normalized.slice(cursor, cursor + length)).digest("hex") === sha256,
+      );
+      if (!legacy) {
         return manual("Un módulo publicado contiene código personalizado o una versión no reconocida.");
       }
       replacements.push({ start: offsets[cursor]!, end: offsets[cursor + legacy.length]!, value: current });

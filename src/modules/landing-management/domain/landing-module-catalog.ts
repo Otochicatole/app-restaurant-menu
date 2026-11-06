@@ -1004,7 +1004,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "phoneLabel", label: "Etiqueta: WhatsApp", type: "text", defaultValue: "WhatsApp / Teléfono" },
       { key: "emailLabel", label: "Etiqueta: Email", type: "text", defaultValue: "Email (opcional)" },
       { key: "notesLabel", label: "Etiqueta: Comentarios", type: "text", defaultValue: "Aclaraciones o Preferencias" },
-      { key: "notesPlaceholder", label: "Placeholder notas", type: "text", defaultValue: "Alergias, cumpleaños, mesa interior o terraza..." },
+      { key: "notesPlaceholder", label: "Placeholder notas", type: "text", defaultValue: "Alergias, cumpleaños u otros detalles..." },
       { key: "btnSubmitLabel", label: "Texto botón confirmar", type: "text", defaultValue: "Confirmar reserva" },
       { key: "policyNotice", label: "Texto aviso / política", type: "text", defaultValue: "Tolerancia máxima de 15 minutos. Pasado ese tiempo la mesa se libera." },
       { key: "depositNotice", label: "Texto garantía lateral", type: "text", defaultValue: "Tu mesa, confirmada con la seña." },
@@ -1038,7 +1038,6 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
             <input type="hidden" name="date" id="resDateInput" value="2026-10-26" />
             <input type="hidden" name="partySize" id="resSelectedPartySize" value="2" />
             <input type="hidden" name="time" id="resSelectedTime" value="20:00" />
-            <input type="hidden" name="zone" id="resSelectedZone" value="Salón Principal" />
 
             <!-- PASO 1: Calendario Mensual Interactivo (Fecha) -->
             <div class="pap__paso-view" id="papStep1View" data-step="1">
@@ -1115,24 +1114,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
                 <div class="res-slots-alert" id="resSlotsAlert" style="display: none;"></div>
 
                 <p class="pap__rotulo" style="margin-top: 24px;" data-i18n="pap.dondeRotulo">¿Dónde te ubicamos?</p>
-                <p class="pap__nota" data-i18n="pap.dondeNota">Elegí dónde querés estar: el deck afuera, el salón principal frente a la barra, o el salón fondo techado con el DJ.</p>
-                <div class="pap__sectores" id="resSectoresGrid">
-                  <button type="button" class="pap__sector es-elegido" data-zone="Salón Principal">
-                    <b data-i18n="pap.salonB">Salón Principal</b>
-                    <small data-i18n="pap.salonDesc">Adentro frente a la barra y cerca de la música</small>
-                    <em data-i18n="pap.duracionMesa">2 horas de mesa</em>
-                  </button>
-                  <button type="button" class="pap__sector" data-zone="Deck">
-                    <b data-i18n="pap.deckB">Deck al aire libre</b>
-                    <small data-i18n="pap.deckDesc">Afuera sobre la vereda con calefacción</small>
-                    <em data-i18n="pap.duracionMesa">2 horas de mesa</em>
-                  </button>
-                  <button type="button" class="pap__sector" data-zone="Salón Fondo">
-                    <b data-i18n="pap.fondoB">Salón Fondo</b>
-                    <small data-i18n="pap.fondoDesc">Al fondo, techado y cerrado, donde pasa el DJ</small>
-                    <em data-i18n="pap.duracionMesa">2 horas de mesa</em>
-                  </button>
-                </div>
+                <p class="pap__nota" data-i18n="pap.dondeNota" role="status">Consultando sectores…</p>
+                <div class="pap__sectores" id="resSectoresGrid" role="group" aria-label="¿Dónde te ubicamos?"></div>
 
                 <p class="pap__rotulo" style="margin-top: 24px;" data-i18n="pap.comensalesRotulo">{{partyLabel}}</p>
                 <div class="pap__gente">
@@ -1230,7 +1213,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
                   <strong class="voucher-value" id="resVoucherGuests">-</strong>
                 </div>
                 <div class="res-voucher-item">
-                  <span class="voucher-label" data-i18n="pap.voucherEspacio">Espacio</span>
+                  <span class="voucher-label" data-i18n="pap.voucherEspacio">Sector solicitado</span>
                   <strong class="voucher-value" id="resVoucherZone">-</strong>
                 </div>
                 <div class="res-voucher-item" style="grid-column: span 2;">
@@ -1275,8 +1258,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
               <dd id="papResumenHora">20:00 hs</dd>
             </div>
             <div>
-              <dt data-i18n="pap.donde">Dónde</dt>
-              <dd id="papResumenDonde">Salón Principal</dd>
+              <dt data-i18n="pap.donde">Sector solicitado</dt>
+              <dd id="papResumenDonde">Sin preferencia</dd>
             </div>
           </dl>
           <div class="pap__lateralPie">
@@ -1773,6 +1756,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   display: flex;
   flex-direction: column;
   gap: 3px;
+  overflow-wrap: anywhere;
   transition: all 0.16s ease;
 }
 .pap__sector:hover {
@@ -1790,14 +1774,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   color: var(--texto-3);
   font-size: 0.8rem;
 }
-.pap__sector em {
-  font-style: normal;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--acento);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 2px;
+.pap__sector:focus-visible {
+  outline: 2px solid var(--violeta-claro);
+  outline-offset: 2px;
 }
 .pap__form {
   display: grid;
@@ -2161,8 +2140,20 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var slotsGrid = root.querySelector('#resSlotsGrid');
     var slotsAlert = root.querySelector('#resSlotsAlert');
     var selectedTimeInput = root.querySelector('#resSelectedTime');
-    var selectedZoneInput = root.querySelector('#resSelectedZone');
-    var sectorBtns = root.querySelectorAll('.pap__sector');
+    var legacyZoneInput = root.querySelector('#resSelectedZone');
+    if (legacyZoneInput) {
+      legacyZoneInput.value = '';
+      legacyZoneInput.disabled = true;
+    }
+    var sectorsGrid = root.querySelector('#resSectoresGrid');
+    var sectorsTitle = root.querySelector('[data-i18n="pap.dondeRotulo"]');
+    var sectorsNote = root.querySelector('[data-i18n="pap.dondeNota"]');
+    var sectorLabels = root.querySelectorAll('[data-i18n="pap.donde"], [data-i18n="pap.voucherEspacio"]');
+    [sectorsTitle, sectorsNote].concat(Array.from(sectorLabels)).forEach(function(element) {
+      // Published Arco templates still include the old translations.
+      if (element) element.removeAttribute('data-i18n');
+    });
+    if (sectorsNote) sectorsNote.setAttribute('role', 'status');
 
     // Form inputs
     var nameInput = root.querySelector('#resNameInput');
@@ -2191,13 +2182,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         personsShort: ' pers.',
         voucherTitle: 'Mesa Confirmada',
         voucherCounter: '¡Comprobante!',
+        sectorTitle: '¿Dónde te ubicamos?',
+        sectorHelp: 'Si querés, elegí un sector. El restaurante tendrá en cuenta tu preferencia al confirmar la reserva.',
+        sectorLoading: 'Consultando sectores…',
+        sectorEmpty: 'Podés continuar sin elegir un sector.',
+        sectorError: 'No pudimos consultar los sectores. Podés continuar sin preferencia.',
+        sectorNone: 'Sin preferencia',
+        sectorRequested: 'Sector solicitado',
         weekdays: ['D', 'L', 'M', 'M', 'J', 'V', 'S'],
         monthNames: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
         formatDate: function(d, m) { return d + ' de ' + m.toLowerCase(); },
         errDate: 'Por favor seleccioná una fecha para tu reserva.',
         errTime: 'Por favor seleccioná un turno u horario disponible.',
         errName: 'Por favor ingresá tu nombre y apellido.',
-        errPhone: 'Por favor ingresá un número de WhatsApp o teléfono de contacto.'
+        errPhone: 'Por favor ingresá un número de WhatsApp o teléfono de contacto.',
+        errRequest: 'No pudimos enviar tu solicitud. Intentá nuevamente.'
       },
       en: {
         stepTitles: { 1: 'When are you coming?', 2: 'What time?', 3: 'Your details' },
@@ -2207,13 +2206,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         personsShort: ' guests',
         voucherTitle: 'Table Confirmed',
         voucherCounter: 'Confirmation Voucher!',
+        sectorTitle: 'Where would you like to sit?',
+        sectorHelp: 'You can choose a seating area. The restaurant will consider your preference when confirming your booking.',
+        sectorLoading: 'Loading seating areas…',
+        sectorEmpty: 'You can continue without choosing a seating area.',
+        sectorError: 'We couldn’t load the seating areas. You can continue without a preference.',
+        sectorNone: 'No preference',
+        sectorRequested: 'Requested seating area',
         weekdays: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
         monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
         formatDate: function(d, m) { return m + ' ' + d; },
         errDate: 'Please select a date for your reservation.',
         errTime: 'Please select an available time slot.',
         errName: 'Please enter your full name.',
-        errPhone: 'Please enter a WhatsApp or phone number.'
+        errPhone: 'Please enter a WhatsApp or phone number.',
+        errRequest: 'We couldn’t send your booking request. Please try again.'
       },
       pt: {
         stepTitles: { 1: 'Quando te esperamos?', 2: 'Em qual horário?', 3: 'Seus dados' },
@@ -2223,13 +2230,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         personsShort: ' pess.',
         voucherTitle: 'Mesa Confirmada',
         voucherCounter: 'Comprovante!',
+        sectorTitle: 'Onde você prefere sentar?',
+        sectorHelp: 'Se quiser, escolha um setor. O restaurante vai considerar sua preferência ao confirmar a reserva.',
+        sectorLoading: 'Consultando setores…',
+        sectorEmpty: 'Você pode continuar sem escolher um setor.',
+        sectorError: 'Não foi possível consultar os setores. Você pode continuar sem preferência.',
+        sectorNone: 'Sem preferência',
+        sectorRequested: 'Setor solicitado',
         weekdays: ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'],
         monthNames: ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'],
         formatDate: function(d, m) { return d + ' de ' + m.toLowerCase(); },
         errDate: 'Por favor selecione uma data para sua reserva.',
         errTime: 'Por favor selecione um horário disponível.',
         errName: 'Por favor informe seu nome e sobrenome.',
-        errPhone: 'Por favor informe um número de WhatsApp ou telefone.'
+        errPhone: 'Por favor informe um número de WhatsApp ou telefone.',
+        errRequest: 'Não foi possível enviar sua solicitação. Tente novamente.'
       }
     };
 
@@ -2247,7 +2262,11 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var selectedDateVal = todayStr;
     var selectedTimeVal = selectedTimeInput ? (selectedTimeInput.value || '20:00') : '20:00';
     var selectedPartySize = selectedPartySizeInput ? (parseInt(selectedPartySizeInput.value, 10) || 2) : 2;
-    var selectedZone = selectedZoneInput ? (selectedZoneInput.value || 'Salón Principal') : 'Salón Principal';
+    var selectedSectorId = '';
+    var sectors = [];
+    var sectorStatus = slug ? 'sectorLoading' : 'sectorEmpty';
+    var sectorRequestSequence = 0;
+    var latestSectorResponse = 0;
     var viewYear = todayObj.getFullYear();
     var viewMonth = todayObj.getMonth();
     var recurringClosedDays = [];
@@ -2284,35 +2303,39 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       return loc.formatDate(d, mName);
     }
 
+    function sectorDisplayName(sector) {
+      return sector.name + (sector.roomName ? (' · ' + sector.roomName) : '');
+    }
+
+    function selectedSector() {
+      return sectors.find(function(sector) { return sector.id === selectedSectorId; });
+    }
+
     function updateBreadcrumbs() {
       if (!papBreadcrumbs) return;
-      if (currentStep === 1) {
-        papBreadcrumbs.style.display = 'none';
-        papBreadcrumbs.innerHTML = '';
-      } else {
-        var loc = i18nConfig[currentLang] || i18nConfig.es;
-        papBreadcrumbs.style.display = 'flex';
-        var chips = [];
-        if (selectedDateVal) {
-          chips.push('<button type="button" class="pap__miga" data-goto="1">📅 ' + formatReadableDateShort(selectedDateVal) + '</button>');
-        }
-        if (currentStep >= 3) {
-          var t = selectedTimeInput ? selectedTimeInput.value : selectedTimeVal;
-          if (t) chips.push('<button type="button" class="pap__miga" data-goto="2">⏰ ' + t + ' hs</button>');
-          var p = selectedPartySizeInput ? selectedPartySizeInput.value : String(selectedPartySize);
-          chips.push('<button type="button" class="pap__miga" data-goto="2">👥 ' + p + loc.personsShort + '</button>');
-          var z = selectedZoneInput ? selectedZoneInput.value : selectedZone;
-          if (z) chips.push('<button type="button" class="pap__miga" data-goto="2">📍 ' + z + '</button>');
-        }
-        papBreadcrumbs.innerHTML = chips.join('');
+      papBreadcrumbs.replaceChildren();
+      papBreadcrumbs.style.display = currentStep === 1 ? 'none' : 'flex';
+      if (currentStep === 1) return;
 
-        papBreadcrumbs.querySelectorAll('.pap__miga').forEach(function(btn) {
-          btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            var targetStep = parseInt(btn.getAttribute('data-goto') || '1', 10);
-            goToStep(targetStep);
-          });
+      function appendChip(label, step) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'pap__miga';
+        button.setAttribute('data-goto', String(step));
+        button.textContent = label;
+        button.addEventListener('click', function() {
+          goToStep(step);
         });
+        papBreadcrumbs.append(button);
+      }
+      if (selectedDateVal) appendChip('📅 ' + formatReadableDateShort(selectedDateVal), 1);
+      if (currentStep >= 3) {
+        var loc = i18nConfig[currentLang] || i18nConfig.es;
+        var time = selectedTimeInput ? selectedTimeInput.value : selectedTimeVal;
+        if (time) appendChip('⏰ ' + time + ' hs', 2);
+        appendChip('👥 ' + selectedPartySize + loc.personsShort, 2);
+        var sector = selectedSector();
+        if (sector) appendChip('📍 ' + sectorDisplayName(sector), 2);
       }
     }
 
@@ -2525,6 +2548,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       }
 
       var requestedPartySize = selectedPartySize;
+      var sectorRequest = ++sectorRequestSequence;
       var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso) + '&partySize=' + requestedPartySize;
 
       fetch(url)
@@ -2538,10 +2562,12 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         .then(function(data) {
           if (selectedPartySize !== requestedPartySize) return;
           if (!data || !data.success || !data.data) {
+            updateSectors(null, sectorRequest);
             renderCalendar(viewYear, viewMonth);
             return;
           }
           var payload = data.data;
+          updateSectors(payload.sectors, sectorRequest);
           if (applyRestaurantClock(payload)) return;
           if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
             recurringClosedDays = payload.recurringClosedDays;
@@ -2556,7 +2582,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           }
         })
         .catch(function(err) {
+          if (selectedPartySize !== requestedPartySize) return;
           console.warn('Error fetching month availability:', err);
+          updateSectors(null, sectorRequest);
           renderCalendar(viewYear, viewMonth);
         });
     }
@@ -2598,18 +2626,73 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       });
     }
 
-    // Sectors / Espacios
-    sectorBtns.forEach(function(secBtn) {
-      secBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        sectorBtns.forEach(function(b) { b.classList.remove('es-elegido'); });
-        secBtn.classList.add('es-elegido');
-        var zone = secBtn.getAttribute('data-zone') || 'Salón Principal';
-        selectedZone = zone;
-        if (selectedZoneInput) selectedZoneInput.value = zone;
-        if (papResumenDonde) papResumenDonde.textContent = zone;
-      });
-    });
+    function syncSectorSelection() {
+      if (sectorsGrid) {
+        sectorsGrid.querySelectorAll('[data-sector-id]').forEach(function(button) {
+          var chosen = button.getAttribute('data-sector-id') === selectedSectorId;
+          button.classList.toggle('es-elegido', chosen);
+          button.setAttribute('aria-pressed', String(chosen));
+        });
+      }
+      var sector = selectedSector();
+      if (papResumenDonde) {
+        papResumenDonde.textContent = sector ? sectorDisplayName(sector) : i18nConfig[currentLang].sectorNone;
+      }
+      if (currentStep === 3) updateBreadcrumbs();
+    }
+
+    function renderSectors() {
+      var loc = i18nConfig[currentLang];
+      if (sectorsTitle) sectorsTitle.textContent = loc.sectorTitle;
+      if (sectorsNote) sectorsNote.textContent = loc[sectorStatus];
+      sectorLabels.forEach(function(label) { label.textContent = loc.sectorRequested; });
+      if (sectorsGrid) {
+        sectorsGrid.setAttribute('role', 'group');
+        sectorsGrid.setAttribute('aria-label', loc.sectorTitle);
+        sectorsGrid.replaceChildren();
+        sectorsGrid.style.display = sectors.length ? '' : 'none';
+        if (sectors.length) {
+          [{ id: '', name: loc.sectorNone }].concat(sectors).forEach(function(sector) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'pap__sector';
+            button.setAttribute('data-sector-id', sector.id);
+            var name = document.createElement('b');
+            name.textContent = sector.name;
+            button.append(name);
+            if (sector.roomName) {
+              var room = document.createElement('small');
+              room.textContent = sector.roomName;
+              button.append(room);
+            }
+            button.addEventListener('click', function() {
+              selectedSectorId = sector.id;
+              syncSectorSelection();
+            });
+            sectorsGrid.append(button);
+          });
+        }
+      }
+      syncSectorSelection();
+    }
+
+    function updateSectors(next, request) {
+      if (request < latestSectorResponse) return;
+      if (!Array.isArray(next)) {
+        if (sectorStatus === 'sectorLoading') {
+          sectorStatus = 'sectorError';
+          renderSectors();
+        }
+        return;
+      }
+      latestSectorResponse = request;
+      var status = next.length ? 'sectorHelp' : 'sectorEmpty';
+      if (status === sectorStatus && JSON.stringify(next) === JSON.stringify(sectors)) return;
+      sectors = next;
+      sectorStatus = status;
+      if (!selectedSector()) selectedSectorId = '';
+      renderSectors();
+    }
 
     function fetchAvailability(date) {
       var dateVal = date || selectedDateVal || todayStr;
@@ -2626,6 +2709,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       if (slotsAlert) slotsAlert.style.display = 'none';
 
       var requestedPartySize = selectedPartySize;
+      var sectorRequest = ++sectorRequestSequence;
       var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateVal) + '&partySize=' + requestedPartySize;
 
       fetch(url)
@@ -2639,10 +2723,12 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         .then(function(data) {
           if (selectedPartySize !== requestedPartySize || selectedDateVal !== dateVal) return;
           if (!data || !data.success || !data.data) {
+            updateSectors(null, sectorRequest);
             renderSlotsFallback();
             return;
           }
           var payload = data.data;
+          updateSectors(payload.sectors, sectorRequest);
           if (applyRestaurantClock(payload)) return;
           if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
             recurringClosedDays = payload.recurringClosedDays;
@@ -2653,7 +2739,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           renderDaySlots(dayInfo);
         })
         .catch(function(err) {
+          if (selectedPartySize !== requestedPartySize || selectedDateVal !== dateVal) return;
           console.warn('Error al consultar disponibilidad:', err);
+          updateSectors(null, sectorRequest);
           renderSlotsFallback();
         });
     }
@@ -2756,7 +2844,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       if (btnSpinner) btnSpinner.style.display = isLoading ? 'inline' : 'none';
     }
 
-    function showSuccess(resData) {
+    function showSuccess(resData, sector) {
       var loc = i18nConfig[currentLang] || i18nConfig.es;
       if (form) form.style.display = 'none';
       if (papBackBtn) papBackBtn.style.display = 'none';
@@ -2771,7 +2859,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       if (voucherTime) voucherTime.textContent = (resData.time || selectedTimeVal) + ' hs';
       var pSize = resData.partySize || selectedPartySize;
       if (voucherGuests) voucherGuests.textContent = pSize + (pSize === 1 ? loc.personSingular : loc.personPlural);
-      if (voucherZone) voucherZone.textContent = selectedZone;
+      if (voucherZone) voucherZone.textContent = sector ? sectorDisplayName(sector) : loc.sectorNone;
       if (voucherName) voucherName.textContent = resData.customerName || (nameInput ? nameInput.value : '');
 
       if (voucherWaBtn) {
@@ -2800,7 +2888,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         var date = selectedDateVal || (dateInput ? dateInput.value : '');
         var time = selectedTimeInput ? (selectedTimeInput.value || selectedTimeVal) : selectedTimeVal;
         var partySize = selectedPartySizeInput ? parseInt(selectedPartySizeInput.value, 10) : selectedPartySize;
-        var zone = selectedZoneInput ? (selectedZoneInput.value || selectedZone) : selectedZone;
+        var preferredSector = selectedSector();
 
         var loc = i18nConfig[currentLang] || i18nConfig.es;
         if (!date) {
@@ -2831,7 +2919,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           partySize: partySize,
           date: date,
           time: time,
-          notes: (zone ? ('[Espacio: ' + zone + '] ') : '') + (notes || '')
+          notes: notes,
+          preferredSectorId: preferredSector ? preferredSector.id : undefined
         };
 
         if (!slug) {
@@ -2845,7 +2934,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
               partySize: partySize,
               customerName: customerName,
               customerPhone: customerPhone
-            });
+            }, preferredSector);
           }, 450);
           return;
         }
@@ -2867,27 +2956,19 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
                 ? resObj.data.error.message
                 : 'No se pudo confirmar la reserva. Verificá los datos e intentá nuevamente.';
               showError(errMsg);
-              if (resObj.status === 409) {
+              if (resObj.status === 409 || (resObj.status === 400 && preferredSector)) {
                 fetchAvailability(date);
               }
               return;
             }
 
             var reservation = (resObj.data.data && resObj.data.data.reservation) ? resObj.data.data.reservation : resObj.data.data;
-            showSuccess(reservation);
+            showSuccess(reservation, preferredSector);
           })
           .catch(function(err) {
             setLoading(false);
             console.warn('Network error creating reservation:', err);
-            // Fallback for visual testing / preview
-            showSuccess({
-              code: '#RES-' + Math.floor(1000 + Math.random() * 9000),
-              date: date,
-              time: time,
-              partySize: partySize,
-              customerName: customerName,
-              customerPhone: customerPhone
-            });
+            showError(loc.errRequest);
           });
       });
     }
@@ -2901,6 +2982,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
           form.style.display = 'block';
         }
         if (papBackBtn) papBackBtn.style.display = 'flex';
+        selectedSectorId = '';
+        syncSectorSelection();
         goToStep(1);
       });
     }
@@ -2911,6 +2994,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       var newLang = e.detail.lang;
       if (!i18nConfig[newLang]) return;
       currentLang = newLang;
+      renderSectors();
       renderCalendar(viewYear, viewMonth);
       goToStep(currentStep);
       updatePartySize(selectedPartySize);
@@ -2920,6 +3004,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     });
 
     // Initial hydration and calendar boot
+    renderSectors();
     bindSlotButtons();
     renderCalendar(viewYear, viewMonth);
     fetchMonthAvailability(viewYear, viewMonth);

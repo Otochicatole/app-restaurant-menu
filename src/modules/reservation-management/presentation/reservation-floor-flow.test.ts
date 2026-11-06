@@ -33,9 +33,10 @@ describe("reservation floor confirmation flow", () => {
   afterEach(cleanup);
 
   it("asks for an assignment before sending a pending confirmation", async () => {
-    render(createElement(ReservationCmsScreen, { initialData: data() }));
+    render(createElement(ReservationCmsScreen, { initialData: data({ ...reservation, adminNotes: "Sector preferido: Ventana · Salón principal" }) }));
     fireEvent.click(screen.getByRole("button", { name: /^Confirmar$/ }));
     const modal = screen.getByRole("dialog", { name: "Confirmar reserva TEST" });
+    expect(within(modal).getByText("Ventana · Salón principal")).toBeTruthy();
     expect(actions.updateReservationStatusAction).not.toHaveBeenCalled();
     expect((within(modal).getByRole("button", { name: "Confirmar y asignar mesas" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(modal).getByRole("button", { name: "Elegir mesa de prueba" }));
