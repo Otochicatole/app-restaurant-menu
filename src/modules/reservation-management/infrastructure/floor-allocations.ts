@@ -10,7 +10,7 @@ import {
 
 type Database = PrismaClient | Prisma.TransactionClient;
 const roomInclude = { locations: true, tables: true, combinations: { include: { members: true } } } satisfies Prisma.DiningRoomInclude;
-const allocationInclude = { tables: true, reservation: { select: { customerName: true, partySize: true, date: true, time: true, notes: true, code: true, source: true, revision: true } } } satisfies Prisma.ReservationAllocationInclude;
+const allocationInclude = { tables: true, reservation: { select: { customerName: true, partySize: true, date: true, time: true, notes: true, code: true, source: true, status: true, revision: true } } } satisfies Prisma.ReservationAllocationInclude;
 type Allocation = Prisma.ReservationAllocationGetPayload<{ include: typeof allocationInclude }>;
 type Event = Prisma.RestaurantEventGetPayload<{ include: { rooms: true } }>;
 
@@ -43,7 +43,7 @@ async function openServiceLeases(database: Database, restaurantId: string, from:
 }
 
 export async function loadFloorState(database: Database, restaurantId: string, from: Date, until: Date) {
-  const restaurant = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { floorManagementEnabled: true, timeZone: true } });
+  const restaurant = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { floorManagementEnabled: true, timeZone: true, reservationPreparationMinutes: true, reservationDurationMinutes: true } });
   if (!restaurant) throw new NotFoundError("Restaurante");
   const [rooms, allocations, events] = await Promise.all([
     database.diningRoom.findMany({ where: { restaurantId, active: true }, include: roomInclude, orderBy: { name: "asc" } }),
@@ -98,11 +98,17 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
 }
 
 export async function getFloorAssignmentOptions(database: Database, restaurantId: string, query: FloorOptionsQuery, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = [], operational = false): Promise<FloorOptionsView> {
-  const settings = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { timeZone: true } });
+  const settings = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { timeZone: true, reservationPreparationMinutes: true, reservationDurationMinutes: true } });
   if (!settings) throw new NotFoundError("Restaurante");
   const event = query.eventId ? await database.restaurantEvent.findFirst({ where: { id: query.eventId, restaurantId }, include: { rooms: true } }) : null;
   if (query.eventId && !event) throw new NotFoundError("Evento");
-  const interval = intervalOverride ?? calculateFloorInterval({ ...query, timeZone: settings.timeZone, event });
+  const interval = intervalOverride ?? calculateFloorInterval({
+    ...query,
+    timeZone: settings.timeZone,
+    event,
+    preparationMinutes: settings.reservationPreparationMinutes,
+    durationMinutes: settings.reservationDurationMinutes,
+  });
   const state = await loadFloorState(database, restaurantId, new Date(interval.blockedFrom), new Date(interval.blockedUntil));
   const live = operational ? await openServiceLeases(database, restaurantId, interval.blockedFrom, interval.blockedUntil) : [];
   const allocations = [...state.allocations, ...live].filter((allocation) => !excludedReservationIds.includes(allocation.reservationId));
@@ -128,7 +134,13 @@ export async function getPhysicalAvailability(database: Database, restaurantId: 
   for (const date of query.dates) {
     result[date] = query.times.filter((time) => {
       try {
-        const interval = calculateFloorInterval({ date, time, timeZone: state.restaurant.timeZone });
+        const interval = calculateFloorInterval({
+          date,
+          time,
+          timeZone: state.restaurant.timeZone,
+          preparationMinutes: state.restaurant.reservationPreparationMinutes,
+          durationMinutes: state.restaurant.reservationDurationMinutes,
+        });
         if (Date.parse(interval.serviceStartAt) <= Date.now()) return false;
         const options = evaluateOptions(state.rooms, state.allocations, state.events, interval, query.partySize);
         return options.some((option) => option.available) || state.rooms.some((room) => hasCustomCapacity(room, options, query.partySize, interval, state.allocations));

@@ -375,6 +375,14 @@ function Table({ table, selected, selecting, draggable, paint, onSelect, onSelec
     onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}
     onDragStart={(event) => { if (!selecting) return; event.cancelBubble = true; gesture.current.dragged = true; onDragStart(event.target); }} onDragMove={(event) => { if (!selecting) return; event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
     {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}
-    <Group rotation={-table.rotation} listening={false}><Text x={-60} y={-8} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill={paint.tableInk} /></Group>
+    <Group rotation={-table.rotation} listening={false}>
+      <Text x={-60} y={-8} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill={paint.tableInk} />
+      {Boolean(table.readyQuantity && table.readyQuantity > 0) && (
+        <Group x={18} y={-18}>
+          <Circle radius={10} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
+          <Text x={-10} y={-5} width={20} align="center" text={String(table.readyQuantity)} fontSize={10} fontStyle="bold" fill="#ffffff" />
+        </Group>
+      )}
+    </Group>
   </Group>;
 }

@@ -58,7 +58,7 @@ export type FloorAllocationView = FloorInterval & {
   id: string; reservationId: string; roomId: string; combinationId: string | null; capacity: number;
   customerName: string; partySize: number; date: string; time: string; notes: string; code: string;
   releasedAt: string | null; poses: FloorPose[]; version: number;
-  locationId?: string | null; source?: string; reservationRevision?: number;
+  locationId?: string | null; source?: string; status?: string; reservationRevision?: number;
   serviceConflict?: boolean;
   serviceOverrun?: boolean;
   servicePartiallyReleased?: boolean;

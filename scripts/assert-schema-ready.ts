@@ -15,7 +15,7 @@ try {
     const tables = await database.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name='AppSchemaState'");
     if (!tables.rows.length) throw new Error("La base usa el esquema anterior. Con el servidor detenido, ejecutá bun run db:cutover y después bun run dev.");
     const state = await database.execute("SELECT generation,state FROM AppSchemaState WHERE id='singleton'");
-    if (Number(state.rows[0]?.generation) !== 5 || state.rows[0]?.state !== "READY") throw new Error("El esquema está incompleto o la base es incompatible con esta versión. El servidor permanecerá detenido.");
+    if (Number(state.rows[0]?.generation) !== 6 || state.rows[0]?.state !== "READY") throw new Error("El esquema está incompleto o la base es incompatible con esta versión. El servidor permanecerá detenido.");
     const journal = await database.execute("PRAGMA journal_mode");
     if (journal.rows[0]?.journal_mode !== "wal") throw new Error("SQLite debe usar WAL para las escrituras concurrentes. Con el servidor detenido, ejecutá bun run db:cutover antes de iniciar la aplicación.");
   } finally {

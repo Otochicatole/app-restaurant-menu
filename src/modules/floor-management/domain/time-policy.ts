@@ -22,6 +22,8 @@ export function restaurantToday(timeZone: string, now = new Date()): string {
 export function calculateFloorInterval(input: {
   date: string; time: string; timeZone: string;
   event?: { date: string; startTime: string; endTime: string } | null;
+  preparationMinutes?: number;
+  durationMinutes?: number;
 }) {
   const timeZone = validateTimeZone(input.timeZone);
   try {
@@ -29,16 +31,19 @@ export function calculateFloorInterval(input: {
     const time = input.event?.startTime ?? input.time;
     const startLocal = Temporal.PlainDateTime.from(`${date}T${time}`, { overflow: "reject" });
     const start = startLocal.toZonedDateTime(timeZone, { disambiguation: "reject" }).toInstant();
-    let end = start.add({ hours: 2 });
+    const duration = input.durationMinutes ?? 120;
+    const prepMinutes = input.preparationMinutes ?? 15;
+    let end = input.event ? start.add({ hours: 2 }) : start.add({ minutes: duration });
     if (input.event?.endTime) {
       if (input.event.endTime === time) throw new BadRequestError("El evento debe terminar después de comenzar.");
       let endLocal = Temporal.PlainDateTime.from(`${date}T${input.event.endTime}`, { overflow: "reject" });
       if (Temporal.PlainDateTime.compare(endLocal, startLocal) < 0) endLocal = endLocal.add({ days: 1 });
       end = endLocal.toZonedDateTime(timeZone, { disambiguation: "reject" }).toInstant();
     }
+    const blockedFrom = input.event ? start.subtract({ hours: 2 }) : start.subtract({ minutes: prepMinutes });
     return {
       serviceStartAt: start.toString(), serviceEndAt: end.toString(),
-      blockedFrom: start.subtract({ hours: 2 }).toString(), blockedUntil: end.toString(), timeZone,
+      blockedFrom: blockedFrom.toString(), blockedUntil: end.toString(), timeZone,
     };
   } catch (error) {
     if (error instanceof BadRequestError) throw error;

@@ -4,15 +4,19 @@ import { calculateFloorInterval, restaurantLocalDateTime, restaurantToday, valid
 const zone = "America/Argentina/Buenos_Aires";
 
 describe("restaurant floor time intervals", () => {
-  it("converts local service time to UTC and reserves two hours before service", () => {
+  it("converts local service time to UTC and reserves preparation buffer before service", () => {
     expect(calculateFloorInterval({ date: "2026-12-01", time: "20:00", timeZone: zone })).toEqual({
+      serviceStartAt: "2026-12-01T23:00:00Z", serviceEndAt: "2026-12-02T01:00:00Z",
+      blockedFrom: "2026-12-01T22:45:00Z", blockedUntil: "2026-12-02T01:00:00Z", timeZone: zone,
+    });
+    expect(calculateFloorInterval({ date: "2026-12-01", time: "20:00", timeZone: zone, preparationMinutes: 120 })).toEqual({
       serviceStartAt: "2026-12-01T23:00:00Z", serviceEndAt: "2026-12-02T01:00:00Z",
       blockedFrom: "2026-12-01T21:00:00Z", blockedUntil: "2026-12-02T01:00:00Z", timeZone: zone,
     });
   });
 
   it("keeps the service date while its preparation interval crosses local midnight", () => {
-    const interval = calculateFloorInterval({ date: "2026-12-02", time: "00:30", timeZone: zone });
+    const interval = calculateFloorInterval({ date: "2026-12-02", time: "00:30", timeZone: zone, preparationMinutes: 120 });
     expect(interval.serviceStartAt).toBe("2026-12-02T03:30:00Z");
     expect(interval.blockedFrom).toBe("2026-12-02T01:30:00Z");
   });

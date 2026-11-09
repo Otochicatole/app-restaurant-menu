@@ -39,7 +39,10 @@ function ReceiptDocument({ receipt, restaurantName, timeZone }: ReceiptProps) {
           </tr></thead>
           <tbody className="divide-y divide-zinc-100">
             {items.map((line) => <tr key={line.id} className="tabular-nums">
-              <td className="break-words py-2 pr-2">{line.name}</td>
+              <td className="break-words py-2 pr-2">
+                <div>{line.name}</div>
+                {line.notes && <div className="text-xs italic text-zinc-500">Nota: {line.notes}</div>}
+              </td>
               <td className="py-2 pr-2 text-right">{line.deliveredQuantity}</td>
               <td className="break-words py-2 pr-2 text-right">{formatServiceMoney(line.unitPriceCents)}</td>
               <td className="break-words py-2 text-right">{formatServiceMoney(line.unitPriceCents * line.deliveredQuantity)}</td>
@@ -47,7 +50,18 @@ function ReceiptDocument({ receipt, restaurantName, timeZone }: ReceiptProps) {
           </tbody>
         </table>
       )}
-      <div className="flex justify-between gap-2 text-base font-semibold text-zinc-950"><span>Total cobrado</span><span className="text-right tabular-nums">{formatServiceMoney(receipt.totalCents ?? 0)}</span></div>
+      <div className="space-y-1 text-sm border-t border-zinc-200 pt-3">
+        <div className="flex justify-between text-zinc-600"><span>Subtotal entregado</span><span className="tabular-nums">{formatServiceMoney(receipt.deliveredCents)}</span></div>
+        {receipt.discountCents > 0 && <div className="flex justify-between text-emerald-800"><span>Descuento {receipt.discountReason ? `(${receipt.discountReason})` : ""}</span><span className="tabular-nums">-{formatServiceMoney(receipt.discountCents)}</span></div>}
+        {receipt.tipCents > 0 && <div className="flex justify-between text-zinc-600"><span>Propina</span><span className="tabular-nums">+{formatServiceMoney(receipt.tipCents)}</span></div>}
+        <div className="flex justify-between gap-2 border-t border-zinc-200 pt-2 text-base font-semibold text-zinc-950"><span>Total cobrado</span><span className="text-right tabular-nums">{formatServiceMoney(receipt.totalCents ?? 0)}</span></div>
+        {receipt.paymentMethod === "SPLIT" && <div className="rounded-lg bg-zinc-50 p-2 text-xs space-y-1 mt-2">
+          <p className="font-semibold text-zinc-700">Desglose de cobro:</p>
+          {receipt.cashCents > 0 && <div className="flex justify-between"><span>Efectivo:</span><span className="tabular-nums">{formatServiceMoney(receipt.cashCents)}</span></div>}
+          {receipt.cardCents > 0 && <div className="flex justify-between"><span>Tarjeta:</span><span className="tabular-nums">{formatServiceMoney(receipt.cardCents)}</span></div>}
+          {receipt.transferCents > 0 && <div className="flex justify-between"><span>Transferencia o QR:</span><span className="tabular-nums">{formatServiceMoney(receipt.transferCents)}</span></div>}
+        </div>}
+      </div>
     </article>
   );
 }

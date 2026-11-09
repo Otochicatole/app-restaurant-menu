@@ -9,6 +9,7 @@ export const reservationStatusSchema = z.enum([
   "COMPLETED",
   "CANCELLED",
   "REJECTED",
+  "NO_SHOW",
 ]);
 export type ReservationStatus = z.infer<typeof reservationStatusSchema>;
 
@@ -293,3 +294,5 @@ export type ReservationCmsData = {
     activeTimeSlotsCount: number;
   };
 };
+
+export * from "./service-contracts";

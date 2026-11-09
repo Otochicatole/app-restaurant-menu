@@ -68,6 +68,8 @@ model Restaurant {
   dailyReservationCapacity     Int                           @default(50)
   timeZone                     String                        @default("America/Argentina/Buenos_Aires")
   floorManagementEnabled       Boolean                       @default(false)
+  reservationPreparationMinutes Int                           @default(15)
+  reservationDurationMinutes    Int                           @default(120)
   slug                         String                        @unique
   landingSlug                  String                        @unique
   status                       TenantStatus                  @default(ACTIVE)
@@ -332,6 +334,7 @@ enum ReservationStatus {
   COMPLETED
   CANCELLED
   REJECTED
+  NO_SHOW
 }
 
 enum RestaurantEventStatus {
@@ -640,6 +643,12 @@ model ServiceAccount {
   paymentMethod   String?
   totalCents      Int?
   receiptNumber   String?
+  tipCents        Int     @default(0)
+  discountCents   Int     @default(0)
+  discountReason  String?
+  cashCents       Int     @default(0)
+  cardCents       Int     @default(0)
+  transferCents   Int     @default(0)
   tables          ServiceAccountTable[]
   lines           ServiceOrderLine[]
 
@@ -678,6 +687,10 @@ model ServiceOrderLine {
   deliveredQuantity Int @default(0)
   cancelledQuantity Int @default(0)
   createdAt         DateTime @default(now())
+  notes             String   @default("")
+  kitchenStatus     String   @default("PENDING")
+  round             Int      @default(1)
+  station           String   @default("KITCHEN")
 
   @@index([accountId, createdAt])
 }

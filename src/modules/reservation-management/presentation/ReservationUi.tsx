@@ -11,6 +11,7 @@ export const STATUS_BADGE_CLASSES: Record<ReservationStatus, string> = {
   COMPLETED: "bg-zinc-100 text-zinc-700 border-zinc-200 font-medium",
   CANCELLED: "bg-red-50 text-red-800 border-red-200 font-medium",
   REJECTED: "bg-zinc-100 text-zinc-700 border-zinc-200 font-medium",
+  NO_SHOW: "bg-stone-100 text-stone-700 border-stone-300 font-medium",
 };
 
 export function PreferredSector({ label }: { label: string }) {

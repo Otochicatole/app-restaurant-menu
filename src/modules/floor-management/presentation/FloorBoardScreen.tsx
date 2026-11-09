@@ -59,6 +59,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   const [error] = floorBoardWorkspace.useField("error");
   const [loading] = floorBoardWorkspace.useField("loading");
   const [releaseTarget, setReleaseTarget] = useState<FloorAllocationView | null>(null);
+  const [releaseReason, setReleaseReason] = useState<"COMPLETED" | "NO_SHOW">("COMPLETED");
   const [refreshedAt] = floorBoardWorkspace.useField("refreshedAt");
   const [assembling, setAssembling] = floorBoardWorkspace.useField("assembling");
   const [walkIn, setWalkIn] = floorBoardWorkspace.useField("walkIn");
@@ -168,7 +169,18 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   const otherAllocations = board?.allocations ?? [];
   const draft = assembling ? assembly.selected : [];
   const poses = room && board ? composeRoomPoses(room, board.allocations, board.at) : [];
-  const baseTables = [...poses.map((pose) => ({ ...pose, id: pose.tableId, active: true, state: "reserved" as const })), ...draft.map((pose) => ({ ...pose, id: "draft:" + pose.tableId, active: true, state: "available" as const }))];
+  const readyByTable = new Map<string, number>();
+  for (const acc of serviceAccounts) {
+    if (acc.readyQuantity > 0) {
+      for (const tid of acc.tableIds) {
+        readyByTable.set(tid, (readyByTable.get(tid) ?? 0) + acc.readyQuantity);
+      }
+    }
+  }
+  const baseTables = [
+    ...poses.map((pose) => ({ ...pose, id: pose.tableId, active: true, state: "reserved" as const, readyQuantity: readyByTable.get(pose.tableId) ?? 0 })),
+    ...draft.map((pose) => ({ ...pose, id: "draft:" + pose.tableId, active: true, state: "available" as const })),
+  ];
   const tables = baseTables.map((table) => layoutPreview?.[table.id] ? { ...table, ...layoutPreview[table.id] } : table);
   const selectionState: FloorSelectionState | null = room ? { room, allocations: board?.allocations ?? [], draft: assembling && assembly.options ? { poses: draft, interval: assembly.options.interval, capacity: assembly.capacity, locationId: assembly.locationId || undefined } : null } : null;
   const availableIds = selectionState ? resolveFloorSelection(selectionState, baseTables.map((table) => table.id)).map((item) => item.resourceId) : [];
@@ -187,7 +199,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       : inventoryChanged ? "El inventario cambió. Elegí las mesas del armado nuevamente."
       : unavailable?.conflict ?? validateTableArrangement(draft) ?? validateFloorPlacement(room, proposal, otherAllocations);
   }
-  const canRelease = (allocation: FloorAllocationView) => canManageWalkIns && !query.date && allocation.source === "WALK_IN" && !allocation.releasedAt
+  const canRelease = (allocation: FloorAllocationView) => canManageWalkIns && !query.date && !allocation.releasedAt
     && !allocation.serviceOverrun && !allocation.servicePartiallyReleased && !serviceAccounts.some((account) => account.allocationId === allocation.id && !account.closedAt);
   const canArrange = (allocation: FloorAllocationView) => canManageTables && !allocation.releasedAt && !allocation.serviceConflict
     && ((!historical && allocation.serviceOverrun) || Date.parse(allocation.blockedUntil) > Date.parse(board?.updatedAt ?? ""));
@@ -222,7 +234,12 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
     try { return await service.mutate(command); }
     finally { if (command.action === "open" || command.action === "checkout" || command.action === "close-empty") void refresh(); }
   };
-  const askRelease = (allocation: FloorAllocationView) => { setReleaseTarget(allocation); setReleaseError(null); openPanel("release"); };
+  const askRelease = (allocation: FloorAllocationView) => {
+    setReleaseTarget(allocation);
+    setReleaseReason("COMPLETED");
+    setReleaseError(null);
+    openPanel("release");
+  };
   const openWalkIn = () => requestTool("walk-in", () => { if (!tools.windows.some((window) => window.id === "walk-in")) setWalkInError(null); });
   const focusAttend = () => { window.requestAnimationFrame(() => attendButton.current?.focus()); };
   const cancelAssembly = () => { setWalkIn(emptyWalkIn); discardWindow("walk-in"); discardWindow("assembly"); tools.windows.filter((window) => window.value.selection?.ids.some((id) => id.startsWith("draft:"))).forEach((window) => discardWindow(window.id)); setAssembling(false); changeAssignment(null); setSelectedResourceIds((current) => current.filter((id) => !id.startsWith("draft:"))); setTableMenu(null); setOperationError(null); setPanel(null); focusAttend(); };
@@ -240,11 +257,16 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
     } catch (failure) { setOperationError(failure instanceof Error ? failure.message : "No se pudo armar la mesa. Volvé a consultar disponibilidad."); }
     finally { setSaving(false); }
   };
-  const releaseWalkIn = async () => {
+  const releaseReservation = async () => {
     if (!releaseTarget || !beginMutation()) return;
     setReleaseError(null);
     try {
-      await saveFloorAction(restaurantId, { action: "release-walk-in", reservationId: releaseTarget.reservationId, expectedRevision: releaseTarget.reservationRevision });
+      await saveFloorAction(restaurantId, {
+        action: "release-reservation",
+        reservationId: releaseTarget.reservationId,
+        expectedRevision: releaseTarget.reservationRevision,
+        reason: releaseReason,
+      });
       setReleaseTarget(null); openPanel(null); await refresh(true);
     } catch (failure) { setReleaseError(failure instanceof Error ? failure.message : "No se pudieron liberar las mesas. Actualizá la sala y volvé a intentar."); }
     finally { setSaving(false); }
@@ -448,7 +470,26 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       );
     })}
     <AdminModal open={panel === "release"} title="Liberar mesas" onClose={closePanel}>
-        {panel === "release" && <div className="space-y-5"><p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">¿El grupo {releaseTarget?.customerName} ya se retiró? Sus mesas quedarán disponibles y se conservará el registro de la visita.</p>{releaseError && <p role="alert" className="text-sm text-red-800">{releaseError}</p>}<div className="flex flex-wrap justify-end gap-3 border-t border-zinc-100 pt-5"><button {...transientButtonProps} type="button" disabled={saving} className={adminSecondaryButtonClass} onClick={() => openPanel("reservations")}>Cancelar</button><button {...transientButtonProps} type="button" disabled={saving} className={adminPrimaryButtonClass} onClick={() => void releaseWalkIn()}>{saving ? "Liberando…" : "Confirmar liberación"}</button></div></div>}
+        {panel === "release" && <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">
+            Liberación de mesas para <strong className="text-[var(--floor-ink,#09090b)]">{releaseTarget?.customerName}</strong> ({releaseTarget?.code}) en {releaseTarget?.poses.map((pose) => pose.label).join(" + ")}:
+          </p>
+          <div className="space-y-2 rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-[var(--floor-hover,#edf2e9)] p-3">
+            <label className="flex items-center gap-2.5 text-sm font-medium text-[var(--floor-ink,#09090b)] cursor-pointer">
+              <input type="radio" name="releaseReason" value="COMPLETED" checked={releaseReason === "COMPLETED"} onChange={() => setReleaseReason("COMPLETED")} />
+              <span>El grupo ya se retiró (Finalizar visita)</span>
+            </label>
+            <label className="flex items-center gap-2.5 text-sm font-medium text-amber-900 cursor-pointer">
+              <input type="radio" name="releaseReason" value="NO_SHOW" checked={releaseReason === "NO_SHOW"} onChange={() => setReleaseReason("NO_SHOW")} />
+              <span>No se presentó (Registrar No-Show)</span>
+            </label>
+          </div>
+          {releaseError && <p role="alert" className="text-sm text-red-800">{releaseError}</p>}
+          <div className="flex flex-wrap justify-end gap-3 border-t border-zinc-100 pt-4">
+            <button {...transientButtonProps} type="button" disabled={saving} className={adminSecondaryButtonClass} onClick={() => openPanel("reservations")}>Cancelar</button>
+            <button {...transientButtonProps} type="button" disabled={saving} className={adminPrimaryButtonClass} onClick={() => void releaseReservation()}>{saving ? "Liberando…" : "Confirmar liberación"}</button>
+          </div>
+        </div>}
     </AdminModal>
 
   </main>;

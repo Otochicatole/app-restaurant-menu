@@ -1,13 +1,25 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { AccountRecord, IdentityRepository } from "../application/ports";
 
+const accountInclude = {
+  organization: true,
+  restaurant: {
+    select: {
+      id: true,
+      status: true,
+      floorManagementEnabled: true,
+      organization: true,
+    },
+  },
+} satisfies Prisma.AdminInclude;
+
 export class PrismaIdentityRepository implements IdentityRepository {
   constructor(private readonly client: PrismaClient) {}
 
   async findAccountByEmail(email: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findFirst({
       where: { email },
-      include: { organization: true, restaurant: { include: { organization: true } } },
+      include: accountInclude,
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -15,7 +27,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   async findAccountById(adminId: string): Promise<AccountRecord | null> {
     const account = await this.client.admin.findUnique({
       where: { id: adminId },
-      include: { organization: true, restaurant: { include: { organization: true } } },
+      include: accountInclude,
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -36,7 +48,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
           },
         },
       },
-      include: { organization: true, restaurant: { include: { organization: true } } },
+      include: accountInclude,
     });
     return account ? toAccountRecord(account) : null;
   }
@@ -110,7 +122,7 @@ export class PrismaIdentityRepository implements IdentityRepository {
   }
 }
 
-type PrismaAccount = Prisma.AdminGetPayload<{ include: { organization: true; restaurant: { include: { organization: true } } } }>;
+type PrismaAccount = Prisma.AdminGetPayload<{ include: typeof accountInclude }>;
 
 function toAccountRecord(account: NonNullable<PrismaAccount>): AccountRecord {
   const organization = account.role === "WAITER" ? account.restaurant?.organization : account.organization;

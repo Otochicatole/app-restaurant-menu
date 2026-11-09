@@ -353,7 +353,7 @@ describe("floor assignment interactions", () => {
     expect(screen.getByTestId("canvas-pan").textContent).toBe("1");
   });
 
-  it("offers release only for walk-ins in the current operational view", async () => {
+  it("offers release for allocations in the current operational view", async () => {
     const value = board();
     value.allocations = [{ ...interval, id: "allocation", reservationId: "reservation", roomId: "room", combinationId: null, capacity: 4, customerName: "Ana", partySize: 2, date: query.date, time: query.time, notes: "", code: "BOOK", releasedAt: null, version: 1, source: "WALK_IN", reservationRevision: 3, poses: options().options[0].poses }];
     value.allocations.push({...value.allocations[0], id: "admin-allocation", reservationId: "admin-reservation", source: "ADMIN", customerName: "Reserva confirmada", poses: options().options[1].poses});
@@ -366,8 +366,8 @@ describe("floor assignment interactions", () => {
     fireEvent.change(within(scheduleWindow).getByLabelText("Hora"), {target: {value: "21:15"}});
     fireEvent.click(screen.getByRole("button", {name: /^Reservas/}));
     const reservations = screen.getByRole("dialog", {name: "Reservas de Salón principal"});
-    expect(screen.getAllByRole("button", {name: "Liberar mesas"})).toHaveLength(1);
-    fireEvent.click(await screen.findByRole("button", {name: "Liberar mesas"}));
+    expect(screen.getAllByRole("button", {name: "Liberar mesas"})).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", {name: "Liberar mesas"})[0]);
     const confirmation = screen.getByRole("dialog", {name: "Liberar mesas"});
     expect(screen.getByRole("dialog", {name: "Reservas de Salón principal"})).toBe(reservations);
     expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBe(scheduleWindow);
@@ -378,10 +378,10 @@ describe("floor assignment interactions", () => {
     expect(screen.getByRole("dialog", {name: "Reservas de Salón principal"})).toBe(reservations);
     expect(reservations.getAttribute("aria-modal")).toBe("false");
     expect(document.body.style.overflow).toBe("");
-    fireEvent.click(within(reservations).getByRole("button", {name: "Liberar mesas"}));
+    fireEvent.click(within(reservations).getAllByRole("button", {name: "Liberar mesas"})[0]);
     expect(api.save).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByRole("dialog", {name: "Liberar mesas"})).getByRole("button", {name: "Confirmar liberación"}));
-    await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", {action: "release-walk-in", reservationId: "reservation", expectedRevision: 3}));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", {action: "release-reservation", reservationId: "reservation", expectedRevision: 3, reason: "COMPLETED"}));
     expect(nativeConfirm).not.toHaveBeenCalled();
   });
 

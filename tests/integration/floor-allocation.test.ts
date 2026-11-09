@@ -181,8 +181,7 @@ describe("SQLite physical reservation allocations", () => {
 
   it("reuses a table exactly at the half-open blocked interval boundary", async () => {
     const owner = await fixture(); const early = await booking(owner, { time: "20:00" });
-    const boundary = await booking(owner, { time: "00:00" });
-    await first.tableReservation.update({ where: { id: boundary.id }, data: { date: "2099-12-02" } });
+    const boundary = await booking(owner, { time: "22:15" });
     await confirm(first, early.id, assignment(owner));
     await confirm(first, boundary.id, assignment(owner));
     expect(await first.reservationAllocation.count({ where: { restaurantId: owner.restaurant.id } })).toBe(2);

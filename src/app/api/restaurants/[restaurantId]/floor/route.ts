@@ -53,7 +53,7 @@ const writeSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("staff"), email: z.string().email(), password: z.string().min(8).max(128) }),
   z.object({ action: z.literal("disable-staff") }),
   createWalkInSchema.extend({ action: z.literal("walk-in") }),
-  z.object({ action: z.literal("release-walk-in"), reservationId: z.string().min(1), expectedRevision: revision }),
+  z.object({ action: z.enum(["release-walk-in", "release-reservation"]), reservationId: z.string().min(1), expectedRevision: revision, reason: z.enum(["COMPLETED", "NO_SHOW"]).optional() }),
   floorReassignmentSchema.extend({ action: z.literal("reassign") }),
 ]);
 export async function POST(request: NextRequest, { params }: Context) {
@@ -66,9 +66,10 @@ export async function POST(request: NextRequest, { params }: Context) {
       await floorReassignments.reassign(restaurantId, command);
       return noStore(successResponse(await floorManagement.getBoard(restaurantId)));
     }
-    if (command.action === "walk-in" || command.action === "release-walk-in") {
+    if (command.action === "walk-in" || command.action === "release-walk-in" || command.action === "release-reservation") {
       await requireFloorReadAccess(restaurantId);
       if (command.action === "walk-in") await floorWalkIns.create(restaurantId, command);
+      else if (command.action === "release-reservation" && command.reason) await floorWalkIns.release(restaurantId, command.reservationId, command.expectedRevision, command.reason);
       else await floorWalkIns.release(restaurantId, command.reservationId, command.expectedRevision);
       return noStore(successResponse(await floorManagement.getBoard(restaurantId)));
     }

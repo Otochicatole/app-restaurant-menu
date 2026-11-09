@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowRight, Check, Clock3, Plus, Printer, ReceiptText, RotateCw, Search } from "lucide-react";
-import type { ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
+import { ArrowRight, Check, CheckCheck, Clock3, Plus, Printer, ReceiptText, RotateCw, Search, Utensils } from "lucide-react";
+import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
 import { floorInputClass } from "./floor-api";
 import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import type { FloorServiceCommand } from "./useFloorService";
@@ -22,7 +22,19 @@ const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS
 const amount = (cents: number) => money.format(cents / 100);
 const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-[var(--floor-muted,#52634b)]";
 const cardClass = "rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-white p-3";
-const paymentLabels: Record<ServicePaymentMethod, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER_QR: "Transferencia o QR" };
+const paymentLabels: Record<ServicePaymentMethod, string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  TRANSFER_QR: "Transferencia o QR",
+  SPLIT: "Pago Dividido / Mixto",
+};
+const kitchenStatusBadge: Record<KitchenStatus, { label: string; className: string }> = {
+  PENDING: { label: "Pendiente", className: "bg-zinc-100 text-zinc-600" },
+  IN_PREP: { label: "En preparación", className: "bg-amber-100 text-amber-900 font-semibold animate-pulse" },
+  READY: { label: "¡Listo para servir!", className: "bg-emerald-100 text-emerald-800 font-bold" },
+  SERVED: { label: "Entregado", className: "bg-zinc-100 text-zinc-500" },
+  CANCELLED: { label: "Anulado", className: "bg-zinc-100 text-zinc-400" },
+};
 const quantityLabel = (quantity: number, label: string) => `${quantity} ${label}${quantity === 1 ? "" : "s"}`;
 
 function parsePrice(value: string) {
@@ -69,6 +81,24 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
   const [receipt, setReceipt] = useState<ServiceAccountView | null>(null);
   const [checkoutVersion, setCheckoutVersion] = useState<number | null>(null);
   const [payment, setPayment] = useState<ServicePaymentMethod | "">("");
+  const [tip, setTip] = useState("");
+  const [discount, setDiscount] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
+  const [splitCash, setSplitCash] = useState("");
+  const [splitCard, setSplitCard] = useState("");
+  const [splitTransfer, setSplitTransfer] = useState("");
+
+  const resetCheckoutState = () => {
+    setCheckoutVersion(null);
+    setPayment("");
+    setTip("");
+    setDiscount("");
+    setDiscountReason("");
+    setSplitCash("");
+    setSplitCard("");
+    setSplitTransfer("");
+  };
+
   const run = async (command: FloorServiceCommand) => {
     setFailure(null);
     try {
@@ -110,6 +140,16 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
     void run({ action: "update-line", ...identity, lineId: line.id, deliveredQuantity: line.deliveredQuantity, cancelledQuantity: line.cancelledQuantity, [field]: line[field] + delta });
   };
 
+  const tipCents = parsePrice(tip);
+  const discountCents = parsePrice(discount);
+  const netDeliveredCents = Math.max(0, account.deliveredCents - discountCents);
+  const totalToPayCents = netDeliveredCents + tipCents;
+  const splitCashCents = parsePrice(splitCash);
+  const splitCardCents = parsePrice(splitCard);
+  const splitTransferCents = parsePrice(splitTransfer);
+  const splitSumCents = splitCashCents + splitCardCents + splitTransferCents;
+  const splitValid = payment !== "SPLIT" || (account.deliveredCents > 0 ? splitSumCents === totalToPayCents : true);
+
   return <>
     <div className={floorWindowBodyClass}>
       <header className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold">{account.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{account.reservationCode} · {account.tableLabels.join(" + ")}</p></div><span className="rounded-lg bg-[var(--floor-hover,#edf2e9)] px-2.5 py-1 text-xs font-semibold">Cuenta abierta</span></header>
@@ -121,13 +161,38 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
       {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
       {cashClosed && !historical && <p className="rounded-lg bg-amber-50 p-2.5 text-sm text-amber-950">La caja del día está cerrada. Un administrador debe reabrirla para cerrar esta cuenta.</p>}
       <section aria-label="Pedidos" className="space-y-2.5">
-        <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">Pedidos</h4><span className="inline-flex items-center gap-1 text-xs text-[var(--floor-muted,#52634b)]"><Clock3 size={13} aria-hidden="true" />{quantityLabel(account.pendingQuantity, "pendiente")}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h4 className="font-semibold">Pedidos</h4>
+            <span className="inline-flex items-center gap-1 text-xs text-[var(--floor-muted,#52634b)]"><Clock3 size={13} aria-hidden="true" />{quantityLabel(account.pendingQuantity, "pendiente")}</span>
+          </div>
+          {account.pendingQuantity > 0 && !historical && <div className="flex flex-wrap gap-2">
+            <button type="button" className={`${floorSecondaryButtonClass} text-xs font-medium`} disabled={locked || confirming} onClick={() => void run({ action: "march-round", ...identity })} title="Marchar tanda a cocina">
+              <Utensils size={13} aria-hidden="true" />Marchar a cocina
+            </button>
+            <button type="button" className={`${floorSecondaryButtonClass} text-xs font-medium`} disabled={locked || confirming} onClick={() => void run({ action: "deliver-all", ...identity })} title="Entregar todos los pedidos pendientes">
+              <CheckCheck size={13} aria-hidden="true" />Entregar todo
+            </button>
+          </div>}
+        </div>
         {!account.lines.length && <p className="text-sm text-[var(--floor-muted,#52634b)]">Todavía no hay pedidos registrados.</p>}
         <ul className="space-y-2">{account.lines.map((line) => {
           const pending = line.quantity - line.deliveredQuantity - line.cancelledQuantity;
+          const statusBadge = kitchenStatusBadge[line.kitchenStatus] ?? kitchenStatusBadge.PENDING;
           return <li key={line.id} className={cardClass}>
-            <div className="flex items-start justify-between gap-2 text-sm"><p className="min-w-0 break-words font-semibold">{line.quantity} × {line.name}</p><p className="shrink-0 tabular-nums">{amount(line.unitPriceCents * (line.quantity - line.cancelledQuantity))}</p></div>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{quantityLabel(pending, "pendiente")} · {quantityLabel(line.deliveredQuantity, "entregado")}{line.cancelledQuantity > 0 && ` · ${quantityLabel(line.cancelledQuantity, "anulado")}`}</p>
+            <div className="flex items-start justify-between gap-2 text-sm">
+              <div className="min-w-0">
+                <p className="break-words font-semibold">{line.quantity} × {line.name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] ${statusBadge.className}`}>{statusBadge.label}</span>
+                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600">{line.station === "BAR" ? "Barra" : "Cocina"}</span>
+                  {line.round > 1 && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-500">Tanda {line.round}</span>}
+                </div>
+                {line.notes && <p className="mt-1 text-xs italic text-[var(--floor-muted,#52634b)]">Nota: {line.notes}</p>}
+              </div>
+              <p className="shrink-0 tabular-nums">{amount(line.unitPriceCents * (line.quantity - line.cancelledQuantity))}</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{quantityLabel(pending, "pendiente")} · {quantityLabel(line.deliveredQuantity, "entregado")}{line.cancelledQuantity > 0 && ` · ${quantityLabel(line.cancelledQuantity, "anulado")}`}</p>
             {pending > 0 && !historical && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Entregar uno de ${line.name}`} onClick={() => updateLine(line, "deliveredQuantity", 1)}><Check size={14} aria-hidden="true" />Entregar 1</button><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Anular uno de ${line.name}`} onClick={() => updateLine(line, "cancelledQuantity", 1)}>Anular 1</button></div>}
             {!historical && (line.deliveredQuantity > 0 || line.cancelledQuantity > 0) && <details className="mt-2">
               <summary className="cursor-pointer text-xs font-medium text-[var(--floor-action,#3d5934)]">Corregir cantidades</summary>
@@ -142,17 +207,64 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
       {!historical && !confirming && <AddOrderLine products={products} busy={locked} onAdd={(line) => run({ action: "add-line", ...identity, ...line })} />}
     </div>
     {!historical && <footer className={floorWindowFooterClass}>
-      {confirming ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); if (canCheckout && !versionChanged) void run({ action: "checkout", ...identity, paymentMethod: payment || undefined }); }}>
-        <p className="font-semibold">Cerrar cuenta · {amount(account.deliveredCents)}</p>
+      {confirming ? <form className="space-y-3" onSubmit={(event) => {
+        event.preventDefault();
+        if (canCheckout && !versionChanged && splitValid) {
+          void run({
+            action: "checkout",
+            ...identity,
+            paymentMethod: payment || undefined,
+            tipCents: tipCents > 0 ? tipCents : undefined,
+            discountCents: discountCents > 0 ? discountCents : undefined,
+            discountReason: discountReason.trim() || undefined,
+            cashCents: payment === "SPLIT" ? splitCashCents : undefined,
+            cardCents: payment === "SPLIT" ? splitCardCents : undefined,
+            transferCents: payment === "SPLIT" ? splitTransferCents : undefined,
+          });
+        }
+      }}>
+        <div className="flex items-baseline justify-between">
+          <p className="font-semibold">Cerrar cuenta</p>
+          <span className="text-base font-bold tabular-nums">{amount(totalToPayCents)}</span>
+        </div>
         {versionChanged ? <p role="alert" className="text-sm text-amber-950">La cuenta cambió. Volvé al pedido y revisá el nuevo total.</p> : <p className="text-xs text-[var(--floor-muted,#52634b)]">Se guardará el recibo y se liberarán las mesas de esta cuenta.</p>}
-        {account.deliveredCents > 0 && !versionChanged && <label className={fieldClass}>Medio de pago<select className={floorInputClass} required disabled={locked} value={payment} onChange={(event) => setPayment(event.target.value as ServicePaymentMethod | "")}><option value="">Elegí un medio</option>{Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
-        <div className="flex flex-wrap justify-end gap-2"><button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={() => { setCheckoutVersion(null); setPayment(""); }}>Volver al pedido</button><button type="submit" className={floorPrimaryButtonClass} disabled={!canCheckout || versionChanged || (account.deliveredCents > 0 && !payment)}>{account.deliveredCents > 0 ? "Confirmar cobro" : "Confirmar cierre"}</button></div>
+        {account.deliveredCents > 0 && !versionChanged && <>
+          <div className="grid grid-cols-2 gap-2">
+            <label className={fieldClass}>Descuento ($)<input className={floorInputClass} disabled={locked} inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" placeholder="0,00" value={discount} onChange={(e) => setDiscount(e.target.value)} /></label>
+            <label className={fieldClass}>Motivo descuento<input className={floorInputClass} disabled={locked} maxLength={100} placeholder="Ej: cortesía" value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} /></label>
+          </div>
+          <label className={fieldClass}>Propina sugerida ($)<input className={floorInputClass} disabled={locked} inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" placeholder="0,00" value={tip} onChange={(e) => setTip(e.target.value)} /></label>
+          <label className={fieldClass}>Medio de pago<select className={floorInputClass} required disabled={locked} value={payment} onChange={(event) => setPayment(event.target.value as ServicePaymentMethod | "")}><option value="">Elegí un medio</option>{Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          {payment === "SPLIT" && <div className="space-y-2 rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-[var(--floor-hover,#edf2e9)] p-2.5">
+            <p className="text-xs font-semibold text-[var(--floor-ink,#263e23)]">Desglose de pago mixto</p>
+            <div className="grid grid-cols-3 gap-2">
+              <label className={fieldClass}>Efectivo<input className={floorInputClass} disabled={locked} inputMode="decimal" placeholder="0,00" value={splitCash} onChange={(e) => setSplitCash(e.target.value)} /></label>
+              <label className={fieldClass}>Tarjeta<input className={floorInputClass} disabled={locked} inputMode="decimal" placeholder="0,00" value={splitCard} onChange={(e) => setSplitCard(e.target.value)} /></label>
+              <label className={fieldClass}>Transf./QR<input className={floorInputClass} disabled={locked} inputMode="decimal" placeholder="0,00" value={splitTransfer} onChange={(e) => setSplitTransfer(e.target.value)} /></label>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className={splitValid ? "font-semibold text-emerald-800" : "font-semibold text-red-700"}>Suma: {amount(splitSumCents)} / {amount(totalToPayCents)}</span>
+              {!splitValid && <span className="text-[11px] text-red-700">Debe coincidir</span>}
+            </div>
+          </div>}
+        </>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={resetCheckoutState}>Volver al pedido</button>
+          <button type="submit" className={floorPrimaryButtonClass} disabled={!canCheckout || versionChanged || (account.deliveredCents > 0 && (!payment || !splitValid))}>{account.deliveredCents > 0 ? "Confirmar cobro" : "Confirmar cierre"}</button>
+        </div>
       </form> : <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-[var(--floor-muted,#52634b)]">{account.pendingQuantity > 0 ? "Entregá o anulá los pedidos pendientes antes de cerrar." : "Al cerrar, se liberan las mesas de esta cuenta."}</p><button type="button" className={floorPrimaryButtonClass} disabled={!canCheckout} onClick={() => setCheckoutVersion(account.version)}>{account.deliveredCents > 0 ? "Cobrar y cerrar" : "Cerrar sin consumo"}</button></div>}
     </footer>}
   </>;
 }
 
-type NewLine = Pick<Extract<FloorServiceCommand, { action: "add-line" }>, "name" | "productId" | "quantity" | "unitPriceCents">;
+type NewLine = {
+  productId?: string;
+  name?: string;
+  unitPriceCents?: number;
+  quantity: number;
+  notes?: string;
+  station?: KitchenStation;
+};
 
 const productSearchText = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es-AR");
 const manualProduct = { id: "manual", name: "Cargar otro producto", price: null };
@@ -228,6 +340,8 @@ function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [notes, setNotes] = useState("");
+  const [station, setStation] = useState<KitchenStation>("KITCHEN");
   const activeProducts = products.filter((product) => product.active);
   const manual = productId === manualProduct.id || activeProducts.length === 0;
   const hasProduct = activeProducts.some((product) => product.id === productId);
@@ -238,13 +352,20 @@ function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[
     if (busy || !Number.isInteger(count) || count < 1 || count > 99) return;
     if (manual && (!name.trim() || cents < 1 || cents > 2_147_483_647)) return;
     if (!manual && !hasProduct) return;
-    const success = await onAdd(manual ? { name: name.trim(), unitPriceCents: cents, quantity: count } : { productId, quantity: count });
-    if (success) { setProductId(""); setName(""); setPrice(""); setQuantity("1"); }
+    const success = await onAdd(manual
+      ? { name: name.trim(), unitPriceCents: cents, quantity: count, notes: notes.trim() || undefined, station }
+      : { productId, quantity: count, notes: notes.trim() || undefined, station }
+    );
+    if (success) { setProductId(""); setName(""); setPrice(""); setQuantity("1"); setNotes(""); setStation("KITCHEN"); }
   };
   return <form aria-label="Agregar pedido" className={`${cardClass} space-y-2.5`} onSubmit={submit}>
     <h4 className="font-semibold">Agregar pedido</h4>
     {activeProducts.length > 0 && <ProductPicker products={activeProducts} value={productId} disabled={busy} onChange={setProductId} />}
     {manual && <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] gap-2"><label className={fieldClass}>Nombre<input className={floorInputClass} disabled={busy} required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label className={fieldClass}>Precio unitario ($)<input className={floorInputClass} disabled={busy} required inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" maxLength={13} value={price} onChange={(event) => setPrice(event.target.value)} /></label></div>}
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.5fr)] gap-2">
+      <label className={fieldClass}>Notas de elaboración<input className={floorInputClass} disabled={busy} maxLength={200} placeholder="Ej: sin sal, punto jugoso" value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
+      <label className={fieldClass}>Estación<select className={floorInputClass} disabled={busy} value={station} onChange={(event) => setStation(event.target.value as KitchenStation)}><option value="KITCHEN">Cocina</option><option value="BAR">Barra</option></select></label>
+    </div>
     <div className="flex flex-wrap items-end justify-between gap-2"><label className={`${fieldClass} w-24`}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><button type="submit" className={floorPrimaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !hasProduct)}><Plus size={16} aria-hidden="true" />Agregar pedido</button></div>
   </form>;
 }
@@ -268,8 +389,19 @@ function ServiceReceiptContent({ account, restaurantName, timeZone }: ServiceRec
   const time = account.closedAt ? new Intl.DateTimeFormat("es-AR", { timeZone, dateStyle: "short", timeStyle: "short" }).format(new Date(account.closedAt)) : "";
   return <div className="space-y-4">
     <header className="rounded-xl bg-[var(--floor-hover,#edf2e9)] p-4"><ReceiptText size={22} aria-hidden="true" /><p className="mt-2 text-sm font-medium">{restaurantName}</p><h3 className="text-lg font-semibold">Recibo de consumo {account.receiptNumber != null && `#${account.receiptNumber}`}</h3><p className="mt-1 text-sm">{account.customerName} · {account.roomName} · {account.tableLabels.join(" + ")}</p><p className="mt-1 text-xs text-[var(--floor-muted,#52634b)]">{time} · Reserva {account.reservationCode}</p></header>
-    <ul className="divide-y divide-[var(--floor-border,#e4e4e7)] text-sm">{account.lines.filter((line) => line.deliveredQuantity > 0).map((line) => <li key={line.id} className="flex items-start justify-between gap-3 py-2"><span>{line.deliveredQuantity} × {line.name}</span><span className="shrink-0 tabular-nums">{amount(line.deliveredQuantity * line.unitPriceCents)}</span></li>)}</ul>
-    <dl className="flex items-baseline justify-between gap-2 border-t border-[var(--floor-border,#e4e4e7)] pt-3"><div><dt className="text-sm">Total cobrado</dt><dd className="text-lg font-semibold tabular-nums">{amount(account.totalCents ?? 0)}</dd></div><div className="text-right"><dt className="text-xs text-[var(--floor-muted,#52634b)]">Medio de pago</dt><dd className="text-sm">{account.paymentMethod ? paymentLabels[account.paymentMethod] : "Sin consumo"}</dd></div></dl>
+    <ul className="divide-y divide-[var(--floor-border,#e4e4e7)] text-sm">{account.lines.filter((line) => line.deliveredQuantity > 0).map((line) => <li key={line.id} className="flex items-start justify-between gap-3 py-2"><div><span>{line.deliveredQuantity} × {line.name}</span>{line.notes && <p className="text-xs text-[var(--floor-muted,#52634b)] italic">Nota: {line.notes}</p>}</div><span className="shrink-0 tabular-nums">{amount(line.deliveredQuantity * line.unitPriceCents)}</span></li>)}</ul>
+    <div className="space-y-1.5 border-t border-[var(--floor-border,#e4e4e7)] pt-3 text-sm">
+      <div className="flex justify-between text-xs text-[var(--floor-muted,#52634b)]"><span>Subtotal entregado</span><span className="tabular-nums">{amount(account.deliveredCents)}</span></div>
+      {account.discountCents > 0 && <div className="flex justify-between text-xs text-emerald-800"><span>Descuento {account.discountReason ? `(${account.discountReason})` : ""}</span><span className="tabular-nums">-{amount(account.discountCents)}</span></div>}
+      {account.tipCents > 0 && <div className="flex justify-between text-xs text-[var(--floor-muted,#52634b)]"><span>Propina</span><span className="tabular-nums">+{amount(account.tipCents)}</span></div>}
+      <dl className="flex items-baseline justify-between gap-2 border-t border-[var(--floor-border,#e4e4e7)] pt-2"><div><dt className="text-sm font-semibold">Total cobrado</dt><dd className="text-lg font-bold tabular-nums">{amount(account.totalCents ?? 0)}</dd></div><div className="text-right"><dt className="text-xs text-[var(--floor-muted,#52634b)]">Medio de pago</dt><dd className="text-sm font-medium">{account.paymentMethod ? paymentLabels[account.paymentMethod] : "Sin consumo"}</dd></div></dl>
+      {account.paymentMethod === "SPLIT" && <div className="rounded-lg bg-[var(--floor-hover,#edf2e9)] p-2.5 text-xs space-y-1">
+        <p className="font-semibold text-[var(--floor-ink,#263e23)]">Desglose de cobro:</p>
+        {account.cashCents > 0 && <div className="flex justify-between"><span>Efectivo:</span><span className="tabular-nums">{amount(account.cashCents)}</span></div>}
+        {account.cardCents > 0 && <div className="flex justify-between"><span>Tarjeta:</span><span className="tabular-nums">{amount(account.cardCents)}</span></div>}
+        {account.transferCents > 0 && <div className="flex justify-between"><span>Transferencia o QR:</span><span className="tabular-nums">{amount(account.transferCents)}</span></div>}
+      </div>}
+    </div>
     <p className="text-xs text-[var(--floor-muted,#52634b)]">Recibo interno guardado para el cierre de caja.</p>
   </div>;
 }

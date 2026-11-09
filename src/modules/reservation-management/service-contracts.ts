@@ -1,27 +1,72 @@
 import { z } from "zod";
 
-export const servicePaymentMethodSchema = z.enum(["CASH", "CARD", "TRANSFER_QR"]);
+export const servicePaymentMethodSchema = z.enum(["CASH", "CARD", "TRANSFER_QR", "SPLIT"]);
 export type ServicePaymentMethod = z.infer<typeof servicePaymentMethodSchema>;
+
+export const kitchenStatusSchema = z.enum(["PENDING", "IN_PREP", "READY", "SERVED", "CANCELLED"]);
+export type KitchenStatus = z.infer<typeof kitchenStatusSchema>;
+
+export const kitchenStationSchema = z.enum(["KITCHEN", "BAR"]);
+export type KitchenStation = z.infer<typeof kitchenStationSchema>;
 
 const id = z.string().min(1).max(128);
 const revision = z.number().int().nonnegative();
 const name = z.string().trim().min(1).max(120);
 const unitPriceCents = z.number().int().min(1).max(2_147_483_647);
+const nonNegativeCents = z.number().int().min(0).max(2_147_483_647);
 const date = z.iso.date();
 
 export const serviceCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open"), allocationId: id, tableId: id, expectedAllocationVersion: revision }),
   z.object({ action: z.literal("close-empty"), allocationId: id, tableId: id, expectedAllocationVersion: revision }),
   z.object({
-    action: z.literal("add-line"), accountId: id, expectedVersion: revision, quantity: z.number().int().min(1).max(99),
-    productId: id.optional(), name: name.optional(), unitPriceCents: unitPriceCents.optional(),
+    action: z.literal("add-line"),
+    accountId: id,
+    expectedVersion: revision,
+    quantity: z.number().int().min(1).max(99),
+    productId: id.optional(),
+    name: name.optional(),
+    unitPriceCents: unitPriceCents.optional(),
+    notes: z.string().trim().max(200).optional(),
+    station: kitchenStationSchema.optional(),
   }).refine((command) => command.productId !== undefined
     ? command.name === undefined && command.unitPriceCents === undefined
     : command.name !== undefined && command.unitPriceCents !== undefined, "Elegí un producto o ingresá nombre y precio."),
-  z.object({ action: z.literal("update-line"), accountId: id, expectedVersion: revision, lineId: id,
-    deliveredQuantity: z.number().int().min(0).max(99), cancelledQuantity: z.number().int().min(0).max(99),
+  z.object({
+    action: z.literal("update-line"),
+    accountId: id,
+    expectedVersion: revision,
+    lineId: id,
+    deliveredQuantity: z.number().int().min(0).max(99),
+    cancelledQuantity: z.number().int().min(0).max(99),
   }),
-  z.object({ action: z.literal("checkout"), accountId: id, expectedVersion: revision, paymentMethod: servicePaymentMethodSchema.optional() }),
+  z.object({
+    action: z.literal("deliver-all"),
+    accountId: id,
+    expectedVersion: revision,
+  }),
+  z.object({
+    action: z.literal("march-round"),
+    accountId: id,
+    expectedVersion: revision,
+  }),
+  z.object({
+    action: z.literal("update-kitchen-status"),
+    lineId: id,
+    status: kitchenStatusSchema,
+  }),
+  z.object({
+    action: z.literal("checkout"),
+    accountId: id,
+    expectedVersion: revision,
+    paymentMethod: servicePaymentMethodSchema.optional(),
+    tipCents: nonNegativeCents.optional(),
+    discountCents: nonNegativeCents.optional(),
+    discountReason: z.string().trim().max(100).optional(),
+    cashCents: nonNegativeCents.optional(),
+    cardCents: nonNegativeCents.optional(),
+    transferCents: nonNegativeCents.optional(),
+  }),
   z.object({ action: z.literal("save-product"), id: id.optional(), name, unitPriceCents }),
   z.object({ action: z.literal("archive-product"), id }),
   z.object({ action: z.literal("close-day"), date }),
@@ -33,6 +78,7 @@ export const serviceCashRangeSchema = z.object({ from: date, to: date })
 
 export type ServiceCommand = z.infer<typeof serviceCommandSchema>;
 export type ServiceProductView = { id: string; name: string; unitPriceCents: number; active: boolean };
+
 export type ServiceOrderLineView = {
   id: string;
   name: string;
@@ -40,7 +86,13 @@ export type ServiceOrderLineView = {
   quantity: number;
   deliveredQuantity: number;
   cancelledQuantity: number;
+  notes: string;
+  kitchenStatus: KitchenStatus;
+  round: number;
+  station: KitchenStation;
+  createdAt: string;
 };
+
 export type ServiceAccountView = {
   id: string;
   allocationId: string;
@@ -56,21 +108,32 @@ export type ServiceAccountView = {
   paymentMethod: ServicePaymentMethod | null;
   totalCents: number | null;
   receiptNumber: string | null;
+  tipCents: number;
+  discountCents: number;
+  discountReason: string | null;
+  cashCents: number;
+  cardCents: number;
+  transferCents: number;
   tableIds: string[];
   tableLabels: string[];
   lines: ServiceOrderLineView[];
   orderedCents: number;
   deliveredCents: number;
   pendingQuantity: number;
+  readyQuantity: number;
 };
+
 export type ServiceCashTotals = {
   cashCents: number;
   cardCents: number;
   transferCents: number;
+  tipCents: number;
+  discountCents: number;
   receiptCount: number;
   totalCents: number;
 };
-export type ServiceCashEventView = Omit<ServiceCashTotals, "totalCents"> & {
+
+export type ServiceCashEventView = {
   id: string;
   restaurantId: string;
   businessDate: string;
@@ -79,7 +142,12 @@ export type ServiceCashEventView = Omit<ServiceCashTotals, "totalCents"> & {
   actorId: string;
   reason: string | null;
   createdAt: string;
+  cashCents: number;
+  cardCents: number;
+  transferCents: number;
+  receiptCount: number;
 };
+
 export type ServiceUnservedGroup = {
   allocationId: string;
   expectedAllocationVersion: number;
@@ -89,7 +157,46 @@ export type ServiceUnservedGroup = {
   customerName: string;
   roomName: string;
 };
-export type ServiceSnapshot = { accounts: ServiceAccountView[]; products: ServiceProductView[]; cashClosed: boolean; unserved: ServiceUnservedGroup[] };
+
+export type ServiceSnapshot = {
+  accounts: ServiceAccountView[];
+  products: ServiceProductView[];
+  cashClosed: boolean;
+  unserved: ServiceUnservedGroup[];
+};
+
+export type KitchenTicketLine = {
+  id: string;
+  name: string;
+  quantity: number;
+  deliveredQuantity: number;
+  cancelledQuantity: number;
+  notes: string;
+  kitchenStatus: KitchenStatus;
+  station: KitchenStation;
+  createdAt: string;
+};
+
+export type KitchenTicketView = {
+  id: string; // accountId + "-" + round
+  accountId: string;
+  round: number;
+  roomName: string;
+  tableLabels: string[];
+  customerName: string;
+  reservationCode: string;
+  openedAt: string;
+  createdAt: string;
+  allReady: boolean;
+  lines: KitchenTicketLine[];
+};
+
+export type KitchenSnapshot = {
+  restaurantName: string;
+  timeZone: string;
+  tickets: KitchenTicketView[];
+};
+
 export type ServiceCashReport = {
   today: string;
   from: string;
@@ -98,4 +205,5 @@ export type ServiceCashReport = {
   totals: ServiceCashTotals;
   days: ServiceCashEventView[];
 };
-export type ServiceCommandResult = ServiceAccountView | ServiceProductView | ServiceCashEventView;
+
+export type ServiceCommandResult = ServiceAccountView | ServiceProductView | ServiceCashEventView | { updated: boolean };

@@ -4,7 +4,7 @@ import { reservationManagementService } from "./infrastructure/composition";
 import { prisma } from "@/platform/database/prisma";
 import type { FloorOptionsQuery } from "@/modules/floor-management/contracts";
 import { getFloorAssignmentOptions as readFloorAssignmentOptions } from "./infrastructure/floor-allocations";
-import { createWalkIn, getWalkInOptions, releaseWalkIn } from "./infrastructure/floor-walk-ins";
+import { createWalkIn, getWalkInOptions, releaseFloorReservation } from "./infrastructure/floor-walk-ins";
 import type { CreateWalkInCommand } from "./contracts";
 import { getFloorReassignmentOptions, reassignFloorAllocation, reassignFloorAllocations, type FloorBatchReassignmentCommand, type FloorReassignmentCommand } from "./infrastructure/floor-reassignments";
 import { TableService } from "./infrastructure/table-service";
@@ -72,7 +72,7 @@ export { createWalkInSchema, walkInDurationSchema } from "./contracts";
 export const floorWalkIns = {
   options: (restaurantId: string, partySize: number, durationMinutes: number) => getWalkInOptions(prisma, restaurantId, partySize, durationMinutes),
   create: (restaurantId: string, command: CreateWalkInCommand) => createWalkIn(prisma, restaurantId, command),
-  release: (restaurantId: string, reservationId: string, expectedRevision: number) => releaseWalkIn(prisma, restaurantId, reservationId, expectedRevision),
+  release: (restaurantId: string, reservationId: string, expectedRevision: number, reason?: "COMPLETED" | "NO_SHOW") => releaseFloorReservation(prisma, restaurantId, reservationId, expectedRevision, reason),
 };
 
 export { floorBatchReassignmentSchema, floorReassignmentSchema } from "./infrastructure/floor-reassignments";

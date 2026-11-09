@@ -6,6 +6,7 @@ export const STATUS_LABEL: Record<ReservationStatus, string> = {
   COMPLETED: "Finalizada",
   CANCELLED: "Cancelada",
   REJECTED: "Rechazada",
+  NO_SHOW: "No asistió (No-Show)",
 };
 
 export const EVENT_STATUS_LABEL: Record<RestaurantEventView["status"], string> = {

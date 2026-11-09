@@ -97,11 +97,13 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
             </div>
             {day && dayAction && <button type="button" onClick={() => setAction({ kind: dayAction, date: day })} className={dayAction === "close-day" ? adminPrimaryButtonClass : adminSecondaryButtonClass}>{dayAction === "close-day" ? "Cerrar día" : "Reabrir día"}</button>}
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 bg-[#f3f6f1] px-4 py-4 sm:grid-cols-4 sm:px-5">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 bg-[#f3f6f1] px-4 py-4 sm:grid-cols-3 lg:grid-cols-6 sm:px-5">
             <div><dt className="text-sm font-medium text-[#263e23]">Total cobrado</dt><dd className="mt-1 break-words text-lg font-semibold tabular-nums text-[#182618]">{formatServiceMoney(report.totals.totalCents)}</dd></div>
             {([["Efectivo", report.totals.cashCents], ["Tarjeta", report.totals.cardCents], ["Transferencia / QR", report.totals.transferCents]] as const).map(([label, cents]) => (
               <div key={label}><dt className="text-sm text-zinc-700">{label}</dt><dd className="mt-1 break-words text-base font-semibold tabular-nums text-zinc-950">{formatServiceMoney(cents)}</dd></div>
             ))}
+            <div><dt className="text-sm text-zinc-700">Propinas</dt><dd className="mt-1 break-words text-base font-semibold tabular-nums text-zinc-950">{formatServiceMoney(report.totals.tipCents)}</dd></div>
+            <div><dt className="text-sm text-zinc-700">Descuentos</dt><dd className="mt-1 break-words text-base font-semibold tabular-nums text-zinc-950">{formatServiceMoney(report.totals.discountCents)}</dd></div>
           </dl>
         </AdminCard>
 

@@ -12,6 +12,7 @@ export type FloorCanvasTable = {
   id: string; label: string; capacity: number; shape: "SQUARE" | "RECTANGLE" | "CIRCLE";
   x: number; y: number; width: number; height: number; rotation: number; active: boolean;
   state?: "available" | "reserved" | "selected" | "unavailable";
+  readyQuantity?: number;
 };
 export type FloorCanvasFixture = {
   id: string; type: "WALL" | "BAR" | "LABEL"; label: string;

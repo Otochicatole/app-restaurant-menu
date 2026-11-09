@@ -49,7 +49,7 @@ export function serviceAdminError(error: unknown) {
 
 const ars = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" });
 
-export const servicePaymentLabels = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER_QR: "Transferencia / QR" } as const;
+export const servicePaymentLabels = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER_QR: "Transferencia / QR", SPLIT: "Pago Dividido / Mixto" } as const;
 
 export function formatServiceDate(date: string) {
   const [year, month, day] = date.split("-");

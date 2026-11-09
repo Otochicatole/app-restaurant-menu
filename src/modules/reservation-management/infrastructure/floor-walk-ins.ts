@@ -65,3 +65,22 @@ export async function releaseWalkIn(database: PrismaClient, restaurantId: string
     await syncReservationAllocation(tx, completed, undefined, now);
   });
 }
+
+export async function releaseFloorReservation(database: PrismaClient, restaurantId: string, reservationId: string, expectedRevision: number, reason: "COMPLETED" | "NO_SHOW" = "COMPLETED", now = new Date()) {
+  z.number().int().nonnegative().parse(expectedRevision);
+  return withSqliteTransaction(database, async (tx) => {
+    await operationalSettings(tx, restaurantId);
+    const reservation = await tx.tableReservation.findFirst({ where: { id: reservationId, restaurantId } });
+    if (!reservation) throw new NotFoundError("Reserva");
+    if (await tx.serviceAccount.count({ where: { restaurantId, reservationId } })) {
+      throw new ConflictError("Cerrá los armados de esta reserva desde Servicio para liberar sus mesas.");
+    }
+    if (reservation.revision !== expectedRevision || reservation.status !== "CONFIRMED") {
+      throw new ConflictError("La reserva cambió. Actualizá la sala antes de liberar las mesas.");
+    }
+    const nextStatus = reservation.source === "WALK_IN" ? "COMPLETED" : (reason === "NO_SHOW" ? "NO_SHOW" : "CANCELLED");
+    const adminNotes = nextStatus === "NO_SHOW" ? (reservation.adminNotes ? `${reservation.adminNotes} · No-show en sala` : "No-show en sala") : reservation.adminNotes;
+    const completed = await tx.tableReservation.update({ where: { id: reservation.id }, data: { status: nextStatus, adminNotes, revision: { increment: 1 } } });
+    await syncReservationAllocation(tx, completed, undefined, now);
+  });
+}

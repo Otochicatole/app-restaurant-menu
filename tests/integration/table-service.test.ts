@@ -25,6 +25,11 @@ function accountView(result: ServiceCommandResult) {
   return result;
 }
 
+function productView(result: ServiceCommandResult) {
+  if (!("unitPriceCents" in result)) throw new Error("Expected product result");
+  return result;
+}
+
 describe("table service in SQLite", () => {
   let first: ReturnType<typeof createSqlitePrismaClient>;
   let second: ReturnType<typeof createSqlitePrismaClient>;
@@ -105,7 +110,7 @@ describe("table service in SQLite", () => {
   it("snapshots catalog prices, settles pending quantities and keeps a receipt immutable on retry", async () => {
     const allocation = await visit();
     const opened = await open(allocation.id);
-    const product = await service.execute(restaurantId, actor, { action: "save-product", name: "Pizza", unitPriceCents: 1999 }, now);
+    const product = productView(await service.execute(restaurantId, actor, { action: "save-product", name: "Pizza", unitPriceCents: 1999 }, now));
     const ordered = accountView(await service.execute(restaurantId, actor, { action: "add-line", accountId: opened.id,
       expectedVersion: 0, productId: product.id, quantity: 3 }, now));
     await service.execute(restaurantId, actor, { action: "save-product", id: product.id, name: "Pizza familiar", unitPriceCents: 3000 }, now);
@@ -174,7 +179,7 @@ describe("table service in SQLite", () => {
   it("isolates accounts, catalog and history between restaurants", async () => {
     const allocation = await visit();
     const account = await open(allocation.id);
-    const foreignProduct = await service.execute(otherRestaurantId, actor, { action: "save-product", name: "Pizza", unitPriceCents: 1100 }, now);
+    const foreignProduct = productView(await service.execute(otherRestaurantId, actor, { action: "save-product", name: "Pizza", unitPriceCents: 1100 }, now));
     await expect(service.account(otherRestaurantId, account.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(service.execute(restaurantId, actor, { action: "add-line", accountId: account.id,
       expectedVersion: 0, productId: foreignProduct.id, quantity: 1 }, now)).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -211,7 +216,7 @@ describe("table service in SQLite", () => {
     const account = await open(allocation.id);
     const scheduled = await withSqliteTransaction(first, async (tx) => {
       const reservation = await tx.tableReservation.create({ data: { restaurantId, code: randomUUID(),
-        customerName: "Grupo siguiente", customerPhone: "12345678", date: "2099-12-02", time: "03:31", status: "CONFIRMED" } });
+        customerName: "Grupo siguiente", customerPhone: "12345678", date: "2099-12-02", time: "01:46", status: "CONFIRMED" } });
       await syncReservationAllocation(tx, reservation, { roomId, locationId, optionId: `table:${tableIds[2]}`,
         x: 180, y: 180, rotation: 0, expectedRoomRevision: 0 });
       return tx.reservationAllocation.findUniqueOrThrow({ where: { reservationId: reservation.id } });
