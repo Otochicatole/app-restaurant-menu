@@ -1,0 +1,205 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { createPortal, flushSync } from "react-dom";
+import { ArrowRight, Check, Clock3, Plus, Printer, ReceiptText, RotateCw } from "lucide-react";
+import type { ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
+import { floorInputClass } from "./floor-api";
+import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
+import type { FloorServiceCommand } from "./useFloorService";
+import styles from "./floor-service-receipt.module.css";
+
+export type FloorServiceTarget = {
+  allocationId: string;
+  customerName: string;
+  reservationCode: string;
+  tableLabels: string[];
+  tableId: string;
+  recovery?: boolean;
+};
+
+const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" });
+const amount = (cents: number) => money.format(cents / 100);
+const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-[var(--floor-muted,#52634b)]";
+const cardClass = "rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-white p-3";
+const paymentLabels: Record<ServicePaymentMethod, string> = { CASH: "Efectivo", CARD: "Tarjeta", TRANSFER_QR: "Transferencia o QR" };
+const quantityLabel = (quantity: number, label: string) => `${quantity} ${label}${quantity === 1 ? "" : "s"}`;
+
+function parsePrice(value: string) {
+  const match = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(value.trim());
+  if (!match) return 0;
+  return Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+}
+
+export function FloorServiceAccounts({ accounts, unserved, error, loading, historical, onChoose, onRecover, onRefresh }: {
+  accounts: ServiceAccountView[]; unserved: ServiceUnservedGroup[]; error: string | null; loading: boolean; historical: boolean;
+  onChoose: (account: ServiceAccountView) => void; onRecover: (group: ServiceUnservedGroup) => void; onRefresh: () => void;
+}) {
+  const visible = historical ? accounts : accounts.filter((account) => !account.closedAt);
+  return <section aria-label={historical ? "Recibos del horario consultado" : "Cuentas abiertas"} className={floorWindowBodyClass}>
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-sm text-[var(--floor-muted,#52634b)]">{historical ? "Consulta de recibos guardados." : "Cuentas abiertas en todos los salones."}</p>
+      <button type="button" className={floorSecondaryButtonClass} onClick={onRefresh} aria-label="Actualizar cuentas"><RotateCw size={15} aria-hidden="true" /></button>
+    </div>
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
+    {loading ? <p role="status" className="py-5 text-sm">Consultando las cuentas…</p>
+      : !visible.length && !error ? <p className="py-5 text-sm text-[var(--floor-muted,#52634b)]">{historical ? "No hay cuentas disponibles para este horario." : "No hay cuentas abiertas. Elegí una mesa ocupada en el plano o desde Reservas."}</p>
+      : <ul className="space-y-2.5">{visible.map((account) => <li key={account.id}>
+        <button type="button" onClick={() => onChoose(account)} className={`${cardClass} flex w-full items-center justify-between gap-3 text-left hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#3d5934)]`}>
+          <span className="min-w-0"><span className="block font-semibold">{account.customerName}</span><span className="block text-xs text-[var(--floor-muted,#52634b)]">{account.roomName} · {account.tableLabels.join(" + ")}</span></span>
+          <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums">{amount(account.totalCents ?? account.orderedCents)}<ArrowRight size={14} aria-hidden="true" /></span>
+        </button>
+      </li>)}</ul>}
+    {!historical && unserved.length > 0 && <section aria-label="Grupos vencidos sin cuenta" className="space-y-2.5">
+      <h3 className="text-sm font-semibold">Grupos vencidos sin cuenta</h3>
+      <ul className="space-y-2.5">{unserved.map((group) => <li key={`${group.allocationId}:${group.tableId}`} className={`${cardClass} flex flex-wrap items-center justify-between gap-2`}>
+        <p className="min-w-0"><span className="block text-sm font-semibold">{group.customerName}</span><span className="block text-xs text-[var(--floor-muted,#52634b)]">{group.roomName} · {group.tableLabels.join(" + ")}</span></p>
+        <button type="button" className={floorSecondaryButtonClass} onClick={() => onRecover(group)}>Cerrar sin consumo</button>
+      </li>)}</ul>
+    </section>}
+  </section>;
+}
+
+export function FloorServiceWindow({ target, account, products, restaurantName, timeZone, loading, loadError, busy, historical, canOpen, allocationVersion, conflict, cashClosed, onCommand, onRefresh }: {
+  target: FloorServiceTarget; account?: ServiceAccountView; products: ServiceProductView[]; restaurantName: string; timeZone: string; loading: boolean;
+  loadError: string | null; busy: boolean; historical: boolean; canOpen: boolean; allocationVersion?: number;
+  conflict: boolean; cashClosed: boolean; onCommand: (command: FloorServiceCommand) => Promise<ServiceAccountView>; onRefresh: () => void;
+}) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ServiceAccountView | null>(null);
+  const [checkoutVersion, setCheckoutVersion] = useState<number | null>(null);
+  const [payment, setPayment] = useState<ServicePaymentMethod | "">("");
+  const run = async (command: FloorServiceCommand) => {
+    setFailure(null);
+    try {
+      const updated = await onCommand(command);
+      if (command.action === "checkout" || command.action === "close-empty") setReceipt(updated);
+      return true;
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : "No se pudo guardar la cuenta. Volvé a intentar.");
+      return false;
+    }
+  };
+  const savedReceipt = account?.closedAt ? account : historical ? null : receipt;
+  if (savedReceipt) return <ServiceReceipt account={savedReceipt} restaurantName={restaurantName} timeZone={timeZone} />;
+  const error = failure || loadError;
+  if (target.recovery && !historical && !account) return <div className={floorWindowBodyClass}>
+    <h3 className="font-semibold">{target.customerName}</h3>
+    <p className="text-sm text-[var(--floor-muted,#52634b)]">{target.reservationCode} · {target.tableLabels.join(" + ")}</p>
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
+    <p className="text-sm">{allocationVersion === undefined ? "El grupo ya no está disponible para este cierre." : cashClosed ? "La caja del día está cerrada. Un administrador debe reabrirla para cerrar este grupo." : "Se guardará un recibo de $0 y se liberarán las mesas de este grupo."}</p>
+    <button type="button" className={floorPrimaryButtonClass} disabled={busy || cashClosed || Boolean(loadError) || allocationVersion === undefined} onClick={() => allocationVersion !== undefined && void run({ action: "close-empty", allocationId: target.allocationId, tableId: target.tableId, expectedAllocationVersion: allocationVersion })}>Confirmar cierre sin consumo</button>
+    {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
+  </div>;
+  if (!account) return <div className={floorWindowBodyClass}>
+    <div><h3 className="font-semibold">{target.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{target.reservationCode} · {target.tableLabels.join(" + ")}</p></div>
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
+    {loading ? <p role="status" className="text-sm">Consultando el servicio…</p> : historical ? <p className="text-sm">No hay una cuenta disponible para este grupo en el horario consultado.</p> : <>
+      <p className="text-sm">{conflict ? "Hay una cuenta de otro grupo en estas mesas. Cerrá esa cuenta antes de abrir la siguiente." : canOpen ? "Abrí la cuenta del grupo para registrar sus pedidos." : "La asignación ya no está disponible para abrir una cuenta."}</p>
+      {canOpen && allocationVersion !== undefined && <button type="button" className={floorPrimaryButtonClass} disabled={busy || conflict || Boolean(loadError)} onClick={() => void run({ action: "open", allocationId: target.allocationId, tableId: target.tableId, expectedAllocationVersion: allocationVersion })}>Abrir cuenta</button>}
+    </>}
+    {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
+  </div>;
+
+  const confirming = checkoutVersion !== null;
+  const versionChanged = confirming && checkoutVersion !== account.version;
+  const locked = historical || busy || Boolean(loadError);
+  const canCheckout = !locked && !cashClosed && account.pendingQuantity === 0;
+  const identity = { accountId: account.id, expectedVersion: account.version };
+  const updateLine = (line: ServiceOrderLineView, field: "deliveredQuantity" | "cancelledQuantity", delta: number) => {
+    void run({ action: "update-line", ...identity, lineId: line.id, deliveredQuantity: line.deliveredQuantity, cancelledQuantity: line.cancelledQuantity, [field]: line[field] + delta });
+  };
+
+  return <>
+    <div className={floorWindowBodyClass}>
+      <header className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold">{account.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{account.reservationCode} · {account.tableLabels.join(" + ")}</p></div><span className="rounded-lg bg-[var(--floor-hover,#edf2e9)] px-2.5 py-1 text-xs font-semibold">Cuenta abierta</span></header>
+      <dl aria-live="polite" className="grid grid-cols-2 gap-3 rounded-xl bg-[var(--floor-hover,#edf2e9)] p-3 text-xs">
+        <div><dt>Consumo registrado</dt><dd className="mt-1 text-base font-semibold tabular-nums">{amount(account.orderedCents)}</dd></div>
+        <div><dt>Total entregado</dt><dd className="mt-1 text-base font-semibold tabular-nums">{amount(account.deliveredCents)}</dd></div>
+      </dl>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
+      {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
+      {cashClosed && !historical && <p className="rounded-lg bg-amber-50 p-2.5 text-sm text-amber-950">La caja del día está cerrada. Un administrador debe reabrirla para cerrar esta cuenta.</p>}
+      <section aria-label="Pedidos" className="space-y-2.5">
+        <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">Pedidos</h4><span className="inline-flex items-center gap-1 text-xs text-[var(--floor-muted,#52634b)]"><Clock3 size={13} aria-hidden="true" />{quantityLabel(account.pendingQuantity, "pendiente")}</span></div>
+        {!account.lines.length && <p className="text-sm text-[var(--floor-muted,#52634b)]">Todavía no hay pedidos registrados.</p>}
+        <ul className="space-y-2">{account.lines.map((line) => {
+          const pending = line.quantity - line.deliveredQuantity - line.cancelledQuantity;
+          return <li key={line.id} className={cardClass}>
+            <div className="flex items-start justify-between gap-2 text-sm"><p className="min-w-0 break-words font-semibold">{line.quantity} × {line.name}</p><p className="shrink-0 tabular-nums">{amount(line.unitPriceCents * (line.quantity - line.cancelledQuantity))}</p></div>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{quantityLabel(pending, "pendiente")} · {quantityLabel(line.deliveredQuantity, "entregado")}{line.cancelledQuantity > 0 && ` · ${quantityLabel(line.cancelledQuantity, "anulado")}`}</p>
+            {pending > 0 && !historical && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Entregar uno de ${line.name}`} onClick={() => updateLine(line, "deliveredQuantity", 1)}><Check size={14} aria-hidden="true" />Entregar 1</button><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Anular uno de ${line.name}`} onClick={() => updateLine(line, "cancelledQuantity", 1)}>Anular 1</button></div>}
+            {!historical && (line.deliveredQuantity > 0 || line.cancelledQuantity > 0) && <details className="mt-2">
+              <summary className="cursor-pointer text-xs font-medium text-[var(--floor-action,#3d5934)]">Corregir cantidades</summary>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {line.deliveredQuantity > 0 && <button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "deliveredQuantity", -1)}>Deshacer entrega</button>}
+                {line.cancelledQuantity > 0 && <button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "cancelledQuantity", -1)}>Deshacer anulación</button>}
+              </div>
+            </details>}
+          </li>;
+        })}</ul>
+      </section>
+      {!historical && !confirming && <AddOrderLine products={products} busy={locked} onAdd={(line) => run({ action: "add-line", ...identity, ...line })} />}
+    </div>
+    {!historical && <footer className={floorWindowFooterClass}>
+      {confirming ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); if (canCheckout && !versionChanged) void run({ action: "checkout", ...identity, paymentMethod: payment || undefined }); }}>
+        <p className="font-semibold">Cerrar cuenta · {amount(account.deliveredCents)}</p>
+        {versionChanged ? <p role="alert" className="text-sm text-amber-950">La cuenta cambió. Volvé al pedido y revisá el nuevo total.</p> : <p className="text-xs text-[var(--floor-muted,#52634b)]">Se guardará el recibo y se liberarán las mesas de esta cuenta.</p>}
+        {account.deliveredCents > 0 && !versionChanged && <label className={fieldClass}>Medio de pago<select className={floorInputClass} required disabled={locked} value={payment} onChange={(event) => setPayment(event.target.value as ServicePaymentMethod | "")}><option value="">Elegí un medio</option>{Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={() => { setCheckoutVersion(null); setPayment(""); }}>Volver al pedido</button><button type="submit" className={floorPrimaryButtonClass} disabled={!canCheckout || versionChanged || (account.deliveredCents > 0 && !payment)}>{account.deliveredCents > 0 ? "Confirmar cobro" : "Confirmar cierre"}</button></div>
+      </form> : <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-[var(--floor-muted,#52634b)]">{account.pendingQuantity > 0 ? "Entregá o anulá los pedidos pendientes antes de cerrar." : "Al cerrar, se liberan las mesas de esta cuenta."}</p><button type="button" className={floorPrimaryButtonClass} disabled={!canCheckout} onClick={() => setCheckoutVersion(account.version)}>{account.deliveredCents > 0 ? "Cobrar y cerrar" : "Cerrar sin consumo"}</button></div>}
+    </footer>}
+  </>;
+}
+
+type NewLine = Pick<Extract<FloorServiceCommand, { action: "add-line" }>, "name" | "productId" | "quantity" | "unitPriceCents">;
+
+function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[]; busy: boolean; onAdd: (line: NewLine) => Promise<boolean> }) {
+  const [productId, setProductId] = useState("");
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const activeProducts = products.filter((product) => product.active);
+  const manual = productId === "manual" || activeProducts.length === 0;
+  const cents = parsePrice(price);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const count = Number(quantity);
+    if (busy || !Number.isInteger(count) || count < 1 || count > 99) return;
+    if (manual && (!name.trim() || cents < 1 || cents > 2_147_483_647)) return;
+    if (!manual && !activeProducts.some((product) => product.id === productId)) return;
+    const success = await onAdd(manual ? { name: name.trim(), unitPriceCents: cents, quantity: count } : { productId, quantity: count });
+    if (success) { setProductId(""); setName(""); setPrice(""); setQuantity("1"); }
+  };
+  return <form aria-label="Agregar pedido" className={`${cardClass} space-y-2.5`} onSubmit={submit}>
+    <h4 className="font-semibold">Agregar pedido</h4>
+    {activeProducts.length > 0 && <label className={fieldClass}>Producto<select className={floorInputClass} disabled={busy} required value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Elegí un producto</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {amount(product.unitPriceCents)}</option>)}<option value="manual">Cargar otro producto</option></select></label>}
+    {manual && <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] gap-2"><label className={fieldClass}>Nombre<input className={floorInputClass} disabled={busy} required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label className={fieldClass}>Precio unitario ($)<input className={floorInputClass} disabled={busy} required inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" maxLength={13} value={price} onChange={(event) => setPrice(event.target.value)} /></label></div>}
+    <div className="flex flex-wrap items-end justify-between gap-2"><label className={`${fieldClass} w-24`}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><button type="submit" className={floorPrimaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !productId)}><Plus size={16} aria-hidden="true" />Agregar pedido</button></div>
+  </form>;
+}
+
+type ServiceReceiptProps = { account: ServiceAccountView; restaurantName: string; timeZone: string };
+
+function ServiceReceipt(props: ServiceReceiptProps) {
+  const [printing, setPrinting] = useState(false);
+  const print = () => {
+    flushSync(() => setPrinting(true));
+    try { window.print(); } finally { setPrinting(false); }
+  };
+  return <>
+    <section aria-label="Recibo de consumo" className={floorWindowBodyClass}><ServiceReceiptContent {...props} /></section>
+    <footer className={`${floorWindowFooterClass} flex justify-end`}><button type="button" className={floorSecondaryButtonClass} onClick={print}><Printer size={16} aria-hidden="true" />Imprimir recibo</button></footer>
+    {printing && createPortal(<div aria-hidden="true" className={styles.printReceipt}><ServiceReceiptContent {...props} /></div>, document.body)}
+  </>;
+}
+
+function ServiceReceiptContent({ account, restaurantName, timeZone }: ServiceReceiptProps) {
+  const time = account.closedAt ? new Intl.DateTimeFormat("es-AR", { timeZone, dateStyle: "short", timeStyle: "short" }).format(new Date(account.closedAt)) : "";
+  return <div className="space-y-4">
+    <header className="rounded-xl bg-[var(--floor-hover,#edf2e9)] p-4"><ReceiptText size={22} aria-hidden="true" /><p className="mt-2 text-sm font-medium">{restaurantName}</p><h3 className="text-lg font-semibold">Recibo de consumo {account.receiptNumber != null && `#${account.receiptNumber}`}</h3><p className="mt-1 text-sm">{account.customerName} · {account.roomName} · {account.tableLabels.join(" + ")}</p><p className="mt-1 text-xs text-[var(--floor-muted,#52634b)]">{time} · Reserva {account.reservationCode}</p></header>
+    <ul className="divide-y divide-[var(--floor-border,#e4e4e7)] text-sm">{account.lines.filter((line) => line.deliveredQuantity > 0).map((line) => <li key={line.id} className="flex items-start justify-between gap-3 py-2"><span>{line.deliveredQuantity} × {line.name}</span><span className="shrink-0 tabular-nums">{amount(line.deliveredQuantity * line.unitPriceCents)}</span></li>)}</ul>
+    <dl className="flex items-baseline justify-between gap-2 border-t border-[var(--floor-border,#e4e4e7)] pt-3"><div><dt className="text-sm">Total cobrado</dt><dd className="text-lg font-semibold tabular-nums">{amount(account.totalCents ?? 0)}</dd></div><div className="text-right"><dt className="text-xs text-[var(--floor-muted,#52634b)]">Medio de pago</dt><dd className="text-sm">{account.paymentMethod ? paymentLabels[account.paymentMethod] : "Sin consumo"}</dd></div></dl>
+    <p className="text-xs text-[var(--floor-muted,#52634b)]">Recibo interno guardado para el cierre de caja.</p>
+  </div>;
+}

@@ -39,6 +39,10 @@ export async function deleteRestaurants(organizationId: string, ids: string[]) {
   return prisma.$transaction(async (tx) => {
     const restaurants = await tx.restaurant.findMany({ where: { organizationId, id: { in: uniqueIds } }, select: { id: true } });
     if (restaurants.length !== uniqueIds.length) throw new NotFoundError("Restaurante");
+    const serviceScope = { restaurantId: { in: uniqueIds } };
+    if (await tx.serviceAccount.count({ where: serviceScope }) || await tx.serviceCashEvent.count({ where: serviceScope })) {
+      throw new ConflictError("El restaurante conserva cuentas o cierres de caja. No se puede eliminar.");
+    }
     const templateAssets = await tx.menuTemplateAsset.findMany({
       where: { template: { restaurantId: { in: uniqueIds } } },
       select: { storageKey: true },

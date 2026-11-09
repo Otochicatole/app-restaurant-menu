@@ -57,6 +57,16 @@ for (const table of ["DiningRoomLocation", "DiningTable", "DiningTableCombinatio
 values("DiningTable", "shape", ["SQUARE", "RECTANGLE", "CIRCLE"]);
 values("ReservationAllocationTable", "shapeSnapshot", ["SQUARE", "RECTANGLE", "CIRCLE"]);
 check("ReservationAllocation", ["serviceStartAt", "serviceEndAt", "blockedFrom", "blockedUntil"], '"serviceEndAt">"serviceStartAt" AND "blockedUntil">"blockedFrom" AND "blockedFrom"<="serviceStartAt" AND "blockedUntil">="serviceEndAt"', "intervalos inválidos");
+minimum("ServiceProduct", "unitPriceCents", 1);
+minimum("ServiceAccount", "version", 0);
+minimum("ServiceAccount", "totalCents", 0, true);
+minimum("ServiceOrderLine", "unitPriceCents", 1);
+minimum("ServiceOrderLine", "quantity", 1);
+for (const column of ["deliveredQuantity", "cancelledQuantity"]) minimum("ServiceOrderLine", column, 0);
+check("ServiceOrderLine", ["quantity", "deliveredQuantity", "cancelledQuantity"],
+  '"deliveredQuantity" + "cancelledQuantity" <= "quantity"', "las entregas y cancelaciones superan lo pedido");
+minimum("ServiceCashEvent", "revision", 1);
+values("ServiceCashEvent", "kind", ["CLOSE", "REOPEN"]);
 
 /** Read-only: missing databases and older tables/columns are deliberately skipped. */
 export async function assertSchemaHardeningPreflight(databaseUrl: string): Promise<void> {

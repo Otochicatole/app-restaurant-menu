@@ -77,7 +77,7 @@ export function buildSelectionLayout(state: FloorSelectionState, ids: string[], 
     const invalid = validateTableArrangement(poses);
     if (invalid) return invalid;
     const capacity = capacityAfterLayout(allocation.capacity, before, poses);
-    if (capacity < allocation.partySize) return `La capacidad útil no alcanza: el armado tiene ${capacity} lugares para ${allocation.partySize} personas.`;
+    if (!allocation.servicePartiallyReleased && !allocation.serviceOverrun && capacity < allocation.partySize) return `La capacidad útil no alcanza: el armado tiene ${capacity} lugares para ${allocation.partySize} personas.`;
     const assignment = floorAssignmentSchema.safeParse({ roomId: state.room.id, locationId: allocation.locationId, optionId: "custom", customTables: poses.map(({ tableId, x, y, rotation }) => ({ tableId, x, y, rotation })), capacity,
       x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length, y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length,
       rotation: 0, expectedRoomRevision: state.room.revision, retainExisting: false });

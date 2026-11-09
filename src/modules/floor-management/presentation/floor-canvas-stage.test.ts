@@ -589,6 +589,30 @@ describe("floor viewport dragging", () => {
     expect(groupAction).toHaveBeenCalledWith(["one", "two"], {x: 320, y: 240}); expect(tableAction).not.toHaveBeenCalled();
   });
 
+  it("routes service clicks to occupied tables and leaves selection and geometry untouched", () => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true, state: "reserved" as const };
+    const onServiceTable = vi.fn();
+    const onSelect = vi.fn();
+    const onMove = vi.fn();
+    render(createElement(FloorCanvasStage, {
+      room, tables: [first, { ...first, id: "two", x: 280 }, { ...first, id: "free", x: 400, state: "available" }],
+      joinedGroups: [{ id: "joined", tableIds: ["one", "two"], label: "M1 + M2" }],
+      interactionMode: "service", zoom: 1, onZoomChange: vi.fn(), onServiceTable, onSelect, onMove,
+    }));
+    const click = (id: string) => act(() => {
+      const event = { evt: new MouseEvent("click", { button: 0 }), cancelBubble: false };
+      (canvas.groups.get(id)!.onClick as (event: unknown) => void)(event);
+    });
+    expect(canvas.stageEvents.draggable).toBe(false);
+    expect(canvas.groups.get("floor-table-one")!.draggable).toBe(false);
+    click("floor-table-two");
+    click("floor-joined-group-joined");
+    click("floor-table-free");
+    expect(onServiceTable.mock.calls).toEqual([["two"], ["one"]]);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
   it.each([
     { press: "onMouseDown", click: "onClick", double: "onDblClick" },
     { press: "onTouchStart", click: "onTap", double: "onDblTap" },

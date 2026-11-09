@@ -26,7 +26,7 @@ export type RestaurantContext = {
   organizationId: string;
   restaurantId: string;
   organizationName: string;
-  restaurant: RestaurantSummary;
+  restaurant: RestaurantSummary & { timeZone: string };
 };
 export type RestaurantWorkspace = {
   organizationId: string;

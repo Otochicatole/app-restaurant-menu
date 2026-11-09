@@ -4,7 +4,7 @@ import { transientButtonProps } from "@/ui/button-state";
 
 import Link from "next/link";
 import { useEffect, useId, useRef, type Ref } from "react";
-import { Building2, CalendarClock, Check, Layers3, List, Package, Plus, Settings2 } from "lucide-react";
+import { Building2, CalendarClock, Check, Layers3, List, Package, Plus, ReceiptText, Settings2 } from "lucide-react";
 import { LogoutButton } from "@/modules/identity-access/ui";
 import type { FloorRoom } from "../contracts";
 
@@ -14,11 +14,12 @@ export type FloorBoardToolbarProps = {
   readOnly: boolean; canManageWalkIns: boolean; enabled: boolean; hasBoard: boolean; assembling: boolean; saving: boolean;
   reservationCount: number; restaurantId: string; activePanel?: string | null; openPanels?: string[]; hasPendingChanges?: boolean;
   onTables?: () => void;
+  onServiceAccounts?: () => void;
 };
 const buttonBase = "flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--floor-focus,#3d5934)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:px-3";
 const actionClass = `${buttonBase} bg-[var(--floor-surface,#fff)] text-[var(--floor-ink,#263e23)] hover:bg-[var(--floor-hover,#edf2e9)] aria-expanded:bg-[var(--floor-hover,#edf2e9)]`;
 
-export function FloorBoardToolbar({ rooms, roomId, roomsOpen, onRoomsOpenChange, onSelectRoom, onSchedule, onReservations, onAttend, onTables, attendButtonRef, readOnly, canManageWalkIns, enabled, hasBoard, assembling, saving, reservationCount, restaurantId, activePanel, openPanels, hasPendingChanges = false }: FloorBoardToolbarProps) {
+export function FloorBoardToolbar({ rooms, roomId, roomsOpen, onRoomsOpenChange, onSelectRoom, onSchedule, onReservations, onAttend, onTables, onServiceAccounts, attendButtonRef, readOnly, canManageWalkIns, enabled, hasBoard, assembling, saving, reservationCount, restaurantId, activePanel, openPanels, hasPendingChanges = false }: FloorBoardToolbarProps) {
   const roomButton = useRef<HTMLButtonElement>(null);
   const roomPopup = useRef<HTMLDivElement>(null);
   const popupId = useId();
@@ -54,6 +55,7 @@ export function FloorBoardToolbar({ rooms, roomId, roomsOpen, onRoomsOpenChange,
     <button {...transientButtonProps} ref={roomButton} type="button" aria-label="Cambiar salón" title="Salones" aria-controls={popupId} aria-expanded={roomsOpen} disabled={!hasBoard || saving} onClick={() => onRoomsOpenChange(!roomsOpen)} className={actionClass}><Building2 size={18} /><span className="hidden whitespace-nowrap lg:inline">Salones</span></button>
     <button {...transientButtonProps} type="button" aria-label="Fecha y hora" title="Fecha y hora" aria-haspopup="dialog" aria-expanded={toolOpen("schedule")} disabled={!hasBoard || saving} onClick={() => openAction(onSchedule)} className={actionClass}><CalendarClock size={18} /><span className="hidden whitespace-nowrap lg:inline">Fecha y hora</span></button>
     <button {...transientButtonProps} type="button" aria-label="Reservas" title={`Reservas · ${reservationCount}`} aria-describedby={reservationCountId} aria-haspopup="dialog" aria-expanded={toolOpen("reservations")} disabled={!hasBoard || saving} onClick={() => openAction(onReservations)} className={actionClass}><List size={18} /><span className="hidden whitespace-nowrap lg:inline">Reservas</span><span id={reservationCountId} className="sr-only text-xs font-normal tabular-nums text-[var(--floor-muted,#52634b)] lg:not-sr-only">{reservationCount}<span className="sr-only"> grupos asignados</span></span></button>
+    {onServiceAccounts && <button {...transientButtonProps} type="button" aria-label="Cuentas de servicio" title="Cuentas de servicio" aria-haspopup="dialog" aria-expanded={toolOpen("service-list")} disabled={saving} onClick={() => openAction(onServiceAccounts)} className={actionClass}><ReceiptText size={18} aria-hidden="true" /><span className="hidden whitespace-nowrap lg:inline">Cuentas</span></button>}
     {canManageWalkIns && enabled && <button {...transientButtonProps} ref={attendButtonRef} type="button" aria-label={assembling ? "Armar mesas" : "Atender sin reserva"} title={assembling ? "Continuar armado" : "Atender sin reserva"} aria-haspopup="dialog" aria-expanded={toolOpen(assembling ? "assembly" : "walk-in")} disabled={!hasBoard || saving} onClick={() => openAction(onAttend)} className={`${buttonBase} bg-[var(--floor-action,#182618)] text-white hover:bg-[var(--floor-action-hover,#2d4628)]`}>{assembling ? <Layers3 size={19} /> : <Plus size={19} />}<span className="hidden whitespace-nowrap lg:inline">{assembling ? "Armar mesas" : "Atender"}</span></button>}
     {onTables && <button {...transientButtonProps} type="button" aria-label="Inventario de mesas" title="Inventario de mesas" aria-haspopup="dialog" aria-expanded={toolOpen("inventory")} disabled={!roomId || saving} onClick={() => openAction(onTables)} className={actionClass}><Package size={18} /><span className="hidden whitespace-nowrap lg:inline">Mesas</span></button>}
     {!readOnly && <Link href={`/admin/restaurants/${encodeURIComponent(restaurantId)}/rooms`} aria-label="Administrar" title="Administrar salones" aria-disabled={navigationDisabled || undefined} tabIndex={navigationDisabled ? -1 : undefined} onClick={(event) => { if (navigationDisabled) event.preventDefault(); else onRoomsOpenChange(false); }} className={`${actionClass} ${navigationDisabled ? "cursor-not-allowed opacity-50" : ""}`}><Settings2 size={18} /><span className="hidden whitespace-nowrap lg:inline">Administrar</span></Link>}

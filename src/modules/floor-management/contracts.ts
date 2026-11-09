@@ -52,13 +52,16 @@ export const floorAssignmentSchema = z.object({
   retainExisting: z.boolean().optional(),
 });
 export type FloorAssignmentInput = z.infer<typeof floorAssignmentSchema>;
-export type FloorPose = Omit<FloorTable, "id" | "active"> & { tableId: string };
+export type FloorPose = Omit<FloorTable, "id" | "active"> & { tableId: string; releasedAt?: string | null };
 export type FloorInterval = { serviceStartAt: string; serviceEndAt: string; blockedFrom: string; blockedUntil: string; timeZone: string };
 export type FloorAllocationView = FloorInterval & {
   id: string; reservationId: string; roomId: string; combinationId: string | null; capacity: number;
   customerName: string; partySize: number; date: string; time: string; notes: string; code: string;
   releasedAt: string | null; poses: FloorPose[]; version: number;
   locationId?: string | null; source?: string; reservationRevision?: number;
+  serviceConflict?: boolean;
+  serviceOverrun?: boolean;
+  servicePartiallyReleased?: boolean;
 };
 export type FloorAssignmentOption = {
   id: string; roomId: string; label: string; capacity: number; x: number; y: number; rotation: FloorRotation;
@@ -78,7 +81,7 @@ export type FloorBoardView = {
   restaurantId: string; restaurantName: string; timeZone: string; enabled: boolean; at: string;
   rooms: FloorRoom[]; allocations: FloorAllocationView[]; updatedAt: string;
 };
-export type FloorLease = { id: string; reservationId: string; roomId: string; blockedFrom: string; blockedUntil: string; releasedAt: string | null; poses: FloorPose[]; locationId?: string | null };
+export type FloorLease = { id: string; reservationId: string; roomId: string; blockedFrom: string; blockedUntil: string; releasedAt: string | null; poses: FloorPose[]; locationId?: string | null; serviceOverrun?: boolean };
 
 /** Shared mapping boundary; accepts repository rows without exposing ORM types. */
 export function toFloorRoom(value: unknown): FloorRoom {
@@ -88,4 +91,4 @@ export function toFloorRoom(value: unknown): FloorRoom {
 }
 
 export { calculateFloorInterval, restaurantToday, restaurantLocalDateTime, validateTimeZone } from "./domain/time-policy";
-export { buildFloorOptions, composeRoomPoses, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, floorTableSeparationGap, validateAssembly, validateTableArrangement, getJoinedTableGroups, usableTableCapacity } from "./domain/floor-policy";
+export { buildFloorOptions, composeRoomPoses, floorPoseOverlaps, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, floorTableSeparationGap, validateAssembly, validateTableArrangement, getJoinedTableGroups, usableTableCapacity } from "./domain/floor-policy";

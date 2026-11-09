@@ -487,6 +487,11 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       const existing = cmd.id ? await tx.restaurantEvent.findFirst({ where: { id: cmd.id, restaurantId }, include: { rooms: true } }) : null;
       if (cmd.id && !existing) throw new NotFoundError("Evento");
       const roomIds = [...new Set(cmd.roomIds ?? existing?.rooms.map((room) => room.roomId) ?? [])];
+      const scheduleChanged = existing && (existing.date !== cmd.date || existing.startTime !== cmd.startTime || existing.endTime !== cmd.endTime ||
+        existing.rooms.map((room) => room.roomId).sort().join(",") !== [...roomIds].sort().join(","));
+      if (scheduleChanged && await tx.serviceAccount.count({ where: { restaurantId, allocation: { reservation: { eventId: existing.id } } } })) {
+        throw new ConflictError("El evento ya tiene servicio registrado. Su fecha, horario y salones deben conservarse.");
+      }
       if (settings.floorManagementEnabled && roomIds.length === 0) throw new BadRequestError("Seleccioná al menos un salón para el evento.");
       if (roomIds.length && await tx.diningRoom.count({ where: { restaurantId, id: { in: roomIds }, active: true } }) !== roomIds.length) {
         throw new BadRequestError("Los salones del evento deben estar activos y pertenecer a este restaurante.");
@@ -528,8 +533,6 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
         : await tx.restaurantEvent.create({ data: { ...data, restaurantId } });
       await tx.restaurantEventRoom.deleteMany({ where: { eventId: event.id, restaurantId } });
       if (roomIds.length) await tx.restaurantEventRoom.createMany({ data: roomIds.map((roomId) => ({ eventId: event.id, restaurantId, roomId })) });
-      const scheduleChanged = existing && (existing.date !== cmd.date || existing.startTime !== cmd.startTime || existing.endTime !== cmd.endTime ||
-        existing.rooms.map((room) => room.roomId).sort().join(",") !== [...roomIds].sort().join(","));
       if (scheduleChanged) {
         await tx.tableReservation.updateMany({ where: { restaurantId, eventId: event.id }, data: { date: event.date, time: event.startTime, revision: { increment: 1 } } });
         const confirmed = await tx.tableReservation.findMany({ where: { restaurantId, eventId: event.id, status: "CONFIRMED" } });
@@ -701,11 +704,16 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       if (existing.source !== "WALK_IN" && cmd.customerPhone.trim().length < 6) throw new BadRequestError("La reserva requiere un teléfono de contacto válido.");
       await this.assertRevision(tx, existing, cmd.status, cmd.expectedRevision);
       const id = cmd.id;
+      const hasService = await tx.serviceAccount.count({ where: { restaurantId, reservationId: id } }) > 0;
+      if (hasService && (existing.status !== cmd.status || existing.date !== cmd.date || existing.time !== cmd.time ||
+        existing.partySize !== cmd.partySize || (cmd.assignment && !cmd.assignment.retainExisting))) {
+        throw new ConflictError("La reserva ya tiene servicio registrado. Gestioná el armado y el cierre desde Servicio.");
+      }
       const data = {
         customerName: cmd.customerName, customerEmail: cmd.customerEmail, customerPhone: cmd.customerPhone,
         partySize: cmd.partySize, date: cmd.date, time: cmd.time, notes: cmd.notes, adminNotes: cmd.adminNotes, status: cmd.status,
       };
-      if (existing.eventId) {
+      if (existing.eventId && !hasService) {
         const event = await this.assertEventCapacity(tx, restaurantId, existing.eventId, cmd.partySize, cmd.status, id);
         data.date = event.date;
         data.time = event.startTime;
@@ -713,7 +721,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       const updated = await tx.tableReservation.update({
         where: { id, restaurantId }, data: { ...data, revision: { increment: 1 } }, include: { event: { select: { title: true } } },
       });
-      await syncReservationAllocation(tx, updated, cmd.assignment);
+      if (!hasService) await syncReservationAllocation(tx, updated, cmd.assignment);
       return toReservationView(updated);
     });
   }
@@ -727,6 +735,9 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     return withSqliteTransaction(this.database, async (tx) => {
       const existing = await tx.tableReservation.findFirst({ where: { id, restaurantId } });
       if (!existing) throw new NotFoundError("Reserva no encontrada");
+      if (await tx.serviceAccount.count({ where: { restaurantId, reservationId: id } })) {
+        throw new ConflictError("La reserva ya tiene servicio registrado. Cerrá los armados desde Servicio.");
+      }
       await this.assertRevision(tx, existing, status, options?.expectedRevision);
       if (existing.eventId) {
         await this.assertEventCapacity(tx, restaurantId, existing.eventId, existing.partySize, status, id);
@@ -740,8 +751,11 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
   }
 
   async deleteReservation(restaurantId: string, id: string): Promise<void> {
-    await this.database.tableReservation.deleteMany({
-      where: { id, restaurantId },
+    await withSqliteTransaction(this.database, async (tx) => {
+      if (await tx.serviceAccount.count({ where: { restaurantId, reservationId: id } })) {
+        throw new ConflictError("La reserva conserva cuentas de servicio y recibos. No se puede eliminar.");
+      }
+      await tx.tableReservation.deleteMany({ where: { id, restaurantId } });
     });
   }
 }

@@ -17,7 +17,7 @@ type Point = { x: number; y: number };
 const elementKey = (kind: FloorCanvasElement["kind"], id: string) => `${kind}:${id}`;
 const selectionModifier = (event?: MouseEvent | TouchEvent) => Boolean(event?.shiftKey || event?.ctrlKey || event?.metaKey);
 
-export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectJoinedTables = false, selectedIds = [], selectedElements = [], selectedFixtureId, selectedLocationId, draggableIds, interactionMode = "select", onSelect, onSelectMany, onSelectElements, onClearSelection, onContextMenuSelection, onContextMenuTable, onContextMenuGroup, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
+export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectJoinedTables = false, selectedIds = [], selectedElements = [], selectedFixtureId, selectedLocationId, draggableIds, interactionMode = "select", onSelect, onSelectMany, onServiceTable, onSelectElements, onClearSelection, onContextMenuSelection, onContextMenuTable, onContextMenuGroup, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
   const paint = canvasPaint[appearance];
   const container = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
@@ -57,6 +57,8 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
     return true;
   }, []);
   const selecting = interactionMode === "select";
+  const panning = interactionMode === "pan";
+  const service = interactionMode === "service";
   const editorCompact = editorMode && size.width < 768;
   const gutters = fullScreen ? {
     top: Math.min(128, size.height * 0.32),
@@ -228,7 +230,7 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
     callback?.(id, point);
   };
   return <div ref={container} className="h-full w-full touch-none">
-    <Stage ref={stage} width={size.width} height={size.height} draggable={!selecting} style={{ cursor: !selecting ? "grab" : onPlace || onSelectMany || onSelectElements ? "crosshair" : "default" }} onDragEnd={(event) => {
+    <Stage ref={stage} width={size.width} height={size.height} draggable={panning} style={{ cursor: panning ? "grab" : service ? "pointer" : onPlace || onSelectMany || onSelectElements ? "crosshair" : "default" }} onDragEnd={(event) => {
       if (event.target !== stage.current) return;
       // Capture the movement before resetting the node; React may apply the updater later.
       const delta = { x: event.target.x(), y: event.target.y() };
@@ -278,11 +280,16 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
             {fixture.label && <Text text={fixture.label} x={-fixture.width / 2} y={-8} width={fixture.width} align="center" fontSize={fixture.type === "LABEL" ? 18 : 13} fill={fixture.type === "WALL" ? "#ffffff" : paint.fixtureInk} fontStyle="bold" />}
           </Group>;
         })}
-        {liveJoinedGroups.map(({ group, tables }) => <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} paint={paint} onSelect={selecting && onSelectMany ? (additive) => onSelectMany(group.tableIds, additive) : undefined} onContextMenu={onContextMenuGroup ? (point) => onContextMenuGroup(group.tableIds, point) : undefined} />)}
+        {liveJoinedGroups.map(({ group, tables }) => {
+          const occupiedTable = service && tables.find((table) => table.state === "reserved");
+          const selectGroup = occupiedTable && onServiceTable ? () => onServiceTable(occupiedTable.id) : selecting && onSelectMany ? (additive: boolean) => onSelectMany(group.tableIds, additive) : undefined;
+          return <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} paint={paint} onSelect={selectGroup} onContextMenu={!service && onContextMenuGroup ? (point) => onContextMenuGroup(group.tableIds, point) : undefined} />;
+        })}
         {liveTables.map((table) => <Table key={table.id} table={table} paint={paint} selected={selectedIds.includes(table.id)} selecting={selecting} draggable={selecting && Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
           onSelect={(additive) => selectTable(table.id, additive)}
           onSelectIndividual={joinedIdsByTable.has(table.id) ? () => { if (!multiTouch.current) onSelect?.(table.id, false); } : undefined}
-          onContextMenu={onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
+          onOpenService={service && table.state === "reserved" && onServiceTable ? () => { if (!multiTouch.current) onServiceTable(table.id); } : undefined}
+          onContextMenu={!service && onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
           onDragStart={(node) => {
             if (!selecting) return;
             const alreadySelected = selectedIds.includes(table.id);
@@ -343,7 +350,7 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
   </Group>;
 }
 
-function Table({ table, selected, selecting, draggable, paint, onSelect, onSelectIndividual, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
+function Table({ table, selected, selecting, draggable, paint, onSelect, onSelectIndividual, onOpenService, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onOpenService?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
   const gesture = useRef({ dragged: false, selectedOnPress: false });
   const reserved = table.state === "reserved";
   const unavailable = table.state === "unavailable" || !table.active;
@@ -352,7 +359,17 @@ function Table({ table, selected, selecting, draggable, paint, onSelect, onSelec
   return <Group id={`floor-table-${table.id}`} x={table.x} y={table.y} rotation={table.rotation} opacity={unavailable ? 0.55 : 1} draggable={draggable && table.active}
     onMouseDown={(event) => { if (!selecting) return; event.cancelBubble = true; if (event.evt.button !== 0) return; const additive = event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey; gesture.current = { dragged: false, selectedOnPress: additive || !selected }; if (gesture.current.selectedOnPress) onSelect(additive); }}
     onTouchStart={() => { gesture.current = { dragged: false, selectedOnPress: false }; }}
-    onClick={(event) => { if (!selecting) return; event.cancelBubble = true; if (event.evt.button === 0 && !gesture.current.dragged && !gesture.current.selectedOnPress) onSelect(false); }} onTap={(event) => { if (!selecting) return; event.cancelBubble = true; if (!gesture.current.dragged) onSelect(false); }}
+    onClick={(event) => {
+      if (onOpenService && event.evt.button === 0) { event.cancelBubble = true; onOpenService(); return; }
+      if (!selecting) return;
+      event.cancelBubble = true;
+      if (event.evt.button === 0 && !gesture.current.dragged && !gesture.current.selectedOnPress) onSelect(false);
+    }} onTap={(event) => {
+      if (onOpenService) { event.cancelBubble = true; onOpenService(); return; }
+      if (!selecting) return;
+      event.cancelBubble = true;
+      if (!gesture.current.dragged) onSelect(false);
+    }}
     onDblClick={selecting && onSelectIndividual ? (event) => { if (event.evt.button !== 0 || gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
     onDblTap={selecting && onSelectIndividual ? (event) => { if (gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
     onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}

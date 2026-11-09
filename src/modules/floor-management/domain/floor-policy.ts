@@ -122,11 +122,22 @@ export function leaseOverlaps(lease: FloorLease, from: number, until: number): b
   const start = Date.parse(lease.blockedFrom); const end = effectiveLeaseEnd(lease);
   return end > start && start < until && end > from;
 }
+function effectivePoseEnd(lease: FloorLease, pose: FloorPose): number {
+  return Math.min(effectiveLeaseEnd(lease), pose.releasedAt ? Date.parse(pose.releasedAt) : Infinity);
+}
+export function floorPoseOverlaps(lease: FloorLease, pose: FloorPose, from: number, until: number): boolean {
+  const start = Date.parse(lease.blockedFrom);
+  const end = effectivePoseEnd(lease, pose);
+  return end > start && start < until && end > from;
+}
 export function composeRoomPoses(room: FloorRoom, leases: FloorLease[], at: string | number): FloorPose[] {
   const poses = new Map<string, FloorPose>();
   const instant = typeof at === "number" ? at : Date.parse(at);
-  for (const lease of leases) if (lease.roomId === room.id && Date.parse(lease.blockedFrom) <= instant && effectiveLeaseEnd(lease) > instant) {
-    for (const pose of lease.poses) poses.set(pose.tableId, pose);
+  for (const lease of leases) if (lease.roomId === room.id && Date.parse(lease.blockedFrom) <= instant) {
+    for (const pose of lease.poses) {
+      const openOverrun = lease.serviceOverrun && !lease.releasedAt && !pose.releasedAt;
+      if (openOverrun || effectivePoseEnd(lease, pose) > instant) poses.set(pose.tableId, pose);
+    }
   }
   return [...poses.values()];
 }
@@ -207,9 +218,9 @@ export function validateFloorPlacement(room: FloorRoom, proposal: FloorLease | n
     const poseError = validatePoses(room, proposal.poses); if (poseError) return poseError;
     const from = Date.parse(proposal.blockedFrom); const until = effectiveLeaseEnd(proposal);
     const ids = new Set(proposal.poses.map((pose) => pose.tableId));
-    const conflict = relevant.find((lease) => leaseOverlaps(lease, from, until) && lease.poses.some((pose) => ids.has(pose.tableId)));
+    const conflict = relevant.find((lease) => lease.poses.some((pose) => ids.has(pose.tableId) && floorPoseOverlaps(lease, pose, from, until)));
     if (conflict) return `Una mesa ya está asignada a la reserva ${conflict.reservationId} durante ese horario.`;
-    const points = [from, until, ...relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), effectiveLeaseEnd(lease)])]
+    const points = [from, until, ...relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), ...lease.poses.map((pose) => effectivePoseEnd(lease, pose))])]
       .filter((value) => value >= from && value <= until).sort((a, b) => a - b);
     for (let index = 0; index < points.length - 1; index++) if (points[index + 1] > points[index]) {
       const invalid = validatePoses(room, composeRoomPoses(room, [...relevant, proposal], (points[index] + points[index + 1]) / 2));
@@ -222,7 +233,7 @@ export function validateFloorPlacement(room: FloorRoom, proposal: FloorLease | n
     const invalid = validateSector(room, lease) ?? validatePoses(room, lease.poses);
     if (invalid) return invalid;
   }
-  const points = [...new Set(relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), effectiveLeaseEnd(lease)]))].sort((a, b) => a - b);
+  const points = [...new Set(relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), ...lease.poses.map((pose) => effectivePoseEnd(lease, pose))]))].sort((a, b) => a - b);
   for (let index = 0; index < points.length - 1; index++) if (points[index + 1] > points[index]) {
     const invalid = validatePoses(room, composeRoomPoses(room, relevant, (points[index] + points[index + 1]) / 2));
     if (invalid) return invalid;
@@ -232,8 +243,12 @@ export function validateFloorPlacement(room: FloorRoom, proposal: FloorLease | n
 
 /** A bounded fit check for availability; actual assignments still validate their exact positions. */
 export function findFloorPlacement(room: FloorRoom, option: FloorAssignmentOption, interval: FloorInterval, leases: FloorLease[], excludeReservationId?: string): { locationId: string; x: number; y: number; rotation: FloorRotation; poses: FloorPose[] } | null {
-  const relevant = leases.filter((lease) => lease.roomId === room.id && lease.reservationId !== excludeReservationId && leaseOverlaps(lease, Date.parse(interval.blockedFrom), Date.parse(interval.blockedUntil)));
-  const occupied = relevant.flatMap((lease) => lease.poses).map(bounds);
+  const from = Date.parse(interval.blockedFrom);
+  const until = Date.parse(interval.blockedUntil);
+  const relevant = leases.filter((lease) => lease.roomId === room.id && lease.reservationId !== excludeReservationId && leaseOverlaps(lease, from, until));
+  const occupied = relevant.flatMap((lease) => lease.poses.filter((pose) =>
+    floorPoseOverlaps(lease, pose, from, until),
+  )).map(bounds);
   const obstacles = room.fixtures.filter((fixture) => fixture.type !== "LABEL").map(bounds);
   const relative = option.poses.map((pose) => ({ ...pose, x: pose.x - option.x, y: pose.y - option.y }));
   for (const location of (room.locations ?? []).filter((item) => item.active)) for (const rotation of [0, 90, 180, 270] as FloorRotation[]) {

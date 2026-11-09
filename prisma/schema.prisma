@@ -52,7 +52,7 @@ model Organization {
 
 model AppSchemaState {
   id            String   @id @default("singleton")
-  generation    Int      @default(4)
+  generation    Int      @default(5)
   state         String   @default("READY")
   migrationJson String?
   updatedAt     DateTime @updatedAt
@@ -92,6 +92,8 @@ model Restaurant {
   diningTables                 DiningTable[]
   diningTableCombinations      DiningTableCombination[]
   reservationAllocations       ReservationAllocation[]
+  serviceProducts              ServiceProduct[]
+  serviceCashEvents            ServiceCashEvent[]
 
   @@index([organizationId])
 }
@@ -498,6 +500,7 @@ model DiningTable {
   updatedAt     DateTime @updatedAt
   combinationMembers DiningTableCombinationMember[]
   allocations   ReservationAllocationTable[]
+  serviceAccounts ServiceAccountTable[]
 
   @@unique([id, restaurantId, roomId])
   @@unique([roomId, label])
@@ -572,8 +575,10 @@ model ReservationAllocation {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   tables         ReservationAllocationTable[]
+  serviceAccounts ServiceAccount[]
 
   @@unique([id, restaurantId, roomId])
+  @@unique([id, restaurantId, reservationId, roomId])
   @@unique([reservationId, restaurantId])
   @@index([restaurantId, blockedFrom])
   @@index([restaurantId, roomId, blockedFrom])
@@ -593,9 +598,104 @@ model ReservationAllocationTable {
   x               Float
   y               Float
   rotation        Int
+  releasedAt      DateTime?
   allocation      ReservationAllocation @relation(fields: [allocationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
   table           DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
 
   @@id([allocationId, tableId])
   @@index([restaurantId, tableId, allocationId])
+}
+
+model ServiceProduct {
+  id             String @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name           String
+  unitPriceCents Int
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lines          ServiceOrderLine[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, name])
+}
+
+model ServiceAccount {
+  id              String @id @default(cuid())
+  restaurantId    String
+  reservationId   String
+  allocationId    String
+  roomId          String
+  allocation      ReservationAllocation @relation(fields: [allocationId, restaurantId, reservationId, roomId], references: [id, restaurantId, reservationId, roomId], onDelete: Restrict, onUpdate: Restrict)
+  roomName        String
+  reservationCode String
+  customerName    String
+  version         Int @default(0)
+  openedAt        DateTime @default(now())
+  openedBy        String
+  closedAt        DateTime?
+  closedBy        String?
+  businessDate    String?
+  paymentMethod   String?
+  totalCents      Int?
+  receiptNumber   String?
+  tables          ServiceAccountTable[]
+  lines           ServiceOrderLine[]
+
+  @@unique([id, restaurantId])
+  @@unique([id, restaurantId, roomId])
+  @@unique([restaurantId, receiptNumber])
+  @@index([restaurantId, closedAt])
+  @@index([restaurantId, businessDate, closedAt])
+  @@index([allocationId, closedAt])
+}
+
+model ServiceAccountTable {
+  accountId    String
+  restaurantId String
+  roomId       String
+  tableId      String
+  label        String
+  releasedAt   DateTime?
+  account      ServiceAccount @relation(fields: [accountId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table        DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([accountId, tableId])
+  @@index([restaurantId, tableId])
+}
+
+model ServiceOrderLine {
+  id                String @id @default(cuid())
+  accountId         String
+  restaurantId      String
+  productId         String?
+  account           ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  product           ServiceProduct? @relation(fields: [productId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  name              String
+  unitPriceCents    Int
+  quantity          Int
+  deliveredQuantity Int @default(0)
+  cancelledQuantity Int @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+model ServiceCashEvent {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  businessDate  String
+  revision      Int
+  kind          String
+  actorId       String
+  reason        String?
+  createdAt     DateTime @default(now())
+  cashCents     Int @default(0)
+  cardCents     Int @default(0)
+  transferCents Int @default(0)
+  receiptCount  Int @default(0)
+
+  @@unique([restaurantId, businessDate, revision])
 }

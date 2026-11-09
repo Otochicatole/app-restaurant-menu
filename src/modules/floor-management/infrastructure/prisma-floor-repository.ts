@@ -5,7 +5,7 @@ import { prisma } from "@/platform/database/prisma";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
-  calculateFloorInterval, floorRoomInputSchema, floorTableInventorySchema, restaurantToday, toFloorRoom, validateFloorPlacement, validateRoomLayout, validateTimeZone,
+  calculateFloorInterval, floorRoomInputSchema, floorTableInventorySchema, restaurantToday, toFloorRoom, validateFloorPlacement, validateRoomLayout, validateTableArrangement, validateTimeZone,
   type FloorAllocationView, type FloorBoardView, type FloorConfigView, type FloorLease, type FloorRoom, type FloorRoomInput, type FloorRotation, type FloorTableInventoryInput,
 } from "../contracts";
 
@@ -17,7 +17,8 @@ const toAllocation = (row: Allocation): FloorAllocationView => ({
   serviceStartAt: row.serviceStartAt.toISOString(), serviceEndAt: row.serviceEndAt.toISOString(), blockedFrom: row.blockedFrom.toISOString(),
   blockedUntil: row.blockedUntil.toISOString(), releasedAt: row.releasedAt?.toISOString() ?? null, version: row.version,
   ...row.reservation, poses: row.tables.map((table) => ({ tableId: table.tableId, label: table.labelSnapshot, shape: table.shapeSnapshot,
-    capacity: table.capacitySnapshot, width: table.width, height: table.height, x: table.x, y: table.y, rotation: table.rotation as FloorRotation })),
+    capacity: table.capacitySnapshot, width: table.width, height: table.height, x: table.x, y: table.y, rotation: table.rotation as FloorRotation,
+    ...(table.releasedAt ? { releasedAt: table.releasedAt.toISOString() } : {}) })),
 });
 
 function uniqueError(error: unknown): never {
@@ -38,16 +39,44 @@ export class PrismaFloorRepository {
       enabled: restaurant.floorManagementEnabled, rooms: restaurant.diningRooms.map(toFloorRoom), staffAccount: restaurant.waiterAccount };
   }
 
-  async getBoard(restaurantId: string, at = new Date().toISOString()): Promise<FloorBoardView> {
-    const instant = new Date(at);
+  async getBoard(restaurantId: string, at?: string, live = at === undefined): Promise<FloorBoardView> {
+    const instant = live || at === undefined ? new Date() : new Date(at);
     if (!Number.isFinite(instant.getTime())) throw new BadRequestError("La fecha del plano no es válida.");
     const restaurant = await this.getConfig(restaurantId);
-    const allocations = await this.database.reservationAllocation.findMany({ where: {
-      restaurantId, blockedFrom: { lte: instant }, blockedUntil: { gt: instant }, OR: [{ releasedAt: null }, { releasedAt: { gt: instant } }],
-    }, include: allocationInclude });
+    const scheduled = { blockedFrom: { lte: instant }, blockedUntil: { gt: instant },
+      OR: [{ releasedAt: null }, { releasedAt: { gt: instant } }] };
+    const rows = await this.database.reservationAllocation.findMany({
+      where: { restaurantId, OR: live ? [scheduled, { serviceAccounts: { some: { closedAt: null } } }] : [scheduled] },
+      include: { ...allocationInclude, serviceAccounts: {
+        where: { closedAt: null }, select: { tables: { where: { releasedAt: null }, select: { tableId: true } } },
+      } },
+    });
+    const liveOwners = new Map(live ? rows.flatMap((row) => row.serviceAccounts.flatMap((account) =>
+      account.tables.map(({ tableId }) => [tableId, row.id] as const))) : []);
+    const views = rows.map(toAllocation);
+    const occupied = views.flatMap((view) => view.poses.flatMap((pose) =>
+      liveOwners.get(pose.tableId) === view.id ? [{ id: view.id, roomId: view.roomId, pose }] : []));
+    const allocations = rows.map((row, index): FloorAllocationView => {
+      const view = views[index];
+      const overrun = live && row.blockedUntil <= instant && row.serviceAccounts.length > 0;
+      const active = view.poses.filter((pose) => !pose.releasedAt || Date.parse(pose.releasedAt) > instant.getTime());
+      let serviceConflict = false;
+      const poses = active.filter((pose) => {
+        const owner = liveOwners.get(pose.tableId);
+        if (owner === row.id) return true;
+        if (overrun) return false;
+        const blocked = Boolean(owner) || occupied.some((table) => table.id !== row.id && table.roomId === row.roomId &&
+          validateTableArrangement([table.pose, pose]) !== null);
+        if (blocked) serviceConflict = true;
+        return !blocked;
+      });
+      return { ...view, poses, ...(overrun ? { serviceOverrun: true } : {}),
+        ...(serviceConflict ? { serviceConflict: true } : {}),
+        ...(active.length < view.poses.length ? { servicePartiallyReleased: true } : {}) };
+    });
     return { restaurantId, restaurantName: restaurant.restaurantName, timeZone: restaurant.timeZone,
       enabled: restaurant.enabled, at: instant.toISOString(), rooms: restaurant.rooms.filter((room) => room.active),
-      allocations: allocations.map(toAllocation), updatedAt: new Date().toISOString() };
+      allocations, updatedAt: new Date().toISOString() };
   }
 
   async saveRoom(restaurantId: string, raw: FloorRoomInput, expectedRevision: number): Promise<FloorRoom> {
@@ -80,9 +109,14 @@ export class PrismaFloorRepository {
     const existing = await tx.diningRoom.findUnique({ where: { id }, include: roomInclude });
     if (existing && existing.restaurantId !== restaurantId) throw new NotFoundError("Salón");
     if ((existing?.revision ?? 0) !== expectedRevision) throw new ConflictError("El salón cambió en otra pestaña. Actualizalo antes de guardar.");
+    const now = new Date();
     const future = existing ? (await tx.reservationAllocation.findMany({ where: {
-      restaurantId, roomId: id, blockedUntil: { gt: new Date() }, OR: [{ releasedAt: null }, { releasedAt: { gt: new Date() } }],
-    }, include: allocationInclude })).map(toAllocation) : [];
+      restaurantId, roomId: id, releasedAt: null,
+      OR: [{ blockedUntil: { gt: now } }, { serviceAccounts: { some: { closedAt: null } } }],
+    }, include: allocationInclude })).map((row) => {
+      const view = toAllocation(row);
+      return { ...view, poses: view.poses.filter((pose) => !pose.releasedAt) };
+    }) : [];
     if (!input.active && future.length) throw new ConflictError("El salón tiene reservas futuras asignadas. Reasignalas antes de archivarlo.");
     for (const old of existing?.tables ?? []) {
       const next = input.tables.find((table) => table.id === old.id);
@@ -140,7 +174,10 @@ export class PrismaFloorRepository {
     await withSqliteTransaction(this.database, async (tx) => {
       const restaurant = await tx.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
       if (restaurant.timeZone === zone) return;
-      const future = await tx.reservationAllocation.count({ where: { restaurantId, blockedUntil: { gt: new Date() }, OR: [{ releasedAt: null }, { releasedAt: { gt: new Date() } }] } });
+      const future = await tx.reservationAllocation.count({ where: {
+        restaurantId, releasedAt: null,
+        OR: [{ blockedUntil: { gt: new Date() } }, { serviceAccounts: { some: { closedAt: null } } }],
+      } });
       if (future) throw new ConflictError("Resolvé las asignaciones futuras antes de cambiar la zona horaria.");
       await tx.restaurant.update({ where: { id: restaurantId }, data: { timeZone: zone } });
     });

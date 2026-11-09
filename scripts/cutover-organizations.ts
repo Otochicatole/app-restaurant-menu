@@ -39,7 +39,7 @@ async function preflightOrganizationCutover(database: Client): Promise<void> {
 async function completeOrganizationCutover(database: Client): Promise<void> {
   const state = await database.execute("SELECT generation,state,migrationJson FROM AppSchemaState WHERE id='singleton'");
   if (!state.rows[0]?.migrationJson) {
-    if (![2, 3, 4].includes(Number(state.rows[0]?.generation)) || state.rows[0]?.state !== "READY") throw new Error("El esquema de organizaciones no está listo.");
+    if (![2, 3, 4, 5].includes(Number(state.rows[0]?.generation)) || state.rows[0]?.state !== "READY") throw new Error("El esquema de organizaciones no está listo.");
     return;
   }
   const legacy = JSON.parse(String(state.rows[0].migrationJson)) as { tenants: Row[]; projects: Row[]; assets: Row[]; templates: Row[]; landings: Row[] };

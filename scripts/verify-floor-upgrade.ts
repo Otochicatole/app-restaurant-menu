@@ -13,6 +13,7 @@ const directory = await mkdtemp(path.join(os.tmpdir(), "floor-upgrade-test-"));
 const migrationRoot = path.resolve("prisma/migrations");
 const floor = "20261029120000_floor_management";
 const inventory = "20261030120000_floor_inventory_locations";
+const tableService = "20261109120000_table_service";
 const organizations = "20261027180000_organization_restaurants";
 const migrations = (await readdir(migrationRoot)).filter((name) => /^\d/.test(name)).sort();
 const clients: Client[] = [];
@@ -29,7 +30,7 @@ async function apply(client: Client, names: string[]) {
 try {
   const fresh = database("fresh");
   await apply(fresh.client, migrations);
-  assert.equal((await fresh.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 4);
+  assert.equal((await fresh.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 5);
   await assertSchemaHardeningPreflight(fresh.url);
 
   const existing = database("existing");
@@ -129,13 +130,20 @@ try {
   await assert.rejects(existing.client.execute("INSERT INTO Admin(id,email,passwordHash,role,updatedAt) VALUES('duplicate-email-after-inventory','OWNER@EXAMPLE.TEST','hash','SUPER_ADMIN',CURRENT_TIMESTAMP)"), /UNIQUE constraint failed/);
   await assertSchemaHardeningPreflight(existing.url);
   assert.deepEqual((await existing.client.execute("PRAGMA foreign_key_check")).rows, []);
+  const beforeService = (await existing.client.execute("SELECT * FROM TableReservation ORDER BY id")).rows;
+  await apply(existing.client, [tableService]);
+  assert.equal((await existing.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 5);
+  assert.deepEqual((await existing.client.execute("SELECT * FROM TableReservation ORDER BY id")).rows, beforeService);
+  assert.deepEqual((await existing.client.execute("SELECT * FROM ReservationAllocationTable ORDER BY tableId")).rows,
+    preservedPoses.map((pose) => ({ ...pose, releasedAt: null })));
+  assert.deepEqual((await existing.client.execute("PRAGMA foreign_key_check")).rows, []);
 
   const legacy = database("legacy");
   await apply(legacy.client, migrations.filter((name) => name < organizations));
   await legacy.client.executeMultiple("INSERT INTO Tenant(id,name,slug,updatedAt) VALUES('legacy','Legacy','legacy',CURRENT_TIMESTAMP); INSERT INTO Admin(id,email,passwordHash,role,tenantId,updatedAt) VALUES('legacy-admin','legacy@example.test','hash','TENANT_ADMIN','legacy',CURRENT_TIMESTAMP);");
   await legacy.client.execute({ sql: "INSERT INTO MenuProject(id,tenantId,name,slug,isPrimary,draftJson,updatedAt) VALUES('legacy-project','legacy','Legacy','legacy-menu',1,?,CURRENT_TIMESTAMP)", args: [JSON.stringify(createTemplateDocument("Legacy"))] });
   await apply(legacy.client, migrations.filter((name) => name >= organizations));
-  assert.equal((await legacy.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 4);
+  assert.equal((await legacy.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 5);
   assert.equal((await legacy.client.execute("SELECT state FROM AppSchemaState")).rows[0]?.state, "MIGRATING");
   await new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, ["run", "scripts/cutover-organizations.ts"], { env: { ...process.env, DATABASE_URL: legacy.url, STORAGE_ROOT: path.join(directory, "storage") }, stdio: "pipe" });
@@ -143,10 +151,10 @@ try {
     child.stdout.on("data", (chunk) => { output += String(chunk); }); child.stderr.on("data", (chunk) => { output += String(chunk); });
     child.once("error", reject); child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(output)));
   });
-  assert.equal((await legacy.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 4, "backfill must never downgrade generation");
+  assert.equal((await legacy.client.execute("SELECT generation FROM AppSchemaState")).rows[0]?.generation, 5, "backfill must never downgrade generation");
   assert.equal((await legacy.client.execute("SELECT state FROM AppSchemaState")).rows[0]?.state, "READY");
   await assertSchemaHardeningPreflight(legacy.url);
-  console.log("Migración de salas verificada: generación 4, cuentas compartidas, aislamiento, constraints, snapshots, conservación y backfill legacy.");
+  console.log("Migración de salas y servicio verificada hasta generación 5.");
 } finally {
   for (const client of clients) client.close();
   try { await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }

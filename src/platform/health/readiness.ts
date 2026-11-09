@@ -44,7 +44,7 @@ async function checkDatabase(): Promise<void> {
     throw new Error("SQLite schema is incomplete");
   }
   const state = await prisma.appSchemaState.findUnique({ where: { id: "singleton" }, select: { generation: true, state: true } });
-  if (state?.generation !== 4 || state.state !== "READY") throw new Error("Database schema is incompatible or incomplete");
+  if (state?.generation !== 5 || state.state !== "READY") throw new Error("Database schema is incompatible or incomplete");
 }
 
 async function checkWritableStorage(): Promise<void> {

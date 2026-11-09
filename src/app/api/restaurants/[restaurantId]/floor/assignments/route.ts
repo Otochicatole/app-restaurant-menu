@@ -17,7 +17,9 @@ export async function PUT(request: NextRequest, { params }: Context) {
     if (at !== null && !Number.isFinite(new Date(at).getTime())) throw new BadRequestError("La fecha del plano no es válida.");
     const command = floorBatchReassignmentSchema.parse(await request.json());
     await floorReassignments.reassignMany(restaurantId, command);
-    const board = at === null ? await floorManagement.getBoard(restaurantId) : await floorManagement.getBoard(restaurantId, at);
+    const board = at !== null && request.nextUrl.searchParams.get("live") === "1"
+      ? await floorManagement.getBoard(restaurantId, undefined, true)
+      : at === null ? await floorManagement.getBoard(restaurantId) : await floorManagement.getBoard(restaurantId, at);
     return noStore(successResponse(board));
   } catch (error) { return noStore(handleApiError(error)); }
 }

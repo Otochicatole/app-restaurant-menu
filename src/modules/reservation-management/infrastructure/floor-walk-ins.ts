@@ -29,7 +29,7 @@ export async function getWalkInOptions(database: PrismaClient, restaurantId: str
   const durationMinutes = walkInDurationSchema.parse(duration);
   const settings = await operationalSettings(database, restaurantId);
   const local = restaurantLocalDateTime(settings.timeZone, now);
-  return getFloorAssignmentOptions(database, restaurantId, { ...local, partySize: size }, walkInInterval(settings.timeZone, durationMinutes, now));
+  return getFloorAssignmentOptions(database, restaurantId, { ...local, partySize: size }, walkInInterval(settings.timeZone, durationMinutes, now), [], true);
 }
 
 /** The staff operation exposes no generic reservation writes or customer contacts. */
@@ -44,7 +44,7 @@ export async function createWalkIn(database: PrismaClient, restaurantId: string,
       customerPhone: "", customerEmail: "", notes: command.notes, partySize: command.partySize,
       ...local, source: "WALK_IN", status: "CONFIRMED",
     } });
-    await syncReservationAllocation(tx, reservation, command.assignment, now, walkInInterval(settings.timeZone, command.durationMinutes, now));
+    await syncReservationAllocation(tx, reservation, command.assignment, now, walkInInterval(settings.timeZone, command.durationMinutes, now), true);
     return { reservationId: reservation.id };
   });
 }
@@ -55,6 +55,9 @@ export async function releaseWalkIn(database: PrismaClient, restaurantId: string
     await operationalSettings(tx, restaurantId);
     const reservation = await tx.tableReservation.findFirst({ where: { id: reservationId, restaurantId, source: "WALK_IN" } });
     if (!reservation) throw new NotFoundError("Visita sin reserva");
+    if (await tx.serviceAccount.count({ where: { restaurantId, reservationId } })) {
+      throw new ConflictError("Cerrá los armados de esta visita desde Servicio para liberar sus mesas.");
+    }
     if (reservation.revision !== expectedRevision || reservation.status !== "CONFIRMED") {
       throw new ConflictError("La visita cambió. Actualizá la sala antes de liberar las mesas.");
     }

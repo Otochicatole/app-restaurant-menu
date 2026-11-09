@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import {
-  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, floorTableSeparationGap, toFloorRoom, transformPoses, usableTableCapacity,
+  buildFloorOptions, calculateFloorInterval, floorAssignmentSchema, floorPoseOverlaps, floorTableSeparationGap, getJoinedTableGroups, toFloorRoom, transformPoses, usableTableCapacity,
   validateFloorPlacement, findFloorPlacement, validateTableArrangement, restaurantLocalDateTime,
   type FloorAllocationView, type FloorAssignmentInput, type FloorAssignmentOption, type FloorInterval,
   type FloorLease, type FloorOptionsQuery, type FloorOptionsView, type FloorPose, type FloorRoom, type FloorRotation,
@@ -22,8 +22,24 @@ export function allocationToView(allocation: Allocation): FloorAllocationView {
     blockedUntil: allocation.blockedUntil.toISOString(), releasedAt: allocation.releasedAt?.toISOString() ?? null,
     version: allocation.version, locationId: allocation.locationId, ...allocation.reservation, reservationRevision: allocation.reservation.revision,
     poses: allocation.tables.map((table) => ({ tableId: table.tableId, label: table.labelSnapshot, shape: table.shapeSnapshot,
-      capacity: table.capacitySnapshot, width: table.width, height: table.height, x: table.x, y: table.y, rotation: table.rotation as FloorRotation })),
+      capacity: table.capacitySnapshot, width: table.width, height: table.height, x: table.x, y: table.y, rotation: table.rotation as FloorRotation,
+      ...(table.releasedAt ? { releasedAt: table.releasedAt.toISOString() } : {}) })),
   };
+}
+
+/** Actual occupancy is used for live seating only, never for the future reservation calendar. */
+async function openServiceLeases(database: Database, restaurantId: string, from: string, until: string): Promise<FloorAllocationView[]> {
+  const allocations = await database.reservationAllocation.findMany({
+    where: { restaurantId, serviceAccounts: { some: { closedAt: null } } },
+    include: { ...allocationInclude, serviceAccounts: {
+      where: { closedAt: null }, select: { tables: { where: { releasedAt: null }, select: { tableId: true } } },
+    } },
+  });
+  return allocations.map((allocation) => {
+    const openTables = new Set(allocation.serviceAccounts.flatMap((account) => account.tables.map((table) => table.tableId)));
+    const view = allocationToView(allocation);
+    return { ...view, blockedFrom: from, blockedUntil: until, poses: view.poses.filter((pose) => openTables.has(pose.tableId) && !pose.releasedAt) };
+  });
 }
 
 export async function loadFloorState(database: Database, restaurantId: string, from: Date, until: Date) {
@@ -59,8 +75,9 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
       && overlapping(interval, calculateFloorInterval({ date: item.date, time: item.startTime, timeZone: interval.timeZone, event: item })));
     if (exclusive) conflict = `El salón está reservado para el evento ${exclusive.title}.`;
     const ids = new Set(option.poses.map((pose) => pose.tableId));
-    const occupied = allocations.find((allocation) => allocation.reservationId !== excludeReservationId && overlapping(interval, allocation)
-      && allocation.poses.some((pose) => ids.has(pose.tableId)));
+    const occupied = allocations.find((allocation) => allocation.reservationId !== excludeReservationId
+      && allocation.poses.some((pose) => ids.has(pose.tableId)
+        && floorPoseOverlaps(allocation, pose, Date.parse(interval.blockedFrom), Date.parse(interval.blockedUntil))));
     if (occupied) conflict = `La mesa está asignada a ${occupied.customerName} (${occupied.code}).`;
     const resourceAvailable = !conflict;
     if (!conflict && option.capacity < partySize) conflict = "La capacidad útil no alcanza para este grupo.";
@@ -80,17 +97,21 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
   }));
 }
 
-export async function getFloorAssignmentOptions(database: Database, restaurantId: string, query: FloorOptionsQuery, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = []): Promise<FloorOptionsView> {
+export async function getFloorAssignmentOptions(database: Database, restaurantId: string, query: FloorOptionsQuery, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = [], operational = false): Promise<FloorOptionsView> {
   const settings = await database.restaurant.findUnique({ where: { id: restaurantId }, select: { timeZone: true } });
   if (!settings) throw new NotFoundError("Restaurante");
   const event = query.eventId ? await database.restaurantEvent.findFirst({ where: { id: query.eventId, restaurantId }, include: { rooms: true } }) : null;
   if (query.eventId && !event) throw new NotFoundError("Evento");
   const interval = intervalOverride ?? calculateFloorInterval({ ...query, timeZone: settings.timeZone, event });
   const state = await loadFloorState(database, restaurantId, new Date(interval.blockedFrom), new Date(interval.blockedUntil));
-  const allocations = state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId));
+  const live = operational ? await openServiceLeases(database, restaurantId, interval.blockedFrom, interval.blockedUntil) : [];
+  const allocations = [...state.allocations, ...live].filter((allocation) => !excludedReservationIds.includes(allocation.reservationId));
   const current = query.excludeReservationId ? await database.reservationAllocation.findUnique({ where: { reservationId: query.excludeReservationId }, include: allocationInclude }) : null;
   const currentAllocation = current?.restaurantId === restaurantId ? allocationToView(current) : null;
-  if (currentAllocation) currentAllocation.capacity = Math.min(currentAllocation.capacity, usableTableCapacity(currentAllocation.poses));
+  if (currentAllocation) {
+    currentAllocation.poses = currentAllocation.poses.filter((pose) => !pose.releasedAt);
+    currentAllocation.capacity = Math.min(currentAllocation.capacity, usableTableCapacity(currentAllocation.poses));
+  }
   // Administrators may organize a draft event before publication.
   const events = event && !state.events.some((item) => item.id === event.id) ? [...state.events, event] : state.events;
   const options = evaluateOptions(state.rooms, allocations, events, interval, query.partySize, query.eventId, query.excludeReservationId);
@@ -147,7 +168,7 @@ function poseRows(poses: FloorPose[]) {
     x: pose.x, y: pose.y, rotation: pose.rotation }));
 }
 
-export async function syncReservationAllocation(tx: Prisma.TransactionClient, reservation: Prisma.TableReservationGetPayload<object>, assignment?: FloorAssignmentInput, now = new Date(), intervalOverride?: FloorInterval): Promise<void> {
+export async function syncReservationAllocation(tx: Prisma.TransactionClient, reservation: Prisma.TableReservationGetPayload<object>, assignment?: FloorAssignmentInput, now = new Date(), intervalOverride?: FloorInterval, live = false): Promise<void> {
   const settings = await tx.restaurant.findUniqueOrThrow({ where: { id: reservation.restaurantId }, select: { floorManagementEnabled: true } });
   const existing = await tx.reservationAllocation.findUnique({ where: { reservationId: reservation.id }, include: allocationInclude });
   if (reservation.status !== "CONFIRMED") {
@@ -155,20 +176,28 @@ export async function syncReservationAllocation(tx: Prisma.TransactionClient, re
     return;
   }
   if (!settings.floorManagementEnabled && !assignment && !existing) return;
-  const prepared = await prepareReservationAllocation(tx, reservation, assignment, intervalOverride, [], existing);
+  const prepared = await prepareReservationAllocation(tx, reservation, assignment, intervalOverride, [], existing, live ? now : undefined);
   await persistPreparedReservationAllocation(tx, prepared);
 }
 
 /** Resolve and validate an assignment without changing reservation or allocation rows. */
-export async function prepareReservationAllocation(tx: Prisma.TransactionClient, reservation: Prisma.TableReservationGetPayload<object>, assignment?: FloorAssignmentInput, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = [], current?: Allocation | null) {
+export async function prepareReservationAllocation(tx: Prisma.TransactionClient, reservation: Prisma.TableReservationGetPayload<object>, assignment?: FloorAssignmentInput, intervalOverride?: FloorInterval, excludedReservationIds: readonly string[] = [], current?: Allocation | null, liveAt?: Date) {
   const existing = current === undefined ? await tx.reservationAllocation.findUnique({ where: { reservationId: reservation.id }, include: allocationInclude }) : current;
+  const serviceAccounts = existing ? await tx.serviceAccount.findMany({
+    where: { allocationId: existing.id, restaurantId: reservation.restaurantId },
+    select: { closedAt: true, tables: { select: { tableId: true } } },
+  }) : [];
+  const partiallyReleased = existing?.tables.some((table) => table.releasedAt !== null);
+  const openAccounts = serviceAccounts.filter((account) => !account.closedAt);
+  const overrun = Boolean(existing && liveAt && existing.blockedUntil <= liveAt && openAccounts.length);
+  const openTableIds = new Set(openAccounts.flatMap((account) => account.tables.map((table) => table.tableId)));
   if (!assignment && (!existing || existing.releasedAt)) throw new BadRequestError("Elegí un salón y sus mesas antes de confirmar la reserva.");
   if (assignment) assignment = floorAssignmentSchema.parse(assignment);
   const retainedWalkInInterval = reservation.source === "WALK_IN" && existing ? allocationToView(existing) : undefined;
   const options = await getFloorAssignmentOptions(tx, reservation.restaurantId, {
     date: reservation.date, time: reservation.time, partySize: reservation.partySize,
     eventId: reservation.eventId, excludeReservationId: reservation.id,
-  }, intervalOverride ?? retainedWalkInInterval, excludedReservationIds);
+  }, intervalOverride ?? retainedWalkInInterval, excludedReservationIds, Boolean(liveAt && !existing));
   let room: FloorRoom | undefined;
   let poses: FloorPose[];
   let capacity: number;
@@ -200,7 +229,7 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
       capacity = Math.min(option.capacity, usableTableCapacity(poses));
       combinationId = option.id.startsWith("combination:") ? option.id.slice("combination:".length) : null;
     }
-    if (capacity < reservation.partySize) throw new ConflictError("La capacidad útil no alcanza para este grupo.");
+    if (!partiallyReleased && !overrun && capacity < reservation.partySize) throw new ConflictError("La capacidad útil no alcanza para este grupo.");
   } else {
     if (!existing || existing.releasedAt) throw new ConflictError("La reserva ya no tiene una asignación vigente. Elegí sus mesas nuevamente.");
     room = options.rooms.find((item) => item.id === existing!.roomId);
@@ -208,9 +237,9 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
     if (assignment && (assignment.roomId !== room.id || assignment.expectedRoomRevision !== room.revision)) throw new ConflictError("El plano cambió. Actualizalo antes de conservar la asignación.");
     combinationId = existing.combinationId;
     locationId = existing.locationId;
-    poses = allocationToView(existing).poses;
+    poses = allocationToView(existing).poses.filter((pose) => !pose.releasedAt);
     capacity = Math.min(existing.capacity, usableTableCapacity(poses));
-    if (capacity < reservation.partySize) throw new ConflictError("El grupo supera la capacidad de las mesas asignadas.");
+    if (!partiallyReleased && capacity < reservation.partySize) throw new ConflictError("El grupo supera la capacidad de las mesas asignadas.");
     if (reservation.eventId) {
       const eventRoom = await tx.restaurantEventRoom.findFirst({ where: { eventId: reservation.eventId, restaurantId: reservation.restaurantId, roomId: room.id } });
       if (!eventRoom) throw new ConflictError("Las mesas asignadas no pertenecen a los salones del evento.");
@@ -219,22 +248,51 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
     const resourceConflict = currentOptions.find((option) => !option.resourceAvailable && option.conflict);
     if (resourceConflict) throw new ConflictError(resourceConflict.conflict!);
   }
-  const state = await loadFloorState(tx, reservation.restaurantId, new Date(options.interval.blockedFrom), new Date(options.interval.blockedUntil));
-  const unavailable = options.options.find((option) => option.id.startsWith("table:") && option.roomId === room!.id && !option.resourceAvailable && poses.some((pose) => option.poses.some((member) => member.tableId === pose.tableId)));
-  if (unavailable) throw new ConflictError(unavailable.conflict ?? "Una mesa del armado ya no está disponible.");
+  const previousPoses = existing ? allocationToView(existing).poses.filter((pose) => !pose.releasedAt) : [];
+  if (existing && serviceAccounts.length) {
+    const previousIds = new Set(previousPoses.filter((pose) => !overrun || openTableIds.has(pose.tableId)).map((pose) => pose.tableId));
+    if (room.id !== existing.roomId || poses.length !== previousIds.size || poses.some((pose) => !previousIds.has(pose.tableId))) {
+      throw new ConflictError("La reserva ya tiene servicio registrado. Conservá las mesas restantes en el mismo salón.");
+    }
+    const groups = getJoinedTableGroups(poses);
+    for (const account of openAccounts) {
+      const memberIds = new Set(account.tables.map((table) => table.tableId));
+      if (!groups.some((group) => group.length === memberIds.size && group.every((pose) => memberIds.has(pose.tableId)))) {
+        throw new ConflictError("Un armado con cuenta abierta se puede mover o girar, pero debe conservar sus mesas juntas.");
+      }
+    }
+  }
   const proposal: FloorLease = { ...options.interval, id: existing?.id ?? "new", reservationId: reservation.id, roomId: room.id, locationId, releasedAt: null, poses };
-  const invalid = validateFloorPlacement(room, proposal, state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId)));
-  if (invalid) throw new ConflictError(invalid);
+  if (!overrun) {
+    const state = await loadFloorState(tx, reservation.restaurantId, new Date(options.interval.blockedFrom), new Date(options.interval.blockedUntil));
+    const unavailable = options.options.find((option) => option.id.startsWith("table:") && option.roomId === room!.id && !option.resourceAvailable && poses.some((pose) => option.poses.some((member) => member.tableId === pose.tableId)));
+    if (unavailable) throw new ConflictError(unavailable.conflict ?? "Una mesa del armado ya no está disponible.");
+    const invalid = validateFloorPlacement(room, proposal, state.allocations.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId)));
+    if (invalid) throw new ConflictError(invalid);
+  }
+  if (liveAt && Date.parse(proposal.blockedFrom) <= liveAt.getTime()) {
+    const liveFrom = liveAt.toISOString();
+    const liveUntil = new Date(Math.max(liveAt.getTime() + 1, Date.parse(proposal.blockedUntil))).toISOString();
+    const serviceLeases = await openServiceLeases(tx, reservation.restaurantId, liveFrom, liveUntil);
+    const liveConflict = validateFloorPlacement(room, { ...proposal, blockedFrom: liveFrom, blockedUntil: liveUntil },
+      serviceLeases.filter((allocation) => !excludedReservationIds.includes(allocation.reservationId)));
+    if (liveConflict) throw new ConflictError("Hay una cuenta abierta que ocupa estas mesas o su ubicación. " + liveConflict);
+  }
+  // Expired groups without a check keep their stored geometry for the no-consumption closeout.
+  if (overrun && existing) {
+    poses = [...poses, ...previousPoses.filter((pose) => !openTableIds.has(pose.tableId))];
+    capacity = existing.capacity;
+  }
   const fields = { restaurantId: reservation.restaurantId, roomId: room.id, locationId, combinationId, capacity,
     timeZone: options.interval.timeZone, serviceStartAt: new Date(options.interval.serviceStartAt), serviceEndAt: new Date(options.interval.serviceEndAt),
     blockedFrom: new Date(options.interval.blockedFrom), blockedUntil: new Date(options.interval.blockedUntil), releasedAt: null, roomRevision: room.revision };
-  return { reservationId: reservation.id, existingId: existing?.id, fields, poses, room, proposal };
+  return { reservationId: reservation.id, existingId: existing?.id, fields, poses, room, proposal, overrun };
 }
 
 export async function persistPreparedReservationAllocation(tx: Prisma.TransactionClient, prepared: Awaited<ReturnType<typeof prepareReservationAllocation>>) {
   const { reservationId, existingId, fields, poses } = prepared;
   if (existingId) {
-    await tx.reservationAllocationTable.deleteMany({ where: { allocationId: existingId } });
+    await tx.reservationAllocationTable.deleteMany({ where: { allocationId: existingId, releasedAt: null } });
     await tx.reservationAllocation.update({ where: { id: existingId }, data: { ...fields, version: { increment: 1 }, tables: { create: poseRows(poses) } } });
   } else await tx.reservationAllocation.create({ data: { id: randomUUID(), reservationId, ...fields, tables: { create: poseRows(poses) } } });
 }

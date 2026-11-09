@@ -54,4 +54,4 @@ Extend the existing Spanish-language CMS visual system. The supplied floor-plan 
 
 ## Explicit Limits
 
-No billing, orders, individual seat assignments, individual waiter assignments, automatic table layout solver or circulation simulation. Daily aggregate capacity remains inactive.
+Floor service records orders, deliveries and one externally collected payment per table group. Checkout releases the group and preserves a printable internal receipt. Admins manage the service catalog and review and close daily cash totals in the restaurant's time zone. Fiscal issuance, payment processing, individual seat assignments, individual waiter assignments, automatic table layout and circulation simulation are out of scope. Daily aggregate capacity remains inactive.

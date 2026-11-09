@@ -12,11 +12,11 @@ async function request<T>(restaurantId: string, parameters: Record<string, strin
 }
 
 export const getFloorConfig = (restaurantId: string, signal?: AbortSignal) => request<FloorConfigView>(restaurantId, { mode: "config" }, undefined, signal);
-export const getFloorBoard = (restaurantId: string, at: string, signal?: AbortSignal) => request<FloorBoardView>(restaurantId, { mode: "board", at }, undefined, signal);
+export const getFloorBoard = (restaurantId: string, at: string, signal?: AbortSignal, live = false) => request<FloorBoardView>(restaurantId, { mode: "board", at, ...(live ? { live: "1" } : {}) }, undefined, signal);
 export const getFloorReassignmentOptions = (restaurantId: string, reservationId: string, signal?: AbortSignal) => request<FloorOptionsView>(restaurantId, {}, undefined, signal, { path: `/assignments/${encodeURIComponent(reservationId)}` });
 export const reassignFloorTables = (restaurantId: string, reservationId: string, command: { expectedRevision: number; expectedAllocationVersion: number; assignment: FloorAssignmentInput }) => request<FloorBoardView>(restaurantId, {}, command, undefined, { path: `/assignments/${encodeURIComponent(reservationId)}`, method: "PUT" });
 export type FloorSelectionUpdate = { reservationId: string; expectedRevision: number; expectedAllocationVersion: number; assignment: FloorAssignmentInput };
-export const reassignFloorSelection = (restaurantId: string, command: { updates: FloorSelectionUpdate[] }, at?: string) => request<FloorBoardView>(restaurantId, at ? { at } : {}, command, undefined, { path: "/assignments", method: "PUT" });
+export const reassignFloorSelection = (restaurantId: string, command: { updates: FloorSelectionUpdate[] }, at?: string, live = false) => request<FloorBoardView>(restaurantId, { ...(at ? { at } : {}), ...(live ? { live: "1" } : {}) }, command, undefined, { path: "/assignments", method: "PUT" });
 export const saveFloorTables = (restaurantId: string, command: FloorTableInventoryInput) => request<{ room: FloorRoom }>(restaurantId, {}, command, undefined, { path: "/tables", method: "PUT" });
 export const saveFloorAction = <T = FloorConfigView>(restaurantId: string, body: unknown) => request<T>(restaurantId, {}, body);
 export const getFloorOptions = (restaurantId: string, input: FloorOptionsQuery, signal?: AbortSignal, walkInDurationMinutes?: number) => request<FloorOptionsView>(restaurantId, {

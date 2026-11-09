@@ -9,16 +9,18 @@ const oldRelease = path.join(root, "release-1");
 const previousRelease = path.join(root, "release-2");
 const floorRelease = path.join(root, "release-3");
 const newRelease = path.join(root, "release-4");
+const serviceRelease = path.join(root, "release-5");
 const binaries = path.join(root, "bin");
 const databasePath = path.join(root, "test.db");
 const database = createClient({ url: `file:${databasePath.replaceAll("\\", "/")}` });
 const bash = process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash";
 const guard = path.resolve("scripts/deploy/assert-schema-compatibility.sh");
 try {
-  await Promise.all([mkdir(oldRelease), mkdir(previousRelease), mkdir(floorRelease), mkdir(newRelease), mkdir(binaries)]);
+  await Promise.all([mkdir(oldRelease), mkdir(previousRelease), mkdir(floorRelease), mkdir(newRelease), mkdir(serviceRelease), mkdir(binaries)]);
   await writeFile(path.join(previousRelease, "app-schema-generation"), "2\n");
   await writeFile(path.join(floorRelease, "app-schema-generation"), "3\n");
   await writeFile(path.join(newRelease, "app-schema-generation"), "4\n");
+  await writeFile(path.join(serviceRelease, "app-schema-generation"), "5\n");
   // Exercise the actual shell guard and SQL with a portable sqlite3 CLI adapter.
   await writeFile(path.join(binaries, "sqlite3"), `#!/usr/bin/env bun
 import { Database } from "bun:sqlite";
@@ -50,7 +52,11 @@ finally { db.close(); }
   await expectGuard(previousRelease, false, "rollback de reservas sin asignación incompatible");
   await expectGuard(floorRelease, false, "rollback de planos sin sectores incompatible");
   await expectGuard(newRelease, true, "release nuevo listo");
+  await expectGuard(serviceRelease, false, "servicio requiere generación 5");
   await expectPortableGuard(false);
+  await database.execute("UPDATE AppSchemaState SET generation=5");
+  await expectGuard(newRelease, false, "rollback sin soporte de cuentas incompatible");
+  await expectGuard(serviceRelease, true, "release de servicio listo");
   await database.execute("PRAGMA journal_mode=WAL");
   await expectPortableGuard(true);
   console.log("Guard de esquema verificado: generaciones anteriores/nuevas y cutover incompleto.");

@@ -3,13 +3,14 @@ import { createEditorWorkspace } from "@/ui/editor-workspace";
 import { emptyWindows } from "@/ui/useFloatingWindows";
 import type { FloorAllocationView, FloorAssignmentInput, FloorBoardView, FloorCombination, FloorConfigView, FloorFixture, FloorLocation, FloorRoom, FloorTable } from "../contracts";
 import type { FloorCanvasElement, FloorInteractionMode } from "./FloorCanvas";
+import type { FloorServiceTarget } from "./FloorServiceWindow";
 
 export type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "combination"; entity: FloorCombination } | { kind: "combination-layout"; id: string } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
 export type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
 export type CombinationMode = { combination: FloorCombination; selectedIds: string[] } | null;
-export type Panel = "rooms" | "schedule" | "reservations" | "walk-in" | "detail" | "release" | "table" | "inventory" | null;
+export type Panel = "rooms" | "schedule" | "reservations" | "walk-in" | "detail" | "release" | "table" | "inventory" | "service" | "service-list" | null;
 export type SelectionSnapshot = { ids: string[]; tables: FloorTable[]; stamp: string; roomId: string };
-export type ToolWindow = { kind: Exclude<Panel, "rooms" | "release" | null> | "assembly"; allocation?: FloorAllocationView; selection?: SelectionSnapshot; room?: FloorRoom };
+export type ToolWindow = { kind: Exclude<Panel, "rooms" | "release" | null> | "assembly"; allocation?: FloorAllocationView; selection?: SelectionSnapshot; room?: FloorRoom; serviceTarget?: FloorServiceTarget };
 export const emptyWalkIn = { customerName: "", partySize: 2, notes: "", durationMinutes: 120 };
 
 export function floorAdminSeed(initialConfig: FloorConfigView | null = null) {

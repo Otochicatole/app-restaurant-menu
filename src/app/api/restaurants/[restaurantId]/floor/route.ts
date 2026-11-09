@@ -16,7 +16,8 @@ export async function GET(request: NextRequest, { params }: Context) {
     const mode = request.nextUrl.searchParams.get("mode") ?? "config";
     if (mode === "board") {
       await requireFloorReadAccess(restaurantId);
-      return noStore(successResponse(await floorManagement.getBoard(restaurantId, request.nextUrl.searchParams.get("at") ?? undefined)));
+      const at = request.nextUrl.searchParams.get("at") ?? undefined;
+      return noStore(successResponse(await floorManagement.getBoard(restaurantId, at, at === undefined || request.nextUrl.searchParams.get("live") === "1")));
     }
     if (mode === "walk-in-options") {
       await requireFloorReadAccess(restaurantId);

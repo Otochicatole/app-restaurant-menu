@@ -7,6 +7,7 @@ import { getFloorAssignmentOptions as readFloorAssignmentOptions } from "./infra
 import { createWalkIn, getWalkInOptions, releaseWalkIn } from "./infrastructure/floor-walk-ins";
 import type { CreateWalkInCommand } from "./contracts";
 import { getFloorReassignmentOptions, reassignFloorAllocation, reassignFloorAllocations, type FloorBatchReassignmentCommand, type FloorReassignmentCommand } from "./infrastructure/floor-reassignments";
+import { TableService } from "./infrastructure/table-service";
 
 export {
   addBlockedDateAction,
@@ -61,6 +62,7 @@ export {
 } from "./contracts";
 
 export const reservationManagement = reservationManagementService;
+export const tableService = new TableService(prisma);
 
 export function getFloorAssignmentOptions(restaurantId: string, query: FloorOptionsQuery) {
   return readFloorAssignmentOptions(prisma, restaurantId, query);

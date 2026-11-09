@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { floorAssignmentSchema, type FloorAssignmentInput } from "@/modules/floor-management/contracts";
 
+export * from "./service-contracts";
+
 export const reservationStatusSchema = z.enum([
   "PENDING",
   "CONFIRMED",

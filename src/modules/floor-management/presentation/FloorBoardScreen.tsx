@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Building2, CalendarClock, Clock, List, Loader2, Package, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, CalendarClock, Clock, List, Loader2, Package, ReceiptText, RefreshCw, Users } from "lucide-react";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
 import { emptyWalkIn, floorBoardReceived, floorBoardSeed, floorBoardWorkspace, floorAssignmentChanged, type Panel, type SelectionSnapshot, type ToolWindow } from "./floor-workspaces";
@@ -9,7 +9,7 @@ import { useFloatingWindows } from "@/ui/useFloatingWindows";
 import { transientButtonProps } from "@/ui/button-state";
 import { floorPrimaryButtonClass as adminPrimaryButtonClass, floorSecondaryButtonClass as adminSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import styles from "./floor-operations.module.css";
-import { calculateFloorInterval, composeRoomPoses, restaurantLocalDateTime, getJoinedTableGroups, validateTableArrangement, validateFloorPlacement, validateRoomLayout, type FloorAllocationView, type FloorAssignmentInput, type FloorBoardView, type FloorLease, type FloorTable } from "../contracts";
+import { calculateFloorInterval, composeRoomPoses, restaurantLocalDateTime, getJoinedTableGroups, validateTableArrangement, validateFloorPlacement, validateRoomLayout, type FloorAllocationView, type FloorAssignmentInput, type FloorBoardView, type FloorLease, type FloorPose, type FloorTable } from "../contracts";
 import { FloorCanvas } from "./FloorCanvas";
 import { FloorAssemblyControls } from "./FloorAssemblyControls";
 import { FloorBoardToolbar } from "./FloorBoardToolbar";
@@ -18,13 +18,20 @@ import { FloorSelectionEditor, type FloorSelectionEditorMode } from "./FloorSele
 import { buildSelectionLayout, canSeparateFloorSelection, contextFloorSelection, resolveFloorSelection, separateFloorSelection, type FloorSelectionLayout, type FloorSelectionState } from "./floor-selection";
 import { FloorInventoryPanel } from "./FloorInventoryPanel";
 import { FloorTableSummary } from "./FloorTableSummary";
+import { FloorServiceAccounts, FloorServiceWindow, type FloorServiceTarget } from "./FloorServiceWindow";
+import { useFloorService, type FloorServiceCommand } from "./useFloorService";
 import { summarizeFloorTables } from "./floor-table-summary";
 import { useFloorAssembly } from "./useFloorAssembly";
 import { floorInputClass, getFloorBoard, reassignFloorSelection, saveFloorAction, saveFloorTables } from "./floor-api";
 
-const toolId = (tool: ToolWindow) => tool.kind === "detail" ? `detail:${tool.allocation!.id}` : tool.kind === "table" ? "selection:" + tool.selection!.ids.slice().sort().map(encodeURIComponent).join("+") : tool.kind === "inventory" ? `inventory:${tool.room!.id}` : tool.kind;
-const toolTitle = (tool: ToolWindow, roomName: string) => tool.kind === "assembly" ? "Armar mesas" : tool.kind === "inventory" ? "Inventario de mesas" : tool.kind === "table" ? (tool.selection?.tables.length === 1 ? "Editar mesa " + tool.selection.tables[0].label : "Editar selección (" + (tool.selection?.tables.length ?? 0) + " mesas)") : tool.kind === "schedule" ? "Fecha y hora" : tool.kind === "reservations" ? `Reservas de ${roomName}` : tool.kind === "walk-in" ? "Atender sin reserva" : "Detalle de la reserva";
+const toolId = (tool: ToolWindow) => tool.kind === "service" ? `service:${tool.serviceTarget!.allocationId}:${tool.serviceTarget!.tableId}` : tool.kind === "detail" ? `detail:${tool.allocation!.id}` : tool.kind === "table" ? "selection:" + tool.selection!.ids.slice().sort().map(encodeURIComponent).join("+") : tool.kind === "inventory" ? `inventory:${tool.room!.id}` : tool.kind;
+const toolTitle = (tool: ToolWindow, roomName: string) => tool.kind === "service" ? `Cuenta · ${tool.serviceTarget!.customerName}` : tool.kind === "service-list" ? "Cuentas de servicio" : tool.kind === "assembly" ? "Armar mesas" : tool.kind === "inventory" ? "Inventario de mesas" : tool.kind === "table" ? (tool.selection?.tables.length === 1 ? "Editar mesa " + tool.selection.tables[0].label : "Editar selección (" + (tool.selection?.tables.length ?? 0) + " mesas)") : tool.kind === "schedule" ? "Fecha y hora" : tool.kind === "reservations" ? `Reservas de ${roomName}` : tool.kind === "walk-in" ? "Atender sin reserva" : "Detalle de la reserva";
 const floatingButton = "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-[var(--floor-ink,#263e23)] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--floor-focus,#3d5934)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+
+function serviceTarget(allocation: FloorAllocationView, group: FloorPose[]): FloorServiceTarget {
+  return { allocationId: allocation.id, customerName: allocation.customerName, reservationCode: allocation.code,
+    tableLabels: group.map(({ label }) => label), tableId: group.map(({ tableId }) => tableId).sort()[0] };
+}
 
 type FloorBoardProps = { restaurantId: string; restaurantName: string; readOnly: boolean; canManageWalkIns?: boolean; initialBoard?: FloorBoardView | null };
 
@@ -54,7 +61,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   const [assembling, setAssembling] = floorBoardWorkspace.useField("assembling");
   const [walkIn, setWalkIn] = floorBoardWorkspace.useField("walkIn");
   const [assignment] = floorBoardWorkspace.useField("assignment");
-  const [saving, setSaving] = floorBoardWorkspace.useField("saving");
+  const [floorSaving, setSaving] = floorBoardWorkspace.useField("saving");
   const [operationError, setOperationError] = floorBoardWorkspace.useField("operationError");
   const [walkInError, setWalkInError] = useState<string | null>(null);
   const [releaseError, setReleaseError] = useState<string | null>(null);
@@ -65,6 +72,14 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   const [tableErrors, setTableErrors] = useState<Record<string, string | null>>({});
   const [inventoryDirty, setInventoryDirty] = floorBoardWorkspace.useField("inventoryDirty");
   const [dirtyWindows, setDirtyWindows] = floorBoardWorkspace.useField("dirtyWindows");
+  const canManageTables = !readOnly || canManageWalkIns;
+  const canUseService = Boolean(board?.enabled && canManageTables);
+  const historical = Boolean(query.date);
+  const serviceTime = historical ? calculateFloorInterval({ ...query, timeZone: board?.timeZone ?? "America/Argentina/Buenos_Aires" }).serviceStartAt : undefined;
+  const service = useFloorService(restaurantId, canUseService && (interactionMode === "service" || tools.windows.some((entry) => entry.value.kind === "service" || entry.value.kind === "service-list")), serviceTime);
+  const serviceAccounts = service.snapshot?.accounts ?? [];
+  const serviceLoading = !service.snapshot && !service.error;
+  const saving = floorSaving || service.busy;
   const pending = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   const boardSurface = useRef<HTMLDivElement>(null);
@@ -121,7 +136,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       const timeZone = snapshot.board?.timeZone ?? "America/Argentina/Buenos_Aires";
       const { query } = snapshot;
       const at = query.date ? calculateFloorInterval({ date: query.date, time: query.time || "20:00", timeZone }).serviceStartAt : new Date().toISOString();
-      const next = await getFloorBoard(restaurantId, at, controller.signal);
+      const next = query.date ? await getFloorBoard(restaurantId, at, controller.signal) : await getFloorBoard(restaurantId, at, controller.signal, true);
       if (isCurrent()) store.dispatch(floorBoardReceived({ board: next, refreshedAt: new Date().toISOString() }));
     } catch (failure) {
       if (isCurrent()) store.dispatch(floorBoardWorkspace.changed({ error: failure instanceof Error ? failure.message : "No se pudo actualizar la sala." }));
@@ -170,12 +185,14 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       : inventoryChanged ? "El inventario cambió. Elegí las mesas del armado nuevamente."
       : unavailable?.conflict ?? validateTableArrangement(draft) ?? validateFloorPlacement(room, proposal, otherAllocations);
   }
-  const canRelease = (allocation: FloorAllocationView) => canManageWalkIns && !query.date && allocation.source === "WALK_IN" && !allocation.releasedAt;
-  const canManageTables = !readOnly || canManageWalkIns;
-  const canArrange = (allocation: FloorAllocationView) => canManageTables && !allocation.releasedAt && Date.parse(allocation.blockedUntil) > Date.parse(board?.updatedAt ?? "");
+  const canRelease = (allocation: FloorAllocationView) => canManageWalkIns && !query.date && allocation.source === "WALK_IN" && !allocation.releasedAt
+    && !allocation.serviceOverrun && !allocation.servicePartiallyReleased && !serviceAccounts.some((account) => account.allocationId === allocation.id && !account.closedAt);
+  const canArrange = (allocation: FloorAllocationView) => canManageTables && !allocation.releasedAt && !allocation.serviceConflict
+    && ((!historical && allocation.serviceOverrun) || Date.parse(allocation.blockedUntil) > Date.parse(board?.updatedAt ?? ""));
   const closeTool = (id: string) => {
     if (saving) return;
     if (id.startsWith("inventory:") && inventoryDirty && !window.confirm("Hay cambios de mesas sin guardar. ¿Querés descartarlos?")) return;
+    if (id.startsWith("service:") && dirtyWindows[id] && !window.confirm("Hay datos de esta cuenta sin guardar. ¿Querés descartarlos?")) return;
     if (id.startsWith("inventory:")) setInventoryDirty(false);
     if (id === "walk-in" && !assembling) { setWalkIn(emptyWalkIn); setWalkInError(null); }
     discardWindow(id);
@@ -184,6 +201,25 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   const requestTool = (next: Panel, prepare?: () => void) => { if (!saving) { prepare?.(); openPanel(next); } };
   const openSchedule = () => requestTool("schedule", () => { if (!tools.windows.some((window) => window.id === "schedule")) { setSchedule({ date: query.date || local.date, time: query.time || local.time }); setScheduleError(null); } });
   const showDetails = (allocation: FloorAllocationView) => { if (!saving) { openPanel("detail", { kind: "detail", allocation }); } };
+  const openServiceWindow = (target: FloorServiceTarget) => {
+    if (!canUseService || saving) return;
+    closeTableMenu();
+    setInteractionMode("service");
+    openPanel("service", { kind: "service", serviceTarget: target });
+  };
+  const serviceTargets = (allocation: FloorAllocationView) => getJoinedTableGroups(allocation.poses).map((group) => serviceTarget(allocation, group));
+  const showServiceAtTable = (tableId: string) => {
+    const matching = allocations.filter((allocation) => allocation.poses.some((pose) => pose.tableId === tableId));
+    const allocation = matching.find((candidate) => !candidate.serviceConflict) ?? matching[0];
+    if (!allocation) return;
+    const group = getJoinedTableGroups(allocation.poses).find((poses) => poses.some((pose) => pose.tableId === tableId));
+    if (!group) return;
+    openServiceWindow(serviceTarget(allocation, group));
+  };
+  const runServiceCommand = async (command: FloorServiceCommand) => {
+    try { return await service.mutate(command); }
+    finally { if (command.action === "open" || command.action === "checkout" || command.action === "close-empty") void refresh(); }
+  };
   const askRelease = (allocation: FloorAllocationView) => { setReleaseTarget(allocation); setReleaseError(null); openPanel("release"); };
   const openWalkIn = () => requestTool("walk-in", () => { if (!tools.windows.some((window) => window.id === "walk-in")) setWalkInError(null); });
   const focusAttend = () => { window.requestAnimationFrame(() => attendButton.current?.focus()); };
@@ -234,7 +270,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   };
   const clearSelection = () => { setSelectedResourceIds([]); setTableMenu(null); };
   const openContext = (hit: string[], point: { x: number; y: number }) => {
-    if (saving) return;
+    if (saving || interactionMode === "service") return;
     const ids = contextFloorSelection(selection, interactionMode === "pan" ? [] : hit, availableIds);
     if (!ids.length) { setTableMenu(null); return; }
     setSelectedResourceIds(ids); setTableMenu({ ids, point }); setOperationError(null);
@@ -272,7 +308,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
     if (!beginMutation()) return;
     setLayoutPreview(preview);
     try {
-      const next = await reassignFloorSelection(restaurantId, { updates: plan.updates }, board.at);
+      const next = await reassignFloorSelection(restaurantId, { updates: plan.updates }, board.at, !historical);
       store.dispatch(floorBoardReceived({ board: next, refreshedAt: next.updatedAt }));
       if (plan.draft) applyDraftLayout(plan.draft);
       if (windowId) discardWindow(windowId);
@@ -327,11 +363,12 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   return <main data-admin-panel data-floor-operations className={`${styles.screen} fixed inset-0 isolate h-dvh overflow-hidden`}>
     <h1 className="sr-only">Sala · {restaurantName}</h1>
     <div ref={boardSurface} tabIndex={-1} role="region" aria-label="Tablero principal de sala" className="absolute inset-0 outline-none">
-      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectJoinedTables selectedIds={selection} selectedLocationId={assembling ? assembly.locationId : undefined}
+      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectJoinedTables selectedIds={interactionMode === "service" ? [] : selection} selectedLocationId={assembling ? assembly.locationId : undefined}
         interactionMode={interactionMode} onInteractionModeChange={(mode) => { setInteractionMode(mode); setTableMenu(null); }}
         draggableIds={!saving ? availableIds.filter((id) => editableResources([id])) : []}
         onSelect={selectTable} onSelectMany={selectTables} onClearSelection={clearSelection}
-        onContextMenuTable={openTableMenu} onContextMenuGroup={openGroupMenu} onContextMenuSelection={(point) => openContext([], point)}
+        onServiceTable={canUseService ? showServiceAtTable : undefined}
+        onContextMenuTable={openTableMenu} onContextMenuGroup={openGroupMenu} onContextMenuSelection={interactionMode === "service" ? undefined : (point) => openContext([], point)}
         onMove={!saving ? moveSelected : undefined} onPlace={assembling && !assembly.locationId && !saving ? assembly.place : undefined} />}
     </div>
     {tableMenu && menuResources.length > 0 && panel !== "release" && <FloorTableContextMenu name={menuName} point={tableMenu.point} disabled={menuDisabled} reason={menuDisabled && !saving ? "La selección ya no se puede modificar o no tenés permiso. Actualizá la sala para continuar." : undefined} onEdit={() => openSelectionEditor(tableMenu.ids)} onSeparate={menuCanSeparate ? () => separateSelected(tableMenu.ids) : undefined} onClose={closeTableMenu} />}
@@ -341,18 +378,19 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       <div aria-label="Salón actual" className="min-w-0 rounded-xl bg-white px-3 py-2 text-[var(--floor-ink,#263e23)] shadow-[0_3px_16px_rgba(24,38,24,0.12)]">
         <span className="block max-w-[60vw] truncate text-[11px] text-[var(--floor-muted,#52634b)] sm:max-w-72">{restaurantName}</span><span className="block max-w-[60vw] truncate text-sm font-semibold sm:max-w-72">{room?.name ?? "Elegir salón"}</span>
       </div>
-      <button {...transientButtonProps} type="button" aria-label="Actualizar" title="Actualizar sala" disabled={loading} onClick={() => { setOperationError(null); void refresh(); if (assembling) assembly.refresh(); }} className={`${floatingButton} pointer-events-auto h-12 w-12 shrink-0 px-0`}>{loading ? <Loader2 size={19} className="animate-spin" /> : <RefreshCw size={19} />}</button>
+      <button {...transientButtonProps} type="button" aria-label="Actualizar" title="Actualizar sala" disabled={loading} onClick={() => { setOperationError(null); void refresh(); void service.refresh(); if (assembling) assembly.refresh(); }} className={`${floatingButton} pointer-events-auto h-12 w-12 shrink-0 px-0`}>{loading ? <Loader2 size={19} className="animate-spin" /> : <RefreshCw size={19} />}</button>
     </header>
 
     <div className="pointer-events-none absolute left-4 right-4 top-[calc(max(1rem,env(safe-area-inset-top))+4rem)] z-10 max-w-lg space-y-2 sm:left-6">
       <div className="w-fit rounded-lg bg-white px-3 py-2 text-xs text-[#46543e] shadow-[0_2px_10px_rgba(24,38,24,0.08)]"><span className="font-semibold">{when}</span><span className="ml-2 text-[var(--floor-muted,#52634b)]" role="status">{refreshedAt ? `Actualizado ${new Intl.DateTimeFormat("es-AR", { timeZone: board?.timeZone ?? "America/Argentina/Buenos_Aires", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(refreshedAt))}` : "Consultando…"}</span></div>
       {tableCounts && <FloorTableSummary counts={tableCounts} />}
+      {canUseService && interactionMode === "service" && <p className="w-fit rounded-lg bg-white px-3 py-2 text-xs font-medium text-[var(--floor-ink,#263e23)] shadow-sm">{historical ? "Consulta de servicio · solo lectura" : "Servicio · tocá una mesa ocupada para ver su cuenta"}</p>}
       {error && (!panel || panel === "rooms") && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}{board && " Se conserva la última vista disponible."}</p>}
       {operationError && !assemblyWindow && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{operationError}</p>}
       {board && !board.enabled && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">La asignación de mesas todavía no está activada.</p>}
     </div>
 
-    <FloorBoardToolbar rooms={board?.rooms ?? []} roomId={roomId} roomsOpen={panel === "rooms"} onRoomsOpenChange={(open) => { if (open) { closeTableMenu();  setPanel("rooms"); } else if (panel === "rooms") setPanel(null); }} onSelectRoom={(id) => { if (id !== roomId) { if (hasPendingChanges && !window.confirm("Hay cambios sin guardar en las ventanas o en el armado. ¿Querés descartarlos y cambiar de salón?")) return; tools.clear(); if (assembling) tools.open("assembly", { kind: "assembly" }); else { setWalkIn(emptyWalkIn); setWalkInError(null); } setDirtyWindows({}); setTableErrors({}); setInventoryDirty(false); changeAssignment(null); setSelectedResourceIds([]); setLayoutPreview(null); } setRoomId(id); setSelectedResourceIds([]); openPanel(null); }} onSchedule={openSchedule} onReservations={() => requestTool("reservations")} onAttend={() => { if (assembling) { tools.open("assembly", { kind: "assembly" }); setPanel(null); } else openWalkIn(); }} onTables={canManageTables && savedRoom ? () => { closeTableMenu(); openPanel("inventory", { kind: "inventory", room: savedRoom }); } : undefined} attendButtonRef={attendButton} readOnly={readOnly} canManageWalkIns={canManageWalkIns} enabled={board?.enabled ?? false} hasBoard={Boolean(board)} assembling={assembling} saving={saving} reservationCount={allocations.length} restaurantId={restaurantId} openPanels={tools.windows.filter((entry) => entry.visible).map((entry) => entry.value.kind)} hasPendingChanges={hasPendingChanges} />
+    <FloorBoardToolbar rooms={board?.rooms ?? []} roomId={roomId} roomsOpen={panel === "rooms"} onRoomsOpenChange={(open) => { if (open) { closeTableMenu();  setPanel("rooms"); } else if (panel === "rooms") setPanel(null); }} onSelectRoom={(id) => { if (id !== roomId) { if (hasPendingChanges && !window.confirm("Hay cambios sin guardar en las ventanas o en el armado. ¿Querés descartarlos y cambiar de salón?")) return; tools.clear(); if (assembling) tools.open("assembly", { kind: "assembly" }); else { setWalkIn(emptyWalkIn); setWalkInError(null); } setDirtyWindows({}); setTableErrors({}); setInventoryDirty(false); changeAssignment(null); setSelectedResourceIds([]); setLayoutPreview(null); } setRoomId(id); setSelectedResourceIds([]); openPanel(null); }} onSchedule={openSchedule} onReservations={() => requestTool("reservations")} onAttend={() => { if (assembling) { tools.open("assembly", { kind: "assembly" }); setPanel(null); } else openWalkIn(); }} onTables={canManageTables && savedRoom ? () => { closeTableMenu(); openPanel("inventory", { kind: "inventory", room: savedRoom }); } : undefined} onServiceAccounts={canUseService ? () => requestTool("service-list") : undefined} attendButtonRef={attendButton} readOnly={readOnly} canManageWalkIns={canManageWalkIns} enabled={board?.enabled ?? false} hasBoard={Boolean(board)} assembling={assembling} saving={saving} reservationCount={allocations.length} restaurantId={restaurantId} openPanels={tools.windows.filter((entry) => entry.visible).map((entry) => entry.value.kind)} hasPendingChanges={hasPendingChanges} />
 
     {assembling && assemblyWindow && <FloorAssemblyControls controller={{ ...assembly, refresh: () => { setOperationError(null); assembly.refresh(); void refresh(); } }} partySize={assemblyPartySize} customerName={walkIn.customerName.trim() || "Sin reserva"} durationMinutes={assemblyDuration} saving={saving} interactionLocked={tableEditorsOpen} floatingWindow={{ visible: assemblyWindow.visible, zIndex: assemblyWindow.zIndex, offset: assemblyWindow.offset, activation: assemblyWindow.activation, onFocus: () => tools.focus(assemblyWindow.id), onHide: () => discardWindow(assemblyWindow.id) }} conflict={assemblyConflict} error={operationError} selectedTableIds={selectionIds} onSelectTable={(id, additive) => { setInteractionMode("select"); selectTable("draft:" + id, additive); }} onSelectTableGroup={(ids) => { setInteractionMode("select"); selectTables(ids.map((id) => "draft:" + id)); }} selectionNotice={selection.length && !draftOnlySelection ? "La selección incluye mesas de otras reservas. Hacé clic derecho en el plano para editarlas juntas." : undefined} onJoinTables={draftOnlySelection ? () => setOperationError(assembly.joinTables(selectionIds)) : undefined} onSeparateTables={draftOnlySelection ? () => separateSelected(selection) : undefined} onEditSelection={draftOnlySelection ? () => openSelectionEditor(selection) : undefined} onConfirm={() => void createWalkIn()} onCancel={cancelAssembly} onEditData={openWalkIn} onChooseRoom={() => openPanel("rooms")} />}
 
@@ -365,16 +403,34 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       const currentSelection = entry.value.allocation ? board?.allocations.find((allocation) => allocation.id === entry.value.allocation!.id) : null;
       const selectedAllocation = currentSelection ?? entry.value.allocation;
       const tableError = staleSelection ? "La selección cambió desde que abriste esta ventana. Cerrala y volvé a abrirla antes de aplicar." : tableErrors[entry.id];
+      const target = entry.value.serviceTarget;
+      const serviceAllocation = target && board?.allocations.find((allocation) => allocation.id === target.allocationId && allocation.poses.some((pose) => pose.tableId === target.tableId));
+      const serviceAccount = target && serviceAccounts.find((account) => account.allocationId === target.allocationId && account.tableIds.includes(target.tableId));
+      const recoveryGroup = target?.recovery ? service.snapshot?.unserved.find((group) => group.allocationId === target.allocationId && group.tableId === target.tableId) : undefined;
+      const currentGroup = serviceAllocation && target && getJoinedTableGroups(serviceAllocation.poses).find((group) => group.some(({ tableId }) => tableId === target.tableId));
+      const currentTarget = currentGroup && serviceAllocation && target ? { ...target, tableLabels: currentGroup.map(({ label }) => label) } : target;
       const closePanel = () => closeTool(entry.id);
       return (
-    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={room?.name ?? restaurantName} icon={panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="right" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 620 }} minWidth={320} minHeight={320} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.selection) setSelectedResourceIds(entry.value.selection.ids); }}>
+    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={currentTarget ? currentTarget.tableLabels.join(" + ") : room?.name ?? restaurantName} icon={panel === "service" || panel === "service-list" ? <ReceiptText size={17} /> : panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="right" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 620 }} minWidth={320} minHeight={320} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.selection) setSelectedResourceIds(entry.value.selection.ids); }}>
       <fieldset disabled={saving} id={"floor-content-" + entry.id} tabIndex={-1} onChangeCapture={() => setDirtyWindows((current) => current[entry.id] ? current : { ...current, [entry.id]: true })} className="flex min-h-0 flex-1 flex-col outline-none">
         {panel === "inventory" && inventoryRoom && canManageTables && <FloorInventoryPanel key={inventoryRoom.id} restaurantId={restaurantId} room={inventoryRoom} onDirtyChange={setInventoryDirty} onBusyChange={inventoryBusyChanged} onClose={closePanel} onSaved={(next) => { setBoard((previous) => previous ? { ...previous, rooms: previous.rooms.map((item) => item.id === next.id ? next : item) } : previous); setInventoryDirty(false); discardWindow(entry.id); }} />}
         {panel === "table" && snapshot && <FloorSelectionEditor disabled={staleSelection} tables={snapshot.tables} inventoryEditable={canManageTables} positionsEditable={canManageTables} busy={saving} error={tableError} onApply={(next, mode) => { void applySelection(next, mode, snapshot, entry.id); }} onCancel={closePanel} />}
         {error && <p role="alert" className="shrink-0 bg-red-50 px-4 py-2 text-xs text-red-800">{error}{board && " Se conserva la última vista disponible."}</p>}
         {panel === "schedule" && <form className="flex min-h-0 flex-1 flex-col" onSubmit={applySchedule}><div className={floorWindowBodyClass}><p className="text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">Consultá el armado del salón para un momento específico. Los horarios corresponden a {board?.timeZone}.</p><div className="grid grid-cols-2 gap-3"><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Fecha<input type="date" required value={schedule.date} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, date: event.target.value }))} /></label><label className="grid gap-1 text-xs font-medium text-[var(--floor-muted,#3f3f46)]">Hora<input type="time" required value={schedule.time} className={floorInputClass} onChange={(event) => setSchedule((value) => ({ ...value, time: event.target.value }))} /></label></div>{scheduleError && <p role="alert" className="text-sm text-red-800">{scheduleError}</p>}</div><footer className={`${floorWindowFooterClass} flex flex-wrap justify-between gap-2`}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => { setQuery({ date: "", time: "" }); setSelectedResourceIds([]); discardWindow(entry.id); setPanel(null); }}><Clock size={16} />Volver a ahora</button><button {...transientButtonProps} type="submit" className={adminPrimaryButtonClass}>Ver este horario</button></footer></form>}
 
-        {panel === "reservations" && <section aria-label="Reservas del salón" className={floorWindowBodyClass}><p className="text-sm text-[var(--floor-muted,#52525b)]">{when} · {allocations.length} grupos con mesas asignadas.</p>{!allocations.length ? <p className="py-6 text-sm text-[var(--floor-muted,#52525b)]">No hay mesas armadas para este horario. Elegí otro momento o atendé una llegada desde el tablero.</p> : allocations.map((allocation) => <AllocationCard key={allocation.id} allocation={allocation} onDetails={() => showDetails(allocation)} onEdit={canArrange(allocation) ? () => editAllocation(allocation) : undefined} onRelease={canRelease(allocation) ? () => askRelease(allocation) : undefined} />)}</section>}
+        {panel === "reservations" && <section aria-label="Reservas del salón" className={floorWindowBodyClass}><p className="text-sm text-[var(--floor-muted,#52525b)]">{when} · {allocations.length} grupos con mesas asignadas.</p>{!allocations.length ? <p className="py-6 text-sm text-[var(--floor-muted,#52525b)]">No hay mesas armadas para este horario. Elegí otro momento o atendé una llegada desde el tablero.</p> : allocations.map((allocation) => <AllocationCard key={allocation.id} allocation={allocation} serviceTargets={canUseService ? serviceTargets(allocation) : []} onService={openServiceWindow} onDetails={() => showDetails(allocation)} onEdit={canArrange(allocation) ? () => editAllocation(allocation) : undefined} onRelease={canRelease(allocation) ? () => askRelease(allocation) : undefined} />)}</section>}
+
+        {panel === "service-list" && <FloorServiceAccounts accounts={serviceAccounts} unserved={service.snapshot?.unserved ?? []} loading={serviceLoading} error={service.error} historical={historical} onRefresh={() => void service.refresh()} onRecover={(group) => openServiceWindow({ ...group, recovery: true })} onChoose={(account) => {
+          const tableId = account.tableIds.slice().sort()[0];
+          if (tableId) openServiceWindow({ allocationId: account.allocationId, customerName: account.customerName, reservationCode: account.reservationCode, tableLabels: account.tableLabels, tableId });
+        }} />}
+        {panel === "service" && currentTarget && <FloorServiceWindow target={currentTarget} account={serviceAccount} products={service.snapshot?.products ?? []} restaurantName={restaurantName} timeZone={board?.timeZone ?? "America/Argentina/Buenos_Aires"} loading={serviceLoading} loadError={service.error} busy={saving} historical={historical}
+          canOpen={canUseService && Boolean(serviceAllocation && !serviceAllocation.releasedAt)} allocationVersion={target?.recovery ? recoveryGroup?.expectedAllocationVersion : serviceAllocation?.version} conflict={Boolean(serviceAllocation?.serviceConflict)} cashClosed={Boolean(service.snapshot?.cashClosed)}
+          onRefresh={() => { void service.refresh(); void refresh(); }} onCommand={async (command) => {
+            const account = await runServiceCommand(command);
+            if (command.action === "add-line" || command.action === "checkout" || command.action === "close-empty") setDirtyWindows((current) => ({ ...current, [entry.id]: false }));
+            return account;
+          }} />}
 
         {panel === "detail" && selectedAllocation && <div className="flex min-h-0 flex-1 flex-col"><div className={floorWindowBodyClass}>{!currentSelection && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Esta asignación ya no ocupa mesas en el horario consultado.</p>}<AllocationCard allocation={selectedAllocation} onEdit={currentSelection && canArrange(currentSelection) ? () => editAllocation(currentSelection) : undefined} onRelease={!assembling && currentSelection && canRelease(currentSelection) ? () => askRelease(currentSelection) : undefined} /></div><footer className={floorWindowFooterClass}><button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={() => openPanel("reservations")}><ArrowLeft size={15} />Ver todas las reservas</button></footer></div>}
 
@@ -396,6 +452,14 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   </main>;
 }
 
-function AllocationCard({ allocation, onDetails, onRelease, onEdit }: { allocation: FloorAllocationView; onDetails?: () => void; onRelease?: () => void; onEdit?: () => void }) {
-  return <article className="border-b border-zinc-200 pb-4 last:border-b-0 last:pb-0"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[var(--floor-ink,#09090b)]">{allocation.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#3f3f46)]">{allocation.poses.map((pose) => pose.label).join(" + ")} · {allocation.time} hs{allocation.source === "WALK_IN" && " · Sin reserva"}</p></div><span className="flex shrink-0 items-center gap-1 rounded-lg bg-[var(--floor-hover,#eef2e9)] px-2 py-1 text-xs font-semibold text-[var(--floor-action,#2d4628)]"><Users size={13} />{allocation.partySize}</span></div>{allocation.notes && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">{allocation.notes}</p>}<div className="mt-3 flex flex-wrap gap-3">{onDetails && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onDetails}>Ver detalle</button>}{onEdit && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onEdit}>Editar armado</button>}{onRelease && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onRelease}>Liberar mesas</button>}</div></article>;
+function AllocationCard({ allocation, onDetails, onRelease, onEdit, serviceTargets = [], onService }: { allocation: FloorAllocationView; onDetails?: () => void; onRelease?: () => void; onEdit?: () => void; serviceTargets?: FloorServiceTarget[]; onService?: (target: FloorServiceTarget) => void }) {
+  return <article className="border-b border-zinc-200 pb-4 last:border-b-0 last:pb-0">
+    <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[var(--floor-ink,#09090b)]">{allocation.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#3f3f46)]">{allocation.poses.map((pose) => pose.label).join(" + ")} · {allocation.time} hs{allocation.source === "WALK_IN" && " · Sin reserva"}</p></div><span className="flex shrink-0 items-center gap-1 rounded-lg bg-[var(--floor-hover,#eef2e9)] px-2 py-1 text-xs font-semibold text-[var(--floor-action,#2d4628)]"><Users size={13} />{allocation.partySize}</span></div>
+    {allocation.serviceConflict && <p className="mt-2 text-xs text-amber-950">Las mesas siguen ocupadas por una cuenta anterior.</p>}
+    {allocation.serviceOverrun && <p className="mt-2 text-xs text-amber-950">Servicio activo fuera del horario previsto.</p>}
+    {allocation.notes && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--floor-muted,#52525b)]">{allocation.notes}</p>}
+    <div className="mt-3 flex flex-wrap gap-3">{onDetails && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onDetails}>Ver detalle</button>}{onEdit && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onEdit}>Editar armado</button>}{onRelease && <button {...transientButtonProps} type="button" className={adminSecondaryButtonClass} onClick={onRelease}>Liberar mesas</button>}
+      {onService && serviceTargets.map((target) => <button key={target.tableId} type="button" className={adminSecondaryButtonClass} onClick={() => onService(target)}><ReceiptText size={15} aria-hidden="true" />Cuenta {target.tableLabels.join(" + ")}</button>)}
+    </div>
+  </article>;
 }

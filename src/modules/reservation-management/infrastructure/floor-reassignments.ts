@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { floorAssignmentSchema, validateFloorPlacement, type FloorInterval } from "@/modules/floor-management/contracts";
+import { floorAssignmentSchema, validateFloorPlacement, type FloorAssignmentInput, type FloorInterval } from "@/modules/floor-management/contracts";
 import { BadRequestError, ConflictError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import { getFloorAssignmentOptions, persistPreparedReservationAllocation, prepareReservationAllocation, syncReservationAllocation } from "./floor-allocations";
@@ -29,11 +29,11 @@ async function currentAssignment(tx: Prisma.TransactionClient, restaurantId: str
   }
   const reservation = await tx.tableReservation.findFirst({
     where: { id: reservationId, restaurantId },
-    include: { allocation: true },
+    include: { allocation: { include: { serviceAccounts: { where: { closedAt: null }, select: { id: true }, take: 1 } } } },
   });
   if (!reservation) throw new NotFoundError("Reserva");
   const allocation = reservation.allocation;
-  if (reservation.status !== "CONFIRMED" || !allocation || allocation.releasedAt || allocation.blockedUntil <= now) {
+  if (reservation.status !== "CONFIRMED" || !allocation || allocation.releasedAt || (allocation.blockedUntil <= now && !allocation.serviceAccounts.length)) {
     throw new ConflictError("El grupo ya no tiene mesas vigentes. Actualizá la sala.");
   }
   const interval: FloorInterval = {
@@ -65,7 +65,7 @@ export async function reassignFloorAllocation(database: PrismaClient, restaurant
       throw new ConflictError("El armado cambió en otra pantalla. Actualizá la sala antes de guardar.");
     }
     const updated = await tx.tableReservation.update({ where: { id: reservation.id }, data: { revision: { increment: 1 } } });
-    await syncReservationAllocation(tx, updated, command.assignment, now, interval);
+    await syncReservationAllocation(tx, updated, command.assignment, now, interval, true);
   });
 }
 
@@ -75,7 +75,7 @@ export async function reassignFloorAllocations(database: PrismaClient, restauran
   return withSqliteTransaction(database, async (tx) => {
     const now = clock();
     const selectedIds = command.updates.map((update) => update.reservationId);
-    const selected = [];
+    const selected: (Awaited<ReturnType<typeof currentAssignment>> & { assignment: FloorAssignmentInput })[] = [];
     for (const update of command.updates) {
       const current = await currentAssignment(tx, restaurantId, update.reservationId, now);
       if (current.reservation.revision !== update.expectedRevision || current.allocation.version !== update.expectedAllocationVersion) {
@@ -85,14 +85,24 @@ export async function reassignFloorAllocations(database: PrismaClient, restauran
     }
     const proposals = [];
     for (const current of selected) {
-      proposals.push(await prepareReservationAllocation(tx, current.reservation, current.assignment, current.interval, selectedIds));
+      proposals.push(await prepareReservationAllocation(tx, current.reservation, current.assignment, current.interval, selectedIds, undefined, now));
     }
     if (proposals.reduce((count, proposal) => count + proposal.poses.length, 0) > 200) {
       throw new BadRequestError("La selección puede modificar hasta 200 mesas a la vez.");
     }
-    const leases = proposals.map(({ proposal }) => proposal);
-    for (const { room, proposal } of proposals) {
+  const scheduled = proposals.filter(({ overrun }) => !overrun);
+  const leases = scheduled.map(({ proposal }) => proposal);
+  for (const { room, proposal } of scheduled) {
       const invalid = validateFloorPlacement(room, proposal, leases);
+      if (invalid) throw new ConflictError(invalid);
+    }
+    const live = proposals.filter(({ proposal }, index) =>
+      Date.parse(proposal.blockedFrom) <= now.getTime() &&
+      (Date.parse(proposal.blockedUntil) > now.getTime() || selected[index].allocation.serviceAccounts.length));
+    const liveEnd = new Date(now.getTime() + 1).toISOString();
+    const liveLeases = live.map(({ proposal }) => ({ ...proposal, blockedFrom: now.toISOString(), blockedUntil: liveEnd }));
+    for (const [index, lease] of liveLeases.entries()) {
+      const invalid = validateFloorPlacement(live[index].room, lease, liveLeases);
       if (invalid) throw new ConflictError(invalid);
     }
     for (const prepared of proposals) {
