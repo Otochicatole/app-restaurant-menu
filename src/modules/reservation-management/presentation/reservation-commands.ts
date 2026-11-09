@@ -1,6 +1,6 @@
 import type { ThunkAction, UnknownAction } from "@reduxjs/toolkit";
 import type { ActionResult } from "@/platform/application/action-result";
-import type { AdminCreateReservationCommand, ReservationStatus, RestaurantEventView, TimeSlotView, UpsertRestaurantEventCommand, UpsertTimeSlotCommand } from "../contracts";
+import type { AdminCreateReservationCommand, ReservationStatus, RestaurantEventView, TimeSlotView, UpdateReservationCommand, UpsertRestaurantEventCommand, UpsertTimeSlotCommand } from "../contracts";
 import { STATUS_LABEL } from "./reservation-labels";
 import {
   addBlockedDateAction, createAdminReservationAction, deleteReservationAction, deleteRestaurantEventAction,
@@ -94,15 +94,21 @@ export function requestReservationStatus(reservationId: string, status: Reservat
   };
 }
 
-export function confirmAssignment(dialogId: number): Command {
+const confirmationFields = ["customerName", "customerEmail", "customerPhone", "partySize", "date", "time", "notes", "adminNotes"] as const;
+export type ReservationConfirmationDetails = Pick<UpdateReservationCommand, (typeof confirmationFields)[number]>;
+
+export function confirmAssignment(dialogId: number, details: ReservationConfirmationDetails): Command {
   return async (dispatch, getState) => {
     const { data, dialog, assignment } = getState();
     if (dialog?.kind !== "assignment" || dialog.id !== dialogId || !assignment) return false;
     const { reservation } = dialog;
-    if (assignment.capacity !== undefined && assignment.capacity < reservation.partySize) return false;
-    return dispatch(write(dialogId, () => updateReservationStatusAction(data.restaurantId, reservation.id, "CONFIRMED", {
-      assignment, expectedRevision: reservation.revision,
-    }), (reservation) => ({ reservation, closeDialog: true, feedback: success('Estado actualizado a "Confirmada"') })));
+    if (assignment.capacity !== undefined && assignment.capacity < details.partySize) return false;
+    const options = { assignment, expectedRevision: reservation.revision };
+    const edited = confirmationFields.some((field) => details[field] !== reservation[field]);
+    return dispatch(write(dialogId, () => edited
+      ? updateReservationAction(data.restaurantId, { ...details, id: reservation.id, status: "CONFIRMED", ...options })
+      : updateReservationStatusAction(data.restaurantId, reservation.id, "CONFIRMED", options),
+    (reservation) => ({ reservation, closeDialog: true, feedback: success('Estado actualizado a "Confirmada"') })));
   };
 }
 

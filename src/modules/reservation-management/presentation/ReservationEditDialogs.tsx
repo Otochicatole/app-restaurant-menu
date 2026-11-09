@@ -1,33 +1,133 @@
-import { useId, useState } from "react";
-import { FloorAssignmentPicker, FloorRoomSelector } from "@/modules/floor-management/ui";
+import { useCallback, useId, useState } from "react";
+import { FloorAssignmentPicker, FloorReservationEditor, FloorRoomSelector } from "@/modules/floor-management/ui";
 import { type FloorAssignmentInput } from "@/modules/floor-management/contracts";
 import { LayoutGrid, Loader2 } from "lucide-react";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
-import { type AdminCreateReservationCommand, type ReservationStatus, type UpsertRestaurantEventCommand, type UpsertTimeSlotCommand } from "../contracts";
+import { type AdminCreateReservationCommand, type ReservationStatus, type TimeSlotView, type UpsertRestaurantEventCommand, type UpsertTimeSlotCommand } from "../contracts";
 import { reservationWorkspace, assignmentChanged, dialogClosed, type ActiveReservationDialog } from "./reservation-workspace";
-import { confirmAssignment, saveEvent, saveReservation, saveSlot } from "./reservation-commands";
+import { confirmAssignment, saveEvent, saveReservation, saveSlot, type ReservationConfirmationDetails } from "./reservation-commands";
 import { STATUS_LABEL, formatShortDate, preferredSectorLabel } from "./reservation-labels";
 import { PreferredSector, reservationInputClass, ReservationSelect, ReservationField, ReservationWriteError } from "./ReservationUi";
 
 export function ReservationAssignment({ dialog }: { dialog: ActiveReservationDialog & { kind: "assignment" } }) {
   const restaurantId = reservationWorkspace.useSelector((state) => state.data.restaurantId);
+  const timeSlots = reservationWorkspace.useSelector((state) => state.data.timeSlots);
+  const assignment = reservationWorkspace.useSelector((state) => state.assignment);
+  const saving = reservationWorkspace.useSelector((state) => state.write !== null);
+  const error = reservationWorkspace.useSelector(({ feedback }) =>
+    feedback?.type === "error" && feedback.dialogId === dialog.id ? feedback.message : null);
   const store = reservationWorkspace.useStore();
-  const isPending = reservationWorkspace.useSelector((state) => state.write !== null);
-  const close = () => store.dispatch(dialogClosed(dialog.id));
-  const setAssignment = (assignment: FloorAssignmentInput | null) => store.dispatch(assignmentChanged({ dialogId: dialog.id, assignment }));
-  const assigningReservation = dialog.reservation;
-  const quickAssignment = reservationWorkspace.useSelector((state) => state.assignment);
-  const quickAssignmentTooSmall = quickAssignment?.capacity !== undefined && quickAssignment.capacity < assigningReservation.partySize;
+  const { id: dialogId, reservation } = dialog;
+  const setAssignment = useCallback((assignment: FloorAssignmentInput | null) => {
+    store.dispatch(assignmentChanged({ dialogId, assignment }));
+  }, [dialogId, store]);
+  const [details, setDetails] = useState<ReservationConfirmationDetails>(() => {
+    const { customerName, customerEmail, customerPhone, partySize, date, time, notes, adminNotes } = reservation;
+    return { customerName, customerEmail, customerPhone, partySize, date, time, notes, adminNotes };
+  });
+  const { date, time, partySize, customerName } = details;
+
   return (
-    <AdminModal open title={`Confirmar reserva ${assigningReservation.code}`} description={`${assigningReservation.customerName} · ${assigningReservation.partySize} personas · ${assigningReservation.date} ${assigningReservation.time}`} wide onClose={() => { if (!isPending) close(); }}>
-        <div className="space-y-4">
-          <ReservationWriteError dialogId={dialog.id} />
-          <PreferredSector label={preferredSectorLabel(assigningReservation)} />
-          <FloorAssignmentPicker restaurantId={restaurantId} query={{ date: assigningReservation.date, time: assigningReservation.time, partySize: assigningReservation.partySize, eventId: assigningReservation.eventId, excludeReservationId: assigningReservation.id }} value={quickAssignment} onChange={setAssignment} />
-          <div className="flex justify-end gap-2"><button type="button" className={adminSecondaryButtonClass} onClick={() => close()} disabled={isPending}>Cancelar</button><button type="button" className={adminPrimaryButtonClass} disabled={isPending || !quickAssignment || quickAssignmentTooSmall} onClick={() => void store.dispatch(confirmAssignment(dialog.id))}>{isPending && <Loader2 size={15} className="animate-spin" />}Confirmar y asignar mesas</button></div>
-        </div>
-      </AdminModal>
+    <FloorReservationEditor
+      restaurantId={restaurantId}
+      query={{ date, time, partySize, eventId: reservation.eventId, excludeReservationId: reservation.id }}
+      value={assignment}
+      onChange={setAssignment}
+      title={`Confirmar reserva ${reservation.code}`}
+      description={`${partySize} ${partySize === 1 ? "persona" : "personas"} · ${formatShortDate(date)} · ${time} hs`}
+      customerName={customerName}
+      preferredSector={preferredSectorLabel(reservation)}
+      saving={saving}
+      error={error}
+      onConfirm={() => void store.dispatch(confirmAssignment(dialogId, details))}
+      onCancel={() => store.dispatch(dialogClosed(dialogId))}
+      renderDetails={(close) => (
+        <ReservationConfirmationForm
+          initialDetails={details}
+          timeSlots={timeSlots}
+          isEvent={Boolean(reservation.eventId)}
+          isWalkIn={reservation.source === "WALK_IN"}
+          saving={saving}
+          onApply={(next) => {
+            if (next.date !== date || next.time !== time || next.partySize !== partySize) setAssignment(null);
+            setDetails(next);
+            close();
+          }}
+          onCancel={close}
+        />
+      )}
+    />
+  );
+}
+
+function ReservationConfirmationForm({ initialDetails, timeSlots, isEvent, isWalkIn, saving, onApply, onCancel }: {
+  initialDetails: ReservationConfirmationDetails;
+  timeSlots: TimeSlotView[];
+  isEvent: boolean;
+  isWalkIn: boolean;
+  saving: boolean;
+  onApply: (details: ReservationConfirmationDetails) => void;
+  onCancel: () => void;
+}) {
+  const [details, setDetails] = useState(initialDetails);
+  const setField = <Field extends keyof ReservationConfirmationDetails>(field: Field, value: ReservationConfirmationDetails[Field]) => {
+    setDetails((previous) => ({ ...previous, [field]: value }));
+  };
+  const inputClass = `${reservationInputClass} w-full min-w-0`;
+  return (
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); if (!saving) onApply(details); }}>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-3">
+        <fieldset disabled={saving} className="min-w-0 space-y-3">
+          <legend className="mb-2 text-sm font-semibold text-zinc-900">Contacto</legend>
+          <ReservationField label="Nombre y apellido">
+            <input type="text" autoComplete="name" required minLength={2} maxLength={100} value={details.customerName} onChange={(event) => setField("customerName", event.target.value)} className={inputClass} />
+          </ReservationField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ReservationField label={isWalkIn ? "Teléfono (opcional)" : "Teléfono / WhatsApp"}>
+              <input type="tel" autoComplete="tel" required={!isWalkIn} minLength={6} maxLength={40} value={details.customerPhone} onChange={(event) => setField("customerPhone", event.target.value)} className={inputClass} />
+            </ReservationField>
+            <ReservationField label="Email (opcional)">
+              <input type="email" autoComplete="email" maxLength={120} value={details.customerEmail} onChange={(event) => setField("customerEmail", event.target.value)} className={inputClass} />
+            </ReservationField>
+          </div>
+        </fieldset>
+
+        <fieldset disabled={saving} className="min-w-0 space-y-3">
+          <legend className="mb-2 text-sm font-semibold text-zinc-900">Servicio</legend>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem]">
+            <ReservationField label="Fecha">
+              <input type="date" required disabled={isEvent} value={details.date} onChange={(event) => setField("date", event.target.value)} className={inputClass} />
+            </ReservationField>
+            <ReservationField label="Horario">
+              <ReservationSelect label="Horario" required disabled={isEvent} value={details.time} onChange={(event) => setField("time", event.target.value)}>
+                {details.time && !timeSlots.some((slot) => slot.time === details.time) && <option value={details.time}>{details.time} hs</option>}
+                {timeSlots.map((slot) => <option key={slot.id} value={slot.time}>{slot.time} hs{slot.label && ` · ${slot.label}`}</option>)}
+              </ReservationSelect>
+            </ReservationField>
+            <ReservationField label="Comensales">
+              <input type="number" min={1} max={40} required value={details.partySize} onChange={(event) => setField("partySize", Number(event.target.value))} className={inputClass} />
+            </ReservationField>
+          </div>
+          {isEvent && <p className="text-xs text-zinc-600">La fecha y el horario corresponden al evento.</p>}
+        </fieldset>
+
+        <fieldset disabled={saving} className="min-w-0 space-y-3">
+          <legend className="mb-2 text-sm font-semibold text-zinc-900">Notas</legend>
+          <ReservationField label="Del comensal (opcional)">
+            <textarea rows={2} maxLength={500} value={details.notes} onChange={(event) => setField("notes", event.target.value)} className={inputClass} />
+          </ReservationField>
+          <ReservationField label="Nota interna (opcional)">
+            <textarea rows={2} maxLength={500} value={details.adminNotes} onChange={(event) => setField("adminNotes", event.target.value)} className={inputClass} />
+          </ReservationField>
+        </fieldset>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-zinc-200 bg-white px-4 py-3">
+        <button type="button" className={adminSecondaryButtonClass} onClick={onCancel}>Volver sin aplicar</button>
+        <button type="submit" className={adminPrimaryButtonClass} disabled={saving}>Aplicar cambios</button>
+      </div>
+    </form>
   );
 }
 

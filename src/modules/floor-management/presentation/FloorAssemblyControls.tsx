@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ChevronDown, Circle, Layers3, Loader2, MapPin, Minus, Plus, RectangleHorizontal, RefreshCw, RotateCw, SlidersHorizontal, Square } from "lucide-react";
-import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
+import { FloatingModalWindow, type FloatingModalWindowProps } from "@/ui/FloatingModalWindow";
 import { transientButtonProps } from "@/ui/button-state";
 import { floorPrimaryButtonClass as adminPrimaryButtonClass, floorSecondaryButtonClass as adminSecondaryButtonClass } from "./floor-ui";
 import type { FloorRotation } from "../contracts";
@@ -14,9 +14,10 @@ import { defaultLayoutCapacity } from "./floor-table-layout";
 
 export type FloorAssemblyControlsProps = Pick<FloorAssemblyGroupingProps, "selectedTableIds" | "onSelectTable" | "onSelectTableGroup" | "onJoinTables" | "onSeparateTables" | "onEditSelection" | "onMoveTableGroup" | "onRotateTableGroup"> & {
   controller: FloorAssemblyController; partySize: number; customerName?: string; durationMinutes?: number;
-  saving?: boolean; suspended?: boolean; conflict?: string | null; error?: string | null;
+  saving?: boolean; suspended?: boolean; conflict?: string | null; error?: string | null; submissionError?: string | null;
   interactionLocked?: boolean; selectionNotice?: string;
   floatingWindow?: { visible: boolean; zIndex: number; offset: number; activation: number; onFocus: () => void; onHide: () => void };
+  windowLayout?: Pick<FloatingModalWindowProps, "viewportInset" | "initialPosition" | "initialSize">;
   confirmLabel?: string; editDataLabel?: string;
   onTableActions?: (id: string, point: { x: number; y: number }) => void;
   onGroupActions?: (ids: string[], point: { x: number; y: number }) => void;
@@ -26,7 +27,7 @@ export type FloorAssemblyControlsProps = Pick<FloorAssemblyGroupingProps, "selec
 const quietAction = "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-[var(--floor-muted,#46543e)] transition-colors hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 const stepperAction = "flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-[var(--floor-ink,#263e23)] hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-35";
 
-export function FloorAssemblyControls({ controller, partySize, customerName, durationMinutes, saving = false, suspended = false, interactionLocked = false, selectionNotice, floatingWindow, conflict, error, confirmLabel = "Armar y ocupar mesas", editDataLabel = "Editar datos", onTableActions, onGroupActions, selectedTableIds, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onEditSelection, onMoveTableGroup, onRotateTableGroup, onConfirm, onCancel, onEditData, onChooseRoom }: FloorAssemblyControlsProps) {
+export function FloorAssemblyControls({ controller, partySize, customerName, durationMinutes, saving = false, suspended = false, interactionLocked = false, selectionNotice, floatingWindow, windowLayout, conflict, error, submissionError, confirmLabel = "Armar y ocupar mesas", editDataLabel = "Editar datos", onTableActions, onGroupActions, selectedTableIds, onSelectTable, onSelectTableGroup, onJoinTables, onSeparateTables, onEditSelection, onMoveTableGroup, onRotateTableGroup, onConfirm, onCancel, onEditData, onChooseRoom }: FloorAssemblyControlsProps) {
   const [windowOpen, setWindowOpen] = useState(true);
   const tool = useRef<HTMLDivElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
@@ -47,12 +48,12 @@ export function FloorAssemblyControls({ controller, partySize, customerName, dur
   const problem = conflict || selectionError || capacityError;
   const canConfirm = Boolean(options && value && room && location && selected.length && !problem && !error && !controller.error && !loading && !saving && !interactionLocked);
   const fieldDisabled = saving || loading || interactionLocked;
-  const message = problem || error || controller.error || (interactionLocked ? "Aplicá o cancelá la edición de las mesas para continuar el armado." : null);
+  const message = problem || error || controller.error || submissionError || (interactionLocked ? "Aplicá o cancelá la edición de las mesas para continuar el armado." : null);
   const closeWindow = () => { if (floatingWindow) floatingWindow.onHide(); else { setWindowOpen(false); window.requestAnimationFrame(() => launcher.current?.focus()); } };
   const restoreWindow = () => { setWindowOpen(true); window.requestAnimationFrame(() => tool.current?.querySelector<HTMLButtonElement>('[role="complementary"] button:not(:disabled)')?.focus()); };
 
   return <div ref={tool}>
-    <FloatingModalWindow id="floor-assembly" title="Armar mesas" subtitle={`${customerName?.trim() || "Sin reserva"} · ${partySize} personas${durationMinutes ? ` · ${durationMinutes} min` : ""}`} icon={<Layers3 size={17} className="text-[var(--floor-action,#3d5934)]" />} role="complementary" ariaLabel="Armar mesas en sala" isOpen={(floatingWindow?.visible ?? windowOpen) && !suspended} keepMounted onClose={closeWindow} closeDisabled={saving} initialAnchor="right" initialOffset={floatingWindow?.offset} activation={floatingWindow?.activation} onFocus={floatingWindow?.onFocus} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 640 }} minWidth={320} minHeight={360} zIndex={floatingWindow?.zIndex ?? 30}>
+    <FloatingModalWindow id="floor-assembly" title="Armar mesas" subtitle={`${customerName?.trim() || "Sin reserva"} · ${partySize} ${partySize === 1 ? "persona" : "personas"}${durationMinutes ? ` · ${durationMinutes} min` : ""}`} icon={<Layers3 size={17} className="text-[var(--floor-action,#3d5934)]" />} role="complementary" ariaLabel="Armar mesas en sala" isOpen={(floatingWindow?.visible ?? windowOpen) && !suspended} keepMounted onClose={closeWindow} closeDisabled={saving} initialAnchor="right" initialOffset={floatingWindow?.offset} activation={floatingWindow?.activation} onFocus={floatingWindow?.onFocus} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={{ width: 400, height: 640 }} minWidth={320} minHeight={360} zIndex={floatingWindow?.zIndex ?? 30} {...windowLayout}>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 text-[var(--floor-ink,#263e23)] [scrollbar-width:thin] [scrollbar-color:var(--floor-scrollbar,#c6cec0)_transparent]">
         <section aria-label="Ubicación del armado" className="space-y-2">
           <div className="flex min-h-9 items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold"><MapPin size={14} className="shrink-0 text-[var(--floor-muted,#607054)]" /><span className="truncate">{room?.name ?? "Elegí un salón"}</span></span><button {...transientButtonProps} type="button" disabled={saving} onClick={onChooseRoom} className={quietAction}>Cambiar salón</button></div>

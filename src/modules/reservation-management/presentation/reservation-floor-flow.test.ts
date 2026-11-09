@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { createElement } from "react";
+import { createElement, useState, type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { FloorAssignmentInput } from "@/modules/floor-management/contracts";
@@ -12,8 +12,21 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("./actions", () => actions);
 const assignment: FloorAssignmentInput = { roomId: "room", optionId: "table:one", x: 200, y: 200, rotation: 0, expectedRoomRevision: 2 };
+type FloorEditorProps = ComponentProps<typeof import("@/modules/floor-management/ui").FloorReservationEditor>;
 vi.mock("@/modules/floor-management/ui", () => ({
   FloorAssignmentPicker: ({ onChange }: { onChange: (value: FloorAssignmentInput) => void }) => createElement("button", { type: "button", onClick: () => onChange(assignment) }, "Elegir mesa de prueba"),
+  FloorReservationEditor: function MockFloorReservationEditor(props: FloorEditorProps) {
+    const [editing, setEditing] = useState(false);
+    return createElement("section", { role: "dialog", "aria-label": props.title },
+      createElement("p", null, props.customerName),
+      createElement("p", null, props.description),
+      createElement("p", null, props.preferredSector),
+      props.error && createElement("p", { role: "alert" }, props.error),
+      editing ? props.renderDetails(() => setEditing(false)) : createElement("button", { type: "button", onClick: () => setEditing(true) }, "Editar reserva"),
+      createElement("button", { type: "button", onClick: () => props.onChange(assignment) }, "Elegir mesa de prueba"),
+      createElement("button", { type: "button", onClick: props.onConfirm, disabled: props.saving || !props.value }, "Confirmar y asignar mesas"),
+      createElement("button", { type: "button", onClick: props.onCancel }, "Cancelar"));
+  },
   FloorRoomSelector: () => null,
 }));
 import { ReservationCmsScreen } from "./ReservationCmsScreen";
@@ -62,6 +75,65 @@ describe("reservation floor confirmation flow", () => {
     await waitFor(() => expect(actions.updateReservationStatusAction).toHaveBeenCalledTimes(2));
     expect(actions.updateReservationStatusAction).toHaveBeenLastCalledWith("restaurant", "reservation", "CONFIRMED", { assignment, expectedRevision: 3 });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("prefills the confirmation editor and submits edited notes and the assignment in one write", async () => {
+    const original = { ...reservation, notes: "Cerca de una ventana" };
+    actions.updateReservationAction.mockResolvedValueOnce({ success: false, error: { code: "CONFLICT", message: "La mesa ya fue asignada." } });
+    render(createElement(ReservationCmsScreen, { initialData: data(original) }));
+    fireEvent.click(screen.getByRole("button", { name: /^Confirmar$/ }));
+    const modal = within(screen.getByRole("dialog", { name: "Confirmar reserva TEST" }));
+    fireEvent.click(modal.getByRole("button", { name: "Elegir mesa de prueba" }));
+    fireEvent.click(modal.getByRole("button", { name: "Editar reserva" }));
+    expect((modal.getByRole("textbox", { name: "Nombre y apellido" }) as HTMLInputElement).value).toBe(original.customerName);
+    const notes = modal.getByRole("textbox", { name: "Del comensal (opcional)" }) as HTMLTextAreaElement;
+    expect(notes.value).toBe(original.notes);
+    fireEvent.change(notes, { target: { value: "Necesita espacio para una silla de ruedas" } });
+    fireEvent.click(modal.getByRole("button", { name: "Aplicar cambios" }));
+    expect(actions.updateReservationAction).not.toHaveBeenCalled();
+    fireEvent.click(modal.getByRole("button", { name: "Confirmar y asignar mesas" }));
+    await waitFor(() => expect(modal.getByRole("alert").textContent).toBe("La mesa ya fue asignada."));
+    expect(actions.updateReservationStatusAction).not.toHaveBeenCalled();
+    const input = { id: original.id, expectedRevision: original.revision, status: "CONFIRMED", assignment, notes: "Necesita espacio para una silla de ruedas" };
+    expect(actions.updateReservationAction).toHaveBeenCalledWith("restaurant", expect.objectContaining(input));
+    fireEvent.click(modal.getByRole("button", { name: "Editar reserva" }));
+    expect((modal.getByRole("textbox", { name: "Del comensal (opcional)" }) as HTMLTextAreaElement).value).toBe(input.notes);
+    fireEvent.click(modal.getByRole("button", { name: "Volver sin aplicar" }));
+    actions.updateReservationAction.mockResolvedValueOnce({ success: true, data: { ...original, status: "CONFIRMED", revision: 4, notes: input.notes } });
+    fireEvent.click(modal.getByRole("button", { name: "Confirmar y asignar mesas" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(actions.updateReservationAction).toHaveBeenCalledTimes(2);
+    expect(actions.updateReservationAction).toHaveBeenLastCalledWith("restaurant", expect.objectContaining(input));
+  });
+
+  it("requires another assignment after changing the time or party size", () => {
+    render(createElement(ReservationCmsScreen, { initialData: data() }));
+    fireEvent.click(screen.getByRole("button", { name: /^Confirmar$/ }));
+    const modal = within(screen.getByRole("dialog"));
+    fireEvent.click(modal.getByRole("button", { name: "Elegir mesa de prueba" }));
+    fireEvent.click(modal.getByRole("button", { name: "Editar reserva" }));
+    fireEvent.change(modal.getByRole("spinbutton", { name: "Comensales" }), { target: { value: "5" } });
+    fireEvent.click(modal.getByRole("button", { name: "Aplicar cambios" }));
+    expect((modal.getByRole("button", { name: "Confirmar y asignar mesas" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(modal.getByText(/5 personas/)).toBeTruthy();
+    fireEvent.click(modal.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(actions.updateReservationAction).not.toHaveBeenCalled();
+    expect(actions.updateReservationStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the event's schedule fixed in the confirmation editor", () => {
+    const signup = { ...reservation, eventId: event.id, date: event.date, time: event.startTime };
+    render(createElement(ReservationCmsScreen, { initialData: { ...data(signup), events: [event] } }));
+    fireEvent.click(screen.getByRole("button", { name: /^Confirmar$/ }));
+    const modal = within(screen.getByRole("dialog"));
+    fireEvent.click(modal.getByRole("button", { name: "Editar reserva" }));
+    const date = modal.getByLabelText("Fecha") as HTMLInputElement;
+    const time = modal.getByRole("combobox", { name: "Horario" }) as HTMLSelectElement;
+    expect(date.value).toBe(event.date);
+    expect(time.value).toBe(event.startTime);
+    expect(date.disabled).toBe(true);
+    expect(time.disabled).toBe(true);
   });
 
   it("prefills a manual signup from attendees and refreshes occupancy after saving", async () => {

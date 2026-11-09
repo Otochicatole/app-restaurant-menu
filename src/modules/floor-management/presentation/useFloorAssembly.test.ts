@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildFloorOptions, getJoinedTableGroups, validateAssembly, validateTableArrangement, type FloorAssignmentInput, type FloorOptionsView, type FloorRoom } from "../contracts";
+import { buildFloorOptions, getJoinedTableGroups, validateAssembly, validateTableArrangement, type FloorAssignmentInput, type FloorOptionsQuery, type FloorOptionsView, type FloorRoom } from "../contracts";
 import { useFloorAssembly } from "./useFloorAssembly";
 
 const api = vi.hoisted(() => ({ options: vi.fn() }));
@@ -15,6 +15,7 @@ const room: FloorRoom = {
 };
 const patio: FloorRoom = { ...room, id: "outside", name: "Patio", locations: [{ ...room.locations[0], id: "patio" }], tables: [{ ...room.tables[0], id: "three", label: "3" }] };
 const interval = { serviceStartAt: "2026-11-10T22:00:00.000Z", serviceEndAt: "2026-11-11T00:00:00.000Z", blockedFrom: "2026-11-10T22:00:00.000Z", blockedUntil: "2026-11-11T00:00:00.000Z", timeZone: "America/Argentina/Buenos_Aires" };
+const reservationQuery = { date: "2026-11-10", time: "19:00", partySize: 6, eventId: "event", excludeReservationId: "reservation" } satisfies FloorOptionsQuery;
 function available(rooms = [room, patio]): FloorOptionsView {
   return { rooms: structuredClone(rooms), interval, options: rooms.flatMap(buildFloorOptions).map((option) => ({ ...option, available: option.capacity >= 6, resourceAvailable: true })) };
 }
@@ -29,6 +30,55 @@ function useHarness() {
 describe("main-floor table assembly", () => {
   beforeEach(() => { vi.resetAllMocks(); api.options.mockResolvedValue(available()); });
   afterEach(cleanup);
+
+  it("loads reservation options for the scheduled service and ignores superseded queries", async () => {
+    let resolveStale!: (options: FloorOptionsView) => void;
+    let resolveCurrent!: (options: FloorOptionsView) => void;
+    api.options.mockResolvedValueOnce(available())
+      .mockImplementationOnce(() => new Promise<FloorOptionsView>((resolve) => { resolveStale = resolve; }))
+      .mockImplementationOnce(() => new Promise<FloorOptionsView>((resolve) => { resolveCurrent = resolve; }));
+    const { result, rerender } = renderHook(({ query }) => useFloorAssembly({
+      restaurantId: "restaurant", active: true, partySize: query.partySize, roomId: "", value: null, onChange: vi.fn(), reservationQuery: query,
+    }), { initialProps: { query: reservationQuery } });
+
+    await waitFor(() => expect(result.current.room?.id).toBe("inside"));
+    expect(api.options).toHaveBeenCalledWith("restaurant", reservationQuery, expect.any(AbortSignal));
+    rerender({ query: { ...reservationQuery } });
+    expect(api.options).toHaveBeenCalledTimes(1);
+
+    rerender({ query: { ...reservationQuery, time: "20:00" } });
+    expect(result.current.loading).toBe(true);
+    expect(result.current.options).toBeNull();
+    const staleSignal = api.options.mock.calls[1][2] as AbortSignal;
+
+    const latestQuery = { ...reservationQuery, time: "21:00", partySize: 8 };
+    rerender({ query: latestQuery });
+    expect(staleSignal.aborted).toBe(true);
+    expect(api.options).toHaveBeenLastCalledWith("restaurant", latestQuery, expect.any(AbortSignal));
+    await act(async () => { resolveCurrent(available([patio])); });
+    expect(result.current.room?.id).toBe("outside");
+    expect(result.current.loading).toBe(false);
+    await act(async () => { resolveStale(available()); });
+    expect(result.current.room?.id).toBe("outside");
+  });
+
+  it("opens the preferred active sector and uses its room for the arrangement", async () => {
+    const { result, rerender } = renderHook(({ roomId }) => {
+      const [value, onChange] = useState<FloorAssignmentInput | null>(null);
+      return useFloorAssembly({ restaurantId: "restaurant", active: true, partySize: 6, roomId, value, onChange,
+        reservationQuery, preferredSector: "Ventana · Patio" });
+    }, { initialProps: { roomId: "" } });
+
+    await waitFor(() => expect(result.current.room?.id).toBe("outside"));
+    expect(result.current.locationId).toBe("patio");
+    expect(result.current.selected).toEqual([]);
+    act(() => result.current.setTableIds(["three"]));
+    expect(result.current.value).toMatchObject({ roomId: "outside", locationId: "patio", expectedRoomRevision: patio.revision });
+
+    rerender({ roomId: "inside" });
+    expect(result.current.room?.id).toBe("inside");
+    expect(result.current.locationId).toBe("");
+  });
 
   it("remembers a point selected before choosing inventory and makes 4 + 4 offer six useful places", async () => {
     const { result } = renderHook(useHarness);
