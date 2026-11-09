@@ -2,7 +2,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
-import { act, fireEvent, within } from "@testing-library/react";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FloorBoardView } from "../contracts";
 
@@ -87,5 +87,41 @@ describe("floor board server snapshot hydration", () => {
     expect(errors).not.toHaveBeenCalled();
     expect(container.innerHTML).toBe(html);
     expect(within(container).getByRole("status").textContent).toBe("Actualizado 09:00:05");
+  });
+
+  it("ignores a board response from a replaced time query", async () => {
+    let respondToOldQuery!: (value: FloorBoardView) => void;
+    api.board
+      .mockImplementationOnce(() => new Promise<FloorBoardView>((resolve) => { respondToOldQuery = resolve; }))
+      .mockResolvedValueOnce({ ...snapshot, rooms: [{ ...snapshot.rooms[0], name: "Servicio nocturno" }] });
+    const element = createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Café", readOnly: true, initialBoard: snapshot });
+    container.innerHTML = renderToString(element);
+    await act(async () => { root = hydrateRoot(container, element); });
+    const dom = within(container);
+    fireEvent.click(dom.getByRole("button", { name: "Actualizar" }));
+    fireEvent.click(dom.getByRole("button", { name: "Fecha y hora" }));
+    fireEvent.change(dom.getByLabelText("Hora"), { target: { value: "21:30" } });
+    fireEvent.click(dom.getByRole("button", { name: "Ver este horario" }));
+    await waitFor(() => expect(dom.getByRole("img", { name: "Plano de Servicio nocturno" })).toBeTruthy());
+    await act(async () => { respondToOldQuery(snapshot); });
+    expect(dom.getByRole("img", { name: "Plano de Servicio nocturno" })).toBeTruthy();
+    expect(api.board.mock.calls[0][2].aborted).toBe(true);
+  });
+
+  it("resets tools and the initial snapshot when the access scope changes", async () => {
+    const props = { restaurantId: "restaurant", restaurantName: "Café", readOnly: true, initialBoard: snapshot };
+    const element = createElement(FloorBoardScreen, props);
+    container.innerHTML = renderToString(element);
+    await act(async () => { root = hydrateRoot(container, element); });
+    const dom = within(container);
+    fireEvent.click(dom.getByRole("button", { name: "Reservas" }));
+    expect(dom.getByRole("dialog", { name: "Reservas de Ventana" })).toBeTruthy();
+    await act(async () => {
+      root?.render(createElement(FloorBoardScreen, {
+        ...props, readOnly: false, initialBoard: { ...snapshot, rooms: [{ ...snapshot.rooms[0], name: "Terraza" }] },
+      }));
+    });
+    expect(dom.getByRole("img", { name: "Plano de Terraza" })).toBeTruthy();
+    expect(dom.queryByRole("dialog")).toBeNull();
   });
 });

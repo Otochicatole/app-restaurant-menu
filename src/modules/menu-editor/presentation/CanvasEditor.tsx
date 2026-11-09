@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bookmark, Check, ExternalLink, Grid2X2, ImagePlus, LayoutTemplate, Loader2, QrCode, Redo2, Search, Undo2, Upload } from "lucide-react";
 import QRCode from "qrcode";
 import { STROKE_SIDES, type CanvasDocumentV1, type CanvasGroup, type CanvasNode, type MenuAssetView, type MenuProjectView, type MenuTemplateView } from "../contracts";
@@ -30,29 +30,37 @@ import { FloatingModalWindow } from "./FloatingModalWindow";
 import { MediaSelectorModal, type MediaSelectorTarget } from "./MediaSelectorModal";
 import { LUCIDE_ICON_NAMES } from "../domain/lucide-icon-catalog";
 
+import { menuEdited, menuOperationFailed, menuOperationStarted, menuOperationSucceeded, menuRedone, menuSeed, menuUndone, menuWorkspace } from "./menu-workspace";
+
 const KonvaCanvas = dynamic(() => import("./KonvaCanvas").then((module) => module.KonvaCanvas), { ssr: false });
 
-export function CanvasEditor({ restaurantId, project, initialAssets, initialTemplates, restaurantName, restaurantSlug, publicMenuUrl }: { restaurantId: string; project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string; publicMenuUrl: string }) {
+type CanvasEditorProps = { restaurantId: string; project: MenuProjectView; initialAssets: MenuAssetView[]; initialTemplates: MenuTemplateView[]; restaurantName: string; restaurantSlug: string; publicMenuUrl: string };
+type MenuRevisionRequest = { kind: "save" | "publish" | "reload" } | { kind: "apply"; templateId: string } | { kind: "overwrite"; revision: number };
+
+export function CanvasEditor(props: CanvasEditorProps) {
+  const { restaurantId, project, initialAssets, initialTemplates } = props;
+  return (
+    <menuWorkspace.Provider key={`${restaurantId}:${project.id}`} seed={menuSeed(project, normalizeDocument(project.document), initialAssets, initialTemplates)}>
+      <CanvasEditorContent {...props} />
+    </menuWorkspace.Provider>
+  );
+}
+
+function CanvasEditorContent({ restaurantId, restaurantName, restaurantSlug, publicMenuUrl }: CanvasEditorProps) {
+  const store = menuWorkspace.useStore();
   const editorApi = `/api/restaurants/${encodeURIComponent(restaurantId)}/editor`;
   const saveRequestRef = useRef<AbortController | null>(null);
-  const [document, setDocument] = useState(() => normalizeDocument(project.document));
-  const [revision, setRevision] = useState(project.draftRevision);
-  const [publishedRevision, setPublishedRevision] = useState(project.publishedRevision);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [deepSelectedId, setDeepSelectedId] = useState<string | null>(null);
+  const conflictRequestRef = useRef<AbortController | null>(null);
+  const [selectedIds, setSelectedIds] = menuWorkspace.useField("selectedIds");
+  const [selectedGroupId, setSelectedGroupId] = menuWorkspace.useField("selectedGroupId");
+  const [deepSelectedId, setDeepSelectedId] = menuWorkspace.useField("deepSelectedId");
   const [renameGroupId, setRenameGroupId] = useState<string | null>(null);
-  const [layersOpen, setLayersOpen] = useState(true);
-  const [iconsOpen, setIconsOpen] = useState(false);
-  const [imagesOpen, setImagesOpen] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [mediaSelectorTarget, setMediaSelectorTarget] = useState<MediaSelectorTarget | null>(null);
-  const [modalZIndices, setModalZIndices] = useState<Record<string, number>>({
-    media: 70,
-    icons: 71,
-    templates: 72,
-    mediaSelector: 75,
-  });
+  const [layersOpen, setLayersOpen] = menuWorkspace.useField("layersOpen");
+  const [iconsOpen, setIconsOpen] = menuWorkspace.useField("iconsOpen");
+  const [imagesOpen, setImagesOpen] = menuWorkspace.useField("imagesOpen");
+  const [templatesOpen, setTemplatesOpen] = menuWorkspace.useField("templatesOpen");
+  const [mediaSelectorTarget, setMediaSelectorTarget] = menuWorkspace.useField("mediaSelectorTarget");
+  const [modalZIndices, setModalZIndices] = menuWorkspace.useField("modalZIndices");
 
   const bringModalToFront = (id: string) => {
     setModalZIndices((prev) => {
@@ -61,26 +69,29 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
       return { ...prev, [id]: highest + 1 };
     });
   };
-  const [assets, setAssets] = useState(initialAssets);
-  const [templates, setTemplates] = useState(initialTemplates);
-  const [history, setHistory] = useState<CanvasDocumentV1[]>([]);
-  const [future, setFuture] = useState<CanvasDocumentV1[]>([]);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [status, setStatus] = useState("Guardado");
-  const [conflict, setConflict] = useState(false);
-  const [viewport, setViewport] = useState(project.document.initialViewport);
+  const [assets, setAssets] = menuWorkspace.useField("assets");
+  const [templates, setTemplates] = menuWorkspace.useField("templates");
+  const [status, setStatus] = menuWorkspace.useField("status");
+  const [viewport, setViewport] = menuWorkspace.useField("viewport");
   const [modal, setModal] = useState<EditorModalState>(null);
   const [modalName, setModalName] = useState("");
   const [modalDescription, setModalDescription] = useState("");
-  const [gridEnabled, setGridEnabled] = useState(false);
-  const [toolMode, setToolMode] = useState<"select" | "hand">("select");
+  const [gridEnabled, setGridEnabled] = menuWorkspace.useField("gridEnabled");
+  const [toolMode, setToolMode] = menuWorkspace.useField("toolMode");
   const [clipboardNotice, setClipboardNotice] = useState<string | null>(null);
-  const editVersionRef = useRef(0);
-  const publishingRef = useRef(false);
   const canvasClipboardRef = useRef<{ snapshot: CanvasClipboardSnapshot; pasteSequence: number } | null>(null);
   const clipboardNoticeTimerRef = useRef<number | null>(null);
+
+  const document = menuWorkspace.useSelector((state) => state.document);
+  const revision = menuWorkspace.useSelector((state) => state.revision);
+  const publishedRevision = menuWorkspace.useSelector((state) => state.publishedRevision);
+  const history = menuWorkspace.useSelector((state) => state.history);
+  const future = menuWorkspace.useSelector((state) => state.future);
+  const dirty = menuWorkspace.useSelector((state) => state.dirty);
+  const conflict = menuWorkspace.useSelector((state) => state.conflict);
+  const operation = menuWorkspace.useSelector((state) => state.operation);
+  const publishing = operation?.kind === "publish";
+  const saving = operation !== null && !publishing;
 
   const assetMap = useMemo(() => Object.fromEntries(assets.map((asset) => [asset.id, asset])), [assets]);
   const fontFaces = useMemo(() => assets.filter((asset) => asset.kind === "FONT").map((asset) => `@font-face{font-family:"editor-font-${asset.id}";src:url("${asset.url}") format("${asset.mimeType.includes("woff2") ? "woff2" : asset.mimeType.includes("woff") ? "woff" : "truetype"}");font-display:swap;}`).join(""), [assets]);
@@ -90,15 +101,9 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
   const selectedNodeIds = useMemo(() => selectedGroup ? [...layerIndex.descendantNodeIds(selectedGroup.id)] : selectedIds, [layerIndex, selectedGroup, selectedIds]);
 
   const commitTransform = (transform: (current: CanvasDocumentV1) => CanvasDocumentV1) => {
-    editVersionRef.current += 1;
-    setDocument((current) => {
-      const next = normalizeDocument(transform(current));
-      setHistory((items) => [...items.slice(-99), current]);
-      return next;
-    });
-    setFuture([]);
-    setDirty(true);
-    setStatus("Cambios pendientes");
+    const current = store.getState();
+    if (current.operation?.kind === "apply" || current.operation?.kind === "reload") return;
+    store.dispatch(menuEdited(normalizeDocument(transform(current.document))));
   };
   const commit = (next: CanvasDocumentV1) => commitTransform(() => next);
   const patchNode = (id: string, patch: Partial<CanvasNode>) => commitTransform((current) => ({ ...current, nodes: current.nodes.map((node) => {
@@ -114,8 +119,8 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
   const patchSelected = (patch: Partial<CanvasNode>) => commitTransform((current) => { const ids = new Set(selectedIds); return { ...current, nodes: current.nodes.map((node) => ids.has(node.id) && !nodeLayerState(current, node).effectiveLocked ? ({ ...node, ...patch } as CanvasNode) : node) }; });
   const moveSelected = (selected: string[], delta: { x: number; y: number }, includeLocked = false) => commitTransform((current) => { const ids = new Set(selected); return { ...current, nodes: current.nodes.map((node) => ids.has(node.id) && (includeLocked || !nodeLayerState(current, node).effectiveLocked) ? ({ ...node, x: node.x + delta.x, y: node.y + delta.y } as CanvasNode) : node) }; });
   const setCanvasSize = (dimension: "width" | "height", value: number) => { const nextValue = Math.max(100, Math.min(100_000, value || 100)); commitTransform((current) => ({ ...current, canvasBounds: { ...current.canvasBounds, [dimension]: nextValue } })); };
-  const undo = () => { const previous = history.at(-1); if (!previous) return; editVersionRef.current += 1; setFuture((items) => [...items, document]); setHistory((items) => items.slice(0, -1)); setDocument(previous); setSelectedGroupId(null); setDeepSelectedId(null); setDirty(true); setStatus("Cambios pendientes"); };
-  const redo = () => { const next = future.at(-1); if (!next) return; editVersionRef.current += 1; setHistory((items) => [...items, document]); setFuture((items) => items.slice(0, -1)); setDocument(next); setSelectedGroupId(null); setDeepSelectedId(null); setDirty(true); setStatus("Cambios pendientes"); };
+  const undo = () => { store.dispatch(menuUndone()); };
+  const redo = () => { store.dispatch(menuRedone()); };
 
   const selectLayerNode = (id: string, additive = false) => {
     setSelectedGroupId(null);
@@ -182,32 +187,64 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
   useEffect(() => () => {
     if (clipboardNoticeTimerRef.current !== null) window.clearTimeout(clipboardNoticeTimerRef.current);
     saveRequestRef.current?.abort();
+    conflictRequestRef.current?.abort();
   }, []);
 
+  const runOperation = useCallback(async (request: MenuRevisionRequest) => {
+    const { kind } = request;
+    const snapshot = store.getState();
+    if (snapshot.operation || (snapshot.conflict && kind !== "reload" && kind !== "overwrite")) return;
+    if (kind === "save" && !snapshot.dirty) return;
+    const messages = {
+      save: ["Guardando...", "Guardado", "No se pudo guardar"],
+      publish: ["Publicando...", "Publicado", "No se pudo publicar"],
+      apply: ["Aplicando plantilla...", "Plantilla aplicada", "No se pudo aplicar la plantilla"],
+      overwrite: ["Guardando...", "Guardado", "No se pudo sobrescribir"],
+      reload: ["Cargando...", "Versión del servidor cargada", "No se pudo cargar la versión del servidor"],
+    };
+    const [pending, completed, failure] = messages[kind];
+    store.dispatch(menuOperationStarted({ kind, status: pending }));
+    const id = store.getState().lastOperation;
+    const controller = new AbortController();
+    saveRequestRef.current = controller;
+    const endpoint = kind === "publish" ? "/publish" : kind === "apply" ? "/templates/" + encodeURIComponent(request.templateId) + "/apply" : "/project";
+    const method = kind === "reload" ? "GET" : kind === "publish" || kind === "apply" ? "POST" : "PUT";
+    try {
+      const response = await fetch(editorApi + endpoint, {
+        method,
+        signal: controller.signal,
+        ...(method !== "GET" && {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            baseRevision: kind === "overwrite" ? request.revision : snapshot.revision,
+            ...(kind !== "apply" && { document: snapshot.document }),
+          }),
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (controller.signal.aborted) return;
+      if (!response.ok || !payload?.success) {
+        store.dispatch(menuOperationFailed({ id, conflict: response.status === 409, status: payload?.error?.message ?? failure }));
+        return;
+      }
+      const result = payload.data as MenuProjectView;
+      store.dispatch(menuOperationSucceeded({
+        id, revision: result.draftRevision, status: completed,
+        ...(kind !== "save" && kind !== "overwrite" && { publishedRevision: result.publishedRevision }),
+        ...((kind === "reload" || kind === "apply") && { document: normalizeDocument(result.document) }),
+      }));
+    } catch (error) {
+      if (!controller.signal.aborted) store.dispatch(menuOperationFailed({ id, conflict: false, status: error instanceof Error ? error.message : failure }));
+    } finally {
+      if (saveRequestRef.current === controller) saveRequestRef.current = null;
+    }
+  }, [editorApi, store]);
+
   useEffect(() => {
-    if (!dirty || saving || publishing || conflict) return;
-    const timer = window.setTimeout(async () => {
-      if (publishingRef.current) return;
-      const controller = new AbortController();
-      saveRequestRef.current = controller;
-      const savedEditVersion = editVersionRef.current;
-      setSaving(true); setStatus("Guardando...");
-      try {
-        const response = await fetch(`${editorApi}/project`, { signal: controller.signal, method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
-        const payload = await response.json();
-        if (controller.signal.aborted) return;
-        if (!response.ok || !payload.success) {
-          if (response.status === 409) setConflict(true);
-          throw new Error(payload.error?.message ?? "No se pudo guardar");
-        }
-        setRevision(payload.data.draftRevision);
-        if (editVersionRef.current === savedEditVersion) { setDirty(false); setStatus("Guardado"); }
-        else { setDirty(true); setStatus("Cambios pendientes"); }
-      } catch (error) { if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "No se pudo guardar"); }
-      finally { if (!controller.signal.aborted) setSaving(false); }
-    }, 800);
+    if (!dirty || operation || conflict) return;
+    const timer = window.setTimeout(() => { void runOperation({ kind: "save" }); }, 800);
     return () => window.clearTimeout(timer);
-  }, [dirty, document, revision, saving, publishing, conflict, editorApi]);
+  }, [dirty, document, operation, conflict, runOperation]);
 
   useEffect(() => {
     if (!dirty && !saving && !publishing) return;
@@ -221,25 +258,30 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
     window.addEventListener("beforeunload", beforeUnload);
     window.document.addEventListener("click", pendingNavigation, true);
     return () => { window.removeEventListener("beforeunload", beforeUnload); window.document.removeEventListener("click", pendingNavigation, true); };
-  }, [dirty, saving, publishing]);
+  }, [dirty, saving, publishing, setStatus]);
 
-  const reloadServerVersion = async () => {
-    const response = await fetch(`${editorApi}/project`);
-    const payload = await response.json();
-    if (!response.ok || !payload.success) return;
-    setDocument(payload.data.document); setRevision(payload.data.draftRevision); setPublishedRevision(payload.data.publishedRevision); setHistory([]); setFuture([]); setDirty(false); setConflict(false); setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds([]); setStatus("Versión del servidor cargada");
-  };
+  const reloadServerVersion = () => runOperation({ kind: "reload" });
   const overwriteServerVersion = async () => {
-    const response = await fetch(`${editorApi}/project`);
-    const payload = await response.json();
-    if (!response.ok || !payload.success) return;
-    setModal({ kind: "overwrite", serverRevision: payload.data.draftRevision });
+    if (store.getState().operation) return;
+    conflictRequestRef.current?.abort();
+    const controller = new AbortController();
+    conflictRequestRef.current = controller;
+    try {
+      const response = await fetch(editorApi + "/project", { signal: controller.signal });
+      const payload = await response.json().catch(() => null);
+      if (controller.signal.aborted || !store.getState().conflict || store.getState().operation) return;
+      if (!response.ok || !payload?.success) {
+        setStatus(payload?.error?.message ?? "No se pudo consultar la versión del servidor.");
+        return;
+      }
+      setModal({ kind: "overwrite", serverRevision: payload.data.draftRevision });
+    } catch {
+      if (!controller.signal.aborted) setStatus("No se pudo consultar la versión del servidor.");
+    } finally {
+      if (conflictRequestRef.current === controller) conflictRequestRef.current = null;
+    }
   };
-  const confirmOverwrite = async (serverRevision: number) => {
-    const save = await fetch(`${editorApi}/project`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: serverRevision, document }) });
-    const saved = await save.json();
-    if (save.ok && saved.success) { setRevision(saved.data.draftRevision); setDirty(false); setConflict(false); setStatus("Guardado"); }
-  };
+  const confirmOverwrite = (revision: number) => runOperation({ kind: "overwrite", revision });
 
   const addNode = (node: CanvasNode) => { commitTransform((current) => ({ ...current, nodes: [...current.nodes, node] })); setSelectedGroupId(null); setDeepSelectedId(node.id); setSelectedIds([node.id]); };
   const newNodeFrame = (preferredWidth: number, preferredHeight: number, point?: { x: number; y: number }) => { const frame = point ? { x: point.x - preferredWidth / 2, y: point.y - preferredHeight / 2, width: preferredWidth, height: preferredHeight } : placeNodeInCanvas(document.canvasBounds, viewport, preferredWidth, preferredHeight); return { x: finiteOr(frame.x, document.canvasBounds.x + document.canvasBounds.width / 2 - preferredWidth / 2), y: finiteOr(frame.y, document.canvasBounds.y + document.canvasBounds.height / 2 - preferredHeight / 2), width: finiteOr(frame.width, preferredWidth), height: finiteOr(frame.height, preferredHeight) }; };
@@ -437,42 +479,13 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
     if (asset.kind === "IMAGE") addImage(asset);
   };
   const deleteAsset = async (asset: MenuAssetView) => { const response = await fetch(`${editorApi}/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE" }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo eliminar la imagen."); setAssets((items) => items.filter((item) => item.id !== asset.id)); };
-  const publish = async () => {
-    if (saving || publishingRef.current || conflict) return;
-    const publishedEditVersion = editVersionRef.current;
-    publishingRef.current = true;
-    setPublishing(true);
-    setStatus("Publicando...");
-    try {
-      const response = await fetch(`${editorApi}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision, document }) });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        if (response.status === 409) setConflict(true);
-        throw new Error(payload.error?.message ?? "No se pudo publicar");
-      }
-      setRevision(payload.data.draftRevision);
-      setPublishedRevision(payload.data.publishedRevision);
-      if (editVersionRef.current === publishedEditVersion) { setDirty(false); setStatus("Publicado"); }
-      else { setDirty(true); setStatus("Publicado; hay cambios pendientes"); }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "No se pudo publicar");
-    } finally {
-      publishingRef.current = false;
-      setPublishing(false);
-    }
-  };
+  const publish = () => runOperation({ kind: "publish" });
   const applyTemplate = async (template: MenuTemplateView) => {
-    if ((dirty || history.length > 0)) { setModal({ kind: "apply", template }); return; }
+    if (store.getState().operation || store.getState().conflict) return;
+    if (dirty || history.length > 0) { setModal({ kind: "apply", template }); return; }
     await performApplyTemplate(template);
   };
-  const performApplyTemplate = async (template: MenuTemplateView) => {
-    setStatus("Aplicando plantilla...");
-    const response = await fetch(`${editorApi}/templates/${encodeURIComponent(template.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevision: revision }) });
-    const payload = await response.json();
-    if (!response.ok || !payload.success) { setStatus(payload.error?.message ?? "No se pudo aplicar la plantilla"); return; }
-    const nextProject = payload.data as MenuProjectView;
-    setHistory((items) => [...items.slice(-99), document]); setFuture([]); setDocument(nextProject.document); setRevision(nextProject.draftRevision); setPublishedRevision(nextProject.publishedRevision); setViewport(nextProject.document.initialViewport); setDirty(false); setStatus("Plantilla aplicada"); setSelectedGroupId(null); setDeepSelectedId(null); setSelectedIds([]);
-  };
+  const performApplyTemplate = (template: MenuTemplateView) => runOperation({ kind: "apply", templateId: template.id });
   const saveTemplate = async (submitPublic: boolean) => { setModalName(""); setModalDescription(""); setModal({ kind: "save", submitPublic }); };
   const performSaveTemplate = async (submitPublic: boolean, name: string, description: string) => {
     const response = await fetch(`${editorApi}/templates`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, submitPublic, document }) });
@@ -716,7 +729,7 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
     </div>
     </div>
     {clipboardNotice && <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-2 text-xs font-semibold text-white shadow-xl">{clipboardNotice}</div>}
-    {modal && <EditorModal state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { setModal(null); await confirmOverwrite(serverRevision); }} />}
+    {modal && <EditorModal revisionBusy={operation !== null || (modal.kind === "apply" && conflict)} state={modal} name={modalName} description={modalDescription} onNameChange={setModalName} onDescriptionChange={setModalDescription} onClose={() => setModal(null)} onApply={async (template) => { if (store.getState().operation || store.getState().conflict) return; setModal(null); await performApplyTemplate(template); }} onSave={async (submitPublic, name, description) => { setModal(null); await performSaveTemplate(submitPublic, name, description); }} onDelete={async (template) => { setModal(null); await performDeleteTemplate(template); }} onOverwrite={async (serverRevision) => { if (store.getState().operation) return; setModal(null); await confirmOverwrite(serverRevision); }} />}
 
     {/* Floating Movable & Resizable Modals for Media, Icons, and Templates */}
     <FloatingModalWindow
@@ -778,6 +791,7 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
           templates={templates}
           assets={assets}
           onApply={applyTemplate}
+          applyDisabled={operation !== null || conflict}
           onSaveTemplate={saveTemplate}
           onDelete={deleteTemplate}
           onImport={importTemplate}
@@ -802,12 +816,12 @@ export function CanvasEditor({ restaurantId, project, initialAssets, initialTemp
 type EditorModalData = { kind: "apply"; template: MenuTemplateView } | { kind: "save"; submitPublic: boolean } | { kind: "delete"; template: MenuTemplateView } | { kind: "overwrite"; serverRevision: number };
 type EditorModalState = EditorModalData | null;
 
-function EditorModal({ state, name, description, onNameChange, onDescriptionChange, onClose, onApply, onSave, onDelete, onOverwrite }: { state: EditorModalData; name: string; description: string; onNameChange: (value: string) => void; onDescriptionChange: (value: string) => void; onClose: () => void; onApply: (template: MenuTemplateView) => Promise<void>; onSave: (submitPublic: boolean, name: string, description: string) => Promise<void>; onDelete: (template: MenuTemplateView) => Promise<void>; onOverwrite: (revision: number) => Promise<void> }) {
+function EditorModal({ revisionBusy, state, name, description, onNameChange, onDescriptionChange, onClose, onApply, onSave, onDelete, onOverwrite }: { revisionBusy: boolean; state: EditorModalData; name: string; description: string; onNameChange: (value: string) => void; onDescriptionChange: (value: string) => void; onClose: () => void; onApply: (template: MenuTemplateView) => Promise<void>; onSave: (submitPublic: boolean, name: string, description: string) => Promise<void>; onDelete: (template: MenuTemplateView) => Promise<void>; onOverwrite: (revision: number) => Promise<void> }) {
   const isApply = state.kind === "apply";
   const isDelete = state.kind === "delete";
   const isSave = state.kind === "save";
   const title = isApply ? "Aplicar plantilla" : isDelete ? "Eliminar plantilla" : isSave ? (state.submitPublic ? "Enviar a la comunidad" : "Guardar plantilla") : "Sobrescribir borrador";
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title"><h2 id="editor-modal-title" className="text-base font-semibold text-zinc-900">{title}</h2>{isApply && <p className="mt-2 text-sm leading-6 text-zinc-600">“{state.template.name}” reemplazará el borrador actual. La publicación vigente no se modificará.</p>}{isDelete && <p className="mt-2 text-sm leading-6 text-zinc-600">Se eliminará “{state.template.name}”. Esta acción no se puede deshacer.</p>}{state.kind === "overwrite" && <p className="mt-2 text-sm leading-6 text-zinc-600">Esto reemplazará el borrador guardado con tu trabajo local.</p>}{isSave && <div className="mt-4 space-y-3"><label className="block text-xs font-medium text-zinc-700">Nombre<input autoFocus className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15" value={name} onChange={(event) => onNameChange(event.target.value)} /></label><label className="block text-xs font-medium text-zinc-700">Descripción<textarea className="mt-1 min-h-20 w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15" value={description} onChange={(event) => onDescriptionChange(event.target.value)} /></label></div>}<div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-xl border border-zinc-200 px-3.5 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50" onClick={onClose}>Cancelar</button>{isApply && <button type="button" className="rounded-xl bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621]" onClick={() => void onApply(state.template)}>Aplicar</button>}{isDelete && <button type="button" className="rounded-xl bg-red-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700" onClick={() => void onDelete(state.template)}>Eliminar</button>}{isSave && <button type="button" disabled={!name.trim()} className="rounded-xl bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621] disabled:opacity-40" onClick={() => void onSave(state.submitPublic, name, description)}>{state.submitPublic ? "Enviar" : "Guardar"}</button>}{state.kind === "overwrite" && <button type="button" className="rounded-xl bg-red-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-red-800" onClick={() => void onOverwrite(state.serverRevision)}>Sobrescribir</button>}</div></div></div>;
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title"><h2 id="editor-modal-title" className="text-base font-semibold text-zinc-900">{title}</h2>{isApply && <p className="mt-2 text-sm leading-6 text-zinc-600">“{state.template.name}” reemplazará el borrador actual. La publicación vigente no se modificará.</p>}{isDelete && <p className="mt-2 text-sm leading-6 text-zinc-600">Se eliminará “{state.template.name}”. Esta acción no se puede deshacer.</p>}{state.kind === "overwrite" && <p className="mt-2 text-sm leading-6 text-zinc-600">Esto reemplazará el borrador guardado con tu trabajo local.</p>}{isSave && <div className="mt-4 space-y-3"><label className="block text-xs font-medium text-zinc-700">Nombre<input autoFocus className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15" value={name} onChange={(event) => onNameChange(event.target.value)} /></label><label className="block text-xs font-medium text-zinc-700">Descripción<textarea className="mt-1 min-h-20 w-full resize-y rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none transition focus:border-[#253621] focus:ring-2 focus:ring-[#253621]/15" value={description} onChange={(event) => onDescriptionChange(event.target.value)} /></label></div>}<div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-xl border border-zinc-200 px-3.5 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50" onClick={onClose}>Cancelar</button>{isApply && <button type="button" disabled={revisionBusy} className="rounded-xl bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621]" onClick={() => void onApply(state.template)}>Aplicar</button>}{isDelete && <button type="button" className="rounded-xl bg-red-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700" onClick={() => void onDelete(state.template)}>Eliminar</button>}{isSave && <button type="button" disabled={!name.trim()} className="rounded-xl bg-[#182618] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#253621] disabled:opacity-40" onClick={() => void onSave(state.submitPublic, name, description)}>{state.submitPublic ? "Enviar" : "Guardar"}</button>}{state.kind === "overwrite" && <button type="button" disabled={revisionBusy} className="rounded-xl bg-red-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-red-800" onClick={() => void onOverwrite(state.serverRevision)}>Sobrescribir</button>}</div></div></div>;
 }
 
 function normalizeDocument(document: CanvasDocumentV1): CanvasDocumentV1 {

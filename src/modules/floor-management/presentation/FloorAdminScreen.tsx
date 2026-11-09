@@ -6,6 +6,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Building2, Check, Layers3, LayoutGrid, Loader2, MapPin, Package, Pencil, Plus, RotateCw, Ruler, Save, Settings2, Shapes, Trash2, X } from "lucide-react";
 import { AdminConfirmModal } from "@/ui/admin/AdminUI";
 import { FloatingModalWindow } from "@/ui/FloatingModalWindow";
+import { floorAdminWorkspace, floorConfigLoaded, floorRoomChanged, floorRoomPatched, floorAdminSeed, type EditorPanel, type EditorTool, type CombinationMode } from "./floor-workspaces";
 import { useFloatingWindows } from "@/ui/useFloatingWindows";
 import { useRegisterAdminNavigationGuard } from "@/ui/admin/AdminNavigationGuard";
 import { transientButtonProps } from "@/ui/button-state";
@@ -19,11 +20,8 @@ import { groupInventoryTables } from "./floor-table-groups";
 import { combinationPoses, inventoryTables, resizeInventoryGroup } from "./floor-inventory";
 import { capacityAfterLayout, defaultLayoutCapacity } from "./floor-table-layout";
 
-type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "combination"; entity: FloorCombination } | { kind: "combination-layout"; id: string } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
-type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
 type ConfirmPanel = { title: string; description: string; confirmLabel: string; run: () => void | Promise<void> };
 type Flyout = "rooms" | "sectors" | "elements" | null;
-type CombinationMode = { combination: FloorCombination; selectedIds: string[] } | null;
 const copy = <T,>(value: T): T => structuredClone(value);
 const nextRotation = (rotation: number): FloorRotation => ((rotation + 90) % 360) as FloorRotation;
 const buttonBase = "flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d5934] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:px-3";
@@ -62,43 +60,53 @@ function baseline(panel: EditorPanel, room: FloorRoom | null, combination: Combi
   return undefined;
 }
 
-export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
+export function FloorAdminScreen({ restaurantId, initialConfig }: { restaurantId: string; initialConfig?: FloorConfigView | null }) {
+  return (
+    <floorAdminWorkspace.Provider key={restaurantId} seed={floorAdminSeed(initialConfig)}>
+      <FloorAdminContent restaurantId={restaurantId} />
+    </floorAdminWorkspace.Provider>
+  );
+}
+
+function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
+  const store = floorAdminWorkspace.useStore();
   const router = useRouter();
-  const [config, setConfig] = useState<FloorConfigView | null>(null);
-  const [draft, setDraft] = useState<FloorRoom | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [config] = floorAdminWorkspace.useField("config");
+  const [draft] = floorAdminWorkspace.useField("draft");
+  const [dirty] = floorAdminWorkspace.useField("dirty");
+  const [busy, setBusy] = floorAdminWorkspace.useField("busy");
+  const [error, setError] = floorAdminWorkspace.useField("error");
+  const [notice] = floorAdminWorkspace.useField("notice");
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const tools = useFloatingWindows<EditorTool>();
+  const tools = useFloatingWindows(floorAdminWorkspace.useField("windows"));
   const [confirmation, setConfirmation] = useState<ConfirmPanel | null>(null);
-  const [editedTools, setEditedTools] = useState<Set<string>>(() => new Set());
+  const [editedTools, setEditedTools] = floorAdminWorkspace.useField("editedTools");
   const [flyout, setFlyout] = useState<Flyout>(null);
-  const [placement, setPlacement] = useState<"sector" | FloorFixture["type"] | null>(null);
-  const [selectedElements, setSelectedElements] = useState<FloorCanvasElement[]>([]);
+  const [placement, setPlacement] = floorAdminWorkspace.useField("placement");
+  const [selectedElements, setSelectedElements] = floorAdminWorkspace.useField("selectedElements");
   const selection = selectedElements.length === 1 ? selectedElements[0] : null;
   const [sectorMenu, setSectorMenu] = useState<{ id: string; point: { x: number; y: number } } | null>(null);
-  const [combinationMode, setCombinationMode] = useState<CombinationMode>(null);
+  const [combinationMode, setCombinationMode] = floorAdminWorkspace.useField("combinationMode");
   const toolbar = useRef<HTMLElement>(null);
   const flyoutSurface = useRef<HTMLDivElement>(null);
   const toolSurfaces = useRef(new Map<string, HTMLDivElement>());
   const toolButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const windowsRef = useRef(tools.windows);
   const hasPendingRoomChanges = dirty || combinationMode !== null;
-  const hasUnsaved = hasPendingRoomChanges || editedTools.size > 0;
+  const hasUnsaved = hasPendingRoomChanges || Object.keys(editedTools).length > 0;
   const interactive = !busy && !confirmation && !tools.windows.some((entry) => entry.visible && ["sector", "fixture", "combination"].includes(entry.value.panel.kind));
   const activationKey = tools.windows.map((entry) => `${entry.id}:${entry.visible}:${entry.activation}`).join("|");
   const roomHref = `/floor?restaurantId=${encodeURIComponent(restaurantId)}`;
 
   useEffect(() => {
+    if (loadAttempt === 0 && store.getState().config) return;
     const controller = new AbortController();
     void getFloorConfig(restaurantId, controller.signal).then((value) => {
       if (controller.signal.aborted) return;
-      setConfig(value); setDraft(value.rooms[0] ? copy(value.rooms[0]) : null); setError(null);
+      store.dispatch(floorConfigLoaded({ config: value, room: value.rooms[0] ?? null }));
     }).catch((failure) => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "No se pudieron cargar los salones."); });
     return () => controller.abort();
-  }, [restaurantId, loadAttempt]);
+  }, [restaurantId, loadAttempt, store, setError]);
   useEffect(() => {
     if (!hasUnsaved) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -133,7 +141,7 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     return () => window.cancelAnimationFrame(frame);
   }, [activationKey]);
 
-  const patch = (next: FloorRoom) => { if (busy) return; setSectorMenu(null); setDraft(next); setDirty(true); setNotice(null); setError(null); };
+  const patch = (next: FloorRoom) => { setSectorMenu(null); store.dispatch(floorRoomPatched(next)); };
   const setSelection = (element: FloorCanvasElement | null) => setSelectedElements(element ? [element] : []);
   const selectCanvasElement = (element: FloorCanvasElement, additive = false) => {
     setSectorMenu(null);
@@ -166,10 +174,10 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
     if (invalid) setError(invalid);
     else patch(next);
   };
-  const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); tools.clear(); setEditedTools(new Set()); setConfirmation(null); setError(null); };
-  const clearToolEdit = (id: string) => setEditedTools((previous) => { if (!previous.has(id)) return previous; const next = new Set(previous); next.delete(id); return next; });
+  const resetInteraction = () => { setSectorMenu(null); setSelection(null); setCombinationMode(null); setPlacement(null); setFlyout(null); tools.clear(); setEditedTools({}); setConfirmation(null); setError(null); };
+  const clearToolEdit = (id: string) => setEditedTools((previous) => { if (!previous[id]) return previous; const next = { ...previous }; delete next[id]; return next; });
   const closeTool = (id: string) => { if (!busy) { if (id.startsWith("combination-layout:")) setCombinationMode(null); tools.close(id); clearToolEdit(id); } };
-  const markToolEdit = (id: string) => setEditedTools((previous) => previous.has(id) ? previous : new Set(previous).add(id));
+  const markToolEdit = (id: string) => setEditedTools((previous) => previous[id] ? previous : { ...previous, [id]: true });
   const staleTool = (value: EditorTool): string | null => {
     if (!draft || value.roomId !== draft.id) return "El salón de esta ventana cambió. Cancelá y volvé a abrir la herramienta.";
     if (JSON.stringify(baseline(value.panel, draft, combinationMode)) !== JSON.stringify(value.baseline)) return "Estos datos cambiaron en otra herramienta. Cancelá y volvé a abrir las propiedades antes de aplicar.";
@@ -184,28 +192,38 @@ export function FloorAdminScreen({ restaurantId }: { restaurantId: string }) {
   useRegisterAdminNavigationGuard(discardBefore);
   const selectRoom = (room: FloorRoom) => {
     if (room.id === draft?.id) { setFlyout(null); return; }
-    discardBefore(() => { setDraft(copy(room)); setDirty(false); resetInteraction(); });
+    discardBefore(() => changeRoom(room, false));
+  };
+  const changeRoom = (room: FloorRoom, dirty: boolean) => {
+    setSectorMenu(null);
+    setFlyout(null);
+    setConfirmation(null);
+    store.dispatch(floorRoomChanged({ room, dirty }));
   };
   const createRoom = () => discardBefore(() => {
     const name = uniqueName("Nuevo salón", config?.rooms.map((room) => room.name) ?? []);
     const next: FloorRoom = { id: crypto.randomUUID(), restaurantId, name, width: 1000, height: 700, active: true, revision: 0, fixtures: [], locations: [], tables: [], combinations: [] };
-    setDraft(next); setDirty(true); resetInteraction(); openPanel({ kind: "dimensions" }, next);
+    changeRoom(next, true); openPanel({ kind: "dimensions" }, next);
   });
   const guardLink = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     if (busy || hasUnsaved) { event.preventDefault(); if (!busy) discardBefore(() => router.push(href)); }
   };
   const mutate = async (body: unknown, message: string, roomAction = false): Promise<boolean> => {
-    if (busy) return false;
-    setSectorMenu(null); setBusy(true); setError(null); setNotice(null);
+    const snapshot = store.getState();
+    if (snapshot.busy) return false;
+    setSectorMenu(null);
+    store.dispatch(floorAdminWorkspace.changed({ busy: true, error: null, notice: null }));
     try {
       const next = await saveFloorAction(restaurantId, body);
-      setConfig(next);
-      if (roomAction || !hasPendingRoomChanges) {
-        const room = next.rooms.find((item) => item.id === draft?.id) ?? next.rooms[0];
-        if (room?.id !== draft?.id) resetInteraction();
-        setDraft(room ? copy(room) : null); if (roomAction) setDirty(false);
+      const update: Partial<ReturnType<typeof floorAdminSeed>> = { config: next, notice: message };
+      if (roomAction || (!snapshot.dirty && !snapshot.combinationMode)) {
+        const room = next.rooms.find((item) => item.id === snapshot.draft?.id) ?? next.rooms[0];
+        if (room?.id !== snapshot.draft?.id) resetInteraction();
+        update.draft = room ?? null;
+        if (roomAction) update.dirty = false;
       }
-      setNotice(message); return true;
+      store.dispatch(floorAdminWorkspace.changed(update));
+      return true;
     } catch (failure) { setError(failure instanceof Error ? failure.message : "No se pudo guardar. Conservamos tus cambios para volver a intentar."); return false; }
     finally { setBusy(false); }
   };

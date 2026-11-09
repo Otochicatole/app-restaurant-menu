@@ -194,14 +194,19 @@ describe("ReservationManagementService", () => {
   });
 
   it("clamps past availability requests to today and limits excessively long ranges", async () => {
-    const service = new ReservationManagementService(createMockRepo());
-    const today = new Date().toISOString().slice(0, 10);
-    const clamped = await service.getPublicAvailability("bistro-test", { from: "2000-01-01", to: "2099-12-31" });
-    expect(clamped.from).toBe(today);
-    expect(clamped.dates).toHaveLength(120);
-    const defaultRange = await service.getPublicAvailability("bistro-test", {});
-    expect(defaultRange.dates).toHaveLength(61);
-    await expect(service.getPublicAvailability("bistro-test", { from: "2099-02-01", to: "2099-01-01" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T01:30:00Z"));
+    try {
+      const service = new ReservationManagementService(createMockRepo());
+      const clamped = await service.getPublicAvailability("bistro-test", { from: "2000-01-01", to: "2099-12-31" });
+      expect(clamped.from).toBe("2026-11-06");
+      expect(clamped.dates).toHaveLength(120);
+      const defaultRange = await service.getPublicAvailability("bistro-test", {});
+      expect(defaultRange.dates).toHaveLength(61);
+      await expect(service.getPublicAvailability("bistro-test", { from: "2099-02-01", to: "2099-01-01" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uses minimal event aggregates for public availability without loading customer history", async () => {

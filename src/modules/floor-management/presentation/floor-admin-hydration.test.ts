@@ -73,6 +73,18 @@ describe("floor editor hydration and client configuration", () => {
     expect(errors).not.toHaveBeenCalled(); expect(recoverable).not.toHaveBeenCalled();
   });
 
+  it("reuses the authorized server configuration on the first render", async () => {
+    const component = createElement(FloorAdminScreen, { restaurantId: "restaurant", initialConfig: config(true) });
+    container.innerHTML = renderToString(component);
+    const serverHtml = container.innerHTML;
+    const recoverable = vi.fn();
+    await act(async () => { root = hydrateRoot(container, component, { onRecoverableError: recoverable }); });
+    expect(within(container).getByRole("img", { name: "Plano de Ventana" })).toBeTruthy();
+    expect(container.innerHTML).toBe(serverHtml);
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(api.config).not.toHaveBeenCalled();
+  });
+
   it("opens and restores its first nonmodal tool after hydration without replacing the canvas or restoring native button state", async () => {
     api.config.mockResolvedValue(config(true));
     const component = element(); container.innerHTML = renderToString(component);

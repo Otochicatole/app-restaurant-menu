@@ -3,13 +3,17 @@ import { createElement, useState } from "react";
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { FloatingModalWindow, type FloatingModalWindowProps } from "./FloatingModalWindow";
-import { useFloatingWindows } from "./useFloatingWindows";
+import { emptyWindows, useFloatingWindows } from "./useFloatingWindows";
 
 afterEach(() => cleanup());
 
+function useTestWindows<T>() {
+  return useFloatingWindows(useState(emptyWindows<T>));
+}
+
 describe("independent floating windows", () => {
   it("opens separate tools, retains their original payloads and restores only the requested hidden window", () => {
-    const { result } = renderHook(() => useFloatingWindows<{ name: string }>());
+    const { result } = renderHook(() => useTestWindows<{ name: string }>());
     const inventory = { name: "Inventario" }; const schedule = { name: "Horario" };
     act(() => { result.current.open("inventory", inventory); result.current.open("schedule", schedule); });
     expect(result.current.windows.map((window) => ({ id: window.id, visible: window.visible, offset: window.offset, zIndex: window.zIndex }))).toEqual([
@@ -26,7 +30,7 @@ describe("independent floating windows", () => {
   });
 
   it("promotes pointer or keyboard focus without requesting restoration or exceeding confirmation layers", () => {
-    const { result } = renderHook(() => useFloatingWindows<number>());
+    const { result } = renderHook(() => useTestWindows<number>());
     act(() => { for (let index = 0; index < 30; index += 1) result.current.open(`tool-${index}`, index); });
     const ids = result.current.windows.map((window) => window.id);
     const activation = result.current.windows[0].activation;
@@ -42,7 +46,7 @@ describe("independent floating windows", () => {
   });
 
   it("discards only a closed tool, clears a room's tools and keeps mutation callbacks stable", () => {
-    const { result } = renderHook(() => useFloatingWindows<string>());
+    const { result } = renderHook(() => useTestWindows<string>());
     const callbacks = { open: result.current.open, hide: result.current.hide, close: result.current.close, focus: result.current.focus, clear: result.current.clear };
     act(() => { result.current.open("one", "Uno"); result.current.open("two", "Dos"); result.current.hide("two"); result.current.close("one"); });
     expect(result.current.windows).toEqual([expect.objectContaining({ id: "two", value: "Dos", visible: false })]);
@@ -60,7 +64,7 @@ describe("independent floating windows", () => {
       return createElement("div", null, createElement("input", { "aria-label": `Dato ${id}`, value, onChange: (event) => setValue(event.target.value) }), createElement("button", { onClick: onDiscard }, "Descartar este formulario"));
     }
     function Harness() {
-      const tools = useFloatingWindows<string>();
+      const tools = useTestWindows<string>();
       return createElement("div", null,
         createElement("button", { onClick: () => tools.open("inventory", "Inventario") }, "Abrir inventario"),
         createElement("button", { onClick: () => tools.open("schedule", "Horario") }, "Abrir horario"),
