@@ -17,6 +17,23 @@ export function ReservationReceipt({ dialog }: { dialog: ActiveReservationDialog
   const close = () => store.dispatch(dialogClosed(dialog.id));
   const changeStatus = (status: ReservationStatus) => store.dispatch(requestReservationStatus(dialog.reservationId, status));
   if (!previewReservation) return null;
+
+  const { customerEmail, customerPhone, customerName, date, time, partySize } = previewReservation;
+  const contactLinkClass = "text-zinc-900 underline-offset-4 hover:underline focus-visible:underline";
+  const unspecified = <span className="font-normal text-zinc-600">No especificado</span>;
+  const details = [
+    { label: "Fecha", icon: Calendar, value: <time dateTime={date}>{formatFriendlyDate(date)}</time> },
+    { label: "Turno / Hora", icon: Clock, value: <time dateTime={time}>{time} hs</time> },
+    { label: "Comensales", icon: Users, value: `${partySize} ${partySize === 1 ? "persona" : "personas"}` },
+    { label: "Titular", icon: UserCheck, value: customerName },
+    { label: "Teléfono / WhatsApp", icon: Phone, value: customerPhone
+      ? <a href={`tel:${customerPhone}`} className={contactLinkClass}>{customerPhone}</a>
+      : unspecified },
+    { label: "Email", icon: Mail, value: customerEmail
+      ? <a href={`mailto:${customerEmail}`} className={contactLinkClass}>{customerEmail}</a>
+      : unspecified },
+  ];
+
   return (
     <AdminModal
           open={Boolean(previewReservation)}
@@ -76,79 +93,17 @@ export function ReservationReceipt({ dialog }: { dialog: ActiveReservationDialog
                 </div>
               </div>
 
-              {/* Structured Grid of Reservation Details */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 text-xs">
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <Calendar size={11} className="text-zinc-400" />
-                    <span>Fecha</span>
-                  </span>
-                  <strong className="text-zinc-900 font-bold text-sm block">
-                    {formatFriendlyDate(previewReservation.date)}
-                  </strong>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <Clock size={11} className="text-zinc-400" />
-                    <span>Turno / Hora</span>
-                  </span>
-                  <strong className="text-zinc-900 font-bold text-sm block">
-                    {previewReservation.time} hs
-                  </strong>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <Users size={11} className="text-zinc-400" />
-                    <span>Comensales</span>
-                  </span>
-                  <strong className="text-zinc-900 font-bold text-sm block">
-                    {previewReservation.partySize} {previewReservation.partySize === 1 ? "persona" : "personas"}
-                  </strong>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <UserCheck size={11} className="text-zinc-400" />
-                    <span>Titular</span>
-                  </span>
-                  <strong className="text-zinc-900 font-bold block truncate" title={previewReservation.customerName}>
-                    {previewReservation.customerName}
-                  </strong>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <Phone size={11} className="text-zinc-400" />
-                    <span>Teléfono / WhatsApp</span>
-                  </span>
-                  <a
-                    href={`tel:${previewReservation.customerPhone}`}
-                    className="text-zinc-900 font-bold hover:text-emerald-700 block truncate"
-                  >
-                    {previewReservation.customerPhone}
-                  </a>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1 mb-0.5">
-                    <Mail size={11} className="text-zinc-400" />
-                    <span>Email</span>
-                  </span>
-                  {previewReservation.customerEmail ? (
-                    <a
-                      href={`mailto:${previewReservation.customerEmail}`}
-                      className="text-zinc-900 font-medium hover:text-blue-700 block truncate"
-                      title={previewReservation.customerEmail}
-                    >
-                      {previewReservation.customerEmail}
-                    </a>
-                  ) : (
-                    <span className="text-zinc-400 italic font-normal">No especificado</span>
-                  )}
-                </div>
-              </div>
+              <dl className="divide-y divide-zinc-200/80">
+                {details.map(({ label, icon: Icon, value }) => (
+                  <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-baseline gap-x-3 py-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                    <dt className="flex items-start gap-2 text-xs leading-5 font-medium text-zinc-600">
+                      <Icon size={14} aria-hidden="true" className="mt-[3px] shrink-0" />
+                      <span className="[overflow-wrap:anywhere]">{label}</span>
+                    </dt>
+                    <dd className="text-sm leading-5 font-semibold text-zinc-900 [overflow-wrap:anywhere]">{value}</dd>
+                  </div>
+                ))}
+              </dl>
 
               {/* Event Banner if tied to an event */}
               {previewReservation.eventId && (
