@@ -17,7 +17,7 @@ type Point = { x: number; y: number };
 const elementKey = (kind: FloorCanvasElement["kind"], id: string) => `${kind}:${id}`;
 const selectionModifier = (event?: MouseEvent | TouchEvent) => Boolean(event?.shiftKey || event?.ctrlKey || event?.metaKey);
 
-export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectedIds = [], selectedElements = [], selectedFixtureId, selectedLocationId, draggableIds, interactionMode = "select", onSelect, onSelectMany, onSelectElements, onClearSelection, onContextMenuSelection, onContextMenuTable, onContextMenuGroup, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
+export default function FloorCanvasStage({ room, tables, appearance = "default", joinedGroups = [], selectJoinedTables = false, selectedIds = [], selectedElements = [], selectedFixtureId, selectedLocationId, draggableIds, interactionMode = "select", onSelect, onSelectMany, onSelectElements, onClearSelection, onContextMenuSelection, onContextMenuTable, onContextMenuGroup, onMove, onSelectFixture, onMoveFixture, onSelectLocation, onContextMenuLocation, onPlace, onMoveLocation, onResizeLocation, grid, fullScreen, editorMode, zoom, onZoomChange }: FloorCanvasProps & { zoom: number; onZoomChange: (zoom: number) => void }) {
   const paint = canvasPaint[appearance];
   const container = useRef<HTMLDivElement>(null);
   const stage = useRef<Konva.Stage>(null);
@@ -90,6 +90,18 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
       };
     });
   });
+  const joinedIdsByTable = new Map<string, string[]>();
+  if (selectJoinedTables && onSelectMany) {
+    for (const { group } of liveJoinedGroups) {
+      for (const id of group.tableIds) joinedIdsByTable.set(id, group.tableIds);
+    }
+  }
+  const selectTable = (id: string, additive: boolean) => {
+    if (!selecting || multiTouch.current) return;
+    const groupIds = joinedIdsByTable.get(id);
+    if (groupIds) onSelectMany?.(groupIds, additive);
+    else onSelect?.(id, additive);
+  };
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -268,12 +280,15 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
         })}
         {liveJoinedGroups.map(({ group, tables }) => <JoinedTables key={group.id} group={group} tables={tables} selectedIds={selectedIds} paint={paint} onSelect={selecting && onSelectMany ? (additive) => onSelectMany(group.tableIds, additive) : undefined} onContextMenu={onContextMenuGroup ? (point) => onContextMenuGroup(group.tableIds, point) : undefined} />)}
         {liveTables.map((table) => <Table key={table.id} table={table} paint={paint} selected={selectedIds.includes(table.id)} selecting={selecting} draggable={selecting && Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
-          onSelect={(additive) => { if (selecting && !multiTouch.current) onSelect?.(table.id, additive); }}
+          onSelect={(additive) => selectTable(table.id, additive)}
+          onSelectIndividual={joinedIdsByTable.has(table.id) ? () => { if (!multiTouch.current) onSelect?.(table.id, false); } : undefined}
           onContextMenu={onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
           onDragStart={(node) => {
             if (!selecting) return;
-            const ids = (selectedIds.includes(table.id) ? selectedIds : [table.id]).filter((id) => liveTables.some((item) => item.id === id && item.active) && (!draggableIds || draggableIds.includes(id)));
-            if (!selectedIds.includes(table.id)) onSelect?.(table.id, false);
+            const alreadySelected = selectedIds.includes(table.id);
+            const targets = alreadySelected ? selectedIds : joinedIdsByTable.get(table.id) ?? [table.id];
+            const ids = targets.filter((id) => liveTables.some((item) => item.id === id && item.active) && (!draggableIds || draggableIds.includes(id)));
+            if (!alreadySelected) selectTable(table.id, false);
             drag.current = { origin: { x: node.x(), y: node.y() }, ids, starts: new Map(tables.filter((item) => ids.includes(item.id)).map((item) => [item.id, { x: item.x, y: item.y }])) };
             setTableDragPreview(new Map(drag.current.starts));
           }}
@@ -315,7 +330,7 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
   const top = Math.min(...bounds.map((bound) => bound.top)) - 6;
   const width = Math.max(...bounds.map((bound) => bound.right)) + 6 - left;
   const height = Math.max(...bounds.map((bound) => bound.bottom)) + 6 - top;
-  const selected = tables.some((table) => selectedIds.includes(table.id) || table.state === "selected");
+  const selected = tables.every((table) => selectedIds.includes(table.id) || table.state === "selected");
   const reserved = tables.some((table) => table.state === "reserved");
   const stroke = selected ? paint.tableSelectedEdge : reserved ? "#95664c" : paint.joinEdge;
   const labelWidth = Math.max(width, 160);
@@ -328,7 +343,7 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
   </Group>;
 }
 
-function Table({ table, selected, selecting, draggable, paint, onSelect, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; paint: CanvasPaint; onSelect: (additive: boolean) => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
+function Table({ table, selected, selecting, draggable, paint, onSelect, onSelectIndividual, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
   const gesture = useRef({ dragged: false, selectedOnPress: false });
   const reserved = table.state === "reserved";
   const unavailable = table.state === "unavailable" || !table.active;
@@ -338,6 +353,8 @@ function Table({ table, selected, selecting, draggable, paint, onSelect, onConte
     onMouseDown={(event) => { if (!selecting) return; event.cancelBubble = true; if (event.evt.button !== 0) return; const additive = event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey; gesture.current = { dragged: false, selectedOnPress: additive || !selected }; if (gesture.current.selectedOnPress) onSelect(additive); }}
     onTouchStart={() => { gesture.current = { dragged: false, selectedOnPress: false }; }}
     onClick={(event) => { if (!selecting) return; event.cancelBubble = true; if (event.evt.button === 0 && !gesture.current.dragged && !gesture.current.selectedOnPress) onSelect(false); }} onTap={(event) => { if (!selecting) return; event.cancelBubble = true; if (!gesture.current.dragged) onSelect(false); }}
+    onDblClick={selecting && onSelectIndividual ? (event) => { if (event.evt.button !== 0 || gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
+    onDblTap={selecting && onSelectIndividual ? (event) => { if (gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
     onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}
     onDragStart={(event) => { if (!selecting) return; event.cancelBubble = true; gesture.current.dragged = true; onDragStart(event.target); }} onDragMove={(event) => { if (!selecting) return; event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
     {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}

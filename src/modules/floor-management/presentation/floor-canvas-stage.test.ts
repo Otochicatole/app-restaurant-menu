@@ -589,6 +589,46 @@ describe("floor viewport dragging", () => {
     expect(groupAction).toHaveBeenCalledWith(["one", "two"], {x: 320, y: 240}); expect(tableAction).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { press: "onMouseDown", click: "onClick", double: "onDblClick" },
+    { press: "onTouchStart", click: "onTap", double: "onDblTap" },
+  ])("selects a joined group with $click and isolates the hit table with $double", ({ press, click, double }) => {
+    const first = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const second = { ...first, id: "two", label: "M2", x: 280 };
+    const onMove = vi.fn();
+    function Board() {
+      const [selectedIds, setSelectedIds] = useState<string[]>([]);
+      return createElement(FloorCanvasStage, {
+        room, tables: [first, second], selectJoinedTables: true, selectedIds, zoom: 1, onZoomChange: vi.fn(), onMove,
+        joinedGroups: [{ id: "joined", tableIds: ["one", "two"], label: "M1 + M2" }],
+        onSelect: (id) => setSelectedIds([id]), onSelectMany: (ids) => setSelectedIds(ids),
+      });
+    }
+    render(createElement(Board));
+    const trigger = (name: string) => act(() => {
+      const event = { evt: new MouseEvent("click", { button: 0 }), cancelBubble: false };
+      (canvas.groups.get("floor-table-two")![name] as (event: unknown) => void)(event);
+    });
+    const outline = () => canvas.rects.get("floor-joined-outline-joined")!.stroke;
+    const neutral = outline();
+    trigger(press);
+    trigger(click);
+    expect(outline()).not.toBe(neutral);
+    trigger(press);
+    trigger(click);
+    trigger(double);
+    expect(outline()).toBe(neutral);
+
+    const table = canvas.groups.get("floor-table-two")!;
+    let x = second.x;
+    const node = { x: () => x, y: () => second.y };
+    trigger(press);
+    act(() => { (table.onDragStart as (event: unknown) => void)({ target: node }); });
+    x += 10;
+    act(() => { (canvas.groups.get("floor-table-two")!.onDragEnd as (event: unknown) => void)({ target: node }); });
+    expect(onMove).toHaveBeenCalledWith(["two"], { x: 10, y: 0 });
+  });
+
   it("pans at 100% from table surfaces without selecting or moving resources and preserves that viewport across modes and refreshes", () => {
     const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
     const onMove = vi.fn(); const onSelect = vi.fn(); const onSelectFixture = vi.fn(); const onSelectLocation = vi.fn();

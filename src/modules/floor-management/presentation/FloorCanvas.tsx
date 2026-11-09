@@ -24,6 +24,7 @@ export type FloorCanvasProps = {
   tables: FloorCanvasTable[];
   appearance?: "default" | "operational";
   joinedGroups?: FloorCanvasJoinedGroup[];
+  selectJoinedTables?: boolean;
   selectedIds?: string[];
   selectedElements?: FloorCanvasElement[];
   selectedFixtureId?: string | null;
@@ -96,7 +97,7 @@ export function FloorCanvas(props: FloorCanvasProps) {
     ? "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)]"
     : "bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] sm:bottom-[calc(env(safe-area-inset-bottom,0px)+6.5rem)]";
   const zoomButtonClass = props.fullScreen ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f5f5f4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:opacity-30" : "rounded p-2 text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)] disabled:opacity-30";
-  const selectionHelp = props.onSelectElements ? "Arrastrá para dibujar un recuadro. Usá Shift, Ctrl o Cmd para sumar a la selección." : "Shift, Ctrl o Cmd para sumar mesas";
+  const selectionHelp = props.selectJoinedTables ? "Clic para seleccionar el grupo, doble clic para elegir una mesa. Usá Shift, Ctrl o Cmd para sumar a la selección." : props.onSelectElements ? "Arrastrá para dibujar un recuadro. Usá Shift, Ctrl o Cmd para sumar a la selección." : "Shift, Ctrl o Cmd para sumar mesas";
   const keyboardHelp = props.editorMode && !props.tables.length ? "Usá las listas Sectores y Elementos para seleccionar con el teclado." : `${props.tables.filter((table) => table.active).length} mesas. Usá la lista para seleccionar mesas con el teclado.`;
   return <div className={`relative isolate overflow-hidden ${props.appearance === "operational" ? "bg-[#eef4f6]" : "bg-[#f5f2e9]"} ${props.fullScreen ? "h-full min-h-0 w-full" : `rounded-xl border border-stone-200 ${props.compact ? "h-[350px]" : "h-[min(65dvh,620px)] min-h-[360px]"}`}`}>
     <div className="h-full w-full" role="img" aria-label={`Plano de ${props.room.name}. ${keyboardHelp}`}>

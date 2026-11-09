@@ -327,7 +327,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   return <main data-admin-panel data-floor-operations className={`${styles.screen} fixed inset-0 isolate h-dvh overflow-hidden`}>
     <h1 className="sr-only">Sala · {restaurantName}</h1>
     <div ref={boardSurface} tabIndex={-1} role="region" aria-label="Tablero principal de sala" className="absolute inset-0 outline-none">
-      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectedIds={selection} selectedLocationId={assembling ? assembly.locationId : undefined}
+      {room && <FloorCanvas key={room.id} appearance="operational" fullScreen room={room} tables={tables} joinedGroups={joinedGroups} selectJoinedTables selectedIds={selection} selectedLocationId={assembling ? assembly.locationId : undefined}
         interactionMode={interactionMode} onInteractionModeChange={(mode) => { setInteractionMode(mode); setTableMenu(null); }}
         draggableIds={!saving ? availableIds.filter((id) => editableResources([id])) : []}
         onSelect={selectTable} onSelectMany={selectTables} onClearSelection={clearSelection}
