@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowRight, Check, Clock3, Plus, Printer, ReceiptText, RotateCw } from "lucide-react";
+import { ArrowRight, Check, Clock3, Plus, Printer, ReceiptText, RotateCw, Search } from "lucide-react";
 import type { ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
 import { floorInputClass } from "./floor-api";
 import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
@@ -154,28 +154,98 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
 
 type NewLine = Pick<Extract<FloorServiceCommand, { action: "add-line" }>, "name" | "productId" | "quantity" | "unitPriceCents">;
 
+const productSearchText = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es-AR");
+const manualProduct = { id: "manual", name: "Cargar otro producto", price: null };
+
+function ProductPicker({ products, value, disabled, onChange }: {
+  products: ServiceProductView[]; value: string; disabled: boolean; onChange: (id: string) => void;
+}) {
+  const id = useId();
+  const listId = `${id}-products`;
+  const [query, setQuery] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const expanded = !disabled && query !== null;
+  const term = productSearchText(query ?? "").trim();
+  const selected = products.find((product) => product.id === value);
+  const selectedLabel = selected ? `${selected.name} · ${amount(selected.unitPriceCents)}` : value === manualProduct.id ? manualProduct.name : "";
+  const options = [...products.filter(({ name }) => productSearchText(name).includes(term))
+    .map(({ id, name, unitPriceCents }) => ({ id, name, price: amount(unitPriceCents) })), manualProduct];
+  const activeId = expanded && options[activeIndex] ? `${listId}-${activeIndex}` : undefined;
+
+  useEffect(() => {
+    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
+
+  const open = () => setQuery((current) => current ?? "");
+  const close = () => { setQuery(null); setActiveIndex(-1); };
+  const select = (optionId: string) => { onChange(optionId); close(); };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      open();
+      setActiveIndex((index) => event.key === "ArrowDown" ? Math.min(index + 1, options.length - 1)
+        : index < 0 ? options.length - 1 : Math.max(index - 1, 0));
+    } else if (expanded && event.key === "Enter") {
+      event.preventDefault();
+      if (options[activeIndex]) select(options[activeIndex].id);
+    } else if (expanded && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+  };
+
+  return <div className={fieldClass}>
+    <label htmlFor={id}>Producto</label>
+    <div className="relative">
+      <Search size={16} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 my-auto" />
+      <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
+        aria-activedescendant={activeId} aria-required="true" autoComplete="off" spellCheck={false} inputMode="search"
+        className={`${floorInputClass} min-h-11 pl-9 placeholder:text-[var(--floor-muted,#52634b)]`} disabled={disabled}
+        placeholder="Buscar producto" value={expanded ? query : selectedLabel} onFocus={open} onClick={open} onBlur={close} onKeyDown={onKeyDown}
+        onChange={(event) => { setQuery(event.target.value); setActiveIndex(-1); onChange(""); }} />
+    </div>
+    {expanded && <div className="rounded-lg border border-[var(--floor-border,#d4d4d8)] bg-white">
+      {options.length === 1 && <p role="status" className="px-3 pt-2 text-sm">No encontramos productos.</p>}
+      <ul id={listId} role="listbox" aria-label="Productos disponibles" className="max-h-44 overflow-y-auto overscroll-contain p-1">
+        {options.map((option, index) => <li key={option.id} role="presentation">
+          <button type="button" tabIndex={-1} role="option" id={`${listId}-${index}`} aria-selected={option.id === value}
+            className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm text-[var(--floor-ink,#09090b)] hover:bg-[var(--floor-hover,#edf2e9)] ${index === activeIndex ? "bg-[var(--floor-hover,#edf2e9)]" : ""}`}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => select(option.id)}>
+            <span className="min-w-0 wrap-break-word">{option.name}</span>
+            {option.price && <span className="shrink-0 tabular-nums text-[var(--floor-muted,#52634b)]">{option.price}</span>}
+          </button>
+        </li>)}
+      </ul>
+    </div>}
+  </div>;
+}
+
 function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[]; busy: boolean; onAdd: (line: NewLine) => Promise<boolean> }) {
   const [productId, setProductId] = useState("");
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("1");
   const activeProducts = products.filter((product) => product.active);
-  const manual = productId === "manual" || activeProducts.length === 0;
+  const manual = productId === manualProduct.id || activeProducts.length === 0;
+  const hasProduct = activeProducts.some((product) => product.id === productId);
   const cents = parsePrice(price);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const count = Number(quantity);
     if (busy || !Number.isInteger(count) || count < 1 || count > 99) return;
     if (manual && (!name.trim() || cents < 1 || cents > 2_147_483_647)) return;
-    if (!manual && !activeProducts.some((product) => product.id === productId)) return;
+    if (!manual && !hasProduct) return;
     const success = await onAdd(manual ? { name: name.trim(), unitPriceCents: cents, quantity: count } : { productId, quantity: count });
     if (success) { setProductId(""); setName(""); setPrice(""); setQuantity("1"); }
   };
   return <form aria-label="Agregar pedido" className={`${cardClass} space-y-2.5`} onSubmit={submit}>
     <h4 className="font-semibold">Agregar pedido</h4>
-    {activeProducts.length > 0 && <label className={fieldClass}>Producto<select className={floorInputClass} disabled={busy} required value={productId} onChange={(event) => setProductId(event.target.value)}><option value="">Elegí un producto</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {amount(product.unitPriceCents)}</option>)}<option value="manual">Cargar otro producto</option></select></label>}
+    {activeProducts.length > 0 && <ProductPicker products={activeProducts} value={productId} disabled={busy} onChange={setProductId} />}
     {manual && <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] gap-2"><label className={fieldClass}>Nombre<input className={floorInputClass} disabled={busy} required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label className={fieldClass}>Precio unitario ($)<input className={floorInputClass} disabled={busy} required inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" maxLength={13} value={price} onChange={(event) => setPrice(event.target.value)} /></label></div>}
-    <div className="flex flex-wrap items-end justify-between gap-2"><label className={`${fieldClass} w-24`}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><button type="submit" className={floorPrimaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !productId)}><Plus size={16} aria-hidden="true" />Agregar pedido</button></div>
+    <div className="flex flex-wrap items-end justify-between gap-2"><label className={`${fieldClass} w-24`}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><button type="submit" className={floorPrimaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !hasProduct)}><Plus size={16} aria-hidden="true" />Agregar pedido</button></div>
   </form>;
 }
 
