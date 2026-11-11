@@ -1,7 +1,15 @@
+import type { Metadata } from "next";
 import { requireSuperAdmin } from "@/modules/identity-access/server";
 import { LogoutButton } from "@/modules/identity-access/ui";
 import { UtensilsCrossed } from "lucide-react";
 import { SuperadminNav } from "./SuperadminNav";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Superadmin",
+    template: "%s · Superadmin",
+  },
+};
 
 export default async function SuperadminLayout({ children }: { children: React.ReactNode }) {
   await requireSuperAdmin();

@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { menuTemplates } from "@/modules/menu-editor/server";
 import { organizationManagement } from "@/modules/organization-management/server";
 import { BarChart3, PanelsTopLeft, Store } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: { absolute: "Resumen · Superadmin" } };
 
 export default async function SuperAdminDashboardPage() {
   const [tenants, templates] = await Promise.all([

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { landingManagement } from "@/modules/landing-management/server";
@@ -8,11 +9,15 @@ import { PrismaFloorRepository } from "./infrastructure/prisma-floor-repository"
 import type { FloorConfigView } from "./contracts";
 
 const repository = new PrismaFloorRepository();
+const loadWaiterRestaurant = cache(async (restaurantId: string) =>
+  prisma.restaurant.findUnique({ where: { id: restaurantId }, include: { organization: true } }),
+);
+
 export async function requireFloorReadAccess(requestedId?: string): Promise<{ restaurantId: string; restaurantName: string; readOnly: boolean; canManageWalkIns: boolean }> {
   const actor = await requireAuthenticatedAccount();
   if (actor.kind === "waiter") {
     if (requestedId && requestedId !== actor.restaurantId) throw new NotFoundError("Restaurante");
-    const restaurant = await prisma.restaurant.findUnique({ where: { id: actor.restaurantId }, include: { organization: true } });
+    const restaurant = await loadWaiterRestaurant(actor.restaurantId);
     if (!restaurant || restaurant.status !== "ACTIVE" || restaurant.organization.status !== "ACTIVE" || !restaurant.floorManagementEnabled) throw new ForbiddenError("La sala no está disponible.");
     return { restaurantId: restaurant.id, restaurantName: restaurant.name, readOnly: true, canManageWalkIns: true };
   }

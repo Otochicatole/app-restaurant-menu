@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { CalendarDays, Globe, Layers3, LayoutGrid, Map, Menu, Settings, UserRound, Wallet } from "lucide-react";
+import { CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Settings, UserRound, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AdminNavigationGuardProvider, useAdminNavigationGuard } from "./AdminNavigationGuard";
 
@@ -40,6 +40,7 @@ function AdminShellContent({
   const isMenusPage = pathname === "/admin/restaurants";
   const isLandingPage = pathname === `${basePath}/landing`;
   const isFloorEditorPage = pathname === `${basePath}/rooms`;
+  const isKitchenPage = pathname === `${basePath}/kitchen`;
 
   const navigation = [
     { label: "Editor", href: basePath, exact: true, icon: Layers3 },
@@ -50,6 +51,7 @@ function AdminShellContent({
           { label: "Reservas", href: `${basePath}/reservations`, icon: CalendarDays },
         ]
       : []),
+    { label: "Cocina", href: `${basePath}/kitchen`, icon: ChefHat },
     { label: "Caja", href: `${basePath}/cash`, icon: Wallet },
     { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
     { label: "Mi cuenta", href: "/admin/account", icon: UserRound },
@@ -181,17 +183,23 @@ function AdminShellContent({
         <Menu size={18} />
       </button>}
 
-      {/* Contenido principal: vista completa para /admin/landing o contenedor con padding para settings */}
-      {isFloorEditorPage ? children : <div className="md:pl-16">
-        <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
-          <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
-        </header>
-        {isLandingPage ? (
-          <div className="h-[calc(100dvh-3.5rem)] w-full flex flex-col">{children}</div>
-        ) : (
-          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
-        )}
-      </div>}
+      {/* Contenido principal: vista completa para /admin/landing, /admin/kitchen o contenedor con padding para settings */}
+      {isFloorEditorPage ? (
+        children
+      ) : isKitchenPage ? (
+        <div className="min-h-screen bg-[#f8faf7] md:pl-16">{children}</div>
+      ) : (
+        <div className="md:pl-16">
+          <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
+            <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
+          </header>
+          {isLandingPage ? (
+            <div className="h-[calc(100dvh-3.5rem)] w-full flex flex-col">{children}</div>
+          ) : (
+            <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
+          )}
+        </div>
+      )}
     </div>
   );
 }

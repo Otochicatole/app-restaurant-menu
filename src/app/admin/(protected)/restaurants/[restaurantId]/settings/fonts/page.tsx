@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { menuEditor } from "@/modules/menu-editor/server";
 import { FontLibraryClient } from "@/modules/menu-editor/ui";
 import { AdminCard, AdminPageHeader } from "@/ui/admin/AdminPrimitives";
+
+export const metadata: Metadata = { title: "Fuentes" };
 export default async function RestaurantFontsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
  const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
  const fonts = await menuEditor.listAssets(restaurantId, "FONT");

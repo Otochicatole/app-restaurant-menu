@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { resolveRestaurantLayoutMetadata } from "@/app/window-title";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { AdminShell } from "@/ui/admin/AdminShell";
 import { ApplicationError } from "@/platform/application/errors";
+
+export async function generateMetadata({ params }: { params: Promise<{ restaurantId: string }> }): Promise<Metadata> {
+  const { restaurantId } = await params;
+  return resolveRestaurantLayoutMetadata(async () => (await requireRestaurantContext(restaurantId)).restaurant.name);
+}
 
 export default async function RestaurantLayout({ children, params }: { children: React.ReactNode; params: Promise<{ restaurantId: string }> }) {
   let context;

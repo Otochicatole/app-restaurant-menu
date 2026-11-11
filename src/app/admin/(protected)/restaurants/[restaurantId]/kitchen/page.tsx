@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { tableService } from "@/modules/reservation-management/server";
 import { KitchenDisplayScreen } from "@/modules/reservation-management/ui";
+
+export const metadata: Metadata = { title: "Cocina" };
 
 export default async function AdminKitchenPage({ params }: { params: Promise<{ restaurantId: string }> }) {
   const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
@@ -10,7 +13,7 @@ export default async function AdminKitchenPage({ params }: { params: Promise<{ r
       restaurantId={restaurantId}
       restaurantName={restaurant.name}
       initialSnapshot={initialSnapshot}
-      backUrl={`/admin/restaurants/${restaurantId}/cash`}
+      backUrl=""
     />
   );
 }

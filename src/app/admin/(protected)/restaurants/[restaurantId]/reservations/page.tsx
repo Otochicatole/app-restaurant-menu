@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { reservationManagement } from "@/modules/reservation-management/server";
 import { ReservationCmsScreen } from "@/modules/reservation-management/ui";
 import { restaurantToday } from "@/modules/floor-management/contracts";
+
+export const metadata: Metadata = { title: "Reservas" };
 export default async function RestaurantReservationsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
  const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
  if (!restaurant.landingEnabled) redirect("/admin/restaurants/" + restaurantId);

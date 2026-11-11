@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { landingManagement } from "@/modules/landing-management/server";
 import { LandingTemplateModerationPanel } from "@/modules/landing-management/ui";
 import { menuTemplates } from "@/modules/menu-editor/server";
 import { TemplateModerationPanel } from "@/modules/menu-editor/ui";
+
+export const metadata: Metadata = { title: "Plantillas" };
 
 export default async function SuperAdminTemplatesPage() {
   const [templateData, landingTemplateData] = await Promise.all([

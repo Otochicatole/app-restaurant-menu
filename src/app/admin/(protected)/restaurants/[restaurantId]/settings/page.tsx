@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminCard, AdminPageHeader } from "@/ui/admin/AdminPrimitives";
 import { requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { menuEditor, requireActiveMenuProject } from "@/modules/menu-editor/server";
 import { RestaurantProfileForm } from "@/modules/menu-editor/ui";
+
+export const metadata: Metadata = { title: "Ajustes" };
 export default async function RestaurantSettingsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
  const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
  const project = await requireActiveMenuProject(restaurantId);

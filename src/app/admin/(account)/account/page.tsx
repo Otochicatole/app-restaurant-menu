@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
 import { AccountProfileForm, LogoutButton } from "@/modules/identity-access/ui";
 import { prisma } from "@/platform/database/prisma";
+
+export const metadata: Metadata = { title: "Mi cuenta" };
 
 export default async function AccountPage() {
   const actor = await requireAuthenticatedAccount();
