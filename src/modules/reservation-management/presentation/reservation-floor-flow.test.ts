@@ -200,4 +200,23 @@ describe("reservation floor confirmation flow", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Todavía no hay reservas")).toBeTruthy();
   });
+
+  it("lets admins configure and preview an event cover image (portada)", async () => {
+    actions.upsertRestaurantEventAction.mockResolvedValue({
+      success: true,
+      data: { ...event, title: "Noche de Vinilos", imageUrl: "https://cdn.example/vinilos.jpg" },
+    });
+    render(createElement(ReservationCmsScreen, { initialData: { ...data(reservation, false), events: [event] } }));
+    fireEvent.click(screen.getByRole("button", { name: /^Eventos$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Crear evento" }));
+    const modal = within(screen.getByRole("dialog", { name: "Crear Evento Especial" }));
+    fireEvent.change(modal.getByPlaceholderText("Ej. Cata de Vinos & Maridaje"), { target: { value: "Noche de Vinilos" } });
+    fireEvent.change(modal.getByLabelText("Portada del Evento (Imagen)"), { target: { value: "https://cdn.example/vinilos.jpg" } });
+    expect(modal.getByRole("button", { name: /Elegir \/ Subir portada/ })).toBeTruthy();
+    fireEvent.click(modal.getByRole("button", { name: "Crear Evento" }));
+    await waitFor(() => expect(actions.upsertRestaurantEventAction).toHaveBeenCalledWith("restaurant", expect.objectContaining({
+      title: "Noche de Vinilos",
+      imageUrl: "https://cdn.example/vinilos.jpg",
+    })));
+  });
 });

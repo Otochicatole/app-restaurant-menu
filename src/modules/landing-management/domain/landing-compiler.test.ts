@@ -992,6 +992,9 @@ describe("landing-compiler", () => {
     it("compiles all landing template presets successfully including arco-bar", () => {
       expect(LANDING_TEMPLATE_PRESETS.length).toBeGreaterThanOrEqual(7);
 
+      const defaultDoc = createDefaultLandingDocument("La Casa", "la-casa");
+      expect(defaultDoc.blocks.some((b) => b.moduleKey === "reservations-booking")).toBe(true);
+
       for (const preset of LANDING_TEMPLATE_PRESETS) {
         const compiled = compileLandingFromDocument(preset.document, {
           restaurantName: preset.name,
@@ -999,15 +1002,19 @@ describe("landing-compiler", () => {
         });
         expect(compiled.htmlContent.length).toBeGreaterThan(100);
         expect(compiled.cssContent.length).toBeGreaterThan(50);
+        expect(compiled.jsContent).toContain("/reservations/events");
       }
 
       const arcoPreset = LANDING_TEMPLATE_PRESETS.find((p) => p.id === "landing-preset-arco-bar");
       expect(arcoPreset).toBeDefined();
+      expect(arcoPreset!.document.blocks.some((b) => b.moduleKey === "reservations-events")).toBe(true);
       const compiledArco = compileLandingFromDocument(arcoPreset!.document, {
         restaurantName: "Arco",
         restaurantSlug: "arco",
       });
       expect(compiledArco.fullHtml).toContain("reservas-mesa");
+      expect(compiledArco.fullHtml).toContain("eventsListGrid");
+      expect(compiledArco.fullHtml).toContain("nav.eventos");
       expect(compiledArco.fullHtml).toContain("pap");
       expect(compiledArco.fullHtml).toContain("panel-navegacion");
       expect(compiledArco.fullHtml).toContain("bb-izq");
@@ -1016,6 +1023,7 @@ describe("landing-compiler", () => {
       expect(compiledArco.fullHtml).toContain("Papas Arco");
       expect(compiledArco.cssContent).toContain("--violeta");
       expect(compiledArco.jsContent).toContain("initReviewsCarousel");
+      expect(compiledArco.jsContent).toContain("/reservations/events");
     });
 
     it("injects responsive navigation toggle and runtime handlers into preview and document", () => {
@@ -1116,13 +1124,15 @@ describe("landing-compiler", () => {
       expect(compiled.jsContent).toContain("/reservations/tables");
     });
 
-    it("correctly compiles the dedicated reservations-events module with cards and booking modal", () => {
+    it("correctly compiles the dedicated reservations-events module with cover banner and .pap booking wizard", () => {
       const eventsModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-events");
       expect(eventsModule).toBeDefined();
       expect(eventsModule?.category).toBe("contacto");
 
       const eventsBlock = createBlockFromBuiltinModule(eventsModule!);
       expect(eventsBlock.values.title).toBe("Noches Especiales & Eventos");
+      expect(eventsBlock.fields.some((f) => f.key === "coverImage" && f.type === "image")).toBe(true);
+      expect(eventsBlock.fields.some((f) => f.key === "targetEventId")).toBe(true);
 
       const doc = createDefaultLandingDocument("La Terraza", "la-terraza");
       doc.blocks.push(eventsBlock);
@@ -1133,10 +1143,11 @@ describe("landing-compiler", () => {
       });
 
       expect(compiled.fullHtml).toContain("eventsListGrid");
-      expect(compiled.fullHtml).toContain("eventModalBackdrop");
+      expect(compiled.fullHtml).toContain("evtPapWidget");
+      expect(compiled.fullHtml).toContain("evtCoverImg");
       expect(compiled.fullHtml).toContain("eventBookingForm");
-      expect(compiled.cssContent).toContain(".events-grid");
-      expect(compiled.cssContent).toContain(".event-card");
+      expect(compiled.cssContent).toContain(".events-cover-banda");
+      expect(compiled.cssContent).toContain(".evt-option-card");
       expect(compiled.jsContent).toContain("/reservations/events");
     });
 

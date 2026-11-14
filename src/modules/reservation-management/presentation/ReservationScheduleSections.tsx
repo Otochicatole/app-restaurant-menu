@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { CalendarX2, Edit2, Trash2, Users } from "lucide-react";
+import { resolveAdminAssetPreviewUrl } from "@/ui/admin/ImageLibraryModal";
 import { AdminEmptyState, adminPrimaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { type TimeSlotView } from "../contracts";
 import { reservationWorkspace, dialogOpened, selectEventOccupancy } from "./reservation-workspace";
@@ -18,6 +19,8 @@ const DAYS_OF_WEEK = [
 ];
 
 export function ReservationEvents({ today }: { today: string }) {
+  const restaurantId = reservationWorkspace.useSelector((state) => state.data.restaurantId);
+  const restaurantSlug = reservationWorkspace.useSelector((state) => state.data.restaurantSlug);
   const events = reservationWorkspace.useSelector((state) => state.data.events);
   const eventOccupancy = reservationWorkspace.useSelector(selectEventOccupancy);
   const store = reservationWorkspace.useStore();
@@ -31,11 +34,24 @@ export function ReservationEvents({ today }: { today: string }) {
               {events.map((event) => {
                 const occupied = Math.min(event.capacity, eventOccupancy[event.id] ?? 0);
                 const percentage = Math.min(100, Math.round((occupied / event.capacity) * 100));
+                const thumbSrc = event.imageUrl
+                  ? resolveAdminAssetPreviewUrl(event.imageUrl, restaurantId, restaurantSlug || restaurantId)
+                  : "";
                 return (
                   <article key={event.id} className="grid gap-4 p-4 sm:grid-cols-[7rem_minmax(0,1fr)] sm:p-5 lg:grid-cols-[8rem_minmax(0,1fr)_minmax(12rem,0.6fr)]">
-                    <div className="flex items-baseline gap-2 sm:block">
-                      <time dateTime={event.date} className="text-lg font-semibold tracking-tight text-[#182618]">{formatShortDate(event.date)}</time>
-                      <p className="text-sm text-zinc-600 tabular-nums">{event.startTime}{event.endTime && ` – ${event.endTime}`} hs</p>
+                    <div className="flex flex-wrap items-center gap-3 sm:block">
+                      {thumbSrc && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={thumbSrc}
+                          alt={event.title}
+                          className="h-14 w-20 shrink-0 rounded-lg border border-[#e9eee7] object-cover sm:mb-2 sm:h-16 sm:w-full"
+                        />
+                      )}
+                      <div>
+                        <time dateTime={event.date} className="text-lg font-semibold tracking-tight text-[#182618]">{formatShortDate(event.date)}</time>
+                        <p className="text-sm text-zinc-600 tabular-nums">{event.startTime}{event.endTime && ` – ${event.endTime}`} hs</p>
+                      </div>
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-lg font-semibold text-zinc-950 [overflow-wrap:anywhere]">{event.title}</h3>

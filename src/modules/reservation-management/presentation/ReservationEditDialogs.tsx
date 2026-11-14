@@ -1,7 +1,8 @@
 import { useCallback, useId, useState } from "react";
 import { FloorAssignmentPicker, FloorReservationEditor, FloorRoomSelector } from "@/modules/floor-management/ui";
+import { ImageLibraryModal, resolveAdminAssetPreviewUrl } from "@/ui/admin/ImageLibraryModal";
 import { type FloorAssignmentInput } from "@/modules/floor-management/contracts";
-import { LayoutGrid, Loader2 } from "lucide-react";
+import { Image as ImageIcon, LayoutGrid, Loader2, X } from "lucide-react";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import { type AdminCreateReservationCommand, type ReservationStatus, type TimeSlotView, type UpsertRestaurantEventCommand, type UpsertTimeSlotCommand } from "../contracts";
@@ -264,10 +265,12 @@ export function ReservationEdit({ dialog }: { dialog: ActiveReservationDialog & 
 export function ReservationEventEdit({ dialog }: { dialog: ActiveReservationDialog & { kind: "event" } }) {
   const floorManagementEnabled = reservationWorkspace.useSelector((state) => state.data.floorManagementEnabled);
   const restaurantId = reservationWorkspace.useSelector((state) => state.data.restaurantId);
+  const restaurantSlug = reservationWorkspace.useSelector((state) => state.data.restaurantSlug);
   const store = reservationWorkspace.useStore();
   const isPending = reservationWorkspace.useSelector((state) => state.write !== null);
   const close = () => store.dispatch(dialogClosed(dialog.id));
   const { editing: editingEvent } = dialog;
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [eventForm, setEventForm] = useState<UpsertRestaurantEventCommand>(() => editingEvent ? {
     title: editingEvent.title, description: editingEvent.description, date: editingEvent.date,
     startTime: editingEvent.startTime, endTime: editingEvent.endTime, capacity: editingEvent.capacity,
@@ -281,8 +284,12 @@ export function ReservationEventEdit({ dialog }: { dialog: ActiveReservationDial
     event.preventDefault();
     void store.dispatch(saveEvent(dialog.id, { ...eventForm, id: editingEvent?.id }));
   };
+  const coverPreviewUrl = eventForm.imageUrl
+    ? resolveAdminAssetPreviewUrl(eventForm.imageUrl, restaurantId, restaurantSlug || restaurantId)
+    : "";
   return (
-    <AdminModal
+    <>
+      <AdminModal
         open
         title={editingEvent ? "Modificar Evento" : "Crear Evento Especial"}
         description="Publicá una experiencia especial con aforo limitado en tu menú y landing page."
@@ -425,6 +432,52 @@ export function ReservationEventEdit({ dialog }: { dialog: ActiveReservationDial
             </div>
           </div>
 
+          <div>
+            <label htmlFor="eventImageUrlInput" className="block text-xs font-semibold text-zinc-700 mb-1">
+              Portada del Evento (Imagen)
+            </label>
+            <div className="space-y-2">
+              {coverPreviewUrl && (
+                <div className="relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={coverPreviewUrl}
+                    alt={eventForm.title || "Portada del evento"}
+                    className="h-32 w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEventForm((prev) => ({ ...prev, imageUrl: "" }))}
+                    className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-zinc-950/75 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-zinc-950"
+                  >
+                    <X size={12} aria-hidden="true" />
+                    Quitar
+                  </button>
+                </div>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="eventImageUrlInput"
+                  type="text"
+                  placeholder="https://... o elegí desde tu galería"
+                  value={eventForm.imageUrl || ""}
+                  onChange={(e) =>
+                    setEventForm((prev) => ({ ...prev, imageUrl: e.target.value }))
+                  }
+                  className="min-w-0 flex-1 px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#182618]/10 focus:border-[#182618]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsMediaModalOpen(true)}
+                  className={`${adminSecondaryButtonClass} shrink-0 inline-flex items-center justify-center gap-1.5`}
+                >
+                  <ImageIcon size={15} aria-hidden="true" />
+                  Elegir / Subir portada
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
@@ -464,6 +517,16 @@ export function ReservationEventEdit({ dialog }: { dialog: ActiveReservationDial
           </div>
         </form>
       </AdminModal>
+      <ImageLibraryModal
+        open={isMediaModalOpen}
+        landingSlug={restaurantSlug || restaurantId}
+        restaurantId={restaurantId}
+        currentUrl={eventForm.imageUrl || ""}
+        title="Portada del Evento Especial"
+        onClose={() => setIsMediaModalOpen(false)}
+        onSelectUrl={(url) => setEventForm((prev) => ({ ...prev, imageUrl: url }))}
+      />
+    </>
   );
 }
 

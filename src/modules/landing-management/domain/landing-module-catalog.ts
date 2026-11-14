@@ -302,8 +302,8 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "subtitle", label: "Subtítulo descriptivo", type: "textarea", defaultValue: "Cortes seleccionados madurados en cámara seca, pesca artesanal del día y cava subterránea de guarda en un ambiente pensado para disfrutar sin prisa." },
       { key: "primaryBtnText", label: "Texto botón principal", type: "text", defaultValue: "Explorar Carta Digital →" },
       { key: "primaryBtnUrl", label: "URL botón principal", type: "url", defaultValue: "{{menuUrl}}" },
-      { key: "secondaryBtnText", label: "Texto botón secundario", type: "text", defaultValue: "Reservar Mesa" },
-      { key: "secondaryBtnUrl", label: "URL botón secundario", type: "url", defaultValue: "#contacto" },
+      { key: "secondaryBtnText", label: "Texto botón secundario", type: "text", defaultValue: "Reservar Mesa o Evento" },
+      { key: "secondaryBtnUrl", label: "URL botón secundario", type: "url", defaultValue: "#reservas" },
     ],
     htmlTemplate: `<!-- Hero Section -->
 <section class="hero-section" id="inicio">
@@ -3056,6 +3056,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "emailLabel", label: "Etiqueta: Email", type: "text", defaultValue: "Email (opcional)" },
       { key: "notesLabel", label: "Etiqueta: Comentarios", type: "text", defaultValue: "Aclaraciones o Preferencias" },
       { key: "notesPlaceholder", label: "Placeholder notas", type: "text", defaultValue: "Alergias, cumpleaños, mesa interior o terraza..." },
+      { key: "eventCoverImage", label: "Portada por defecto (eventos)", type: "image", defaultValue: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=85" },
       { key: "btnSubmitLabel", label: "Texto botón confirmar", type: "text", defaultValue: "Confirmar Reserva" },
       { key: "policyNotice", label: "Texto aviso / política", type: "text", defaultValue: "Tolerancia máxima de 15 minutos. Ante cancelaciones o modificaciones, por favor contactanos con anticipación." },
       { key: "restaurantPhone", label: "WhatsApp para comprobante", type: "text", defaultValue: "+5491100000000" },
@@ -3063,7 +3064,7 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       { key: "successMessage", label: "Mensaje de éxito", type: "textarea", defaultValue: "Hemos registrado tu solicitud exitosamente. Podés guardar este comprobante o enviárnoslo por WhatsApp." },
     ],
     htmlTemplate: `<!-- Reservas de Mesas y Eventos Especiales -->
-<section class="section reservation-section res-booking-section" id="reservas" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}">
+<section class="section reservation-section res-booking-section" id="reservas" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}" data-default-event-cover="{{eventCoverImage}}">
   <div class="container reservation-container">
     <div class="section-header text-center">
       <span class="section-kicker">{{kicker}}</span>
@@ -3315,6 +3316,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
           <!-- Tarjeta de evento seleccionado -->
           <div class="res-selected-event-card" id="resSelectedEventCard">
+            <div class="res-selected-event-cover" id="resSelectedEventCoverWrap">
+              <img id="resSelectedEventCover" src="{{eventCoverImage}}" alt="Portada del evento seleccionado" loading="lazy" />
+            </div>
             <div class="res-selected-event-top">
               <span class="res-selected-event-badge">🎟️ EVENTO SELECCIONADO</span>
               <button type="button" class="res-change-event-btn" id="resChangeEventBtn">Cambiar evento ✕</button>
@@ -3449,21 +3453,21 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     cssTemplate: `.reservation-container { max-width: 780px; margin: 0 auto; }
 .res-card { background: var(--color-card-bg, #ffffff); border: 1px solid var(--color-border, #e5e7eb); border-radius: var(--radius-lg, 16px); padding: 36px 32px; box-shadow: var(--shadow-soft, 0 4px 20px rgba(0, 0, 0, 0.05)); }
 .res-mode-switch-wrapper { display: flex; justify-content: center; margin-bottom: 24px; }
-.res-mode-switch { display: inline-flex; background: rgba(0, 0, 0, 0.04); border: 1px solid var(--color-border, #e5e7eb); border-radius: 14px; padding: 5px; gap: 6px; }
+.res-mode-switch { display: inline-flex; background: var(--color-bg, rgba(0, 0, 0, 0.04)); border: 1px solid var(--color-border, #e5e7eb); border-radius: 14px; padding: 5px; gap: 6px; }
 .res-mode-btn { display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 10px 20px; border-radius: 10px; cursor: pointer; transition: all 0.2s ease; text-align: left; }
-.res-mode-btn:hover { background: rgba(0, 0, 0, 0.04); }
+.res-mode-btn:hover { background: rgba(128, 128, 128, 0.08); }
 .res-mode-btn.active[data-mode="tables"] { background: var(--color-card-bg, #ffffff); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
-.res-mode-btn.active[data-mode="tables"] .res-mode-btn-title { color: #059669; }
+.res-mode-btn.active[data-mode="tables"] .res-mode-btn-title { color: #10b981; }
 .res-mode-btn.active[data-mode="events"] { background: var(--color-card-bg, #ffffff); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
-.res-mode-btn.active[data-mode="events"] .res-mode-btn-title { color: #7c3aed; }
+.res-mode-btn.active[data-mode="events"] .res-mode-btn-title { color: #8b5cf6; }
 .res-mode-icon { font-size: 1.4rem; line-height: 1; }
 .res-mode-btn-content { display: flex; flex-direction: column; }
 .res-mode-btn-title { font-size: 0.95rem; font-weight: 800; color: var(--color-text-main, #111827); }
 .res-mode-btn-sub { font-size: 0.72rem; font-weight: 500; color: var(--color-text-muted, #6b7280); }
 .res-mode-counter-badge { background: #7c3aed; color: #ffffff; font-size: 0.7rem; font-weight: 800; padding: 2px 7px; border-radius: 9999px; margin-left: 4px; }
 .res-mode-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 24px; }
-.res-mode-banner-table { background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.28); color: #065f46; }
-.res-mode-banner-event { background: rgba(124, 58, 237, 0.08); border: 1.5px solid rgba(124, 58, 237, 0.28); color: #5b21b6; }
+.res-mode-banner-table { background: rgba(16, 185, 129, 0.1); border: 1.5px solid rgba(16, 185, 129, 0.3); color: var(--color-text-main, #065f46); }
+.res-mode-banner-event { background: rgba(124, 58, 237, 0.1); border: 1.5px solid rgba(124, 58, 237, 0.3); color: var(--color-text-main, #5b21b6); }
 .res-mode-banner-left { display: flex; align-items: center; gap: 12px; }
 .res-mode-banner-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
 .res-mode-banner-title { display: block; font-size: 0.95rem; font-weight: 800; line-height: 1.3; }
@@ -3480,34 +3484,45 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 .res-events-list { margin-bottom: 16px; }
 .res-events-heading { font-size: 0.92rem; font-weight: 700; color: var(--color-text-main, #111827); margin-bottom: 12px; }
 .res-events-cards { display: grid; grid-template-columns: 1fr; gap: 14px; }
-.res-event-card-item { border: 1.5px solid var(--color-border, #e5e7eb); border-radius: 12px; padding: 18px 20px; background: var(--color-bg, #ffffff); display: flex; align-items: center; justify-content: space-between; gap: 16px; transition: all 0.2s ease; }
+.res-event-card-item { border: 1.5px solid var(--color-border, #e5e7eb); border-radius: 14px; overflow: hidden; background: var(--color-bg, #ffffff); display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; align-items: stretch; gap: 0; transition: all 0.2s ease; }
 .res-event-card-item:hover { border-color: #7c3aed; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.12); transform: translateY(-2px); }
-.res-event-card-info { flex: 1; }
+.res-event-card-media { position: relative; min-height: 120px; background: rgba(124, 58, 237, 0.12); overflow: hidden; }
+.res-event-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.res-event-card-info { flex: 1; padding: 16px 18px; min-width: 0; }
 .res-event-card-title { font-size: 1.1rem; font-weight: 800; color: var(--color-text-main, #111827); margin-bottom: 4px; }
 .res-event-card-desc { font-size: 0.85rem; color: var(--color-text-muted, #6b7280); margin-bottom: 8px; line-height: 1.4; }
 .res-event-card-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-weight: 700; }
-.meta-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); color: var(--color-text-main, #111827); }
-.meta-chip.spots-free { background: rgba(16, 185, 129, 0.12); color: #065f46; }
-.meta-chip.spots-full { background: rgba(239, 68, 68, 0.12); color: #991b1b; }
+.meta-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(128, 128, 128, 0.12); color: var(--color-text-main, #111827); }
+.meta-chip.spots-free { background: rgba(16, 185, 129, 0.14); color: #10b981; }
+.meta-chip.spots-full { background: rgba(239, 68, 68, 0.14); color: #ef4444; }
+.res-event-pick-wrap { display: flex; align-items: center; padding: 16px 18px 16px 4px; }
 .res-event-pick-btn { padding: 9px 18px; font-size: 0.88rem; font-weight: 700; border-radius: 8px; border: none; background: #7c3aed; color: #ffffff; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
 .res-event-pick-btn:hover:not(:disabled) { background: #6d28d9; }
 .res-event-pick-btn:disabled { opacity: 0.45; cursor: not-allowed; background: #9ca3af; }
-.res-events-empty { text-align: center; padding: 36px 20px; background: rgba(0, 0, 0, 0.02); border-radius: 12px; border: 1px dashed var(--color-border, #e5e7eb); }
+.res-selected-event-cover { border-radius: 10px; overflow: hidden; margin-bottom: 14px; border: 1px solid rgba(124, 58, 237, 0.25); height: 180px; }
+.res-selected-event-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (max-width: 680px) {
+  .res-event-card-item { grid-template-columns: 1fr; }
+  .res-event-card-media { height: 150px; }
+  .res-event-pick-wrap { padding: 0 18px 16px; }
+  .res-event-pick-btn { width: 100%; }
+}
+.res-events-empty { text-align: center; padding: 36px 20px; background: rgba(128, 128, 128, 0.04); border-radius: 12px; border: 1px dashed var(--color-border, #e5e7eb); }
 .res-events-empty-icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
-.res-events-empty h4 { font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; }
+.res-events-empty h4 { font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; color: var(--color-text-main, #111827); }
 .res-events-empty p { font-size: 0.88rem; color: var(--color-text-muted, #6b7280); max-width: 440px; margin: 0 auto 16px auto; }
 .res-switch-to-table-btn { font-size: 0.9rem; font-weight: 700; padding: 8px 16px; border-radius: 8px; }
-.res-selected-event-card { background: linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(99, 102, 241, 0.06)); border: 1.5px solid rgba(124, 58, 237, 0.35); border-radius: 14px; padding: 20px; margin-bottom: 24px; }
+.res-selected-event-card { background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(99, 102, 241, 0.08)); border: 1.5px solid rgba(124, 58, 237, 0.35); border-radius: 14px; padding: 20px; margin-bottom: 24px; }
 .res-selected-event-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.res-selected-event-badge { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; letter-spacing: 0.05em; }
-.res-change-event-btn { border: none; background: transparent; font-size: 0.82rem; font-weight: 700; color: #6b7280; cursor: pointer; }
-.res-change-event-btn:hover { color: #dc2626; text-decoration: underline; }
+.res-selected-event-badge { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: #8b5cf6; letter-spacing: 0.05em; }
+.res-change-event-btn { border: none; background: transparent; font-size: 0.82rem; font-weight: 700; color: var(--color-text-muted, #6b7280); cursor: pointer; }
+.res-change-event-btn:hover { color: #ef4444; text-decoration: underline; }
 .res-selected-event-title { font-size: 1.25rem; font-weight: 800; color: var(--color-text-main, #111827); margin-bottom: 6px; }
 .res-selected-event-desc { font-size: 0.88rem; color: var(--color-text-muted, #6b7280); margin-bottom: 12px; line-height: 1.4; }
-.res-selected-event-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: rgba(255, 255, 255, 0.7); border-radius: 10px; padding: 12px; border: 1px solid rgba(124, 58, 237, 0.15); }
+.res-selected-event-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: var(--color-bg, rgba(255, 255, 255, 0.7)); border-radius: 10px; padding: 12px; border: 1px solid rgba(124, 58, 237, 0.2); }
 .res-selected-meta-item { display: flex; flex-direction: column; }
-.res-selected-meta-item .meta-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; font-weight: 700; }
-.res-selected-meta-item .meta-val { font-size: 0.95rem; font-weight: 800; color: #111827; }
+.res-selected-meta-item .meta-label { font-size: 0.72rem; color: var(--color-text-muted, #6b7280); text-transform: uppercase; font-weight: 700; }
+.res-selected-meta-item .meta-val { font-size: 0.95rem; font-weight: 800; color: var(--color-text-main, #111827); }
 .res-form-step { margin-bottom: 28px; }
 .res-step-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .res-step-label { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; color: var(--color-text-main, #111827); margin-bottom: 0; }
@@ -4357,6 +4372,23 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       });
     }
 
+    function escapeHtmlText(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function resolveEventCoverUrl(ev) {
+      var raw = ev && ev.imageUrl ? String(ev.imageUrl).trim() : '';
+      if (raw && raw.indexOf('{{') === -1) return raw;
+      var def = root.getAttribute('data-default-event-cover') || '';
+      if (def && def.indexOf('{{') === -1) return def;
+      return 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=85';
+    }
+
     function renderEvents(events) {
       eventsList = (events || []).map(function(event) {
         return Object.assign({}, event, {
@@ -4392,21 +4424,27 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       eventsList.forEach(function(ev) {
         var isSoldOut = Boolean(ev.isSoldOut) || (ev.availableSpots !== undefined && ev.availableSpots <= 0);
         var spotsText = isSoldOut ? 'Agotado' : ((ev.availableSpots !== undefined ? ev.availableSpots : (ev.maxCapacity || 'Cupos')) + ' disponibles');
+        var coverUrl = resolveEventCoverUrl(ev);
 
         cardsHtml += '<div class="res-event-card-item">' +
+          '<div class="res-event-card-media">' +
+            '<img src="' + escapeHtmlText(coverUrl) + '" alt="' + escapeHtmlText(ev.title || 'Evento Especial') + '" class="res-event-card-img" loading="lazy" />' +
+          '</div>' +
           '<div class="res-event-card-info">' +
-            '<h4 class="res-event-card-title">' + (ev.title || 'Evento Especial') + '</h4>' +
-            '<p class="res-event-card-desc">' + (ev.description || 'Experiencia temática exclusiva con menú y propuesta de autor.') + '</p>' +
+            '<h4 class="res-event-card-title">' + escapeHtmlText(ev.title || 'Evento Especial') + '</h4>' +
+            '<p class="res-event-card-desc">' + escapeHtmlText(ev.description || 'Experiencia temática exclusiva con menú y propuesta de autor.') + '</p>' +
             '<div class="res-event-card-meta">' +
-              '<span class="meta-chip">📅 ' + ev.date + '</span>' +
-              '<span class="meta-chip">⏰ ' + ev.time + ' hs</span>' +
-              (ev.price ? ('<span class="meta-chip">💳 ' + ev.price + '</span>') : '') +
-              '<span class="meta-chip ' + (isSoldOut ? 'spots-full' : 'spots-free') + '">👥 ' + spotsText + '</span>' +
+              '<span class="meta-chip">📅 ' + escapeHtmlText(ev.date) + '</span>' +
+              '<span class="meta-chip">⏰ ' + escapeHtmlText(ev.time) + ' hs</span>' +
+              (ev.price ? ('<span class="meta-chip">💳 ' + escapeHtmlText(ev.price) + '</span>') : '') +
+              '<span class="meta-chip ' + (isSoldOut ? 'spots-full' : 'spots-free') + '">👥 ' + escapeHtmlText(spotsText) + '</span>' +
             '</div>' +
           '</div>' +
-          '<button type="button" class="res-event-pick-btn" data-event-id="' + ev.id + '" ' + (isSoldOut ? 'disabled' : '') + '>' +
-            (isSoldOut ? 'Agotado' : 'Elegir este Evento →') +
-          '</button>' +
+          '<div class="res-event-pick-wrap">' +
+            '<button type="button" class="res-event-pick-btn" data-event-id="' + escapeHtmlText(ev.id) + '" ' + (isSoldOut ? 'disabled' : '') + '>' +
+              (isSoldOut ? 'Agotado' : 'Elegir este Evento →') +
+            '</button>' +
+          '</div>' +
         '</div>';
       });
 
@@ -4432,6 +4470,23 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
       if (eventForm) eventForm.style.display = 'block';
 
       if (eventSelectedIdInput) eventSelectedIdInput.value = evObj.id;
+      var cardEl = root.querySelector('#resSelectedEventCard');
+      var coverImg = root.querySelector('#resSelectedEventCover');
+      var coverUrl = resolveEventCoverUrl(evObj);
+      if (!coverImg && cardEl) {
+        var coverWrap = document.createElement('div');
+        coverWrap.className = 'res-selected-event-cover';
+        coverWrap.id = 'resSelectedEventCoverWrap';
+        coverImg = document.createElement('img');
+        coverImg.id = 'resSelectedEventCover';
+        coverImg.loading = 'lazy';
+        coverWrap.appendChild(coverImg);
+        cardEl.insertBefore(coverWrap, cardEl.firstChild);
+      }
+      if (coverImg) {
+        coverImg.src = coverUrl;
+        coverImg.alt = evObj.title || 'Portada del evento';
+      }
       var titleEl = root.querySelector('#resSelectedEventTitle');
       var descEl = root.querySelector('#resSelectedEventDesc');
       var dateEl = root.querySelector('#resSelectedEventDate');
@@ -4472,7 +4527,9 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         pill.classList.toggle('active', pill.getAttribute('data-spots') === String(defaultSpots));
       });
 
-      eventForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (typeof eventForm.scrollIntoView === 'function') {
+        eventForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
 
     function fetchMonthAvailability(year, month) {
@@ -4840,364 +4897,474 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
   {
     moduleKey: "reservations-events",
     name: "Eventos Especiales & Degustaciones",
-    description: "Módulo interactivo exclusivo para promocionar y reservar eventos especiales, catas y cenas temáticas con visualización de cupos en tiempo real.",
+    description: "Módulo paso a paso estilo Reservas con portada superior y ficha lateral para reservar cupos en eventos específicos o elegir entre eventos activos.",
     category: "contacto",
     fields: [
       { key: "kicker", label: "Subtítulo superior", type: "text", defaultValue: "Experiencias Únicas" },
-      { key: "title", label: "Título de sección", type: "text", defaultValue: "Noches Especiales & Eventos" },
+      { key: "title", label: "Título de portada", type: "text", defaultValue: "Noches Especiales & Eventos" },
+      { key: "subtitle", label: "Bajada de título", type: "text", defaultValue: "reservá tu lugar en un minuto" },
       { key: "description", label: "Descripción", type: "textarea", defaultValue: "Descubrí nuestras degustaciones, noches temáticas y cenas de autor con cupos limitados." },
-      { key: "emptyMessage", label: "Mensaje si no hay eventos", type: "textarea", defaultValue: "No hay eventos especiales programados en este momento. ¡Volvé a consultar pronto!" },
-      { key: "btnBookLabel", label: "Texto botón reservar", type: "text", defaultValue: "Reservar mi Lugar" },
+      { key: "coverImage", label: "Imagen de portada", type: "image", defaultValue: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=85" },
+      { key: "coverCaption", label: "Texto sobre la portada", type: "text", defaultValue: "Cupo limitado · Experiencias gastronómicas con reserva previa." },
+      { key: "targetEventId", label: "ID o título de evento específico (opcional)", type: "text", defaultValue: "" },
+      { key: "venueName", label: "Nombre del local", type: "text", defaultValue: "{{restaurantName}}" },
+      { key: "venueAddress", label: "Subtítulo / Ubicación", type: "text", defaultValue: "Experiencias Exclusivas" },
+      { key: "step1Title", label: "Título Paso 1 (Eventos)", type: "text", defaultValue: "¿Qué evento querés vivir?" },
       { key: "partyLabel", label: "Etiqueta: Lugares a reservar", type: "text", defaultValue: "¿Cuántos lugares deseás reservar?" },
+      { key: "nameLabel", label: "Etiqueta: Nombre", type: "text", defaultValue: "Nombre y Apellido" },
+      { key: "phoneLabel", label: "Etiqueta: WhatsApp", type: "text", defaultValue: "WhatsApp / Teléfono" },
+      { key: "emailLabel", label: "Etiqueta: Email", type: "text", defaultValue: "Email (opcional)" },
+      { key: "notesLabel", label: "Etiqueta: Comentarios", type: "text", defaultValue: "Preferencias o Aclaraciones" },
+      { key: "notesPlaceholder", label: "Placeholder notas", type: "text", defaultValue: "Restricciones alimentarias, celiaquía, festejo..." },
+      { key: "btnBookLabel", label: "Texto botón confirmar", type: "text", defaultValue: "Confirmar lugar" },
+      { key: "policyNotice", label: "Texto aviso / política", type: "text", defaultValue: "Presentate 15 minutos antes del inicio con tu código de comprobante." },
+      { key: "depositNotice", label: "Texto garantía lateral", type: "text", defaultValue: "Tu lugar en el evento queda confirmado al instante." },
+      { key: "emptyMessage", label: "Mensaje si no hay eventos", type: "textarea", defaultValue: "No hay eventos especiales programados en este momento. ¡Volvé a consultar pronto!" },
       { key: "restaurantPhone", label: "WhatsApp para comprobante", type: "text", defaultValue: "+5491100000000" },
       { key: "successTitle", label: "Título al confirmar", type: "text", defaultValue: "¡Lugar Reservado para el Evento!" },
       { key: "successMessage", label: "Mensaje de éxito", type: "textarea", defaultValue: "Tu lugar para el evento ha sido confirmado. Guardá este comprobante para ingresar." },
     ],
-    htmlTemplate: `<!-- Eventos Especiales & Degustaciones -->
-<section class="section events-section" id="eventos" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}">
-  <div class="container events-container">
-    <div class="section-header text-center">
-      <span class="section-kicker">{{kicker}}</span>
-      <h2 class="section-title">{{title}}</h2>
-      <p class="section-description">{{description}}</p>
-    </div>
+    htmlTemplate: `<!-- Eventos Especiales & Degustaciones (.pap + Portada) -->
+<section class="section events-section res-events-section pap-section" id="eventos" data-restaurant-slug="{{restaurantSlug}}" data-restaurant-name="{{restaurantName}}" data-restaurant-phone="{{restaurantPhone}}" data-target-event="{{targetEventId}}" data-venue-name="{{venueName}}" data-venue-address="{{venueAddress}}">
+  <div class="container events-container pap-wrapper">
+    <!-- Portada del Evento / Sección -->
+    <header class="events-cover-header" id="evtCoverHeader">
+      <p class="tapa__eyebrow section-kicker" id="evtCoverKicker">{{kicker}}</p>
+      <h2 class="tapa__titulo section-title">
+        <span id="evtCoverMainTitle" data-default-title="{{title}}">{{title}}</span>
+        <span class="tapa__sub" id="evtCoverSubtitle" data-default-subtitle="{{subtitle}}">{{subtitle}}</span>
+      </h2>
+      <p class="events-cover-desc section-description" id="evtCoverDesc" data-default-desc="{{description}}">{{description}}</p>
+      <div class="evt-cover-meta" id="evtCoverMeta" style="display: none;"></div>
+    </header>
 
-    <!-- Grilla de Eventos -->
-    <div class="events-grid" id="eventsListGrid">
-      <div class="event-card">
-        <div class="event-card-media">
-          <div class="event-icon-placeholder">🍷</div>
-          <span class="event-badge-price">Degustación Premium</span>
+    <figure class="banda events-cover-banda" id="evtCoverFigure">
+      <img id="evtCoverImg" src="{{coverImage}}" data-default-cover="{{coverImage}}" alt="{{title}}" loading="lazy" />
+      <figcaption id="evtCoverCaption" data-default-caption="{{coverCaption}}">{{coverCaption}}</figcaption>
+    </figure>
+
+    <!-- Wizard Paso a Paso (.pap) idéntico a Reservas de Mesa -->
+    <div class="pap evt-pap" id="evtPapWidget" aria-label="Reservar lugar en evento">
+      <header class="pap__barra">
+        <button type="button" class="pap__atras" id="evtBackBtn" disabled aria-label="Volver al paso anterior">‹</button>
+        <div class="pap__centro">
+          <p class="pap__titulo" id="evtStepTitle">{{step1Title}}</p>
+          <p class="pap__cuenta" id="evtStepCounter">Paso 1 de 3</p>
         </div>
-        <div class="event-card-content">
-          <div class="event-meta-row">
-            <span class="event-meta-pill">📅 Próximamente</span>
-            <span class="event-meta-pill">⏰ 21:00 hs</span>
-          </div>
-          <h3 class="event-card-title">Cena & Maridaje de Estación</h3>
-          <p class="event-card-desc">Recorrido por nuestros platos más aclamados acompañados por etiquetas seleccionadas.</p>
-          <div class="event-card-footer">
-            <span class="event-spots-badge">👥 Cupos limitados</span>
-            <button type="button" class="btn btn-primary event-book-btn">Reservar mi Lugar</button>
-          </div>
-        </div>
+        <span class="pap__hueco" aria-hidden="true"></span>
+      </header>
+
+      <div class="pap__avance" aria-hidden="true">
+        <i id="evtProgressBar" style="width: 33%"></i>
       </div>
-    </div>
 
-    <!-- Estado vacío -->
-    <div class="events-empty-state" id="eventsEmptyState" style="display: none;">
-      <span class="events-empty-icon">🎪</span>
-      <p>{{emptyMessage}}</p>
-    </div>
+      <div class="pap__migas" id="evtBreadcrumbs" style="display: none;"></div>
 
-    <!-- Modal para Reservar Lugar en el Evento -->
-    <div class="event-modal-backdrop" id="eventModalBackdrop" style="display: none;">
-      <div class="event-modal-dialog">
-        <button type="button" class="event-modal-close" id="eventModalClose" aria-label="Cerrar modal">✕</button>
+      <div class="pap__cuerpo">
+        <!-- Columna Principal: Pasos del Wizard -->
+        <div class="pap__paso">
+          <form class="res-form event-booking-form" id="eventBookingForm" autocomplete="off">
+            <input type="hidden" id="eventModalEventId" name="eventId" value="" />
+            <input type="hidden" id="eventModalSpots" name="partySize" value="2" />
 
-        <div class="event-modal-header">
-          <span class="event-modal-kicker">Reserva de Evento</span>
-          <h3 class="event-modal-title" id="eventModalTitle">Título del Evento</h3>
-          <p class="event-modal-subtitle" id="eventModalSubtitle">📅 Fecha • ⏰ Horario</p>
+            <!-- PASO 1: Elegir Evento -->
+            <div class="pap__paso-view" id="evtStep1View" data-step="1">
+              <div class="pap__sectores events-grid" id="eventsListGrid">
+                <button type="button" class="pap__sector evt-option-card" data-event-preview="true">
+                  <div class="evt-option-row">
+                    <img class="evt-option-thumb" src="{{coverImage}}" alt="{{title}}" loading="lazy" />
+                    <div class="evt-option-body">
+                      <b>Cena &amp; Maridaje de Estación</b>
+                      <small>Recorrido de pasos de autor con etiquetas seleccionadas y música en vivo.</small>
+                      <div class="event-meta-row">
+                        <span class="event-meta-pill">📅 Próximamente</span>
+                        <span class="event-meta-pill">⏰ 21:00 hs</span>
+                        <span class="event-spots-badge">👥 Cupos limitados</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div class="events-empty-state" id="eventsEmptyState" style="display: none;">
+                <span class="events-empty-icon">🎪</span>
+                <p>{{emptyMessage}}</p>
+              </div>
+            </div>
+
+            <!-- PASO 2: Cantidad de Lugares / Entradas -->
+            <div class="pap__paso-view" id="evtStep2View" data-step="2" style="display: none;">
+              <div class="evt-selected-brief" id="evtSelectedBrief">
+                <div class="evt-selected-brief-copy">
+                  <strong id="evtBriefTitle">{{title}}</strong>
+                  <span id="evtBriefMeta">📅 Próximamente · ⏰ 21:00 hs</span>
+                </div>
+                <button type="button" class="pap__miga--boton" id="evtSwitchEventBtn" style="display: none;">Cambiar evento</button>
+              </div>
+
+              <p class="pap__rotulo" id="evtPartyHeading">{{partyLabel}}</p>
+              <div class="pap__gente">
+                <div class="pap__contador">
+                  <button type="button" class="pap__mas" id="evtSpotsMinusBtn" aria-label="Uno menos">−</button>
+                  <b class="pap__numero" id="evtSpotsDisplay">2</b>
+                  <button type="button" class="pap__mas" id="evtSpotsPlusBtn" aria-label="Uno más">+</button>
+                </div>
+                <p class="pap__ayuda pap__ayuda--centro" id="evtSpotsHelp">Elegí la cantidad de entradas o lugares para este evento.</p>
+              </div>
+            </div>
+
+            <!-- PASO 3: Datos del Titular -->
+            <div class="pap__paso-view" id="evtStep3View" data-step="3" style="display: none;">
+              <div class="pap__form">
+                <label class="pap__marco">
+                  <span>{{nameLabel}} *</span>
+                  <input type="text" id="eventCustomerName" class="pap__campo res-input" placeholder="Ej: Valentina Morales" required />
+                </label>
+                <label class="pap__marco">
+                  <span>{{phoneLabel}} *</span>
+                  <input type="tel" id="eventCustomerPhone" class="pap__campo res-input" placeholder="Ej: +54 9 11 9876-5432" required />
+                </label>
+                <label class="pap__marco">
+                  <span>{{emailLabel}}</span>
+                  <input type="email" id="eventCustomerEmail" class="pap__campo res-input" placeholder="valentina@ejemplo.com" />
+                </label>
+                <label class="pap__marco">
+                  <span>{{notesLabel}}</span>
+                  <textarea id="eventNotes" class="pap__campo res-input res-textarea" rows="2" placeholder="{{notesPlaceholder}}"></textarea>
+                </label>
+                <p class="pap__nota" id="evtPolicyNotice">ℹ️ {{policyNotice}}</p>
+              </div>
+            </div>
+
+            <div class="res-error-box" id="eventErrorBox" style="display: none;"></div>
+
+            <div class="pap__pie es-pegado" id="evtFooterActions">
+              <button type="button" class="pap__seguir" id="evtNextBtn">
+                <span id="evtNextBtnLabel">Continuar</span>
+              </button>
+              <button type="submit" class="pap__seguir pap__seguir--confirmar res-submit-btn" id="eventSubmitBtn" style="display: none;">
+                <span class="pap__seguir-cuerpo">
+                  <svg class="pap__campana" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path class="pap__campana-vapor" d="M13.4 20.6c-.9-1.1.9-2 0-3.1M18.6 20.6c-.9-1.1.9-2 0-3.1"></path>
+                    <path d="M3.5 25.5h25"></path>
+                    <g class="pap__campana-tapa">
+                      <path d="M6.5 22.5a9.5 9.5 0 0 1 19 0z"></path>
+                      <path d="M16 13v-1.5"></path>
+                      <circle cx="16" cy="10.3" r="1.2"></circle>
+                    </g>
+                  </svg>
+                  <span class="event-btn-text">{{btnBookLabel}}</span>
+                </span>
+                <span class="event-btn-spinner" style="display: none;">⏳ Reservando tus cupos...</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- Comprobante Inline de Éxito -->
+          <div class="event-success-view res-success-view pap__voucher-card" id="eventSuccessView" style="display: none;">
+            <div class="res-success-header">
+              <div class="res-success-icon-badge">✓</div>
+              <h3 class="res-success-title">{{successTitle}}</h3>
+              <p class="res-success-desc">{{successMessage}}</p>
+            </div>
+
+            <div class="res-voucher-card">
+              <div class="res-voucher-kicker">Comprobante de Entrada al Evento</div>
+              <div class="res-voucher-code" id="eventVoucherCode">#EVT-0000</div>
+              <div class="res-voucher-details">
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Evento</span>
+                  <strong class="voucher-value" id="eventVoucherTitle">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Fecha y Hora</span>
+                  <strong class="voucher-value" id="eventVoucherDate">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Lugares Reservados</span>
+                  <strong class="voucher-value" id="eventVoucherGuests">-</strong>
+                </div>
+                <div class="res-voucher-item">
+                  <span class="voucher-label">Titular</span>
+                  <strong class="voucher-value" id="eventVoucherName">-</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="res-success-actions">
+              <a href="#" target="_blank" rel="noreferrer" class="btn btn-whatsapp res-voucher-wa-btn" id="eventVoucherWaBtn">
+                <span>Compartir por WhatsApp</span>
+              </a>
+              <button type="button" class="btn btn-outline res-new-booking-btn" id="eventNewBookingBtn">
+                Reservar otro evento
+              </button>
+            </div>
+          </div>
         </div>
 
-        <form class="event-booking-form" id="eventBookingForm" autocomplete="off">
-          <input type="hidden" id="eventModalEventId" name="eventId" value="" />
-          <input type="hidden" id="eventModalSpots" name="partySize" value="2" />
-
-          <!-- Paso 1: Lugares a reservar -->
-          <div class="res-form-step">
-            <label class="res-step-label">
-              <span class="res-step-num">1</span>
-              <span>{{partyLabel}}</span>
-            </label>
-            <div class="res-party-selector" id="eventSpotsPills">
-              <button type="button" class="res-party-pill" data-spots="1">1</button>
-              <button type="button" class="res-party-pill active" data-spots="2">2</button>
-              <button type="button" class="res-party-pill" data-spots="3">3</button>
-              <button type="button" class="res-party-pill" data-spots="4">4</button>
-              <button type="button" class="res-party-pill" data-spots="5">5</button>
-              <button type="button" class="res-party-pill" data-spots="6">6</button>
+        <!-- Lateral / Resumen del Ticket en Vivo -->
+        <aside class="pap__lateral" id="evtLateralSummary" aria-label="Resumen de tu evento">
+          <div class="pap__ficha">
+            <img class="pap__fichaFoto" id="evtSideImage" src="{{coverImage}}" alt="{{title}}" width="204" height="116" loading="lazy" />
+            <div class="pap__fichaTexto">
+              <b id="evtSideTitle">{{title}}</b>
+              <small id="evtSideMeta">{{venueName}} · {{venueAddress}}</small>
+              <small class="evt-side-price" id="evtSidePrice" style="display: none;"></small>
             </div>
           </div>
-
-          <!-- Paso 2: Datos de Contacto -->
-          <div class="res-form-step">
-            <label class="res-step-label">
-              <span class="res-step-num">2</span>
-              <span>Datos del Titular</span>
-            </label>
-            <div class="res-grid-fields">
-              <div class="res-field-group">
-                <label for="eventCustomerName">Nombre y Apellido *</label>
-                <input type="text" id="eventCustomerName" class="res-input" placeholder="Ej: Santiago Ramos" required />
-              </div>
-              <div class="res-field-group">
-                <label for="eventCustomerPhone">WhatsApp / Teléfono *</label>
-                <input type="tel" id="eventCustomerPhone" class="res-input" placeholder="Ej: +54 9 11 9876-5432" required />
-              </div>
+          <dl class="pap__resumen">
+            <div>
+              <dt id="evtLblEvento">Evento</dt>
+              <dd id="evtResumenTitulo">—</dd>
             </div>
-            <div class="res-field-group mt-3">
-              <label for="eventCustomerEmail">Email (opcional)</label>
-              <input type="email" id="eventCustomerEmail" class="res-input" placeholder="santiago@ejemplo.com" />
+            <div>
+              <dt id="evtLblFecha">Fecha</dt>
+              <dd id="evtResumenFecha">—</dd>
             </div>
-            <div class="res-field-group mt-3">
-              <label for="eventNotes">Preferencias o Aclaraciones</label>
-              <textarea id="eventNotes" class="res-input res-textarea" rows="2" placeholder="Restricciones alimentarias, celiaquía, etc."></textarea>
+            <div>
+              <dt id="evtLblHora">Horario</dt>
+              <dd id="evtResumenHora">—</dd>
             </div>
-          </div>
-
-          <div class="res-error-box" id="eventErrorBox" style="display: none;"></div>
-
-          <div class="res-form-actions">
-            <button type="submit" class="btn btn-primary res-submit-btn" id="eventSubmitBtn">
-              <span class="event-btn-text">{{btnBookLabel}}</span>
-              <span class="event-btn-spinner" style="display: none;">⏳ Reservando tus cupos...</span>
-            </button>
-          </div>
-        </form>
-
-        <!-- Comprobante de éxito -->
-        <div class="event-success-view" id="eventSuccessView" style="display: none;">
-          <div class="res-success-header">
-            <div class="res-success-icon-badge">✓</div>
-            <h3 class="res-success-title">{{successTitle}}</h3>
-            <p class="res-success-desc">{{successMessage}}</p>
-          </div>
-
-          <div class="res-voucher-card">
-            <div class="res-voucher-kicker">Comprobante de Entrada al Evento</div>
-            <div class="res-voucher-code" id="eventVoucherCode">#EVT-0000</div>
-            <div class="res-voucher-details">
-              <div class="res-voucher-item">
-                <span class="voucher-label">Evento</span>
-                <strong class="voucher-value" id="eventVoucherTitle">-</strong>
-              </div>
-              <div class="res-voucher-item">
-                <span class="voucher-label">Fecha y Hora</span>
-                <strong class="voucher-value" id="eventVoucherDate">-</strong>
-              </div>
-              <div class="res-voucher-item">
-                <span class="voucher-label">Lugares Reservados</span>
-                <strong class="voucher-value" id="eventVoucherGuests">-</strong>
-              </div>
-              <div class="res-voucher-item">
-                <span class="voucher-label">Titular</span>
-                <strong class="voucher-value" id="eventVoucherName">-</strong>
-              </div>
+            <div>
+              <dt id="evtLblCupos">Lugares</dt>
+              <dd id="evtResumenCupos">2 personas</dd>
             </div>
+            <div>
+              <dt id="evtLblDisp">Disponibilidad</dt>
+              <dd id="evtResumenRestantes">—</dd>
+            </div>
+          </dl>
+          <div class="pap__lateralPie">
+            <p class="pap__lateralTitulo" id="evtDepositNotice">{{depositNotice}}</p>
           </div>
-
-          <div class="res-success-actions">
-            <a href="#" target="_blank" rel="noreferrer" class="btn btn-whatsapp res-voucher-wa-btn" id="eventVoucherWaBtn">
-              <span>Compartir por WhatsApp</span>
-            </a>
-            <button type="button" class="btn btn-outline" id="eventCloseSuccessBtn">
-              Cerrar
-            </button>
-          </div>
-        </div>
+        </aside>
       </div>
     </div>
   </div>
 </section>`,
-    cssTemplate: `.events-container {
-  max-width: 1080px;
+    cssTemplate: `.events-section {
+  --acento: var(--color-primary, #10b981);
+  --violeta: var(--color-primary, #10b981);
+  --violeta-claro: var(--color-primary-light, #34d399);
+  --fondo-0: var(--color-bg, #ffffff);
+  --fondo-1: var(--color-card-bg, #ffffff);
+  --fondo-2: var(--color-bg, #f4f4f5);
+  --linea: var(--color-border, #e5e7eb);
+  --linea-viva: var(--color-border, #d4d4d8);
+  --texto: var(--color-text-main, #111827);
+  --texto-2: var(--color-text-muted, #52525b);
+  --texto-3: var(--color-text-muted, #71717a);
+  --r-factor: 1;
+  color: var(--texto);
+}
+.events-container {
+  max-width: 960px;
   margin: 0 auto;
 }
-.events-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 24px;
-  margin-top: 36px;
-}
-@media (max-width: 640px) {
-  .events-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-    margin-top: 24px;
-  }
-  .event-card-content {
-    padding: 18px 16px;
-  }
-  .event-modal-dialog {
-    padding: 20px 16px;
-    width: 95%;
-  }
-}
-.event-card {
-  display: flex;
-  flex-direction: column;
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 16px);
-  overflow: hidden;
-  box-shadow: var(--shadow-soft);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.event-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-}
-.event-card-media {
-  position: relative;
-  height: 160px;
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.12) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.event-card-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.event-icon-placeholder {
-  font-size: 3.2rem;
-}
-.event-badge-price {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: var(--color-primary);
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 5px 12px;
-  border-radius: 9999px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-.event-card-content {
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-.event-meta-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-.event-meta-pill {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: rgba(0, 0, 0, 0.04);
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-.event-card-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin: 0 0 8px 0;
-  color: var(--color-text-main);
-}
-.event-card-desc {
-  font-size: 0.92rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
+.events-cover-header {
   margin-bottom: 18px;
-  flex: 1;
 }
-.event-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 14px;
-  border-top: 1px solid var(--color-border);
-}
-.event-spots-badge {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #059669;
-}
-.event-spots-badge.sold-out {
-  color: #dc2626;
-}
-.event-book-btn {
-  padding: 8px 16px;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-.events-empty-state {
-  text-align: center;
-  padding: 64px 20px;
-  color: var(--color-text-muted);
-}
-.events-empty-icon {
-  font-size: 3rem;
-  display: block;
-  margin-bottom: 12px;
-}
-.event-modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 99999;
-  padding: 16px;
-}
-.event-modal-dialog {
-  background: var(--color-card-bg, #ffffff);
-  border-radius: var(--radius-lg, 16px);
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 28px 24px;
-  position: relative;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-}
-.event-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  border: none;
-  background: rgba(0, 0, 0, 0.06);
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-main);
-}
-.event-modal-kicker {
-  font-size: 0.75rem;
+.events-cover-header .tapa__eyebrow {
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  font-weight: 800;
-  color: var(--color-primary);
-  letter-spacing: 0.05em;
+  color: var(--violeta-claro);
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: block;
 }
-.event-modal-title {
-  font-size: 1.4rem;
-  font-weight: 800;
-  margin: 4px 0 6px 0;
-  color: var(--color-text-main);
+.events-cover-header .tapa__titulo {
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+  font-size: clamp(1.7rem, 3.6vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.08;
+  color: var(--texto);
 }
-.event-modal-subtitle {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-  margin-bottom: 20px;
+.events-cover-header .tapa__titulo .tapa__sub {
+  display: block;
+  color: var(--texto-2);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+.events-cover-desc {
+  color: var(--texto-2);
+  font-size: 0.94rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 68ch;
+}
+.evt-cover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.events-cover-banda {
+  position: relative;
+  margin: 0 0 22px;
+  border-radius: var(--radius-lg, 18px);
+  border: 1px solid var(--linea);
+  overflow: hidden;
+  background: var(--fondo-2);
+}
+.events-cover-banda img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  filter: saturate(0.86) brightness(0.76);
+}
+.events-cover-banda::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 62%;
+  background: linear-gradient(transparent, rgba(10, 10, 14, 0.85));
+}
+.events-cover-banda figcaption {
+  position: absolute;
+  z-index: 1;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.events-section .pap {
+  background: var(--fondo-1);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius-lg, 22px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+}
+.events-section .pap__barra {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--linea);
+}
+.events-section .pap__atras {
+  border: 1px solid var(--linea);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  color: var(--texto-2);
+  cursor: pointer;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+.events-section .pap__atras:disabled { opacity: 0.25; cursor: not-allowed; pointer-events: none; }
+.events-section .pap__centro { text-align: center; }
+.events-section .pap__titulo { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--texto); letter-spacing: -0.02em; }
+.events-section .pap__cuenta { margin: 3px 0 0; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--texto-3); }
+.events-section .pap__hueco { width: 38px; height: 38px; }
+.events-section .pap__avance { background: var(--linea); height: 3px; width: 100%; overflow: hidden; }
+.events-section .pap__avance i { background: var(--violeta); height: 100%; display: block; transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1); }
+.events-section .pap__migas { display: flex; align-items: center; gap: 8px; padding: 14px 26px 0; flex-wrap: wrap; }
+.events-section .pap__miga { background: var(--fondo-2); border: 1px solid var(--linea); border-radius: 9999px; padding: 5px 12px; font-size: 0.78rem; font-weight: 600; color: var(--texto-2); cursor: pointer; }
+.events-section .pap__cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 236px; align-items: start; gap: 26px; padding: 24px 26px 26px; }
+.events-section .pap__paso { display: flex; flex-direction: column; min-width: 0; }
+.events-section .pap__paso-view { display: flex; flex-direction: column; flex: 1; }
+.events-section .pap__lateral { display: grid; background: var(--fondo-2); border: 1px solid var(--linea); border-radius: 18px; padding: 16px; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 14px; width: 236px; box-sizing: border-box; }
+.events-section .pap__lateral .pap__ficha { background: transparent; border: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0; }
+.events-section .pap__lateral .pap__fichaFoto { border-radius: 14px; width: 100%; height: 116px; object-fit: cover; display: block; }
+.events-section .pap__lateral .pap__fichaTexto { display: grid; gap: 2px; }
+.events-section .pap__lateral .pap__fichaTexto b { color: var(--texto); font-size: 1rem; font-weight: 700; }
+.events-section .pap__lateral .pap__fichaTexto small { color: var(--texto-2); font-size: 0.78rem; line-height: 1.4; }
+.events-section .evt-side-price { color: var(--violeta-claro) !important; font-weight: 700; }
+.events-section .pap__lateral .pap__resumen { border-top: 1px solid var(--linea); margin: 0; display: grid; }
+.events-section .pap__lateral .pap__resumen > div { border-bottom: 1px solid var(--linea); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 0; }
+.events-section .pap__lateral .pap__resumen dt { letter-spacing: 0.14em; text-transform: uppercase; color: var(--violeta-claro); font-size: 0.625rem; font-weight: 700; flex-shrink: 0; }
+.events-section .pap__lateral .pap__resumen dd { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--texto); text-align: right; overflow-wrap: anywhere; }
+.events-section .pap__lateralPie { text-align: center; padding-top: 2px; }
+.events-section .pap__lateralTitulo { margin: 0; font-size: 0.72rem; color: var(--texto-3); line-height: 1.45; }
+.events-section .pap__sectores { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 0; }
+.events-section .evt-option-card { width: 100%; border: 1px solid var(--linea); border-radius: 14px; background: var(--fondo-2); text-align: left; cursor: pointer; padding: 12px 14px; transition: all 0.16s ease; }
+.events-section .evt-option-card:hover:not(:disabled) { border-color: var(--violeta); }
+.events-section .evt-option-card.es-elegido { border-color: var(--violeta); box-shadow: inset 0 0 0 1px var(--violeta); }
+.events-section .evt-option-card:disabled { opacity: 0.65; cursor: not-allowed; }
+.events-section .evt-option-row { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 14px; align-items: center; }
+.events-section .evt-option-thumb { width: 78px; height: 78px; border-radius: 10px; object-fit: cover; display: block; border: 1px solid var(--linea); }
+.events-section .evt-option-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.events-section .evt-option-body b { font-size: 1rem; font-weight: 700; color: var(--texto); line-height: 1.25; }
+.events-section .evt-option-body small { font-size: 0.82rem; color: var(--texto-2); line-height: 1.4; }
+.events-section .event-meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.events-section .event-meta-pill { font-size: 0.74rem; font-weight: 600; color: var(--texto-2); background: var(--fondo-1); border: 1px solid var(--linea); padding: 2px 8px; border-radius: 9999px; }
+.events-section .event-spots-badge { font-size: 0.76rem; font-weight: 700; color: #10b981; padding: 2px 4px; }
+.events-section .event-spots-badge.sold-out { color: #ef4444; }
+.events-section .evt-selected-brief { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--linea); background: var(--fondo-2); margin-bottom: 20px; }
+.events-section .evt-selected-brief-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.events-section .evt-selected-brief-copy strong { font-size: 0.96rem; color: var(--texto); }
+.events-section .evt-selected-brief-copy span { font-size: 0.8rem; color: var(--texto-2); }
+.events-section .pap__miga--boton { border: 1px solid var(--linea-viva); border-radius: 8px; background: var(--fondo-1); color: var(--texto-2); font: inherit; font-size: 0.72rem; font-weight: 700; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
+.events-section .pap__rotulo { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texto-3); margin: 0 0 10px; text-align: center; }
+.events-section .pap__gente { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 0 6px; }
+.events-section .pap__contador { display: inline-flex; align-items: center; background: var(--fondo-2); border: 1px solid var(--linea); border-radius: 18px; padding: 6px 10px; gap: 22px; }
+.events-section .pap__mas { border: 1px solid var(--linea-viva); border-radius: 50%; background: var(--fondo-1); color: var(--texto); width: 46px; height: 46px; cursor: pointer; font-size: 1.45rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.events-section .pap__mas:disabled { opacity: 0.3; cursor: not-allowed; }
+.events-section .pap__numero { font-size: 2.8rem; font-weight: 800; color: var(--texto); min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.events-section .pap__ayuda { font-size: 0.8rem; color: var(--texto-3); text-align: center; margin: 14px 0 0; line-height: 1.45; }
+.events-section .pap__form { display: grid; gap: 14px; }
+.events-section .pap__marco { display: flex; flex-direction: column; gap: 6px; }
+.events-section .pap__marco > span { color: var(--texto-2); font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.events-section .pap__campo,
+.events-section .res-input { box-sizing: border-box; border: 1px solid var(--linea); border-radius: 12px; background: var(--fondo-2); width: 100%; color: var(--texto); padding: 12px 15px; font-family: inherit; font-size: 0.96rem; }
+.events-section .pap__campo:focus,
+.events-section .res-input:focus { outline: none; border-color: var(--violeta); }
+.events-section .res-textarea { resize: vertical; }
+.events-section .pap__nota { color: var(--texto-3); font-size: 0.8rem; line-height: 1.5; margin: 4px 0 0; }
+.events-section .res-error-box { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 11px 14px; border-radius: 12px; font-size: 0.88rem; font-weight: 600; margin-top: 14px; }
+.events-section .pap__pie { margin-top: 22px; padding-top: 14px; }
+.events-section .pap__seguir,
+.events-section .res-submit-btn { border-radius: 14px; background: var(--violeta); color: #ffffff; cursor: pointer; border: 0; width: 100%; padding: 15px; font-family: inherit; font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.events-section .pap__seguir:disabled,
+.events-section .res-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.events-section .pap__seguir-cuerpo { display: inline-flex; align-items: center; gap: 10px; }
+.events-section .pap__campana { width: 20px; height: 20px; }
+.events-section .events-empty-state { text-align: center; padding: 36px 18px; color: var(--texto-2); border: 1px dashed var(--linea); border-radius: 14px; }
+.events-section .events-empty-icon { font-size: 2.4rem; display: block; margin-bottom: 10px; }
+.events-section .res-success-view { text-align: center; padding: 12px 0; }
+.events-section .res-success-icon-badge { width: 56px; height: 56px; background: #10b981; color: #ffffff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; margin: 0 auto 12px; }
+.events-section .res-success-title { font-size: 1.35rem; font-weight: 800; color: var(--texto); margin: 0 0 6px; }
+.events-section .res-success-desc { color: var(--texto-2); font-size: 0.9rem; margin: 0 0 20px; }
+.events-section .res-voucher-card { background: var(--fondo-2); border: 1px dashed var(--linea-viva); border-radius: 16px; padding: 18px; margin-bottom: 20px; text-align: left; }
+.events-section .res-voucher-kicker { font-size: 0.72rem; text-transform: uppercase; font-weight: 800; color: var(--violeta-claro); letter-spacing: 0.05em; }
+.events-section .res-voucher-code { font-size: 1.45rem; font-weight: 800; color: var(--texto); margin: 4px 0 14px; }
+.events-section .res-voucher-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.events-section .res-voucher-item { display: flex; flex-direction: column; }
+.events-section .voucher-label { font-size: 0.7rem; color: var(--texto-3); text-transform: uppercase; font-weight: 700; }
+.events-section .voucher-value { font-size: 0.92rem; color: var(--texto); }
+.events-section .res-success-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.events-section .btn-whatsapp { background-color: #25d366; color: #ffffff; padding: 11px 18px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.events-section .btn-outline { background: transparent; border: 1px solid var(--linea); color: var(--texto); padding: 11px 18px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+@media (max-width: 760px) {
+  .events-cover-banda img { height: 150px; }
+  .events-section .pap__cuerpo { display: block; padding: 16px 14px 20px; }
+  .events-section .pap__lateral { display: none; }
+  .events-section .evt-option-row { grid-template-columns: 60px minmax(0, 1fr); gap: 10px; }
+  .events-section .evt-option-thumb { width: 60px; height: 60px; }
+  .events-section .res-voucher-details { grid-template-columns: 1fr; }
+  .events-section .btn-whatsapp,
+  .events-section .res-new-booking-btn { width: 100%; }
 }`,
     jsTemplate: `(function() {
   function isEditorMode() {
     return !!document.getElementById('__landing-blocks-root') &&
       document.documentElement.getAttribute('data-preview-mode') !== 'true';
   }
-
-  function setupEventsWidget(root) {
-    if (root.__resEventsMounted) return;
-    root.__resEventsMounted = true;
 
   function resolveRestaurantSlug(root) {
     var slug = root ? (root.getAttribute('data-restaurant-slug') || '') : '';
@@ -5227,8 +5394,672 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
 
     return '';
   }
-    var slug = resolveRestaurantSlug(root);
 
+  function setupPapEventsWidget(root) {
+    var slug = resolveRestaurantSlug(root);
+    var grid = root.querySelector('#eventsListGrid');
+    var emptyState = root.querySelector('#eventsEmptyState');
+    var form = root.querySelector('#eventBookingForm');
+    var hiddenEventIdInput = root.querySelector('#eventModalEventId');
+    var hiddenSpotsInput = root.querySelector('#eventModalSpots');
+
+    var backBtn = root.querySelector('#evtBackBtn');
+    var stepTitleEl = root.querySelector('#evtStepTitle');
+    var stepCounterEl = root.querySelector('#evtStepCounter');
+    var progressBarEl = root.querySelector('#evtProgressBar');
+    var breadcrumbsEl = root.querySelector('#evtBreadcrumbs');
+    var footerActions = root.querySelector('#evtFooterActions');
+    var nextBtn = root.querySelector('#evtNextBtn');
+    var nextBtnLabel = root.querySelector('#evtNextBtnLabel');
+    var submitBtn = root.querySelector('#eventSubmitBtn');
+    var btnText = root.querySelector('.event-btn-text');
+    var btnSpinner = root.querySelector('.event-btn-spinner');
+    var errorBox = root.querySelector('#eventErrorBox');
+
+    var step1View = root.querySelector('#evtStep1View');
+    var step2View = root.querySelector('#evtStep2View');
+    var step3View = root.querySelector('#evtStep3View');
+
+    var coverImg = root.querySelector('#evtCoverImg');
+    var coverMainTitle = root.querySelector('#evtCoverMainTitle');
+    var coverSubtitle = root.querySelector('#evtCoverSubtitle');
+    var coverDesc = root.querySelector('#evtCoverDesc');
+    var coverCaption = root.querySelector('#evtCoverCaption');
+    var coverMeta = root.querySelector('#evtCoverMeta');
+
+    var briefTitle = root.querySelector('#evtBriefTitle');
+    var briefMeta = root.querySelector('#evtBriefMeta');
+    var switchEventBtn = root.querySelector('#evtSwitchEventBtn');
+    var spotsMinusBtn = root.querySelector('#evtSpotsMinusBtn');
+    var spotsPlusBtn = root.querySelector('#evtSpotsPlusBtn');
+    var spotsDisplay = root.querySelector('#evtSpotsDisplay');
+    var spotsHelp = root.querySelector('#evtSpotsHelp');
+
+    var sideImage = root.querySelector('#evtSideImage');
+    var sideTitle = root.querySelector('#evtSideTitle');
+    var sideMeta = root.querySelector('#evtSideMeta');
+    var sidePrice = root.querySelector('#evtSidePrice');
+    var resumenTitulo = root.querySelector('#evtResumenTitulo');
+    var resumenFecha = root.querySelector('#evtResumenFecha');
+    var resumenHora = root.querySelector('#evtResumenHora');
+    var resumenCupos = root.querySelector('#evtResumenCupos');
+    var resumenRestantes = root.querySelector('#evtResumenRestantes');
+
+    var customerNameInput = root.querySelector('#eventCustomerName');
+    var customerPhoneInput = root.querySelector('#eventCustomerPhone');
+    var customerEmailInput = root.querySelector('#eventCustomerEmail');
+    var notesInput = root.querySelector('#eventNotes');
+
+    var successView = root.querySelector('#eventSuccessView');
+    var voucherCode = root.querySelector('#eventVoucherCode');
+    var voucherTitle = root.querySelector('#eventVoucherTitle');
+    var voucherDate = root.querySelector('#eventVoucherDate');
+    var voucherGuests = root.querySelector('#eventVoucherGuests');
+    var voucherName = root.querySelector('#eventVoucherName');
+    var voucherWaBtn = root.querySelector('#eventVoucherWaBtn');
+    var newBookingBtn = root.querySelector('#eventNewBookingBtn');
+
+    var defaultCover = (coverImg && coverImg.getAttribute('data-default-cover')) || '';
+    var defaultTitle = (coverMainTitle && coverMainTitle.getAttribute('data-default-title')) || 'Eventos Especiales';
+    var defaultSubtitle = (coverSubtitle && coverSubtitle.getAttribute('data-default-subtitle')) || '';
+    var defaultDesc = (coverDesc && coverDesc.getAttribute('data-default-desc')) || '';
+    var defaultCaption = (coverCaption && coverCaption.getAttribute('data-default-caption')) || '';
+    var defaultVenueMeta = (sideMeta && sideMeta.textContent) || '';
+    var targetEventFilter = (root.getAttribute('data-target-event') || '').trim();
+    if (targetEventFilter.indexOf('{{') !== -1) targetEventFilter = '';
+
+    var i18nConfig = {
+      es: {
+        stepPick: '¿Qué evento querés vivir?',
+        stepSpots: '¿Cuántos lugares?',
+        stepDetails: 'Tus datos',
+        stepCounter: function(cur, total) { return 'Paso ' + cur + ' de ' + total; },
+        personSingular: ' lugar',
+        personPlural: ' lugares',
+        soldOut: 'Cupos agotados',
+        availableSuffix: ' disponibles',
+        continueLabel: 'Continuar',
+        switchLabel: 'Cambiar evento',
+        newBookingSingle: 'Reservar nuevamente',
+        newBookingMulti: 'Reservar otro evento',
+        voucherTitle: '¡Lugar Confirmado!',
+        voucherCounter: '¡Comprobante!',
+        lblEvento: 'Evento',
+        lblFecha: 'Fecha',
+        lblHora: 'Horario',
+        lblCupos: 'Lugares',
+        lblDisp: 'Disponibilidad',
+        errEvent: 'Por favor elegí un evento disponible.',
+        errName: 'Por favor ingresá tu nombre completo.',
+        errPhone: 'Por favor ingresá un teléfono o WhatsApp de contacto.',
+        errNet: 'Error de conexión al enviar la reserva.'
+      },
+      en: {
+        stepPick: 'Which event would you like?',
+        stepSpots: 'How many guests?',
+        stepDetails: 'Your details',
+        stepCounter: function(cur, total) { return 'Step ' + cur + ' of ' + total; },
+        personSingular: ' guest',
+        personPlural: ' guests',
+        soldOut: 'Sold out',
+        availableSuffix: ' spots left',
+        continueLabel: 'Continue',
+        switchLabel: 'Change event',
+        newBookingSingle: 'Book again',
+        newBookingMulti: 'Book another event',
+        voucherTitle: 'Spot Confirmed!',
+        voucherCounter: 'Confirmed Voucher!',
+        lblEvento: 'Event',
+        lblFecha: 'Date',
+        lblHora: 'Time',
+        lblCupos: 'Guests',
+        lblDisp: 'Availability',
+        errEvent: 'Please select an available event.',
+        errName: 'Please enter your full name.',
+        errPhone: 'Please enter a WhatsApp or phone number.',
+        errNet: 'Connection error while sending booking.'
+      },
+      pt: {
+        stepPick: 'Qual evento você quer viver?',
+        stepSpots: 'Quantos lugares?',
+        stepDetails: 'Seus dados',
+        stepCounter: function(cur, total) { return 'Passo ' + cur + ' de ' + total; },
+        personSingular: ' lugar',
+        personPlural: ' lugares',
+        soldOut: 'Esgotado',
+        availableSuffix: ' disponíveis',
+        continueLabel: 'Continuar',
+        switchLabel: 'Trocar evento',
+        newBookingSingle: 'Reservar novamente',
+        newBookingMulti: 'Reservar outro evento',
+        voucherTitle: 'Lugar Confirmado!',
+        voucherCounter: 'Comprovante!',
+        lblEvento: 'Evento',
+        lblFecha: 'Data',
+        lblHora: 'Horário',
+        lblCupos: 'Lugares',
+        lblDisp: 'Disponibilidade',
+        errEvent: 'Por favor escolha um evento disponível.',
+        errName: 'Por favor informe seu nome completo.',
+        errPhone: 'Por favor informe um telefone ou WhatsApp.',
+        errNet: 'Erro de conexão ao enviar a reserva.'
+      }
+    };
+
+    var currentLang = 'es';
+    try { currentLang = localStorage.getItem('mise_idioma') || 'es'; } catch (_) {}
+    if (!i18nConfig[currentLang]) currentLang = 'es';
+
+    var allEvents = [];
+    var selectedEvent = null;
+    var singleEventMode = false;
+    var selectedSpots = hiddenSpotsInput ? (parseInt(hiddenSpotsInput.value, 10) || 2) : 2;
+    var currentView = 1; // 1: pick event, 2: spots, 3: details
+
+    function loc() { return i18nConfig[currentLang] || i18nConfig.es; }
+
+    function resolveImageUrl(evt) {
+      if (evt && evt.imageUrl && String(evt.imageUrl).trim()) return String(evt.imageUrl).trim();
+      return defaultCover;
+    }
+
+    function applyCoverForEvent(evt) {
+      var l = loc();
+      var imgUrl = resolveImageUrl(evt);
+      if (coverImg && imgUrl) {
+        coverImg.src = imgUrl;
+        coverImg.alt = evt ? evt.title : defaultTitle;
+      }
+      if (sideImage && imgUrl) {
+        sideImage.src = imgUrl;
+        sideImage.alt = evt ? evt.title : defaultTitle;
+      }
+      if (evt && singleEventMode) {
+        if (coverMainTitle) coverMainTitle.textContent = evt.title || defaultTitle;
+        if (coverSubtitle) coverSubtitle.textContent = evt.date + ' · ' + evt.startTime + ' hs';
+        if (coverDesc) coverDesc.textContent = evt.description || defaultDesc;
+        if (coverCaption) coverCaption.textContent = evt.priceLabel ? (evt.title + ' · ' + evt.priceLabel) : (evt.title + ' · ' + evt.date + ' ' + evt.startTime + ' hs');
+      } else {
+        if (coverMainTitle) coverMainTitle.textContent = defaultTitle;
+        if (coverSubtitle) coverSubtitle.textContent = defaultSubtitle;
+        if (coverDesc) coverDesc.textContent = defaultDesc;
+        if (coverCaption) coverCaption.textContent = evt ? (evt.title + ' · ' + evt.date + ' ' + evt.startTime + ' hs') : defaultCaption;
+      }
+      if (coverMeta) {
+        coverMeta.replaceChildren();
+        if (evt) {
+          var isSoldOut = evt.available === false || evt.remainingSpots <= 0;
+          var chips = [
+            '📅 ' + evt.date,
+            '⏰ ' + evt.startTime + ' hs',
+            isSoldOut ? ('🚫 ' + l.soldOut) : ('👥 ' + evt.remainingSpots + l.availableSuffix)
+          ];
+          if (evt.priceLabel) chips.push('💳 ' + evt.priceLabel);
+          chips.forEach(function(text) {
+            var span = document.createElement('span');
+            span.className = 'event-meta-pill';
+            span.textContent = text;
+            coverMeta.appendChild(span);
+          });
+          coverMeta.style.display = 'flex';
+        } else {
+          coverMeta.style.display = 'none';
+        }
+      }
+    }
+
+    function updateLateralSummary() {
+      var l = loc();
+      if (sideTitle) sideTitle.textContent = selectedEvent ? selectedEvent.title : defaultTitle;
+      if (sideMeta) sideMeta.textContent = selectedEvent ? (selectedEvent.date + ' · ' + selectedEvent.startTime + ' hs') : defaultVenueMeta;
+      if (sidePrice) {
+        if (selectedEvent && selectedEvent.priceLabel) {
+          sidePrice.textContent = selectedEvent.priceLabel;
+          sidePrice.style.display = 'block';
+        } else {
+          sidePrice.style.display = 'none';
+        }
+      }
+      if (resumenTitulo) resumenTitulo.textContent = selectedEvent ? selectedEvent.title : '—';
+      if (resumenFecha) resumenFecha.textContent = selectedEvent ? selectedEvent.date : '—';
+      if (resumenHora) resumenHora.textContent = selectedEvent ? (selectedEvent.startTime + ' hs') : '—';
+      if (resumenCupos) resumenCupos.textContent = selectedSpots + (selectedSpots === 1 ? l.personSingular : l.personPlural);
+      if (resumenRestantes) {
+        if (!selectedEvent) {
+          resumenRestantes.textContent = '—';
+        } else {
+          resumenRestantes.textContent = (selectedEvent.available === false || selectedEvent.remainingSpots <= 0)
+            ? l.soldOut
+            : (selectedEvent.remainingSpots + l.availableSuffix);
+        }
+      }
+    }
+
+    function updateSpotsControls() {
+      var maxAllowed = selectedEvent ? Math.max(1, Math.min(selectedEvent.remainingSpots || 1, 20)) : 20;
+      if (selectedSpots > maxAllowed) selectedSpots = maxAllowed;
+      if (selectedSpots < 1) selectedSpots = 1;
+      if (hiddenSpotsInput) hiddenSpotsInput.value = String(selectedSpots);
+      if (spotsDisplay) spotsDisplay.textContent = String(selectedSpots);
+      if (spotsMinusBtn) spotsMinusBtn.disabled = (selectedSpots <= 1);
+      if (spotsPlusBtn) spotsPlusBtn.disabled = (selectedSpots >= maxAllowed);
+      if (spotsHelp && selectedEvent) {
+        spotsHelp.textContent = 'Quedan ' + selectedEvent.remainingSpots + ' lugares disponibles para este evento.';
+      }
+      updateLateralSummary();
+    }
+
+    function updateBreadcrumbs() {
+      if (!breadcrumbsEl) return;
+      breadcrumbsEl.replaceChildren();
+      var startView = singleEventMode ? 2 : 1;
+      if (currentView <= startView) {
+        breadcrumbsEl.style.display = 'none';
+        return;
+      }
+      breadcrumbsEl.style.display = 'flex';
+      if (selectedEvent && !singleEventMode) {
+        var bEvt = document.createElement('button');
+        bEvt.type = 'button';
+        bEvt.className = 'pap__miga';
+        bEvt.textContent = '🎟️ ' + selectedEvent.title;
+        bEvt.addEventListener('click', function() { goToView(1); });
+        breadcrumbsEl.appendChild(bEvt);
+      }
+      if (selectedEvent && currentView >= 3) {
+        var l = loc();
+        var bSpots = document.createElement('button');
+        bSpots.type = 'button';
+        bSpots.className = 'pap__miga';
+        bSpots.textContent = '👥 ' + selectedSpots + (selectedSpots === 1 ? l.personSingular : l.personPlural);
+        bSpots.addEventListener('click', function() { goToView(2); });
+        breadcrumbsEl.appendChild(bSpots);
+      }
+    }
+
+    function goToView(view) {
+      currentView = view;
+      if (step1View) step1View.style.display = view === 1 ? 'flex' : 'none';
+      if (step2View) step2View.style.display = view === 2 ? 'flex' : 'none';
+      if (step3View) step3View.style.display = view === 3 ? 'flex' : 'none';
+
+      var l = loc();
+      var totalSteps = singleEventMode ? 2 : 3;
+      var displayStep = singleEventMode ? (view === 1 ? 1 : view - 1) : view;
+
+      if (stepCounterEl) stepCounterEl.textContent = l.stepCounter(displayStep, totalSteps);
+      if (stepTitleEl) {
+        if (view === 1) stepTitleEl.textContent = l.stepPick;
+        else if (view === 2) stepTitleEl.textContent = (singleEventMode && selectedEvent) ? selectedEvent.title : l.stepSpots;
+        else stepTitleEl.textContent = l.stepDetails;
+      }
+
+      var pct = Math.round((displayStep / totalSteps) * 100);
+      if (progressBarEl) progressBarEl.style.width = pct + '%';
+
+      var minView = singleEventMode && selectedEvent && !(selectedEvent.available === false || selectedEvent.remainingSpots <= 0) ? 2 : 1;
+      if (backBtn) backBtn.disabled = (view <= minView);
+
+      if (nextBtn) {
+        nextBtn.style.display = view === 3 ? 'none' : 'flex';
+        if (view === 1) nextBtn.disabled = !selectedEvent || (selectedEvent.available === false || selectedEvent.remainingSpots <= 0);
+        else nextBtn.disabled = !selectedEvent;
+      }
+      if (nextBtnLabel) nextBtnLabel.textContent = l.continueLabel;
+      if (submitBtn) submitBtn.style.display = view === 3 ? 'flex' : 'none';
+      if (switchEventBtn) {
+        switchEventBtn.textContent = l.switchLabel;
+        switchEventBtn.style.display = (!singleEventMode && allEvents.length > 1) ? 'inline-flex' : 'none';
+      }
+
+      updateBreadcrumbs();
+      updateLateralSummary();
+    }
+
+    function selectEvent(evt, advanceToSpots) {
+      selectedEvent = evt;
+      if (hiddenEventIdInput) hiddenEventIdInput.value = evt ? evt.id : '';
+      if (grid) {
+        grid.querySelectorAll('[data-event-id]').forEach(function(btn) {
+          btn.classList.toggle('es-elegido', Boolean(evt && btn.getAttribute('data-event-id') === evt.id));
+        });
+      }
+      if (evt) {
+        selectedSpots = Math.min(2, Math.max(1, evt.remainingSpots || 1));
+        if (briefTitle) briefTitle.textContent = evt.title;
+        if (briefMeta) briefMeta.textContent = '📅 ' + evt.date + ' · ⏰ ' + evt.startTime + ' hs' + (evt.priceLabel ? (' · ' + evt.priceLabel) : '');
+      }
+      applyCoverForEvent(evt);
+      updateSpotsControls();
+      if (advanceToSpots && evt) {
+        goToView(2);
+      }
+    }
+
+    function renderEventOptions(events) {
+      if (!grid) return;
+      grid.replaceChildren();
+      var l = loc();
+
+      if (!events || events.length === 0) {
+        grid.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+        if (footerActions) footerActions.style.display = 'none';
+        singleEventMode = false;
+        selectedEvent = null;
+        applyCoverForEvent(null);
+        goToView(1);
+        return;
+      }
+
+      if (emptyState) emptyState.style.display = 'none';
+      if (footerActions) footerActions.style.display = 'block';
+      grid.style.display = 'grid';
+
+      events.forEach(function(evt) {
+        var isSoldOut = evt.available === false || evt.remainingSpots <= 0;
+        var card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'pap__sector evt-option-card';
+        card.setAttribute('data-event-id', evt.id);
+        if (selectedEvent && selectedEvent.id === evt.id) card.classList.add('es-elegido');
+        if (isSoldOut) card.disabled = true;
+
+        var row = document.createElement('div');
+        row.className = 'evt-option-row';
+
+        var thumb = document.createElement('img');
+        thumb.className = 'evt-option-thumb';
+        thumb.src = resolveImageUrl(evt);
+        thumb.alt = evt.title || 'Evento';
+        thumb.loading = 'lazy';
+        row.appendChild(thumb);
+
+        var body = document.createElement('div');
+        body.className = 'evt-option-body';
+
+        var titleEl = document.createElement('b');
+        titleEl.textContent = evt.title || 'Evento Especial';
+        body.appendChild(titleEl);
+
+        if (evt.description) {
+          var descEl = document.createElement('small');
+          descEl.textContent = evt.description;
+          body.appendChild(descEl);
+        }
+
+        var metaRow = document.createElement('div');
+        metaRow.className = 'event-meta-row';
+
+        var dPill = document.createElement('span');
+        dPill.className = 'event-meta-pill';
+        dPill.textContent = '📅 ' + evt.date;
+        metaRow.appendChild(dPill);
+
+        var tPill = document.createElement('span');
+        tPill.className = 'event-meta-pill';
+        tPill.textContent = '⏰ ' + evt.startTime + ' hs';
+        metaRow.appendChild(tPill);
+
+        if (evt.priceLabel) {
+          var pPill = document.createElement('span');
+          pPill.className = 'event-meta-pill';
+          pPill.textContent = '💳 ' + evt.priceLabel;
+          metaRow.appendChild(pPill);
+        }
+
+        var sBadge = document.createElement('span');
+        sBadge.className = isSoldOut ? 'event-spots-badge sold-out' : 'event-spots-badge';
+        sBadge.textContent = isSoldOut ? ('🚫 ' + l.soldOut) : ('👥 ' + evt.remainingSpots + l.availableSuffix);
+        metaRow.appendChild(sBadge);
+
+        body.appendChild(metaRow);
+        row.appendChild(body);
+        card.appendChild(row);
+
+        card.addEventListener('click', function(e) {
+          if (isEditorMode()) return;
+          e.preventDefault();
+          if (isSoldOut) return;
+          selectEvent(evt, true);
+        });
+
+        grid.appendChild(card);
+      });
+
+      if (events.length === 1) {
+        singleEventMode = true;
+        var onlyEvt = events[0];
+        var onlySoldOut = onlyEvt.available === false || onlyEvt.remainingSpots <= 0;
+        selectEvent(onlyEvt, !onlySoldOut);
+        if (onlySoldOut) goToView(1);
+      } else {
+        singleEventMode = false;
+        applyCoverForEvent(selectedEvent);
+        goToView(selectedEvent ? currentView : 1);
+      }
+    }
+
+    function fetchEvents() {
+      if (!slug) return;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events';
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data || !data.success || !data.data) return;
+          var list = data.data.events || [];
+          if (targetEventFilter) {
+            var needle = targetEventFilter.toLowerCase();
+            list = list.filter(function(evt) {
+              return evt.id === targetEventFilter || String(evt.title || '').trim().toLowerCase() === needle;
+            });
+          }
+          allEvents = list;
+          if (selectedEvent) {
+            selectedEvent = allEvents.find(function(e) { return e.id === selectedEvent.id; }) || null;
+          }
+          renderEventOptions(allEvents);
+        })
+        .catch(function(err) {
+          console.warn('Error al obtener eventos especiales:', err);
+        });
+    }
+
+    if (backBtn) {
+      backBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (currentView === 3) goToView(2);
+        else if (currentView === 2 && !singleEventMode) goToView(1);
+      });
+    }
+
+    if (switchEventBtn) {
+      switchEventBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        goToView(1);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (currentView === 1) {
+          if (!selectedEvent) return;
+          goToView(2);
+        } else if (currentView === 2) {
+          if (!selectedEvent) return;
+          goToView(3);
+        }
+      });
+    }
+
+    if (spotsMinusBtn) {
+      spotsMinusBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (selectedSpots > 1) {
+          selectedSpots -= 1;
+          updateSpotsControls();
+        }
+      });
+    }
+
+    if (spotsPlusBtn) {
+      spotsPlusBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var maxAllowed = selectedEvent ? Math.max(1, Math.min(selectedEvent.remainingSpots || 1, 20)) : 20;
+        if (selectedSpots < maxAllowed) {
+          selectedSpots += 1;
+          updateSpotsControls();
+        }
+      });
+    }
+
+    function showError(msg) {
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+      } else {
+        alert(msg);
+      }
+    }
+
+    function setLoading(isLoading) {
+      if (submitBtn) submitBtn.disabled = isLoading;
+      if (btnText) btnText.style.display = isLoading ? 'none' : 'inline';
+      if (btnSpinner) btnSpinner.style.display = isLoading ? 'inline' : 'none';
+    }
+
+    function showSuccess(reservation) {
+      var l = loc();
+      if (form) form.style.display = 'none';
+      if (backBtn) backBtn.style.display = 'none';
+      if (breadcrumbsEl) breadcrumbsEl.style.display = 'none';
+      if (stepTitleEl) stepTitleEl.textContent = l.voucherTitle;
+      if (stepCounterEl) stepCounterEl.textContent = l.voucherCounter;
+      if (progressBarEl) progressBarEl.style.width = '100%';
+
+      if (successView) {
+        successView.style.display = 'block';
+        if (voucherCode) voucherCode.textContent = reservation.code || '#EVT-OK';
+        if (voucherTitle) voucherTitle.textContent = reservation.eventTitle || (selectedEvent ? selectedEvent.title : 'Evento Especial');
+        if (voucherDate) voucherDate.textContent = (reservation.date || (selectedEvent && selectedEvent.date) || '') + ' ' + (reservation.time || (selectedEvent && selectedEvent.startTime) || '') + ' hs';
+        if (voucherGuests) voucherGuests.textContent = (reservation.partySize || selectedSpots) + ' cupos confirmados';
+        if (voucherName) voucherName.textContent = reservation.customerName;
+
+        var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
+        var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
+        var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
+        var waMsg = encodeURIComponent('¡Hola! Reservé lugares para el evento ' + (reservation.eventTitle || '') + ' en ' + restaurantName + '.\\nCódigo: ' + (reservation.code || '') + '\\nFecha: ' + reservation.date + ' ' + reservation.time + ' hs\\nLugares: ' + reservation.partySize + '\\nA nombre de: ' + reservation.customerName);
+        if (voucherWaBtn) voucherWaBtn.href = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
+      }
+      if (newBookingBtn) {
+        newBookingBtn.textContent = singleEventMode ? l.newBookingSingle : l.newBookingMulti;
+      }
+    }
+
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+        var l = loc();
+        var eventId = hiddenEventIdInput ? hiddenEventIdInput.value : (selectedEvent ? selectedEvent.id : '');
+        var customerName = customerNameInput ? customerNameInput.value.trim() : '';
+        var customerPhone = customerPhoneInput ? customerPhoneInput.value.trim() : '';
+        var customerEmail = customerEmailInput ? customerEmailInput.value.trim() : '';
+        var notes = notesInput ? notesInput.value.trim() : '';
+        var partySize = hiddenSpotsInput ? parseInt(hiddenSpotsInput.value, 10) : selectedSpots;
+
+        if (!eventId) { showError(l.errEvent); return; }
+        if (!customerName) { showError(l.errName); return; }
+        if (!customerPhone) { showError(l.errPhone); return; }
+
+        if (!slug) {
+          setTimeout(function() {
+            showSuccess({
+              code: '#EVT-' + Math.floor(1000 + Math.random() * 9000),
+              eventTitle: selectedEvent ? selectedEvent.title : defaultTitle,
+              date: (selectedEvent && selectedEvent.date) || '2026-11-11',
+              time: (selectedEvent && selectedEvent.startTime) || '21:00',
+              partySize: partySize,
+              customerName: customerName
+            });
+          }, 300);
+          return;
+        }
+
+        setLoading(true);
+        fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: eventId,
+            customerName: customerName,
+            customerPhone: customerPhone,
+            customerEmail: customerEmail || undefined,
+            partySize: partySize,
+            notes: notes || undefined
+          })
+        })
+          .then(function(res) {
+            return res.json().then(function(json) { return { status: res.status, ok: res.ok, data: json }; });
+          })
+          .then(function(resObj) {
+            setLoading(false);
+            if (!resObj.ok || !resObj.data || !resObj.data.success) {
+              var errMsg = (resObj.data && resObj.data.error && resObj.data.error.message)
+                ? resObj.data.error.message
+                : 'Ocurrió un error al registrar tu lugar en el evento. Intentá nuevamente.';
+              showError(errMsg);
+              return;
+            }
+            showSuccess(resObj.data.data.reservation);
+            fetchEvents();
+          })
+          .catch(function() {
+            setLoading(false);
+            showError(l.errNet);
+          });
+      });
+    }
+
+    if (newBookingBtn) {
+      newBookingBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (successView) successView.style.display = 'none';
+        if (form) {
+          form.reset();
+          form.style.display = 'block';
+        }
+        if (backBtn) backBtn.style.display = 'flex';
+        selectedSpots = 2;
+        updateSpotsControls();
+        goToView(singleEventMode ? 2 : 1);
+      });
+    }
+
+    document.addEventListener('mise:language-change', function(e) {
+      if (!e || !e.detail || !e.detail.lang || !i18nConfig[e.detail.lang]) return;
+      currentLang = e.detail.lang;
+      var l = loc();
+      var lblEvt = root.querySelector('#evtLblEvento'); if (lblEvt) lblEvt.textContent = l.lblEvento;
+      var lblFec = root.querySelector('#evtLblFecha'); if (lblFec) lblFec.textContent = l.lblFecha;
+      var lblHor = root.querySelector('#evtLblHora'); if (lblHor) lblHor.textContent = l.lblHora;
+      var lblCup = root.querySelector('#evtLblCupos'); if (lblCup) lblCup.textContent = l.lblCupos;
+      var lblDis = root.querySelector('#evtLblDisp'); if (lblDis) lblDis.textContent = l.lblDisp;
+      renderEventOptions(allEvents);
+    });
+
+    updateSpotsControls();
+    if (!isEditorMode()) {
+      fetchEvents();
+    } else {
+      goToView(1);
+    }
+  }
+
+  function setupLegacyModalWidget(root) {
+    var slug = resolveRestaurantSlug(root);
     var grid = root.querySelector('#eventsListGrid');
     var emptyState = root.querySelector('#eventsEmptyState');
     var modalBackdrop = root.querySelector('#eventModalBackdrop');
@@ -5247,7 +6078,6 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
     var btnText = root.querySelector('.event-btn-text');
     var btnSpinner = root.querySelector('.event-btn-spinner');
     var errorBox = root.querySelector('#eventErrorBox');
-
     var successView = root.querySelector('#eventSuccessView');
     var voucherCode = root.querySelector('#eventVoucherCode');
     var voucherTitle = root.querySelector('#eventVoucherTitle');
@@ -5266,227 +6096,97 @@ export const BUILTIN_LANDING_MODULES: BuiltinLandingModuleDefinition[] = [
         if (modalSpotsInput) modalSpotsInput.value = p.getAttribute('data-spots') || '2';
       });
     });
+    if (modalClose) modalClose.addEventListener('click', function() { if (modalBackdrop) modalBackdrop.style.display = 'none'; });
+    if (closeSuccessBtn) closeSuccessBtn.addEventListener('click', function() { if (modalBackdrop) modalBackdrop.style.display = 'none'; });
 
-    if (modalClose) {
-      modalClose.addEventListener('click', function() {
-        if (modalBackdrop) modalBackdrop.style.display = 'none';
-      });
-    }
-
-    if (closeSuccessBtn) {
-      closeSuccessBtn.addEventListener('click', function() {
-        if (modalBackdrop) modalBackdrop.style.display = 'none';
-      });
-    }
-
-    function fetchEvents() {
+    function fetchLegacy() {
       if (!slug) return;
-      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events';
-
-      fetch(url)
+      fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events')
         .then(function(res) { return res.json(); })
         .then(function(data) {
-          if (!data || !data.success || !data.data) {
-            return;
-          }
+          if (!data || !data.success || !data.data || !grid) return;
           var events = data.data.events || [];
-          renderEvents(events);
-        })
-        .catch(function(err) {
-          console.warn('Error al obtener eventos especiales:', err);
-        });
-    }
-
-    function renderEvents(events) {
-      if (!grid) return;
-      if (!events || events.length === 0) {
-        grid.style.display = 'none';
-        if (emptyState) emptyState.style.display = 'block';
-        return;
-      }
-
-      if (emptyState) emptyState.style.display = 'none';
-      grid.style.display = 'grid';
-
-      var html = [];
-      events.forEach(function(evt) {
-        var isSoldOut = evt.available === false || evt.remainingSpots <= 0;
-        var spotsText = isSoldOut ? '🚫 Cupos agotados' : ('👥 ' + evt.remainingSpots + ' lugares disponibles');
-        var spotsBadgeClass = isSoldOut ? 'event-spots-badge sold-out' : 'event-spots-badge';
-        var disabledAttr = isSoldOut ? ' disabled' : '';
-
-        var mediaHtml = evt.imageUrl
-          ? '<img src="' + evt.imageUrl + '" alt="' + evt.title + '" class="event-card-img" />'
-          : '<div class="event-icon-placeholder">🎟️</div>';
-
-        var priceBadge = evt.priceLabel
-          ? '<span class="event-badge-price">' + evt.priceLabel + '</span>'
-          : '';
-
-        html.push(
-          '<div class="event-card">' +
-          '  <div class="event-card-media">' + mediaHtml + priceBadge + '</div>' +
-          '  <div class="event-card-content">' +
-          '    <div class="event-meta-row">' +
-          '      <span class="event-meta-pill">📅 ' + evt.date + '</span>' +
-          '      <span class="event-meta-pill">⏰ ' + evt.startTime + ' hs</span>' +
-          '    </div>' +
-          '    <h3 class="event-card-title">' + evt.title + '</h3>' +
-          '    <p class="event-card-desc">' + (evt.description || '') + '</p>' +
-          '    <div class="event-card-footer">' +
-          '      <span class="' + spotsBadgeClass + '">' + spotsText + '</span>' +
-          '      <button type="button" class="btn btn-primary event-book-btn" data-event-id="' + evt.id + '" data-event-title="' + evt.title + '" data-event-date="' + evt.date + '" data-event-time="' + evt.startTime + '" data-event-spots="' + evt.remainingSpots + '"' + disabledAttr + '>Reservar mi Lugar</button>' +
-          '    </div>' +
-          '  </div>' +
-          '</div>'
-        );
-      });
-
-      grid.innerHTML = html.join('\\n');
-      bindEventButtons();
-    }
-
-    function bindEventButtons() {
-      var bookBtns = grid ? grid.querySelectorAll('.event-book-btn:not(:disabled)') : [];
-      bookBtns.forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-          if (isEditorMode()) return;
-          e.preventDefault();
-
-          var eventId = btn.getAttribute('data-event-id');
-          var title = btn.getAttribute('data-event-title');
-          var date = btn.getAttribute('data-event-date');
-          var time = btn.getAttribute('data-event-time');
-          var spots = parseInt(btn.getAttribute('data-event-spots') || '10', 10);
-
-          if (modalEventIdInput) modalEventIdInput.value = eventId || '';
-          if (modalTitle) modalTitle.textContent = title || 'Evento Especial';
-          if (modalSubtitle) modalSubtitle.textContent = '📅 ' + date + ' • ⏰ ' + time + ' hs';
-
-          if (form) {
-            form.reset();
-            form.style.display = 'block';
-          }
-          if (successView) successView.style.display = 'none';
-          if (errorBox) errorBox.style.display = 'none';
-
-          if (modalSpotsInput) modalSpotsInput.value = '2';
-          spotsPills.forEach(function(p) {
-            var val = parseInt(p.getAttribute('data-spots') || '1', 10);
-            p.style.display = val <= spots ? 'inline-block' : 'none';
-            p.classList.toggle('active', val === 2 || (spots === 1 && val === 1));
+          if (!events.length) { grid.style.display = 'none'; if (emptyState) emptyState.style.display = 'block'; return; }
+          if (emptyState) emptyState.style.display = 'none';
+          grid.style.display = 'grid';
+          grid.replaceChildren();
+          events.forEach(function(evt) {
+            var isSoldOut = evt.available === false || evt.remainingSpots <= 0;
+            var card = document.createElement('div');
+            card.className = 'event-card';
+            var body = document.createElement('div');
+            body.className = 'event-card-content';
+            var h3 = document.createElement('h3');
+            h3.className = 'event-card-title';
+            h3.textContent = evt.title;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-primary event-book-btn';
+            btn.textContent = 'Reservar mi Lugar';
+            btn.setAttribute('data-event-id', evt.id);
+            if (isSoldOut) btn.disabled = true;
+            btn.addEventListener('click', function() {
+              if (modalEventIdInput) modalEventIdInput.value = evt.id;
+              if (modalTitle) modalTitle.textContent = evt.title;
+              if (modalSubtitle) modalSubtitle.textContent = '📅 ' + evt.date + ' • ⏰ ' + evt.startTime + ' hs';
+              if (form) { form.reset(); form.style.display = 'block'; }
+              if (successView) successView.style.display = 'none';
+              if (modalBackdrop) modalBackdrop.style.display = 'flex';
+            });
+            body.appendChild(h3);
+            body.appendChild(btn);
+            card.appendChild(body);
+            grid.appendChild(card);
           });
-
-          if (modalBackdrop) modalBackdrop.style.display = 'flex';
-        });
-      });
+        }).catch(function() {});
     }
 
     if (form) {
       form.addEventListener('submit', function(e) {
         if (isEditorMode()) return;
         e.preventDefault();
-
-        if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
-
+        if (errorBox) errorBox.style.display = 'none';
         var eventId = modalEventIdInput ? modalEventIdInput.value : '';
         var customerName = customerNameInput ? customerNameInput.value.trim() : '';
         var customerPhone = customerPhoneInput ? customerPhoneInput.value.trim() : '';
-        var customerEmail = customerEmailInput ? customerEmailInput.value.trim() : '';
-        var notes = notesInput ? notesInput.value.trim() : '';
         var partySize = modalSpotsInput ? parseInt(modalSpotsInput.value, 10) : 2;
-
-        if (!eventId) {
-          showModalError('Error: no se identificó el evento seleccionado.');
-          return;
-        }
-        if (!customerName) {
-          showModalError('Por favor ingresá tu nombre completo.');
-          return;
-        }
-        if (!customerPhone) {
-          showModalError('Por favor ingresá un teléfono o WhatsApp de contacto.');
-          return;
-        }
-
-        setModalLoading(true);
-
-        var payload = {
-          eventId: eventId,
-          customerName: customerName,
-          customerPhone: customerPhone,
-          customerEmail: customerEmail || undefined,
-          partySize: partySize,
-          notes: notes || undefined
-        };
-
+        if (!eventId || !customerName || !customerPhone) return;
+        if (submitBtn) submitBtn.disabled = true;
+        if (btnText) btnText.style.display = 'none';
+        if (btnSpinner) btnSpinner.style.display = 'inline';
         fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-          .then(function(res) {
-            return res.json().then(function(json) {
-              return { status: res.status, ok: res.ok, data: json };
-            });
-          })
-          .then(function(resObj) {
-            setModalLoading(false);
-            if (!resObj.ok || !resObj.data.success) {
-              var errMsg = (resObj.data && resObj.data.error && resObj.data.error.message)
-                ? resObj.data.error.message
-                : 'Ocurrió un error al registrar tu lugar en el evento. Intentá nuevamente.';
-              showModalError(errMsg);
-              return;
-            }
-
-            var resData = resObj.data.data.reservation;
-            showModalSuccess(resData);
-            fetchEvents();
-          })
-          .catch(function() {
-            setModalLoading(false);
-            showModalError('Error de conexión al enviar la reserva.');
-          });
+          body: JSON.stringify({ eventId: eventId, customerName: customerName, customerPhone: customerPhone, customerEmail: (customerEmailInput && customerEmailInput.value.trim()) || undefined, partySize: partySize, notes: (notesInput && notesInput.value.trim()) || undefined })
+        }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(ro) {
+            if (submitBtn) submitBtn.disabled = false;
+            if (btnText) btnText.style.display = 'inline';
+            if (btnSpinner) btnSpinner.style.display = 'none';
+            if (!ro.ok || !ro.data.success) return;
+            var res = ro.data.data.reservation;
+            if (form) form.style.display = 'none';
+            if (successView) successView.style.display = 'block';
+            if (voucherCode) voucherCode.textContent = res.code || '#EVT-OK';
+            if (voucherTitle) voucherTitle.textContent = res.eventTitle || '';
+            if (voucherDate) voucherDate.textContent = res.date + ' ' + res.time + ' hs';
+            if (voucherGuests) voucherGuests.textContent = res.partySize + ' cupos confirmados';
+            if (voucherName) voucherName.textContent = res.customerName;
+            if (voucherWaBtn) voucherWaBtn.href = '#';
+            fetchLegacy();
+          }).catch(function() {});
       });
     }
+    if (!isEditorMode()) fetchLegacy();
+  }
 
-    function showModalError(msg) {
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = 'block';
-      } else {
-        alert(msg);
-      }
-    }
-
-    function setModalLoading(isLoading) {
-      if (submitBtn) submitBtn.disabled = isLoading;
-      if (btnText) btnText.style.display = isLoading ? 'none' : 'inline';
-      if (btnSpinner) btnSpinner.style.display = isLoading ? 'inline' : 'none';
-    }
-
-    function showModalSuccess(reservation) {
-      if (form) form.style.display = 'none';
-      if (successView) {
-        successView.style.display = 'block';
-        if (voucherCode) voucherCode.textContent = reservation.code || '#EVT-OK';
-        if (voucherTitle) voucherTitle.textContent = reservation.eventTitle || 'Evento Especial';
-        if (voucherDate) voucherDate.textContent = reservation.date + ' ' + reservation.time + ' hs';
-        if (voucherGuests) voucherGuests.textContent = reservation.partySize + ' cupos confirmados';
-        if (voucherName) voucherName.textContent = reservation.customerName;
-
-        var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
-        var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
-        var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
-        var waMsg = encodeURIComponent('¡Hola! Reservé lugares para el evento ' + (reservation.eventTitle || '') + ' en ' + restaurantName + '.\\nCódigo: ' + (reservation.code || '') + '\\nFecha: ' + reservation.date + ' ' + reservation.time + ' hs\\nLugares: ' + reservation.partySize + '\\nA nombre de: ' + reservation.customerName);
-        var waUrl = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
-        if (voucherWaBtn) voucherWaBtn.href = waUrl;
-      }
-    }
-
-    if (!isEditorMode()) {
-      fetchEvents();
+  function setupEventsWidget(root) {
+    if (root.__resEventsMounted) return;
+    root.__resEventsMounted = true;
+    if (root.querySelector('#evtPapWidget')) {
+      setupPapEventsWidget(root);
+    } else {
+      setupLegacyModalWidget(root);
     }
   }
 

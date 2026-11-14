@@ -124,7 +124,7 @@ export const upsertRestaurantEventSchema = z.object({
   endTime: z.string().trim().refine((value) => value === "" || timeStringRegex.test(value), "Horario de fin inválido (HH:mm)").default(""),
   capacity: z.coerce.number().int().min(1, "El cupo mínimo es 1").max(500).default(20),
   priceLabel: z.string().trim().max(80).default(""),
-  imageUrl: z.string().trim().max(500).default(""),
+  imageUrl: z.string().trim().max(1000).default(""),
   blocksRegularReservations: z.boolean().default(false),
   status: restaurantEventStatusSchema.default("PUBLISHED"),
   roomIds: z.array(z.string().min(1)).max(200).optional(),

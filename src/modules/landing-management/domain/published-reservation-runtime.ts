@@ -8,8 +8,14 @@ const legacyRuntimes: Record<string, { length: number; sha256: string }[]> = {
     { length: 33758, sha256: "07d0f05ed8573d5f8eaeb142a4452624587b38c6c07c5199ff31d11f1789b2e1" },
     { length: 35099, sha256: "d545317ec5606b7f1072735e13c68a6f9efd2b9d3f05a7b333eac7d62ce3120e" },
   ],
-  "reservations-booking": [{ length: 38681, sha256: "0e83c97d442a3c1af2503fd0f7843de9d1b6c18822ec00396fec823aad52e5ad" }],
-  "reservations-events": [{ length: 13008, sha256: "ddabe754943d1447db506887670a48353cea975864b4c1b2c841d7f2868a0d38" }],
+  "reservations-booking": [
+    { length: 38681, sha256: "0e83c97d442a3c1af2503fd0f7843de9d1b6c18822ec00396fec823aad52e5ad" },
+    { length: 40992, sha256: "02cbf722bd9a7df0d6248ea6fb3482e9a430446eb692a7803c301397796139d9" },
+  ],
+  "reservations-events": [
+    { length: 13008, sha256: "ddabe754943d1447db506887670a48353cea975864b4c1b2c841d7f2868a0d38" },
+    { length: 13035, sha256: "feb385dd3b26f9337a60752c0dfbf3fd24584b42b9e40602cd475af9c101be91" },
+  ],
 };
 const generatedStart = "(function() {\n  function __initModuleScripts() {\n";
 const generatedEnd = "\n  }\n  window.__initLandingModuleScripts = __initModuleScripts;\n  if (document.readyState === 'loading') {\n    document.addEventListener('DOMContentLoaded', __initModuleScripts);\n  } else {\n    __initModuleScripts();\n  }\n})();";

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BUILTIN_LANDING_MODULES, createBlockFromBuiltinModule } from "../../src/modules/landing-management/domain/landing-module-catalog";
 import { compileLandingFromDocument, createDefaultLandingDocument } from "../../src/modules/landing-management/domain/landing-compiler";
+import { LANDING_TEMPLATE_PRESETS } from "../../src/modules/landing-management/domain/landing-template-presets";
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.replaceChildren(); });
 
@@ -131,5 +132,117 @@ describe("managed booking widgets without a server", () => {
     await vi.waitFor(() => expect(document.querySelector(".pap__nota")?.textContent).toBe(note));
     expect(document.querySelectorAll("#resSectoresGrid button")).toHaveLength(0);
     expect(document.querySelector("#papResumenDonde")?.textContent).toBe("Sin preferencia");
+  });
+
+  it("loads and books a single specific event with its cover inside the Arco landing preset", async () => {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(options.body)) });
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { reservation: { code: "EVT-900", eventTitle: "Noche de Jazz", date: "2099-05-01", time: "21:00", partySize: 3, customerName: "Lucía" } },
+          }),
+        };
+      }
+      if (url.includes("/reservations/events")) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { events: [{ id: "evt-1", title: "Noche de Jazz", description: "Cuarteto en vivo", date: "2099-05-01", startTime: "21:00", imageUrl: "https://cdn.example/jazz-cover.jpg", priceLabel: "$18.000", capacity: 30, remainingSpots: 12, available: true }] },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ success: true, data: { dates: [], recurringClosedDays: [], events: [], sectors: [] } }) };
+    }));
+
+    const arcoPreset = LANDING_TEMPLATE_PRESETS.find((preset) => preset.id === "landing-preset-arco-bar")!;
+    const compiled = compileLandingFromDocument(arcoPreset.document, { restaurantName: "Arco", restaurantSlug: "arco-bar" });
+    document.body.innerHTML = compiled.htmlContent;
+    document.querySelector<HTMLElement>("#resSuccessView")!.scrollIntoView = vi.fn();
+    window.eval(compiled.jsContent);
+
+    await vi.waitFor(() => expect((document.querySelector("#evtCoverImg") as HTMLImageElement).src).toContain("jazz-cover.jpg"));
+    expect((document.querySelector("#evtSideImage") as HTMLImageElement).src).toContain("jazz-cover.jpg");
+    expect(document.querySelector("#evtCoverMainTitle")?.textContent).toBe("Noche de Jazz");
+    expect(document.querySelector<HTMLElement>("#evtStep2View")?.style.display).toBe("flex");
+    expect(document.querySelector("#evtStepCounter")?.textContent).toBe("Paso 1 de 2");
+
+    (document.querySelector("#evtSpotsPlusBtn") as HTMLButtonElement).click();
+    expect(document.querySelector("#evtSpotsDisplay")?.textContent).toBe("3");
+    (document.querySelector("#evtNextBtn") as HTMLButtonElement).click();
+    expect(document.querySelector<HTMLElement>("#evtStep3View")?.style.display).toBe("flex");
+    expect(document.querySelector("#evtStepCounter")?.textContent).toBe("Paso 2 de 2");
+
+    (document.querySelector("#eventCustomerName") as HTMLInputElement).value = "Lucía";
+    (document.querySelector("#eventCustomerPhone") as HTMLInputElement).value = "+5491155551111";
+    document.querySelector("#eventBookingForm")!.dispatchEvent(new Event("submit", { cancelable: true }));
+
+    await vi.waitFor(() => expect(document.querySelector("#eventVoucherCode")?.textContent).toBe("EVT-900"));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toContain("/api/public/landing/arco-bar/reservations/events");
+    expect(posts[0]?.body).toMatchObject({ eventId: "evt-1", partySize: 3, customerName: "Lucía" });
+  });
+
+  it("lets visitors switch between multiple events, updates portada, and shows covers in reservations-booking", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/reservations/events") || url.includes("/reservations/availability")) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              dates: [],
+              recurringClosedDays: [],
+              events: [
+                { id: "evt-1", title: "Cata Nocturna", description: "5 etiquetas", date: "2099-05-01", startTime: "20:30", imageUrl: "https://cdn.example/cata.jpg", priceLabel: "$20.000", capacity: 20, remainingSpots: 8, available: true },
+                { id: "evt-2", title: "Sunset Electrónico", description: "DJ invitado", date: "2099-05-08", startTime: "19:30", imageUrl: "https://cdn.example/sunset.jpg", priceLabel: "$15.000", capacity: 50, remainingSpots: 20, available: true },
+              ],
+            },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ success: true, data: {} }) };
+    }));
+
+    const eventsDef = BUILTIN_LANDING_MODULES.find((entry) => entry.moduleKey === "reservations-events")!;
+    const pinnedBlock = createBlockFromBuiltinModule(eventsDef);
+    pinnedBlock.values.targetEventId = "evt-2";
+    const pinnedDoc = createDefaultLandingDocument("Prueba", "prueba");
+    pinnedDoc.blocks = [pinnedBlock];
+    document.body.innerHTML = compileLandingFromDocument(pinnedDoc, { restaurantName: "Prueba", restaurantSlug: "prueba" }).htmlContent;
+    window.eval(compileLandingFromDocument(pinnedDoc, { restaurantName: "Prueba", restaurantSlug: "prueba" }).jsContent);
+
+    await vi.waitFor(() => expect((document.querySelector("#evtCoverImg") as HTMLImageElement).src).toContain("sunset.jpg"));
+    expect(document.querySelector("#evtCoverMainTitle")?.textContent).toBe("Sunset Electrónico");
+    expect(document.querySelectorAll('#eventsListGrid [data-event-id]')).toHaveLength(1);
+
+    document.body.replaceChildren();
+    const multiDoc = createDefaultLandingDocument("Prueba", "prueba");
+    multiDoc.blocks = [createBlockFromBuiltinModule(eventsDef)];
+    const compiledMulti = compileLandingFromDocument(multiDoc, { restaurantName: "Prueba", restaurantSlug: "prueba" });
+    document.body.innerHTML = compiledMulti.htmlContent;
+    window.eval(compiledMulti.jsContent);
+    await vi.waitFor(() => expect(document.querySelectorAll('#eventsListGrid [data-event-id]')).toHaveLength(2));
+    expect(document.querySelector("#evtStepCounter")?.textContent).toBe("Paso 1 de 3");
+    (document.querySelector('#eventsListGrid [data-event-id="evt-2"]') as HTMLButtonElement).click();
+    expect((document.querySelector("#evtCoverImg") as HTMLImageElement).src).toContain("sunset.jpg");
+    expect(document.querySelector("#evtStepCounter")?.textContent).toBe("Paso 2 de 3");
+
+    document.body.replaceChildren();
+    const bookingDef = BUILTIN_LANDING_MODULES.find((entry) => entry.moduleKey === "reservations-booking")!;
+    const bookingDoc = createDefaultLandingDocument("Prueba", "prueba");
+    bookingDoc.blocks = [createBlockFromBuiltinModule(bookingDef)];
+    const compiledBooking = compileLandingFromDocument(bookingDoc, { restaurantName: "Prueba", restaurantSlug: "prueba" });
+    document.body.innerHTML = compiledBooking.htmlContent;
+    window.eval(compiledBooking.jsContent);
+
+    await vi.waitFor(() => expect(document.querySelector('#resEventsCards [data-event-id="evt-2"]')).not.toBeNull());
+    expect((document.querySelector('#resEventsCards .res-event-card-img') as HTMLImageElement).src).toContain("cata.jpg");
+    (document.querySelector('#resEventsCards [data-event-id="evt-2"]') as HTMLButtonElement).click();
+    expect((document.querySelector("#resSelectedEventCover") as HTMLImageElement).src).toContain("sunset.jpg");
   });
 });
