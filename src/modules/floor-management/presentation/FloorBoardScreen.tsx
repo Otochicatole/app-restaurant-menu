@@ -26,8 +26,10 @@ import { floorInputClass, getFloorBoard, reassignFloorSelection, saveFloorAction
 
 const toolId = (tool: ToolWindow) => tool.kind === "service" ? `service:${tool.serviceTarget!.allocationId}:${tool.serviceTarget!.tableId}` : tool.kind === "detail" ? `detail:${tool.allocation!.id}` : tool.kind === "table" ? "selection:" + tool.selection!.ids.slice().sort().map(encodeURIComponent).join("+") : tool.kind === "inventory" ? `inventory:${tool.room!.id}` : tool.kind;
 const toolTitle = (tool: ToolWindow, roomName: string) => tool.kind === "service" ? `Cuenta · ${tool.serviceTarget!.customerName}` : tool.kind === "service-list" ? "Cuentas de servicio" : tool.kind === "assembly" ? "Armar mesas" : tool.kind === "inventory" ? "Inventario de mesas" : tool.kind === "table" ? (tool.selection?.tables.length === 1 ? "Editar mesa " + tool.selection.tables[0].label : "Editar selección (" + (tool.selection?.tables.length ?? 0) + " mesas)") : tool.kind === "schedule" ? "Fecha y hora" : tool.kind === "reservations" ? `Reservas de ${roomName}` : tool.kind === "walk-in" ? "Atender sin reserva" : "Detalle de la reserva";
-const floorToolWindowSize = { width: 800, height: 1240 };
-const floorAssemblyWindowLayout = { initialSize: { width: 800, height: 1280 } };
+const floorToolWindowSize = { width: 560, height: 540 };
+const floorListWindowSize = { width: 920, height: 640 };
+const floorServiceWindowSize = { width: 1200, height: 680 };
+const floorAssemblyWindowLayout = { initialSize: { width: 440, height: 480 } };
 const floatingButton = "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-[var(--floor-ink,#263e23)] shadow-[0_3px_16px_rgba(24,38,24,0.12)] transition-colors hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--floor-focus,#3d5934)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
 function serviceTarget(allocation: FloorAllocationView, group: FloorPose[]): FloorServiceTarget {
@@ -433,9 +435,14 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
       const recoveryGroup = target?.recovery ? service.snapshot?.unserved.find((group) => group.allocationId === target.allocationId && group.tableId === target.tableId) : undefined;
       const currentGroup = serviceAllocation && target && getJoinedTableGroups(serviceAllocation.poses).find((group) => group.some(({ tableId }) => tableId === target.tableId));
       const currentTarget = currentGroup && serviceAllocation && target ? { ...target, tableLabels: currentGroup.map(({ label }) => label) } : target;
+      const windowSize = panel === "service"
+        ? floorServiceWindowSize
+        : panel === "service-list" || panel === "reservations" || panel === "inventory"
+          ? floorListWindowSize
+          : floorToolWindowSize;
       const closePanel = () => closeTool(entry.id);
       return (
-    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={currentTarget ? currentTarget.tableLabels.join(" + ") : room?.name ?? restaurantName} icon={panel === "service" || panel === "service-list" ? <ReceiptText size={17} /> : panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="right" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 100 }} initialPosition={{ x: 0, y: 112 }} initialSize={floorToolWindowSize} minWidth={320} minHeight={320} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.selection) setSelectedResourceIds(entry.value.selection.ids); }}>
+    <FloatingModalWindow key={entry.id} id={"floor-tools-" + entry.id} title={title} subtitle={currentTarget ? currentTarget.tableLabels.join(" + ") : room?.name ?? restaurantName} icon={panel === "service" || panel === "service-list" ? <ReceiptText size={17} /> : panel === "inventory" ? <Package size={17} /> : panel === "schedule" ? <CalendarClock size={17} /> : panel === "walk-in" ? <Users size={17} /> : <List size={17} />} isOpen={entry.visible} keepMounted onClose={() => closeTool(entry.id)} closeDisabled={saving} initialAnchor="center" initialOffset={entry.offset} activation={entry.activation} viewportInset={{ bottom: 16 }} initialPosition={{ x: 0, y: 76 }} initialSize={windowSize} minWidth={320} minHeight={240} zIndex={entry.zIndex} onFocus={() => { tools.focus(entry.id); if (entry.value.selection) setSelectedResourceIds(entry.value.selection.ids); }}>
       <fieldset disabled={saving} id={"floor-content-" + entry.id} tabIndex={-1} onChangeCapture={() => setDirtyWindows((current) => current[entry.id] ? current : { ...current, [entry.id]: true })} className="flex min-h-0 flex-1 flex-col outline-none">
         {panel === "inventory" && inventoryRoom && canManageTables && <FloorInventoryPanel key={inventoryRoom.id} restaurantId={restaurantId} room={inventoryRoom} onDirtyChange={setInventoryDirty} onBusyChange={inventoryBusyChanged} onClose={closePanel} onSaved={(next) => { setBoard((previous) => previous ? { ...previous, rooms: previous.rooms.map((item) => item.id === next.id ? next : item) } : previous); setInventoryDirty(false); discardWindow(entry.id); }} />}
         {panel === "table" && snapshot && <FloorSelectionEditor disabled={staleSelection} tables={snapshot.tables} inventoryEditable={canManageTables} positionsEditable={canManageTables} busy={saving} error={tableError} onApply={(next, mode) => { void applySelection(next, mode, snapshot, entry.id); }} onCancel={closePanel} />}
@@ -452,7 +459,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
           canOpen={canUseService && Boolean(serviceAllocation && !serviceAllocation.releasedAt)} allocationVersion={target?.recovery ? recoveryGroup?.expectedAllocationVersion : serviceAllocation?.version} conflict={Boolean(serviceAllocation?.serviceConflict)} cashClosed={Boolean(service.snapshot?.cashClosed)}
           onRefresh={() => { void service.refresh(); void refresh(); }} onCommand={async (command) => {
             const account = await runServiceCommand(command);
-            if (command.action === "add-line" || command.action === "checkout" || command.action === "close-empty") setDirtyWindows((current) => ({ ...current, [entry.id]: false }));
+            if (command.action === "add-line" || command.action === "confirm-order" || command.action === "checkout" || command.action === "close-empty") setDirtyWindows((current) => ({ ...current, [entry.id]: false }));
             return account;
           }} />}
 

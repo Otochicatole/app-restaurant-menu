@@ -20,7 +20,7 @@ export interface FloatingModalWindowProps {
   onClose: () => void;
   initialPosition?: Point;
   initialSize?: Size;
-  initialAnchor?: "right";
+  initialAnchor?: "right" | "center";
   initialOffset?: number;
   activation?: number;
   viewportInset?: ViewportInset;
@@ -81,6 +81,14 @@ export function FloatingModalWindow({ id, title, subtitle, icon, isOpen, onClose
       const area = getViewport();
       let next = fitGeometry({ ...geometryRef.current, ...preferredSize.current }, area, minWidth, minHeight, minimized.current ? headerRef.current?.getBoundingClientRect().height || 56 : undefined);
       if (!initialized.current && initialAnchor === "right") next = fitGeometry({ ...next, x: limits(area, minWidth, minHeight).right - next.width - initialOffset }, area, minWidth, minHeight);
+      else if (!initialized.current && initialAnchor === "center") {
+        const bounds = limits(area, minWidth, minHeight);
+        next = fitGeometry({
+          ...next,
+          x: Math.round(bounds.left + (bounds.width - next.width) / 2) + initialOffset,
+          y: Math.round(bounds.top + (bounds.height - next.height) / 2) + initialOffset,
+        }, area, minWidth, minHeight);
+      }
       initialized.current = true;
       updateGeometry(next);
     };

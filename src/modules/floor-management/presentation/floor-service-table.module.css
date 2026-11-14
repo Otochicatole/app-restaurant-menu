@@ -1,0 +1,150 @@
+.tableWrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(26rem, 60vh);
+  container-type: inline-size;
+  border-radius: 0.75rem;
+  border: 1px solid var(--floor-border, #e4e4e7);
+  background: #fff;
+}
+
+.serviceTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.serviceTable caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.serviceTable thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--floor-hover, #edf2e9);
+}
+
+.serviceTable th,
+.serviceTable td {
+  padding: 0.5rem 0.6rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--floor-border, #e4e4e7);
+}
+
+.serviceTable thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--floor-muted, #52634b);
+  white-space: nowrap;
+}
+
+.serviceTable tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: #fff;
+  font-weight: 600;
+  color: var(--floor-ink, #09090b);
+}
+
+.serviceTable tbody tr:last-child th,
+.serviceTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@container (width < 430px) {
+  .serviceTable,
+  .serviceTable thead,
+  .serviceTable tbody,
+  .serviceTable tr,
+  .serviceTable th,
+  .serviceTable td {
+    display: block;
+  }
+
+  .serviceTable thead {
+    display: none;
+  }
+
+  .serviceTable tbody tr {
+    margin-block-end: 0.65rem;
+    border-bottom: 1px solid var(--floor-border, #e4e4e7);
+  }
+
+  .serviceTable tbody tr:last-child {
+    margin-block-end: 0;
+    border-bottom: 0;
+  }
+
+  .serviceTable tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--floor-hover, #edf2e9);
+  }
+
+  .serviceTable th,
+  .serviceTable td {
+    border-bottom: 0;
+    padding: 0.4rem 0.65rem;
+  }
+
+  .serviceTable td:nth-child(2)::before {
+    content: var(--label-2) ": ";
+    font-weight: 600;
+    color: var(--floor-muted, #52634b);
+  }
+
+  .serviceTable td:nth-child(3)::before {
+    content: var(--label-3) ": ";
+    font-weight: 600;
+    color: var(--floor-muted, #52634b);
+  }
+
+  .serviceTable td:nth-child(4)::before {
+    content: var(--label-4) ": ";
+    font-weight: 600;
+    color: var(--floor-muted, #52634b);
+  }
+
+  .serviceTable td:nth-child(5)::before {
+    content: var(--label-5) ": ";
+    font-weight: 600;
+    color: var(--floor-muted, #52634b);
+  }
+
+  .serviceTable td:nth-child(6)::before {
+    content: var(--label-6) ": ";
+    font-weight: 600;
+    color: var(--floor-muted, #52634b);
+  }
+}
+
+.orderBuilder {
+  container-type: inline-size;
+}
+
+.orderBuilderGrid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (width >= 600px) {
+  .orderBuilderGrid {
+    grid-template-columns: minmax(12rem, 1fr) 8.5rem 5.5rem auto;
+    align-items: end;
+  }
+}

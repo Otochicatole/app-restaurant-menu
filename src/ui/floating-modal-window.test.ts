@@ -141,4 +141,17 @@ describe("shared floating tool window", () => {
     expect(close.disabled).toBe(true); expect(close.getAttribute("autocomplete")).toBe("off");
     fireEvent.click(close); expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("centers horizontally and vertically inside bounds when initialAnchor is center", () => {
+    setViewport(1400, 900);
+    render(createElement(FloatingModalWindow, props({
+      initialAnchor: "center",
+      initialPosition: { x: 0, y: 0 },
+      initialSize: { width: 1000, height: 600 },
+      viewportInset: { bottom: 16 },
+    })));
+    const panel = screen.getByRole("dialog", { name: "Iconos" });
+    // bounds: left=10, width=1380 -> x = 10 + (1380 - 1000)/2 = 200; top=10, height=864 -> y = 10 + (864 - 600)/2 = 142
+    expect(geometry(panel)).toEqual({ x: 200, y: 142, width: 1000, height: 600 });
+  });
 });

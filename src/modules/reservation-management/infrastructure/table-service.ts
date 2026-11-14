@@ -201,33 +201,83 @@ async function assignWaiter(tx: Prisma.TransactionClient, restaurantId: string, 
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function addLine(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"add-line">, now: Date) {
-  const account = await findAccount(tx, restaurantId, command.accountId);
-  await updateAccount(tx, account, command.expectedVersion);
-  const product = command.productId ? await tx.serviceProduct.findFirst({
-    where: { id: command.productId, restaurantId, active: true }, select: productSelect,
-  }) : null;
-  if (command.productId && !product) throw new NotFoundError("Producto activo");
-  const name = product?.name ?? command.name;
-  const unitPriceCents = product?.unitPriceCents ?? command.unitPriceCents;
-  if (name === undefined || unitPriceCents === undefined) throw new BadRequestError("Indicá el nombre y precio del consumo.");
-  if (toAccount(account).orderedCents + unitPriceCents * command.quantity > maxStoredCents) {
-    throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
+type OrderLineInput = {
+  productId?: string;
+  name?: string;
+  unitPriceCents?: number;
+  quantity: number;
+  notes?: string;
+  station?: KitchenStation;
+};
+
+async function resolveOrderLineData(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  accountId: string,
+  round: number,
+  now: Date,
+  item: OrderLineInput,
+  productsById?: Map<string, { id: string; name: string; unitPriceCents: number }>,
+) {
+  let product: { id: string; name: string; unitPriceCents: number } | null = null;
+  if (item.productId) {
+    product = productsById?.get(item.productId) ?? await tx.serviceProduct.findFirst({
+      where: { id: item.productId, restaurantId, active: true },
+      select: productSelect,
+    });
+    if (!product) throw new NotFoundError("Producto activo");
+    productsById?.set(product.id, product);
   }
-  const currentRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 1);
-  await tx.serviceOrderLine.create({ data: {
-    accountId: account.id,
+  const name = product?.name ?? item.name;
+  const unitPriceCents = product?.unitPriceCents ?? item.unitPriceCents;
+  if (name === undefined || unitPriceCents === undefined) {
+    throw new BadRequestError("Indicá el nombre y precio del consumo.");
+  }
+  return {
+    accountId,
     restaurantId,
     productId: product?.id,
     name,
     unitPriceCents,
-    quantity: command.quantity,
+    quantity: item.quantity,
     createdAt: now,
-    notes: command.notes ?? "",
-    kitchenStatus: "PENDING",
-    round: currentRound,
-    station: command.station ?? "KITCHEN",
-  } });
+    notes: item.notes ?? "",
+    kitchenStatus: "PENDING" as const,
+    round,
+    station: item.station ?? "KITCHEN",
+  };
+}
+
+async function addLine(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"add-line">, now: Date) {
+  const account = await findAccount(tx, restaurantId, command.accountId);
+  await updateAccount(tx, account, command.expectedVersion);
+  const currentRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 1);
+  const data = await resolveOrderLineData(tx, restaurantId, account.id, currentRound, now, command);
+  if (toAccount(account).orderedCents + data.unitPriceCents * data.quantity > maxStoredCents) {
+    throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
+  }
+  await tx.serviceOrderLine.create({ data });
+  return toAccount(await findAccount(tx, restaurantId, account.id));
+}
+
+async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"confirm-order">, now: Date) {
+  const account = await findAccount(tx, restaurantId, command.accountId);
+  await updateAccount(tx, account, command.expectedVersion);
+  const nextRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 0) + 1;
+  const productsById = new Map<string, { id: string; name: string; unitPriceCents: number }>();
+  const linesToCreate: Awaited<ReturnType<typeof resolveOrderLineData>>[] = [];
+  let runningOrderedCents = toAccount(account).orderedCents;
+  for (const item of command.items) {
+    const data = await resolveOrderLineData(tx, restaurantId, account.id, nextRound, now, item, productsById);
+    runningOrderedCents += data.unitPriceCents * data.quantity;
+    if (runningOrderedCents > maxStoredCents) {
+      throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
+    }
+    linesToCreate.push(data);
+  }
+  for (const data of linesToCreate) {
+    await tx.serviceOrderLine.create({ data });
+  }
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
@@ -595,7 +645,7 @@ export class TableService {
     const command = serviceCommandSchema.parse(raw);
     return withSqliteTransaction(this.database, async (tx) => {
       const requiresFloor = command.action === "open" || command.action === "assign-waiter" || command.action === "close-empty"
-        || command.action === "add-line" || command.action === "update-line" || command.action === "checkout"
+        || command.action === "add-line" || command.action === "confirm-order" || command.action === "update-line" || command.action === "checkout"
         || command.action === "deliver-all" || command.action === "march-round" || command.action === "update-kitchen-status";
       const { timeZone } = await settings(tx, restaurantId, requiresFloor);
       switch (command.action) {
@@ -603,6 +653,7 @@ export class TableService {
         case "assign-waiter": return assignWaiter(tx, restaurantId, command);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "add-line": return addLine(tx, restaurantId, command, now);
+        case "confirm-order": return confirmOrder(tx, restaurantId, command, now);
         case "update-line": return updateLine(tx, restaurantId, command);
         case "deliver-all": return deliverAll(tx, restaurantId, command);
         case "march-round": return marchRound(tx, restaurantId, command);

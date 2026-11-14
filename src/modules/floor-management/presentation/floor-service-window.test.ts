@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ServiceAccountView, StaffMemberView } from "@/modules/reservation-management/contracts";
+import type { ServiceAccountView, ServiceProductView, StaffMemberView } from "@/modules/reservation-management/contracts";
 import { FloorServiceAccounts, FloorServiceWindow, type FloorServiceTarget } from "./FloorServiceWindow";
 
 const target: FloorServiceTarget = {
@@ -165,5 +165,125 @@ describe("FloorServiceWindow waiter assignment", () => {
         waiterId: "w-2",
       });
     });
+  });
+});
+
+describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
+  afterEach(cleanup);
+
+  const products: ServiceProductView[] = [
+    { id: "prod-1", name: "Milanesa", unitPriceCents: 1200000, active: true },
+    { id: "prod-2", name: "Agua sin gas", unitPriceCents: 250000, active: true },
+  ];
+
+  it("builds a draft list in a table first and sends confirm-order only when confirmed", async () => {
+    const confirmedAccount: ServiceAccountView = {
+      ...openAccount,
+      version: 3,
+      orderedCents: 2650000,
+      pendingQuantity: 3,
+      lines: [
+        {
+          id: "line-1",
+          name: "Milanesa",
+          unitPriceCents: 1200000,
+          quantity: 2,
+          deliveredQuantity: 0,
+          cancelledQuantity: 0,
+          notes: "Con papas",
+          kitchenStatus: "PENDING",
+          round: 1,
+          station: "KITCHEN",
+          createdAt: "2026-11-14T00:05:00.000Z",
+        },
+      ],
+    };
+    const onCommand = vi.fn(async () => confirmedAccount);
+
+    const view = render(createElement(FloorServiceWindow, {
+      target,
+      account: openAccount,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    // Select first catalog product and add 1 unit with note
+    const picker = screen.getByLabelText("Producto");
+    fireEvent.focus(picker);
+    fireEvent.click(screen.getByRole("option", { name: /Milanesa/i }));
+    fireEvent.change(screen.getByLabelText("Notas de elaboración"), { target: { value: "Con papas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+
+    // Select second catalog product to BAR
+    fireEvent.focus(picker);
+    fireEvent.click(screen.getByRole("option", { name: /Agua sin gas/i }));
+    fireEvent.change(screen.getByLabelText("Estación"), { target: { value: "BAR" } });
+    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+
+    // Nothing sent to server / kitchen yet!
+    expect(onCommand).not.toHaveBeenCalled();
+
+    const draftTable = screen.getByRole("table", { name: "Listado del pedido borrador pendiente de confirmar" });
+    expect(within(draftTable).getByRole("rowheader", { name: /Milanesa/i })).toBeTruthy();
+    expect(within(draftTable).getByRole("rowheader", { name: /Agua sin gas/i })).toBeTruthy();
+    expect(within(draftTable).getByText("Barra")).toBeTruthy();
+
+    // Adjust Milanesa quantity +1 and remove Agua sin gas? Let's keep both after incrementing Milanesa to 2!
+    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Milanesa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar pedido y enviar a cocina" }));
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith({
+        action: "confirm-order",
+        accountId: "acc-1",
+        expectedVersion: 2,
+        items: [
+          { productId: "prod-1", quantity: 2, notes: "Con papas", station: "KITCHEN" },
+          { productId: "prod-2", quantity: 1, station: "BAR" },
+        ],
+      });
+    });
+
+    // Draft list clears once confirmed and confirmed orders render in table format.
+    await waitFor(() => {
+      expect(screen.queryByRole("table", { name: "Listado del pedido borrador pendiente de confirmar" })).toBeNull();
+    });
+
+    view.rerender(createElement(FloorServiceWindow, {
+      target,
+      account: confirmedAccount,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    const confirmedTable = screen.getByRole("table", { name: "Pedidos confirmados enviados a cocina y entregados" });
+    expect(within(confirmedTable).getByRole("rowheader", { name: /Milanesa/i })).toBeTruthy();
+    expect(within(confirmedTable).getByText("Tanda 1")).toBeTruthy();
+    expect(within(confirmedTable).getByText("2 pend. · 0 ent.")).toBeTruthy();
+    expect(within(confirmedTable).getByRole("button", { name: "Entregar uno de Milanesa" })).toBeTruthy();
   });
 });

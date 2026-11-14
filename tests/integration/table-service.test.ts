@@ -344,4 +344,77 @@ describe("table service in SQLite", () => {
     // Existing account keeps the assigned waiter name snapshot even after deactivation.
     expect((await service.account(restaurantId, opened.id)).assignedWaiterName).toBe("Bruno");
   });
+
+  it("creates one discrete kitchen ticket per confirmed order batch and validates atomicity", async () => {
+    const allocation = await visit();
+    const opened = await open(allocation.id);
+    const foreignProduct = productView(await service.execute(otherRestaurantId, actor, {
+      action: "save-product", name: "Postre ajeno", unitPriceCents: 1500,
+    }, now));
+    const empanada = productView(await service.execute(restaurantId, actor, {
+      action: "save-product", name: "Empanada", unitPriceCents: 1800,
+    }, now));
+
+    // Before confirming an order, cocina has zero tickets for this account.
+    expect((await service.kitchen(restaurantId)).tickets).toEqual([]);
+
+    // Foreign product inside a batch aborts the whole batch without partial rows.
+    await expect(service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: opened.version,
+      items: [
+        { productId: empanada.id, quantity: 2, station: "KITCHEN" },
+        { productId: foreignProduct.id, quantity: 1, station: "BAR" },
+      ],
+    }, now)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await service.kitchen(restaurantId)).tickets).toEqual([]);
+
+    const batchOne = accountView(await service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: opened.version,
+      items: [
+        { productId: empanada.id, quantity: 3, notes: "Bien doradas", station: "KITCHEN" },
+        { name: "Limonada", unitPriceCents: 2500, quantity: 2, station: "BAR" },
+      ],
+    }, now));
+    expect(batchOne.version).toBe(1);
+    expect(batchOne.lines.map((line) => ({ name: line.name, round: line.round, station: line.station }))).toEqual([
+      { name: "Empanada", round: 1, station: "KITCHEN" },
+      { name: "Limonada", round: 1, station: "BAR" },
+    ]);
+
+    // Stale version rejected before inserting a second round.
+    await expect(service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: 0,
+      items: [{ name: "Café", unitPriceCents: 1200, quantity: 1, station: "BAR" }],
+    }, now)).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const batchTwo = accountView(await service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: batchOne.version,
+      items: [{ name: "Flan casero", unitPriceCents: 3200, quantity: 1, notes: "Con dulce", station: "KITCHEN" }],
+    }, now));
+    expect(batchTwo.lines[2]).toMatchObject({ name: "Flan casero", round: 2, station: "KITCHEN" });
+
+    const kitchen = await service.kitchen(restaurantId);
+    expect(kitchen.tickets).toHaveLength(2);
+    expect(kitchen.tickets[0]).toMatchObject({
+      round: 1,
+      lines: [
+        expect.objectContaining({ name: "Empanada", quantity: 3, notes: "Bien doradas", station: "KITCHEN" }),
+        expect.objectContaining({ name: "Limonada", quantity: 2, station: "BAR" }),
+      ],
+    });
+    expect(kitchen.tickets[1]).toMatchObject({
+      round: 2,
+      lines: [
+        expect.objectContaining({ name: "Flan casero", quantity: 1, notes: "Con dulce", station: "KITCHEN" }),
+      ],
+    });
+  });
 });

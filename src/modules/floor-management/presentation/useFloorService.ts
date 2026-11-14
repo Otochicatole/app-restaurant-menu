@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ServiceAccountView, ServiceCommand, ServiceSnapshot } from "@/modules/reservation-management/contracts";
 
-export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "assign-waiter" | "add-line" | "update-line" | "checkout" | "close-empty" | "deliver-all" | "march-round" }>;
+export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "assign-waiter" | "add-line" | "confirm-order" | "update-line" | "checkout" | "close-empty" | "deliver-all" | "march-round" }>;
 
 async function serviceRequest<T>(restaurantId: string, { at, signal, command }: { at?: string; signal?: AbortSignal; command?: FloorServiceCommand }): Promise<T> {
   const params = at ? `?${new URLSearchParams({ at })}` : "";

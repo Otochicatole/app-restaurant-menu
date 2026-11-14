@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowRight, Check, CheckCheck, Clock3, Plus, Printer, ReceiptText, RotateCw, Search, UserCheck, Utensils } from "lucide-react";
-import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup, StaffMemberView } from "@/modules/reservation-management/contracts";
+import { ArrowRight, Check, CheckCheck, Clock3, Minus, Plus, Printer, ReceiptText, RotateCw, Search, Send, Trash2, UserCheck, Utensils } from "lucide-react";
+import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderItemInput, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup, StaffMemberView } from "@/modules/reservation-management/contracts";
 import { floorInputClass } from "./floor-api";
 import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import type { FloorServiceCommand } from "./useFloorService";
 import styles from "./floor-service-receipt.module.css";
+import tableStyles from "./floor-service-table.module.css";
 
 export type FloorServiceTarget = {
   allocationId: string;
@@ -23,6 +24,8 @@ const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS
 const amount = (cents: number) => money.format(cents / 100);
 const fieldClass = "grid min-w-0 gap-1.5 text-xs font-medium text-[var(--floor-muted,#52634b)]";
 const cardClass = "rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-white p-3";
+const tableActionButtonClass = "inline-flex h-7 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-[var(--floor-border,#d4d4d8)] bg-white px-2 text-[11px] font-medium text-[var(--floor-ink,#27272a)] transition-colors hover:border-[var(--floor-border-hover,#a1a1aa)] hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-45";
+const tableDangerButtonClass = "inline-flex h-7 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-45";
 const paymentLabels: Record<ServicePaymentMethod, string> = {
   CASH: "Efectivo",
   CARD: "Tarjeta",
@@ -98,6 +101,10 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
   const [splitCash, setSplitCash] = useState("");
   const [splitCard, setSplitCard] = useState("");
   const [splitTransfer, setSplitTransfer] = useState("");
+  const nextDraftKeyRef = useRef(0);
+  const [draftState, setDraftState] = useState<{ accountId: string | null; items: DraftOrderItem[] }>({ accountId: account?.id ?? null, items: [] });
+  const draftCaptionId = useId();
+  const confirmedCaptionId = useId();
 
   const resetCheckoutState = () => {
     setCheckoutVersion(null);
@@ -186,11 +193,61 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
   const confirming = checkoutVersion !== null;
   const versionChanged = confirming && checkoutVersion !== account.version;
   const locked = historical || busy || Boolean(loadError);
-  const canCheckout = !locked && !cashClosed && account.pendingQuantity === 0;
+  const draftItems = draftState.accountId === account.id ? draftState.items : [];
+  const canCheckout = !locked && !cashClosed && account.pendingQuantity === 0 && draftItems.length === 0;
   const identity = { accountId: account.id, expectedVersion: account.version };
   const updateLine = (line: ServiceOrderLineView, field: "deliveredQuantity" | "cancelledQuantity", delta: number) => {
     void run({ action: "update-line", ...identity, lineId: line.id, deliveredQuantity: line.deliveredQuantity, cancelledQuantity: line.cancelledQuantity, [field]: line[field] + delta });
   };
+
+  const updateDraftItems = (updater: (current: DraftOrderItem[]) => DraftOrderItem[]) => {
+    setFailure(null);
+    setDraftState((current) => ({
+      accountId: account.id,
+      items: updater(current.accountId === account.id ? current.items : []),
+    }));
+  };
+
+  const addDraftItem = (item: Omit<DraftOrderItem, "key">) => {
+    updateDraftItems((current) => {
+      const existingIndex = current.findIndex((entry) =>
+        (item.productId ? entry.productId === item.productId : !entry.productId && entry.name === item.name && entry.unitPriceCents === item.unitPriceCents)
+        && entry.notes === item.notes
+        && entry.station === item.station
+        && entry.quantity + item.quantity <= 99,
+      );
+      if (existingIndex >= 0) {
+        return current.map((entry, index) => index === existingIndex ? { ...entry, quantity: entry.quantity + item.quantity } : entry);
+      }
+      nextDraftKeyRef.current += 1;
+      return [...current, { ...item, key: `draft-${nextDraftKeyRef.current}` }];
+    });
+  };
+
+  const changeDraftQuantity = (key: string, delta: number) => {
+    updateDraftItems((current) => current.map((item) =>
+      item.key === key ? { ...item, quantity: Math.min(99, Math.max(1, item.quantity + delta)) } : item,
+    ));
+  };
+
+  const removeDraftItem = (key: string) => {
+    updateDraftItems((current) => current.filter((item) => item.key !== key));
+  };
+
+  const confirmDraftOrder = async () => {
+    if (locked || confirming || draftItems.length === 0) return;
+    const items: ServiceOrderItemInput[] = draftItems.map((item) => item.productId
+      ? { productId: item.productId, quantity: item.quantity, ...(item.notes ? { notes: item.notes } : {}), station: item.station }
+      : { name: item.name, unitPriceCents: item.unitPriceCents, quantity: item.quantity, ...(item.notes ? { notes: item.notes } : {}), station: item.station },
+    );
+    const ok = await run({ action: "confirm-order", ...identity, items });
+    if (ok) {
+      setDraftState({ accountId: account.id, items: [] });
+    }
+  };
+
+  const draftTotalCents = draftItems.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
+  const draftUnits = draftItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const tipCents = parsePrice(tip);
   const discountCents = parsePrice(discount);
@@ -262,10 +319,133 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
       {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
       {cashClosed && !historical && <p className="rounded-lg bg-amber-50 p-2.5 text-sm text-amber-950">La caja del día está cerrada. Un administrador debe reabrirla para cerrar esta cuenta.</p>}
+      {!historical && !confirming && (
+        <section aria-label="Listado del nuevo pedido" className="space-y-3">
+          <AddOrderLine products={products} busy={locked} onAdd={addDraftItem} />
+          <div className={`${cardClass} space-y-2.5`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h4 className="font-semibold">Listado del pedido</h4>
+                <span className="rounded bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                  {draftUnits === 0 ? "Sin ítems" : `${quantityLabel(draftUnits, "ítem")} · Sin enviar`}
+                </span>
+              </div>
+              {draftItems.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 disabled:opacity-50"
+                  disabled={locked}
+                  onClick={() => updateDraftItems(() => [])}
+                >
+                  Vaciar lista
+                </button>
+              )}
+            </div>
+            {draftItems.length === 0 ? (
+              <p className="text-xs text-[var(--floor-muted,#52634b)]">
+                Agregá los productos al listado. El ticket para cocina se genera recién al confirmar el pedido.
+              </p>
+            ) : (
+              <>
+                <div tabIndex={0} role="region" aria-labelledby={draftCaptionId} className={tableStyles.tableWrapper}>
+                  <table
+                    className={tableStyles.serviceTable}
+                    style={{
+                      "--label-2": '"Estación"',
+                      "--label-3": '"Cant."',
+                      "--label-4": '"Subtotal"',
+                      "--label-5": '"Acciones"',
+                    } as CSSProperties}
+                  >
+                    <caption id={draftCaptionId}>Listado del pedido borrador pendiente de confirmar</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Ítem</th>
+                        <th scope="col">Estación</th>
+                        <th scope="col">Cant.</th>
+                        <th scope="col" className="text-right">Subtotal</th>
+                        <th scope="col" className="text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {draftItems.map((item) => (
+                        <tr key={item.key}>
+                          <th scope="row">
+                            <span className="block break-words">{item.name}</span>
+                            {item.notes && (
+                              <span className="mt-0.5 block text-xs font-normal italic text-[var(--floor-muted,#52634b)]">
+                                Nota: {item.notes}
+                              </span>
+                            )}
+                          </th>
+                          <td className="whitespace-nowrap">{item.station === "BAR" ? "Barra" : "Cocina"}</td>
+                          <td>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--floor-border,#d4d4d8)] bg-white text-zinc-800 hover:bg-[var(--floor-hover,#edf2e9)] disabled:opacity-40"
+                                disabled={locked || item.quantity <= 1}
+                                aria-label={`Restar uno de ${item.name}`}
+                                onClick={() => changeDraftQuantity(item.key, -1)}
+                              >
+                                <Minus size={11} aria-hidden="true" />
+                              </button>
+                              <span className="min-w-5 text-center font-semibold tabular-nums">{item.quantity}</span>
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--floor-border,#d4d4d8)] bg-white text-zinc-800 hover:bg-[var(--floor-hover,#edf2e9)] disabled:opacity-40"
+                                disabled={locked || item.quantity >= 99}
+                                aria-label={`Sumar uno de ${item.name}`}
+                                onClick={() => changeDraftQuantity(item.key, 1)}
+                              >
+                                <Plus size={11} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap text-right font-medium tabular-nums">
+                            {amount(item.unitPriceCents * item.quantity)}
+                          </td>
+                          <td>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                className={tableDangerButtonClass}
+                                disabled={locked}
+                                aria-label={`Quitar ${item.name}`}
+                                onClick={() => removeDraftItem(item.key)}
+                              >
+                                <Trash2 size={12} aria-hidden="true" />Quitar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--floor-border,#e4e4e7)] pt-2.5">
+                  <div className="text-xs">
+                    <span className="text-[var(--floor-muted,#52634b)]">Total borrador: </span>
+                    <strong className="text-sm tabular-nums text-[var(--floor-ink,#09090b)]">{amount(draftTotalCents)}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className={floorPrimaryButtonClass}
+                    disabled={locked || draftItems.length === 0}
+                    onClick={() => void confirmDraftOrder()}
+                  >
+                    <Send size={15} aria-hidden="true" />Confirmar pedido y enviar a cocina
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      )}
       <section aria-label="Pedidos" className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h4 className="font-semibold">Pedidos</h4>
+            <h4 className="font-semibold">Pedidos confirmados</h4>
             <span className="inline-flex items-center gap-1 text-xs text-[var(--floor-muted,#52634b)]"><Clock3 size={13} aria-hidden="true" />{quantityLabel(account.pendingQuantity, "pendiente")}</span>
           </div>
           {account.pendingQuantity > 0 && !historical && <div className="flex flex-wrap gap-2">
@@ -277,36 +457,117 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
             </button>
           </div>}
         </div>
-        {!account.lines.length && <p className="text-sm text-[var(--floor-muted,#52634b)]">Todavía no hay pedidos registrados.</p>}
-        <ul className="space-y-2">{account.lines.map((line) => {
-          const pending = line.quantity - line.deliveredQuantity - line.cancelledQuantity;
-          const statusBadge = kitchenStatusBadge[line.kitchenStatus] ?? kitchenStatusBadge.PENDING;
-          return <li key={line.id} className={cardClass}>
-            <div className="flex items-start justify-between gap-2 text-sm">
-              <div className="min-w-0">
-                <p className="break-words font-semibold">{line.quantity} × {line.name}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] ${statusBadge.className}`}>{statusBadge.label}</span>
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600">{line.station === "BAR" ? "Barra" : "Cocina"}</span>
-                  {line.round > 1 && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-500">Tanda {line.round}</span>}
-                </div>
-                {line.notes && <p className="mt-1 text-xs italic text-[var(--floor-muted,#52634b)]">Nota: {line.notes}</p>}
-              </div>
-              <p className="shrink-0 tabular-nums">{amount(line.unitPriceCents * (line.quantity - line.cancelledQuantity))}</p>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">{quantityLabel(pending, "pendiente")} · {quantityLabel(line.deliveredQuantity, "entregado")}{line.cancelledQuantity > 0 && ` · ${quantityLabel(line.cancelledQuantity, "anulado")}`}</p>
-            {pending > 0 && !historical && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Entregar uno de ${line.name}`} onClick={() => updateLine(line, "deliveredQuantity", 1)}><Check size={14} aria-hidden="true" />Entregar 1</button><button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} aria-label={`Anular uno de ${line.name}`} onClick={() => updateLine(line, "cancelledQuantity", 1)}>Anular 1</button></div>}
-            {!historical && (line.deliveredQuantity > 0 || line.cancelledQuantity > 0) && <details className="mt-2">
-              <summary className="cursor-pointer text-xs font-medium text-[var(--floor-action,#3d5934)]">Corregir cantidades</summary>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {line.deliveredQuantity > 0 && <button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "deliveredQuantity", -1)}>Deshacer entrega</button>}
-                {line.cancelledQuantity > 0 && <button type="button" className={floorSecondaryButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "cancelledQuantity", -1)}>Deshacer anulación</button>}
-              </div>
-            </details>}
-          </li>;
-        })}</ul>
+        {!account.lines.length ? (
+          <p className="text-sm text-[var(--floor-muted,#52634b)]">Todavía no hay pedidos confirmados.</p>
+        ) : (
+          <div tabIndex={0} role="region" aria-labelledby={confirmedCaptionId} className={tableStyles.tableWrapper}>
+            <table
+              className={tableStyles.serviceTable}
+              style={{
+                "--label-2": '"Estación"',
+                "--label-3": '"Estado"',
+                "--label-4": '"Cant."',
+                "--label-5": '"Subtotal"',
+                "--label-6": '"Acciones"',
+              } as CSSProperties}
+            >
+              <caption id={confirmedCaptionId}>Pedidos confirmados enviados a cocina y entregados</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Ítem</th>
+                  <th scope="col">Estación</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Cant.</th>
+                  <th scope="col" className="text-right">Subtotal</th>
+                  <th scope="col" className="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {account.lines.map((line) => {
+                  const pending = line.quantity - line.deliveredQuantity - line.cancelledQuantity;
+                  const statusBadge = kitchenStatusBadge[line.kitchenStatus] ?? kitchenStatusBadge.PENDING;
+                  return (
+                    <tr key={line.id}>
+                      <th scope="row">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="break-words">{line.name}</span>
+                          <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-zinc-600">Tanda {line.round}</span>
+                        </span>
+                        {line.notes && (
+                          <span className="mt-1 block text-xs font-normal italic text-[var(--floor-muted,#52634b)]">
+                            Nota: {line.notes}
+                          </span>
+                        )}
+                      </th>
+                      <td className="whitespace-nowrap">{line.station === "BAR" ? "Barra" : "Cocina"}</td>
+                      <td>
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap ${statusBadge.className}`}>
+                          {statusBadge.label}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span className="block font-semibold tabular-nums">{line.quantity}</span>
+                        <span className="block text-[11px] text-[var(--floor-muted,#52634b)] tabular-nums">
+                          {pending} pend. · {line.deliveredQuantity} ent.
+                          {line.cancelledQuantity > 0 && ` · ${line.cancelledQuantity} anul.`}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap text-right font-medium tabular-nums">
+                        {amount(line.unitPriceCents * (line.quantity - line.cancelledQuantity))}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap items-center justify-end gap-1">
+                          {pending > 0 && !historical && (
+                            <>
+                              <button
+                                type="button"
+                                className={tableActionButtonClass}
+                                disabled={locked || confirming}
+                                aria-label={`Entregar uno de ${line.name}`}
+                                onClick={() => updateLine(line, "deliveredQuantity", 1)}
+                              >
+                                <Check size={12} aria-hidden="true" />Entregar 1
+                              </button>
+                              <button
+                                type="button"
+                                className={tableActionButtonClass}
+                                disabled={locked || confirming}
+                                aria-label={`Anular uno de ${line.name}`}
+                                onClick={() => updateLine(line, "cancelledQuantity", 1)}
+                              >
+                                Anular 1
+                              </button>
+                            </>
+                          )}
+                          {!historical && (line.deliveredQuantity > 0 || line.cancelledQuantity > 0) && (
+                            <details className="w-full text-right">
+                              <summary className="cursor-pointer text-[11px] font-medium text-[var(--floor-action,#3d5934)]">
+                                Corregir cantidades
+                              </summary>
+                              <div className="mt-1 flex flex-wrap justify-end gap-1">
+                                {line.deliveredQuantity > 0 && (
+                                  <button type="button" className={tableActionButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "deliveredQuantity", -1)}>
+                                    Deshacer entrega
+                                  </button>
+                                )}
+                                {line.cancelledQuantity > 0 && (
+                                  <button type="button" className={tableActionButtonClass} disabled={locked || confirming} onClick={() => updateLine(line, "cancelledQuantity", -1)}>
+                                    Deshacer anulación
+                                  </button>
+                                )}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
-      {!historical && !confirming && <AddOrderLine products={products} busy={locked} onAdd={(line) => run({ action: "add-line", ...identity, ...line })} />}
     </div>
     {!historical && <footer className={floorWindowFooterClass}>
       {confirming ? <form className="space-y-3" onSubmit={(event) => {
@@ -354,18 +615,19 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
           <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={resetCheckoutState}>Volver al pedido</button>
           <button type="submit" className={floorPrimaryButtonClass} disabled={!canCheckout || versionChanged || (account.deliveredCents > 0 && (!payment || !splitValid))}>{account.deliveredCents > 0 ? "Confirmar cobro" : "Confirmar cierre"}</button>
         </div>
-      </form> : <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-[var(--floor-muted,#52634b)]">{account.pendingQuantity > 0 ? "Entregá o anulá los pedidos pendientes antes de cerrar." : "Al cerrar, se liberan las mesas de esta cuenta."}</p><button type="button" className={floorPrimaryButtonClass} disabled={!canCheckout} onClick={() => setCheckoutVersion(account.version)}>{account.deliveredCents > 0 ? "Cobrar y cerrar" : "Cerrar sin consumo"}</button></div>}
+      </form> : <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-[var(--floor-muted,#52634b)]">{draftItems.length > 0 ? "Confirmá o vaciá el listado antes de cerrar." : account.pendingQuantity > 0 ? "Entregá o anulá los pedidos pendientes antes de cerrar." : "Al cerrar, se liberan las mesas de esta cuenta."}</p><button type="button" className={floorPrimaryButtonClass} disabled={!canCheckout} onClick={() => setCheckoutVersion(account.version)}>{account.deliveredCents > 0 ? "Cobrar y cerrar" : "Cerrar sin consumo"}</button></div>}
     </footer>}
   </>;
 }
 
-type NewLine = {
+type DraftOrderItem = {
+  key: string;
   productId?: string;
-  name?: string;
-  unitPriceCents?: number;
+  name: string;
+  unitPriceCents: number;
   quantity: number;
-  notes?: string;
-  station?: KitchenStation;
+  notes: string;
+  station: KitchenStation;
 };
 
 const productSearchText = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es-AR");
@@ -437,7 +699,7 @@ function ProductPicker({ products, value, disabled, onChange }: {
   </div>;
 }
 
-function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[]; busy: boolean; onAdd: (line: NewLine) => Promise<boolean> }) {
+function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[]; busy: boolean; onAdd: (item: Omit<DraftOrderItem, "key">) => void }) {
   const [productId, setProductId] = useState("");
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -446,29 +708,45 @@ function AddOrderLine({ products, busy, onAdd }: { products: ServiceProductView[
   const [station, setStation] = useState<KitchenStation>("KITCHEN");
   const activeProducts = products.filter((product) => product.active);
   const manual = productId === manualProduct.id || activeProducts.length === 0;
-  const hasProduct = activeProducts.some((product) => product.id === productId);
+  const selectedProduct = activeProducts.find((product) => product.id === productId);
+  const hasProduct = Boolean(selectedProduct);
   const cents = parsePrice(price);
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
     const count = Number(quantity);
     if (busy || !Number.isInteger(count) || count < 1 || count > 99) return;
-    if (manual && (!name.trim() || cents < 1 || cents > 2_147_483_647)) return;
-    if (!manual && !hasProduct) return;
-    const success = await onAdd(manual
-      ? { name: name.trim(), unitPriceCents: cents, quantity: count, notes: notes.trim() || undefined, station }
-      : { productId, quantity: count, notes: notes.trim() || undefined, station }
-    );
-    if (success) { setProductId(""); setName(""); setPrice(""); setQuantity("1"); setNotes(""); setStation("KITCHEN"); }
+    if (manual) {
+      if (!name.trim() || cents < 1 || cents > 2_147_483_647) return;
+      onAdd({ name: name.trim(), unitPriceCents: cents, quantity: count, notes: notes.trim(), station });
+    } else if (selectedProduct) {
+      onAdd({
+        productId: selectedProduct.id,
+        name: selectedProduct.name,
+        unitPriceCents: selectedProduct.unitPriceCents,
+        quantity: count,
+        notes: notes.trim(),
+        station,
+      });
+    } else {
+      return;
+    }
+    setProductId("");
+    setName("");
+    setPrice("");
+    setQuantity("1");
+    setNotes("");
+    setStation("KITCHEN");
   };
-  return <form aria-label="Agregar pedido" className={`${cardClass} space-y-2.5`} onSubmit={submit}>
-    <h4 className="font-semibold">Agregar pedido</h4>
+  return <form aria-label="Agregar pedido al listado" className={`${cardClass} ${tableStyles.orderBuilder} space-y-2.5`} onSubmit={submit}>
+    <h4 className="font-semibold">Agregar al listado</h4>
     {activeProducts.length > 0 && <ProductPicker products={activeProducts} value={productId} disabled={busy} onChange={setProductId} />}
     {manual && <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] gap-2"><label className={fieldClass}>Nombre<input className={floorInputClass} disabled={busy} required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label className={fieldClass}>Precio unitario ($)<input className={floorInputClass} disabled={busy} required inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" maxLength={13} value={price} onChange={(event) => setPrice(event.target.value)} /></label></div>}
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.5fr)] gap-2">
+    <div className={tableStyles.orderBuilderGrid}>
       <label className={fieldClass}>Notas de elaboración<input className={floorInputClass} disabled={busy} maxLength={200} placeholder="Ej: sin sal, punto jugoso" value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       <label className={fieldClass}>Estación<select className={floorInputClass} disabled={busy} value={station} onChange={(event) => setStation(event.target.value as KitchenStation)}><option value="KITCHEN">Cocina</option><option value="BAR">Barra</option></select></label>
+      <label className={fieldClass}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+      <button type="submit" className={floorSecondaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !hasProduct)}><Plus size={16} aria-hidden="true" />Agregar a la lista</button>
     </div>
-    <div className="flex flex-wrap items-end justify-between gap-2"><label className={`${fieldClass} w-24`}>Cantidad<input className={floorInputClass} disabled={busy} required type="number" min={1} max={99} step={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><button type="submit" className={floorPrimaryButtonClass} disabled={busy || (manual ? !name.trim() || cents < 1 || cents > 2_147_483_647 : !hasProduct)}><Plus size={16} aria-hidden="true" />Agregar pedido</button></div>
   </form>;
 }
 

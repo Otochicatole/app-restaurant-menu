@@ -29,6 +29,23 @@ const unitPriceCents = z.number().int().min(1).max(2_147_483_647);
 const nonNegativeCents = z.number().int().min(0).max(2_147_483_647);
 const date = z.iso.date();
 
+const orderItemSourceMessage = "Elegí un producto o ingresá nombre y precio.";
+const serviceOrderItemFields = {
+  quantity: z.number().int().min(1).max(99),
+  productId: id.optional(),
+  name: name.optional(),
+  unitPriceCents: unitPriceCents.optional(),
+  notes: z.string().trim().max(200).optional(),
+  station: kitchenStationSchema.optional(),
+};
+const hasValidOrderItemSource = (item: { productId?: string; name?: string; unitPriceCents?: number }) =>
+  item.productId !== undefined
+    ? item.name === undefined && item.unitPriceCents === undefined
+    : item.name !== undefined && item.unitPriceCents !== undefined;
+
+export const serviceOrderItemSchema = z.object(serviceOrderItemFields).refine(hasValidOrderItemSource, orderItemSourceMessage);
+export type ServiceOrderItemInput = z.infer<typeof serviceOrderItemSchema>;
+
 export const serviceCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open"), allocationId: id, tableId: id, expectedAllocationVersion: revision, waiterId: id }),
   z.object({ action: z.literal("assign-waiter"), accountId: id, expectedVersion: revision, waiterId: id }),
@@ -37,15 +54,14 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
     action: z.literal("add-line"),
     accountId: id,
     expectedVersion: revision,
-    quantity: z.number().int().min(1).max(99),
-    productId: id.optional(),
-    name: name.optional(),
-    unitPriceCents: unitPriceCents.optional(),
-    notes: z.string().trim().max(200).optional(),
-    station: kitchenStationSchema.optional(),
-  }).refine((command) => command.productId !== undefined
-    ? command.name === undefined && command.unitPriceCents === undefined
-    : command.name !== undefined && command.unitPriceCents !== undefined, "Elegí un producto o ingresá nombre y precio."),
+    ...serviceOrderItemFields,
+  }).refine(hasValidOrderItemSource, orderItemSourceMessage),
+  z.object({
+    action: z.literal("confirm-order"),
+    accountId: id,
+    expectedVersion: revision,
+    items: z.array(serviceOrderItemSchema).min(1).max(50),
+  }),
   z.object({
     action: z.literal("update-line"),
     accountId: id,
