@@ -46,14 +46,17 @@ describe("administrative full-screen floor editor", () => {
     expect(view.container.querySelector("[class*='md:pl-16']")?.classList.contains("bg-[#f8faf7]")).toBe(true);
   });
 
-  it("renders Caja and Catálogo as separate routes in the main navigation", () => {
+  it("renders Caja, Catálogo and Personal as separate routes in the main navigation", () => {
     route.pathname = "/admin/restaurants/restaurant/products";
     render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
     const cashLink = screen.getByRole("link", { name: "Caja" });
     const catalogLink = screen.getByRole("link", { name: "Catálogo" });
+    const staffLink = screen.getByRole("link", { name: "Personal" });
     expect(cashLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/cash");
     expect(catalogLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/products");
+    expect(staffLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/staff");
     expect(cashLink.getAttribute("aria-current")).toBeNull();
     expect(catalogLink.getAttribute("aria-current")).toBe("page");
+    expect(staffLink.getAttribute("aria-current")).toBeNull();
   });
 });

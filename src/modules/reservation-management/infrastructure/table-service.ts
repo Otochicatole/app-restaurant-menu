@@ -8,6 +8,7 @@ import {
   type KitchenSnapshot, type KitchenStatus, type KitchenStation, type KitchenTicketView,
   type ServiceAccountView, type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals,
   type ServiceCommand, type ServiceCommandResult, type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup,
+  type StaffMemberView, type StaffRole,
 } from "../service-contracts";
 import { syncReservationAllocation } from "./floor-allocations";
 
@@ -25,10 +26,18 @@ const allocationInclude = {
 } satisfies Prisma.ReservationAllocationInclude;
 type AllocationRow = Prisma.ReservationAllocationGetPayload<{ include: typeof allocationInclude }>;
 const productSelect = { id: true, name: true, unitPriceCents: true, active: true } satisfies Prisma.ServiceProductSelect;
+const staffSelect = { id: true, name: true, role: true, phone: true, notes: true, active: true, createdAt: true } satisfies Prisma.RestaurantStaffMemberSelect;
 const maxStoredCents = 2_147_483_647;
+
+type StaffRow = Prisma.RestaurantStaffMemberGetPayload<{ select: typeof staffSelect }>;
+
+function toStaffMember(row: StaffRow): StaffMemberView {
+  return { ...row, role: row.role as StaffRole, createdAt: row.createdAt.toISOString() };
+}
 
 function toAccount(row: AccountRow): ServiceAccountView {
   const { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName,
+    assignedWaiterId, assignedWaiterName,
     version, openedAt, closedAt, businessDate, paymentMethod, totalCents, receiptNumber,
     tipCents, discountCents, discountReason, cashCents, cardCents, transferCents } = row;
   const lines = row.lines.map(({ id, name, unitPriceCents, quantity, deliveredQuantity, cancelledQuantity, notes, kitchenStatus, round, station, createdAt }) =>
@@ -47,7 +56,8 @@ function toAccount(row: AccountRow): ServiceAccountView {
     }
     return summary;
   }, { orderedCents: 0, deliveredCents: 0, pendingQuantity: 0, readyQuantity: 0 });
-  return { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName, version,
+  return { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName,
+    assignedWaiterId: assignedWaiterId ?? null, assignedWaiterName: assignedWaiterName ?? null, version,
     openedAt: openedAt.toISOString(), closedAt: closedAt?.toISOString() ?? null, businessDate,
     paymentMethod: paymentMethod === null ? null : servicePaymentMethodSchema.parse(paymentMethod), totalCents, receiptNumber,
     tipCents: tipCents ?? 0, discountCents: discountCents ?? 0, discountReason: discountReason ?? null,
@@ -99,7 +109,7 @@ async function findAccount(database: Database, restaurantId: string, id: string)
   return account;
 }
 
-async function updateAccount(tx: Prisma.TransactionClient, account: AccountRow, expectedVersion: number, data: Prisma.ServiceAccountUpdateManyMutationInput = {}) {
+async function updateAccount(tx: Prisma.TransactionClient, account: AccountRow, expectedVersion: number, data: Prisma.ServiceAccountUncheckedUpdateManyInput = {}) {
   const updated = await tx.serviceAccount.updateMany({
     where: { id: account.id, restaurantId: account.restaurantId, version: expectedVersion, closedAt: null },
     data: { ...data, version: { increment: 1 } },
@@ -135,7 +145,17 @@ function accountDetails(allocation: AllocationRow, actorId: string, now: Date) {
     customerName: allocation.reservation.customerName, openedAt: now, openedBy: actorId };
 }
 
+async function requireActiveWaiter(tx: Prisma.TransactionClient, restaurantId: string, waiterId: string) {
+  const waiter = await tx.restaurantStaffMember.findFirst({
+    where: { id: waiterId, restaurantId, active: true, role: "WAITER" },
+    select: { id: true, name: true },
+  });
+  if (!waiter) throw new BadRequestError("Elegí un camarero activo del restaurante.");
+  return waiter;
+}
+
 async function openAccount(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"open">, now: Date) {
+  const waiter = await requireActiveWaiter(tx, restaurantId, command.waiterId);
   const allocation = await findAllocation(tx, restaurantId, command.allocationId);
   assertCurrentAllocation(allocation, command);
   const existing = await tx.serviceAccount.findFirst({
@@ -164,9 +184,21 @@ async function openAccount(tx: Prisma.TransactionClient, restaurantId: string, a
   if (collision) throw new ConflictError(`Hay una cuenta abierta en la ubicación de este armado. ${collision}`);
   const account = await tx.serviceAccount.create({ data: {
     ...accountDetails(allocation, actorId, now),
+    assignedWaiterId: waiter.id,
+    assignedWaiterName: waiter.name,
     tables: { create: group.map(({ tableId, label }) => ({ tableId, label })) },
   }, include: accountInclude });
   return toAccount(account);
+}
+
+async function assignWaiter(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"assign-waiter">) {
+  const waiter = await requireActiveWaiter(tx, restaurantId, command.waiterId);
+  const account = await findAccount(tx, restaurantId, command.accountId);
+  await updateAccount(tx, account, command.expectedVersion, {
+    assignedWaiterId: waiter.id,
+    assignedWaiterName: waiter.name,
+  });
+  return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
 async function addLine(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"add-line">, now: Date) {
@@ -400,6 +432,31 @@ async function archiveProduct(tx: Prisma.TransactionClient, restaurantId: string
   return tx.serviceProduct.findUniqueOrThrow({ where: { id }, select: productSelect });
 }
 
+async function saveStaff(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-staff">) {
+  const data = {
+    name: command.name,
+    role: command.role,
+    phone: command.phone,
+    notes: command.notes,
+    active: command.active,
+  };
+  if (!command.id) {
+    return toStaffMember(await tx.restaurantStaffMember.create({ data: { restaurantId, ...data }, select: staffSelect }));
+  }
+  const updated = await tx.restaurantStaffMember.updateMany({ where: { id: command.id, restaurantId }, data });
+  if (updated.count !== 1) throw new NotFoundError("Integrante del personal");
+  return toStaffMember(await tx.restaurantStaffMember.findUniqueOrThrow({ where: { id: command.id }, select: staffSelect }));
+}
+
+async function setStaffActive(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"set-staff-active">) {
+  const updated = await tx.restaurantStaffMember.updateMany({
+    where: { id: command.id, restaurantId },
+    data: { active: command.active },
+  });
+  if (updated.count !== 1) throw new NotFoundError("Integrante del personal");
+  return toStaffMember(await tx.restaurantStaffMember.findUniqueOrThrow({ where: { id: command.id }, select: staffSelect }));
+}
+
 async function recordCashEvent(tx: Prisma.TransactionClient, restaurantId: string, actorId: string,
   command: Command<"close-day"> | Command<"reopen-day">, today: string, now: Date) {
   if (command.date > today) throw new BadRequestError("No podés operar la caja de un día futuro.");
@@ -429,15 +486,22 @@ export class TableService {
     return withSqliteTransaction(this.database, async (tx) => {
       const { timeZone } = await settings(tx, restaurantId, true);
       const today = restaurantToday(timeZone, now);
-      const [accounts, products, cash, unserved] = await Promise.all([
+      const [accounts, products, waiters, cash, unserved] = await Promise.all([
         tx.serviceAccount.findMany({ where: { restaurantId, ...(at
           ? { closedAt: { lte: at }, businessDate: restaurantToday(timeZone, at) }
           : { closedAt: null }) }, include: accountInclude, orderBy: [{ openedAt: "asc" }, { id: "asc" }] }),
         tx.serviceProduct.findMany({ where: { restaurantId, active: true }, select: productSelect, orderBy: { name: "asc" } }),
+        at
+          ? Promise.resolve([])
+          : tx.restaurantStaffMember.findMany({
+              where: { restaurantId, active: true, role: "WAITER" },
+              select: staffSelect,
+              orderBy: [{ name: "asc" }, { id: "asc" }],
+            }),
         lastCashEvent(tx, restaurantId, today),
         at ? [] : unservedGroups(tx, restaurantId, now),
       ]);
-      return { accounts: accounts.map(toAccount), products, cashClosed: cash?.kind === "CLOSE", unserved };
+      return { accounts: accounts.map(toAccount), products, waiters: waiters.map(toStaffMember), cashClosed: cash?.kind === "CLOSE", unserved };
     });
   }
 
@@ -501,6 +565,16 @@ export class TableService {
     return this.database.serviceProduct.findMany({ where: { restaurantId }, select: productSelect, orderBy: { name: "asc" } });
   }
 
+  async staff(restaurantId: string): Promise<StaffMemberView[]> {
+    await settings(this.database, restaurantId);
+    const rows = await this.database.restaurantStaffMember.findMany({
+      where: { restaurantId },
+      select: staffSelect,
+      orderBy: [{ active: "desc" }, { role: "asc" }, { name: "asc" }, { id: "asc" }],
+    });
+    return rows.map(toStaffMember);
+  }
+
   async report(restaurantId: string, from?: string, to?: string, now = new Date()): Promise<ServiceCashReport> {
     return withSqliteTransaction(this.database, async (tx) => {
       const { timeZone } = await settings(tx, restaurantId);
@@ -520,12 +594,13 @@ export class TableService {
   async execute(restaurantId: string, actorId: string, raw: ServiceCommand, now = new Date()): Promise<ServiceCommandResult> {
     const command = serviceCommandSchema.parse(raw);
     return withSqliteTransaction(this.database, async (tx) => {
-      const requiresFloor = command.action === "open" || command.action === "close-empty" || command.action === "add-line"
-        || command.action === "update-line" || command.action === "checkout" || command.action === "deliver-all"
-        || command.action === "march-round" || command.action === "update-kitchen-status";
+      const requiresFloor = command.action === "open" || command.action === "assign-waiter" || command.action === "close-empty"
+        || command.action === "add-line" || command.action === "update-line" || command.action === "checkout"
+        || command.action === "deliver-all" || command.action === "march-round" || command.action === "update-kitchen-status";
       const { timeZone } = await settings(tx, restaurantId, requiresFloor);
       switch (command.action) {
         case "open": return openAccount(tx, restaurantId, actorId, command, now);
+        case "assign-waiter": return assignWaiter(tx, restaurantId, command);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "add-line": return addLine(tx, restaurantId, command, now);
         case "update-line": return updateLine(tx, restaurantId, command);
@@ -535,6 +610,8 @@ export class TableService {
         case "checkout": return checkout(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "save-product": return saveProduct(tx, restaurantId, command);
         case "archive-product": return archiveProduct(tx, restaurantId, command.id);
+        case "save-staff": return saveStaff(tx, restaurantId, command);
+        case "set-staff-active": return setStaffActive(tx, restaurantId, command);
         case "close-day":
         case "reopen-day": return recordCashEvent(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
       }

@@ -96,6 +96,7 @@ model Restaurant {
   reservationAllocations       ReservationAllocation[]
   serviceProducts              ServiceProduct[]
   serviceCashEvents            ServiceCashEvent[]
+  staffMembers                 RestaurantStaffMember[]
 
   @@index([organizationId])
 }
@@ -624,6 +625,33 @@ model ServiceProduct {
   @@index([restaurantId, active, name])
 }
 
+enum StaffRole {
+  WAITER
+  KITCHEN
+  BAR
+  CASHIER
+  HOST
+  MANAGER
+  OTHER
+}
+
+model RestaurantStaffMember {
+  id              String           @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name            String
+  role            StaffRole        @default(WAITER)
+  phone           String           @default("")
+  notes           String           @default("")
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  serviceAccounts ServiceAccount[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, role, name])
+}
+
 model ServiceAccount {
   id              String @id @default(cuid())
   restaurantId    String
@@ -634,6 +662,9 @@ model ServiceAccount {
   roomName        String
   reservationCode String
   customerName    String
+  assignedWaiterId   String?
+  assignedWaiterName String?
+  assignedWaiter     RestaurantStaffMember? @relation(fields: [assignedWaiterId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
   version         Int @default(0)
   openedAt        DateTime @default(now())
   openedBy        String
@@ -658,6 +689,7 @@ model ServiceAccount {
   @@index([restaurantId, closedAt])
   @@index([restaurantId, businessDate, closedAt])
   @@index([allocationId, closedAt])
+  @@index([restaurantId, assignedWaiterId])
 }
 
 model ServiceAccountTable {

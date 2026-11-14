@@ -9,6 +9,19 @@ export type KitchenStatus = z.infer<typeof kitchenStatusSchema>;
 export const kitchenStationSchema = z.enum(["KITCHEN", "BAR"]);
 export type KitchenStation = z.infer<typeof kitchenStationSchema>;
 
+export const staffRoleSchema = z.enum(["WAITER", "KITCHEN", "BAR", "CASHIER", "HOST", "MANAGER", "OTHER"]);
+export type StaffRole = z.infer<typeof staffRoleSchema>;
+
+export const staffRoleLabels: Record<StaffRole, string> = {
+  WAITER: "Camarero/a",
+  KITCHEN: "Cocina",
+  BAR: "Barra",
+  CASHIER: "Caja",
+  HOST: "Recepción",
+  MANAGER: "Encargado/a",
+  OTHER: "General",
+};
+
 const id = z.string().min(1).max(128);
 const revision = z.number().int().nonnegative();
 const name = z.string().trim().min(1).max(120);
@@ -17,7 +30,8 @@ const nonNegativeCents = z.number().int().min(0).max(2_147_483_647);
 const date = z.iso.date();
 
 export const serviceCommandSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("open"), allocationId: id, tableId: id, expectedAllocationVersion: revision }),
+  z.object({ action: z.literal("open"), allocationId: id, tableId: id, expectedAllocationVersion: revision, waiterId: id }),
+  z.object({ action: z.literal("assign-waiter"), accountId: id, expectedVersion: revision, waiterId: id }),
   z.object({ action: z.literal("close-empty"), allocationId: id, tableId: id, expectedAllocationVersion: revision }),
   z.object({
     action: z.literal("add-line"),
@@ -69,6 +83,16 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("save-product"), id: id.optional(), name, unitPriceCents }),
   z.object({ action: z.literal("archive-product"), id }),
+  z.object({
+    action: z.literal("save-staff"),
+    id: id.optional(),
+    name: z.string().trim().min(1).max(100),
+    role: staffRoleSchema,
+    phone: z.string().trim().max(40).default(""),
+    notes: z.string().trim().max(200).default(""),
+    active: z.boolean().default(true),
+  }),
+  z.object({ action: z.literal("set-staff-active"), id, active: z.boolean() }),
   z.object({ action: z.literal("close-day"), date }),
   z.object({ action: z.literal("reopen-day"), date, reason: z.string().trim().min(1).max(500) }),
 ]);
@@ -78,6 +102,16 @@ export const serviceCashRangeSchema = z.object({ from: date, to: date })
 
 export type ServiceCommand = z.infer<typeof serviceCommandSchema>;
 export type ServiceProductView = { id: string; name: string; unitPriceCents: number; active: boolean };
+
+export type StaffMemberView = {
+  id: string;
+  name: string;
+  role: StaffRole;
+  phone: string;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+};
 
 export type ServiceOrderLineView = {
   id: string;
@@ -101,6 +135,8 @@ export type ServiceAccountView = {
   roomName: string;
   reservationCode: string;
   customerName: string;
+  assignedWaiterId: string | null;
+  assignedWaiterName: string | null;
   version: number;
   openedAt: string;
   closedAt: string | null;
@@ -161,6 +197,7 @@ export type ServiceUnservedGroup = {
 export type ServiceSnapshot = {
   accounts: ServiceAccountView[];
   products: ServiceProductView[];
+  waiters: StaffMemberView[];
   cashClosed: boolean;
   unserved: ServiceUnservedGroup[];
 };
@@ -206,4 +243,4 @@ export type ServiceCashReport = {
   days: ServiceCashEventView[];
 };
 
-export type ServiceCommandResult = ServiceAccountView | ServiceProductView | ServiceCashEventView | { updated: boolean };
+export type ServiceCommandResult = ServiceAccountView | ServiceProductView | ServiceCashEventView | StaffMemberView | { updated: boolean };

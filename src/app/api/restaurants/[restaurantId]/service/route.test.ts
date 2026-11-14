@@ -5,14 +5,14 @@ import { GET, POST } from "./route";
 
 const access = vi.hoisted(() => ({
   floor: vi.fn(), admin: vi.fn(), actor: vi.fn(),
-  snapshot: vi.fn(), report: vi.fn(), products: vi.fn(), execute: vi.fn(),
+  snapshot: vi.fn(), report: vi.fn(), products: vi.fn(), staff: vi.fn(), execute: vi.fn(),
 }));
 
 vi.mock("@/modules/floor-management/server", () => ({ requireFloorReadAccess: access.floor }));
 vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: access.admin }));
 vi.mock("@/modules/identity-access/server", () => ({ requireAuthenticatedAccount: access.actor }));
 vi.mock("@/modules/reservation-management/server", () => ({
-  tableService: { snapshot: access.snapshot, report: access.report, products: access.products, execute: access.execute },
+  tableService: { snapshot: access.snapshot, report: access.report, products: access.products, staff: access.staff, execute: access.execute },
 }));
 
 const url = "http://example.test/api/restaurants/restaurant/service";
@@ -41,14 +41,24 @@ describe("restaurant service permissions", () => {
     expect(access.execute).toHaveBeenCalledWith("restaurant", "staff", checkout);
   });
 
-  it("requires admin access for the catalog, sales history and closing actions", async () => {
-    for (const mode of ["cash", "products"]) {
+  it("requires admin access for the catalog, staff, sales history and closing actions", async () => {
+    for (const mode of ["cash", "products", "staff"]) {
       expect((await GET(new NextRequest(url + "?mode=" + mode), context())).status).toBe(403);
     }
     expect((await POST(post({ action: "close-day", date: "2026-11-09" }), context())).status).toBe(403);
+    expect((await POST(post({ action: "save-staff", name: "Ana", role: "WAITER" }), context())).status).toBe(403);
+    expect((await POST(post({ action: "set-staff-active", id: "st-1", active: false }), context())).status).toBe(403);
     expect(access.report).not.toHaveBeenCalled();
     expect(access.products).not.toHaveBeenCalled();
+    expect(access.staff).not.toHaveBeenCalled();
     expect(access.execute).not.toHaveBeenCalled();
+  });
+
+  it("lets a waiter reassign an active waiter within their floor scope", async () => {
+    const command = { action: "assign-waiter", accountId: "bill", expectedVersion: 1, waiterId: "w-2" };
+    access.execute.mockResolvedValue({ id: "bill", assignedWaiterId: "w-2" });
+    expect((await POST(post(command), context())).status).toBe(200);
+    expect(access.execute).toHaveBeenCalledWith("restaurant", "staff", command);
   });
 
   it("does not expose historical receipts to a waiter through the board query", async () => {

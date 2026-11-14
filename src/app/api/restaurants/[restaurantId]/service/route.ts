@@ -9,8 +9,8 @@ import { handleApiError, successResponse } from "@/platform/http/api-response";
 import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
 
 type Context = { params: Promise<{ restaurantId: string }> };
-const adminActions = new Set(["save-product", "archive-product", "close-day", "reopen-day"]);
-const modeSchema = z.enum(["board", "cash", "products"]);
+const adminActions = new Set(["save-product", "archive-product", "save-staff", "set-staff-active", "close-day", "reopen-day"]);
+const modeSchema = z.enum(["board", "cash", "products", "staff"]);
 
 function privateResponse(response: Response) {
   response.headers.set("Cache-Control", "private, no-store");
@@ -27,14 +27,16 @@ export async function GET(request: NextRequest, { params }: Context) {
       const at = query.get("at");
       const instant = at ? new Date(z.iso.datetime({ offset: true }).parse(at)) : undefined;
       if (instant && (await requireAuthenticatedAccount()).kind === "waiter") {
-        return privateResponse(successResponse({ accounts: [], products: [], unserved: [], cashClosed: false }));
+        return privateResponse(successResponse({ accounts: [], products: [], waiters: [], unserved: [], cashClosed: false }));
       }
       return privateResponse(successResponse(await tableService.snapshot(restaurantId, undefined, instant)));
     }
     await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
     const result = mode === "products"
       ? await tableService.products(restaurantId)
-      : await tableService.report(restaurantId, query.get("from") ?? undefined, query.get("to") ?? undefined);
+      : mode === "staff"
+        ? await tableService.staff(restaurantId)
+        : await tableService.report(restaurantId, query.get("from") ?? undefined, query.get("to") ?? undefined);
     return privateResponse(successResponse(result));
   } catch (error) {
     return privateResponse(handleApiError(error));

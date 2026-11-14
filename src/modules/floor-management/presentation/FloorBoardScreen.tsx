@@ -232,7 +232,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
   };
   const runServiceCommand = async (command: FloorServiceCommand) => {
     try { return await service.mutate(command); }
-    finally { if (command.action === "open" || command.action === "checkout" || command.action === "close-empty") void refresh(); }
+    finally { if (command.action === "open" || command.action === "assign-waiter" || command.action === "checkout" || command.action === "close-empty") void refresh(); }
   };
   const askRelease = (allocation: FloorAllocationView) => {
     setReleaseTarget(allocation);
@@ -448,7 +448,7 @@ function FloorBoardContent({ restaurantId, restaurantName, readOnly, canManageWa
           const tableId = account.tableIds.slice().sort()[0];
           if (tableId) openServiceWindow({ allocationId: account.allocationId, customerName: account.customerName, reservationCode: account.reservationCode, tableLabels: account.tableLabels, tableId });
         }} />}
-        {panel === "service" && currentTarget && <FloorServiceWindow target={currentTarget} account={serviceAccount} products={service.snapshot?.products ?? []} restaurantName={restaurantName} timeZone={board?.timeZone ?? "America/Argentina/Buenos_Aires"} loading={serviceLoading} loadError={service.error} busy={saving} historical={historical}
+        {panel === "service" && currentTarget && <FloorServiceWindow target={currentTarget} account={serviceAccount} products={service.snapshot?.products ?? []} waiters={service.snapshot?.waiters ?? []} staffHref={readOnly ? undefined : `/admin/restaurants/${encodeURIComponent(restaurantId)}/staff`} restaurantName={restaurantName} timeZone={board?.timeZone ?? "America/Argentina/Buenos_Aires"} loading={serviceLoading} loadError={service.error} busy={saving} historical={historical}
           canOpen={canUseService && Boolean(serviceAllocation && !serviceAllocation.releasedAt)} allocationVersion={target?.recovery ? recoveryGroup?.expectedAllocationVersion : serviceAllocation?.version} conflict={Boolean(serviceAllocation?.serviceConflict)} cashClosed={Boolean(service.snapshot?.cashClosed)}
           onRefresh={() => { void service.refresh(); void refresh(); }} onCommand={async (command) => {
             const account = await runServiceCommand(command);

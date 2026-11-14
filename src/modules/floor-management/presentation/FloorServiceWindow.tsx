@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowRight, Check, CheckCheck, Clock3, Plus, Printer, ReceiptText, RotateCw, Search, Utensils } from "lucide-react";
-import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
+import { ArrowRight, Check, CheckCheck, Clock3, Plus, Printer, ReceiptText, RotateCw, Search, UserCheck, Utensils } from "lucide-react";
+import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup, StaffMemberView } from "@/modules/reservation-management/contracts";
 import { floorInputClass } from "./floor-api";
 import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import type { FloorServiceCommand } from "./useFloorService";
@@ -58,7 +59,13 @@ export function FloorServiceAccounts({ accounts, unserved, error, loading, histo
       : !visible.length && !error ? <p className="py-5 text-sm text-[var(--floor-muted,#52634b)]">{historical ? "No hay cuentas disponibles para este horario." : "No hay cuentas abiertas. Elegí una mesa ocupada en el plano o desde Reservas."}</p>
       : <ul className="space-y-2.5">{visible.map((account) => <li key={account.id}>
         <button type="button" onClick={() => onChoose(account)} className={`${cardClass} flex w-full items-center justify-between gap-3 text-left hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#3d5934)]`}>
-          <span className="min-w-0"><span className="block font-semibold">{account.customerName}</span><span className="block text-xs text-[var(--floor-muted,#52634b)]">{account.roomName} · {account.tableLabels.join(" + ")}</span></span>
+          <span className="min-w-0">
+            <span className="block font-semibold">{account.customerName}</span>
+            <span className="block text-xs text-[var(--floor-muted,#52634b)]">
+              {account.roomName} · {account.tableLabels.join(" + ")}
+              {account.assignedWaiterName ? ` · Camarero: ${account.assignedWaiterName}` : ""}
+            </span>
+          </span>
           <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums">{amount(account.totalCents ?? account.orderedCents)}<ArrowRight size={14} aria-hidden="true" /></span>
         </button>
       </li>)}</ul>}
@@ -72,13 +79,17 @@ export function FloorServiceAccounts({ accounts, unserved, error, loading, histo
   </section>;
 }
 
-export function FloorServiceWindow({ target, account, products, restaurantName, timeZone, loading, loadError, busy, historical, canOpen, allocationVersion, conflict, cashClosed, onCommand, onRefresh }: {
-  target: FloorServiceTarget; account?: ServiceAccountView; products: ServiceProductView[]; restaurantName: string; timeZone: string; loading: boolean;
+export function FloorServiceWindow({ target, account, products, waiters, staffHref, restaurantName, timeZone, loading, loadError, busy, historical, canOpen, allocationVersion, conflict, cashClosed, onCommand, onRefresh }: {
+  target: FloorServiceTarget; account?: ServiceAccountView; products: ServiceProductView[]; waiters: StaffMemberView[]; staffHref?: string;
+  restaurantName: string; timeZone: string; loading: boolean;
   loadError: string | null; busy: boolean; historical: boolean; canOpen: boolean; allocationVersion?: number;
   conflict: boolean; cashClosed: boolean; onCommand: (command: FloorServiceCommand) => Promise<ServiceAccountView>; onRefresh: () => void;
 }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ServiceAccountView | null>(null);
+  const [selectedWaiterId, setSelectedWaiterId] = useState("");
+  const [reassigningWaiter, setReassigningWaiter] = useState(false);
+  const [nextWaiterId, setNextWaiterId] = useState("");
   const [checkoutVersion, setCheckoutVersion] = useState<number | null>(null);
   const [payment, setPayment] = useState<ServicePaymentMethod | "">("");
   const [tip, setTip] = useState("");
@@ -121,13 +132,54 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
     <button type="button" className={floorPrimaryButtonClass} disabled={busy || cashClosed || Boolean(loadError) || allocationVersion === undefined} onClick={() => allocationVersion !== undefined && void run({ action: "close-empty", allocationId: target.allocationId, tableId: target.tableId, expectedAllocationVersion: allocationVersion })}>Confirmar cierre sin consumo</button>
     {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
   </div>;
+  const chosenWaiterId = waiters.some((waiter) => waiter.id === selectedWaiterId) ? selectedWaiterId : "";
   if (!account) return <div className={floorWindowBodyClass}>
     <div><h3 className="font-semibold">{target.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{target.reservationCode} · {target.tableLabels.join(" + ")}</p></div>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-800">{error}</p>}
-    {loading ? <p role="status" className="text-sm">Consultando el servicio…</p> : historical ? <p className="text-sm">No hay una cuenta disponible para este grupo en el horario consultado.</p> : <>
-      <p className="text-sm">{conflict ? "Hay una cuenta de otro grupo en estas mesas. Cerrá esa cuenta antes de abrir la siguiente." : canOpen ? "Abrí la cuenta del grupo para registrar sus pedidos." : "La asignación ya no está disponible para abrir una cuenta."}</p>
-      {canOpen && allocationVersion !== undefined && <button type="button" className={floorPrimaryButtonClass} disabled={busy || conflict || Boolean(loadError)} onClick={() => void run({ action: "open", allocationId: target.allocationId, tableId: target.tableId, expectedAllocationVersion: allocationVersion })}>Abrir cuenta</button>}
-    </>}
+    {loading ? <p role="status" className="text-sm">Consultando el servicio…</p> : historical ? <p className="text-sm">No hay una cuenta disponible para este grupo en el horario consultado.</p>
+      : conflict ? <p className="text-sm">Hay una cuenta de otro grupo en estas mesas. Cerrá esa cuenta antes de abrir la siguiente.</p>
+      : !canOpen || allocationVersion === undefined ? <p className="text-sm">La asignación ya no está disponible para abrir una cuenta.</p>
+      : waiters.length === 0 ? <div className="space-y-3">
+          <p className="text-sm">Todavía no hay camareros activos cargados para asignar a esta mesa.</p>
+          {staffHref && <Link href={staffHref} className={floorSecondaryButtonClass}>Ir a Personal para cargar camareros</Link>}
+        </div>
+      : <div className="space-y-3">
+          <p className="text-sm">Asigná el camarero que atiende esta mesa para iniciar el servicio.</p>
+          <div role="radiogroup" aria-label="Camarero asignado" className="grid gap-2">
+            {waiters.map((waiter) => {
+              const selected = chosenWaiterId === waiter.id;
+              return (
+                <button
+                  key={waiter.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={busy || Boolean(loadError)}
+                  onClick={() => setSelectedWaiterId(waiter.id)}
+                  className={`${cardClass} flex w-full items-center justify-between gap-3 text-left transition-colors ${
+                    selected
+                      ? "border-[#3d5934] bg-[var(--floor-hover,#edf2e9)] ring-2 ring-[#3d5934]/25"
+                      : "hover:bg-[var(--floor-hover,#edf2e9)]"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-zinc-950">{waiter.name}</span>
+                    {waiter.notes && <span className="block text-xs text-[var(--floor-muted,#52634b)]">{waiter.notes}</span>}
+                  </span>
+                  {selected && <Check size={16} aria-hidden="true" className="shrink-0 text-[#263e23]" />}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className={floorPrimaryButtonClass}
+            disabled={!chosenWaiterId || busy || conflict || Boolean(loadError)}
+            onClick={() => void run({ action: "open", allocationId: target.allocationId, tableId: target.tableId, expectedAllocationVersion: allocationVersion, waiterId: chosenWaiterId })}
+          >
+            <UserCheck size={16} aria-hidden="true" />Asignar camarero y abrir cuenta
+          </button>
+        </div>}
     {loadError && <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
   </div>;
 
@@ -152,7 +204,57 @@ export function FloorServiceWindow({ target, account, products, restaurantName, 
 
   return <>
     <div className={floorWindowBodyClass}>
-      <header className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold">{account.customerName}</h3><p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{account.reservationCode} · {account.tableLabels.join(" + ")}</p></div><span className="rounded-lg bg-[var(--floor-hover,#edf2e9)] px-2.5 py-1 text-xs font-semibold">Cuenta abierta</span></header>
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="font-semibold">{account.customerName}</h3>
+            <p className="mt-1 text-sm text-[var(--floor-muted,#52634b)]">{account.reservationCode} · {account.tableLabels.join(" + ")}</p>
+          </div>
+          <span className="rounded-lg bg-[var(--floor-hover,#edf2e9)] px-2.5 py-1 text-xs font-semibold">Cuenta abierta</span>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-white px-3 py-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 font-medium text-[var(--floor-ink,#263e23)]">
+            <UserCheck size={14} aria-hidden="true" />
+            Camarero: <strong>{account.assignedWaiterName ?? "Sin asignar"}</strong>
+          </span>
+          {!historical && waiters.length > 0 && !reassigningWaiter && (
+            <button
+              type="button"
+              disabled={locked || confirming}
+              onClick={() => { setNextWaiterId(account.assignedWaiterId ?? waiters[0]?.id ?? ""); setReassigningWaiter(true); }}
+              className="font-semibold text-[#263e23] underline underline-offset-2 disabled:opacity-50"
+            >
+              Cambiar camarero
+            </button>
+          )}
+        </div>
+        {reassigningWaiter && !historical && (
+          <form
+            aria-label="Reasignar camarero"
+            className="flex flex-wrap items-end gap-2 rounded-xl border border-[var(--floor-border,#e4e4e7)] bg-white p-2.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!nextWaiterId) return;
+              void run({ action: "assign-waiter", ...identity, waiterId: nextWaiterId }).then((ok) => {
+                if (ok) setReassigningWaiter(false);
+              });
+            }}
+          >
+            <label className={`${fieldClass} min-w-36 flex-1`}>
+              Nuevo camarero
+              <select className={floorInputClass} disabled={locked} value={nextWaiterId} onChange={(event) => setNextWaiterId(event.target.value)}>
+                {waiters.map((waiter) => (
+                  <option key={waiter.id} value={waiter.id}>{waiter.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex gap-1.5">
+              <button type="button" className={floorSecondaryButtonClass} disabled={locked} onClick={() => setReassigningWaiter(false)}>Cancelar</button>
+              <button type="submit" className={floorPrimaryButtonClass} disabled={locked || !nextWaiterId || nextWaiterId === account.assignedWaiterId}>Guardar</button>
+            </div>
+          </form>
+        )}
+      </header>
       <dl aria-live="polite" className="grid grid-cols-2 gap-3 rounded-xl bg-[var(--floor-hover,#edf2e9)] p-3 text-xs">
         <div><dt>Consumo registrado</dt><dd className="mt-1 text-base font-semibold tabular-nums">{amount(account.orderedCents)}</dd></div>
         <div><dt>Total entregado</dt><dd className="mt-1 text-base font-semibold tabular-nums">{amount(account.deliveredCents)}</dd></div>

@@ -39,6 +39,7 @@ describe("table service in SQLite", () => {
   let roomId: string;
   let locationId: string;
   let tableIds: string[];
+  let waiterId: string;
 
   beforeAll(async () => {
     await mkdir(directory, { recursive: true });
@@ -70,6 +71,8 @@ describe("table service in SQLite", () => {
     roomId = room.id;
     locationId = room.locations[0].id;
     tableIds = room.tables.map(({ id }) => id);
+    const waiter = await first.restaurantStaffMember.create({ data: { restaurantId, name: "Ana", role: "WAITER", active: true } });
+    waiterId = waiter.id;
   });
 
   async function visit() {
@@ -80,9 +83,9 @@ describe("table service in SQLite", () => {
     return first.reservationAllocation.findUniqueOrThrow({ where: { reservationId } });
   }
 
-  async function open(allocationId: string, index = 0, expectedAllocationVersion = 0, client = service) {
+  async function open(allocationId: string, index = 0, expectedAllocationVersion = 0, client = service, assignedWaiterId = waiterId) {
     return accountView(await client.execute(restaurantId, actor, { action: "open", allocationId,
-      tableId: tableIds[index], expectedAllocationVersion }, now));
+      tableId: tableIds[index], expectedAllocationVersion, waiterId: assignedWaiterId }, now));
   }
 
   it("opens one account per joined group and releases only that group until the last checkout", async () => {
@@ -164,7 +167,7 @@ describe("table service in SQLite", () => {
       assignment: { roomId, locationId, optionId: `table:${tableIds[2]}`, x: 420, y: 180, rotation: 0, expectedRoomRevision: 0 },
     }, () => after);
     const laterAllocation = await first.reservationAllocation.findUniqueOrThrow({ where: { reservationId: later.reservationId } });
-    await service.execute(restaurantId, actor, { action: "open", allocationId: laterAllocation.id, tableId: tableIds[2], expectedAllocationVersion: 0 }, after);
+    await service.execute(restaurantId, actor, { action: "open", allocationId: laterAllocation.id, tableId: tableIds[2], expectedAllocationVersion: 0, waiterId }, after);
     const snapshot = await service.snapshot(restaurantId, after);
     expect(snapshot.unserved).toEqual([expect.objectContaining({ allocationId: old.id, tableId: tableIds[2], expectedAllocationVersion: 1 })]);
     const close = { action: "close-empty", allocationId: old.id, tableId: tableIds[2], expectedAllocationVersion: 1 } as const;
@@ -236,7 +239,7 @@ describe("table service in SQLite", () => {
       expect(timed.allocations[0]).not.toHaveProperty("serviceConflict");
       expect(timed.allocations[0].poses.map(({ tableId }) => tableId)).toEqual([tableIds[2]]);
     } finally { vi.useRealTimers(); }
-    const openScheduled = { action: "open", allocationId: scheduled.id, tableId: tableIds[2], expectedAllocationVersion: 0 } as const;
+    const openScheduled = { action: "open", allocationId: scheduled.id, tableId: tableIds[2], expectedAllocationVersion: 0, waiterId } as const;
     await expect(new TableService(second).execute(restaurantId, actor, openScheduled, after))
       .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("en la ubicación de este armado") });
     await service.execute(restaurantId, actor, { action: "checkout", accountId: account.id, expectedVersion: 0 }, after);
@@ -297,5 +300,48 @@ describe("table service in SQLite", () => {
     expect((await service.account(restaurantId, account.id)).tableIds).toEqual(tableIds.slice(0, 2));
     expect(await first.reservationAllocationTable.findMany({ where: { allocationId: allocation.id, releasedAt: null }, orderBy: { x: "asc" } }))
       .toMatchObject([{ tableId: tableIds[0], x: 260 }, { tableId: tableIds[1], x: 340 }]);
+  });
+
+  it("manages restaurant staff and requires an active waiter when opening or reassigning an account", async () => {
+    const secondWaiter = await service.execute(restaurantId, actor, {
+      action: "save-staff", name: "Bruno", role: "WAITER", phone: "1155550000", notes: "Turno noche", active: true,
+    }, now);
+    if (!("role" in secondWaiter)) throw new Error("Expected staff member");
+    const cook = await service.execute(restaurantId, actor, {
+      action: "save-staff", name: "Carla", role: "KITCHEN", phone: "", notes: "Parrilla", active: true,
+    }, now);
+    if (!("role" in cook)) throw new Error("Expected cook staff member");
+    const foreignWaiter = await first.restaurantStaffMember.create({ data: { restaurantId: otherRestaurantId, name: "Otro", role: "WAITER", active: true } });
+
+    expect((await service.staff(restaurantId)).map((m) => [m.name, m.role])).toEqual([
+      ["Carla", "KITCHEN"],
+      ["Ana", "WAITER"],
+      ["Bruno", "WAITER"],
+    ]);
+    expect((await service.snapshot(restaurantId, now)).waiters.map((w) => w.name)).toEqual(["Ana", "Bruno"]);
+
+    const allocation = await visit();
+    await expect(service.execute(restaurantId, actor, {
+      action: "open", allocationId: allocation.id, tableId: tableIds[0], expectedAllocationVersion: 0, waiterId: cook.id,
+    }, now)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(service.execute(restaurantId, actor, {
+      action: "open", allocationId: allocation.id, tableId: tableIds[0], expectedAllocationVersion: 0, waiterId: foreignWaiter.id,
+    }, now)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    const opened = await open(allocation.id, 0, 0, service, waiterId);
+    expect(opened).toMatchObject({ assignedWaiterId: waiterId, assignedWaiterName: "Ana" });
+
+    const reassigned = accountView(await service.execute(restaurantId, actor, {
+      action: "assign-waiter", accountId: opened.id, expectedVersion: opened.version, waiterId: secondWaiter.id,
+    }, now));
+    expect(reassigned).toMatchObject({ assignedWaiterId: secondWaiter.id, assignedWaiterName: "Bruno", version: 1 });
+
+    await service.execute(restaurantId, actor, { action: "set-staff-active", id: secondWaiter.id, active: false }, now);
+    expect((await service.snapshot(restaurantId, now)).waiters.map((w) => w.name)).toEqual(["Ana"]);
+    await expect(service.execute(restaurantId, actor, {
+      action: "assign-waiter", accountId: opened.id, expectedVersion: reassigned.version, waiterId: secondWaiter.id,
+    }, now)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    // Existing account keeps the assigned waiter name snapshot even after deactivation.
+    expect((await service.account(restaurantId, opened.id)).assignedWaiterName).toBe("Bruno");
   });
 });
