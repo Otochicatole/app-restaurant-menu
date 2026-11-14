@@ -3,7 +3,7 @@ import { CalendarDays, Printer, ReceiptText } from "lucide-react";
 import { AdminCard, AdminPageHeader, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type { ServiceAccountView, ServiceCashEventView, ServiceCashReport } from "../contracts";
-import { ServiceAdminNavigation, ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
+import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
 import { CashReceipt } from "./CashReceipt";
 import { formatServiceDate, formatServiceMoney, sendServiceAdmin, serviceAdminError, serviceAdminUrl, servicePaymentLabels, useServiceAdminQuery } from "./service-admin-client";
 
@@ -83,7 +83,6 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
   return (
     <div className="space-y-5">
       <AdminPageHeader title="Caja" description="Consultá los cobros y los cierres del restaurante según la fecha en que se registró cada pago." />
-      <ServiceAdminNavigation restaurantId={restaurantId} current="cash" />
       <CashPeriodFilter today={today} range={range} onApply={applyRange} />
       {notice && <p role="status" className="rounded-xl bg-[#e8efe6] px-4 py-3 text-sm font-medium text-[#263e23]">{notice}</p>}
       {!result && <ServiceLoading message="Cargando los movimientos de caja…" />}

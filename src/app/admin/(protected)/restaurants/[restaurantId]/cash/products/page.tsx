@@ -1,10 +1,6 @@
-import type { Metadata } from "next";
-import { ServiceCatalogScreen } from "@/modules/reservation-management/ui";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Catálogo" };
-
-export default async function ServiceProductsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
-  const { restaurantId } = await requireRestaurantContext((await params).restaurantId);
-  return <ServiceCatalogScreen restaurantId={restaurantId} />;
+export default async function LegacyCashProductsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
+  const { restaurantId } = await params;
+  redirect(`/admin/restaurants/${encodeURIComponent(restaurantId)}/products`);
 }

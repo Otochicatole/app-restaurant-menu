@@ -3,7 +3,7 @@ import { Archive, Pencil, Plus, Search } from "lucide-react";
 import { AdminCard, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type { ServiceCommand, ServiceProductView } from "../contracts";
-import { ServiceAdminNavigation, ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
+import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
 import { formatServiceMoney, parseServicePrice, sendServiceAdmin, serviceAdminError, serviceAdminUrl, useServiceAdminQuery } from "./service-admin-client";
 
 type ProductDialog = { kind: "edit"; product?: ServiceProductView } | { kind: "archive"; product: ServiceProductView };
@@ -28,7 +28,6 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
     <div className="space-y-5">
       <AdminPageHeader title="Catálogo de productos" description="Cargá los productos y precios que el equipo usa para tomar pedidos en sala."
         actions={<button type="button" className={adminPrimaryButtonClass} onClick={() => setDialog({ kind: "edit" })}><Plus size={17} aria-hidden="true" /> Nuevo producto</button>} />
-      <ServiceAdminNavigation restaurantId={restaurantId} current="products" />
       {notice && <p role="status" className="rounded-xl bg-[#e8efe6] px-4 py-3 text-sm font-medium text-[#263e23]">{notice}</p>}
       {!result && <ServiceLoading message="Cargando productos…" />}
       {result?.error && <ServiceLoadError message={result.error} onRetry={refresh} />}
