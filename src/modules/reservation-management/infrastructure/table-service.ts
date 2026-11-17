@@ -4,10 +4,11 @@ import { getJoinedTableGroups, restaurantToday, validateTableArrangement, type F
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import {
-  serviceCashRangeSchema, serviceCommandSchema, servicePaymentMethodSchema,
+  serviceAuditActionSchema, serviceAuditSeveritySchema, serviceCashRangeSchema, serviceCommandSchema, servicePaymentMethodSchema,
   type KitchenSnapshot, type KitchenStatus, type KitchenStation, type KitchenTicketView,
-  type ServiceAccountView, type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals,
-  type ServiceCommand, type ServiceCommandResult, type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup,
+  type ServiceAccountAuditLogView, type ServiceAccountView, type ServiceAuditAction, type ServiceAuditSeverity,
+  type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals, type ServiceCommand, type ServiceCommandResult,
+  type ServiceDraftRemovalInput, type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup,
   type StaffMemberView, type StaffRole,
 } from "../service-contracts";
 import { syncReservationAllocation } from "./floor-allocations";
@@ -17,6 +18,7 @@ type Command<Action extends ServiceCommand["action"]> = Extract<ServiceCommand, 
 const accountInclude = {
   lines: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
   tables: { orderBy: [{ label: "asc" }, { tableId: "asc" }] },
+  auditLogs: { orderBy: [{ sequence: "asc" }, { createdAt: "asc" }, { id: "asc" }] },
 } satisfies Prisma.ServiceAccountInclude;
 type AccountRow = Prisma.ServiceAccountGetPayload<{ include: typeof accountInclude }>;
 const allocationInclude = {
@@ -33,6 +35,94 @@ type StaffRow = Prisma.RestaurantStaffMemberGetPayload<{ select: typeof staffSel
 
 function toStaffMember(row: StaffRow): StaffMemberView {
   return { ...row, role: row.role as StaffRole, createdAt: row.createdAt.toISOString() };
+}
+
+type AuditEntryInput = {
+  action: ServiceAuditAction;
+  severity?: ServiceAuditSeverity;
+  summary: string;
+  details?: Record<string, string | number | boolean | null>;
+  amountDeltaCents?: number;
+};
+
+const currencyFormatter = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" });
+const draftRemovalActionText: Record<ServiceDraftRemovalInput["reason"], string> = {
+  REMOVED: "Quitó del borrador",
+  DECREMENTED: "Restó del borrador",
+  CLEARED: "Vació del borrador",
+};
+
+function parseAuditDetails(detailsJson: string | null): Record<string, string | number | boolean | null> | null {
+  if (!detailsJson) return null;
+  try {
+    const parsed = JSON.parse(detailsJson);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, string | number | boolean | null>;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveActorLabel(tx: Prisma.TransactionClient, actorId: string): Promise<string> {
+  const admin = await tx.admin.findUnique({ where: { id: actorId }, select: { role: true, email: true } });
+  if (!admin) return `Usuario (${actorId})`;
+  return admin.role === "WAITER" ? `Sala (${admin.email})` : `Admin (${admin.email})`;
+}
+
+async function appendAuditLogs(
+  tx: Prisma.TransactionClient,
+  accountId: string,
+  restaurantId: string,
+  waiterName: string | null,
+  actorId: string,
+  now: Date,
+  entries: readonly AuditEntryInput[],
+) {
+  if (entries.length === 0) return;
+  const [actorLabel, lastEntry] = await Promise.all([
+    resolveActorLabel(tx, actorId),
+    tx.serviceAccountAuditLog.findFirst({
+      where: { accountId, restaurantId },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    }),
+  ]);
+  let sequence = (lastEntry?.sequence ?? 0) + 1;
+  for (const entry of entries) {
+    await tx.serviceAccountAuditLog.create({
+      data: {
+        accountId,
+        restaurantId,
+        sequence: sequence++,
+        action: entry.action,
+        severity: entry.severity ?? "INFO",
+        summary: entry.summary,
+        detailsJson: entry.details ? JSON.stringify(entry.details) : null,
+        amountDeltaCents: entry.amountDeltaCents ?? 0,
+        waiterName,
+        actorId,
+        actorLabel,
+        createdAt: now,
+      },
+    });
+  }
+}
+
+function buildDraftRemovalAuditEntries(removals?: readonly ServiceDraftRemovalInput[]): AuditEntryInput[] {
+  if (!removals?.length) return [];
+  return removals.map((item) => ({
+    action: "DRAFT_ITEM_REMOVED",
+    severity: "INFO",
+    summary: `${draftRemovalActionText[item.reason]}: ${item.quantity}x ${item.name}`,
+    details: {
+      productId: item.productId ?? null,
+      itemName: item.name,
+      quantity: item.quantity,
+      unitPriceCents: item.unitPriceCents,
+      reason: item.reason,
+    },
+    amountDeltaCents: -(item.unitPriceCents * item.quantity),
+  }));
 }
 
 function toAccount(row: AccountRow): ServiceAccountView {
@@ -56,13 +146,31 @@ function toAccount(row: AccountRow): ServiceAccountView {
     }
     return summary;
   }, { orderedCents: 0, deliveredCents: 0, pendingQuantity: 0, readyQuantity: 0 });
+  const auditLogs: ServiceAccountAuditLogView[] = row.auditLogs.map((entry) => ({
+    id: entry.id,
+    sequence: entry.sequence,
+    action: serviceAuditActionSchema.parse(entry.action),
+    severity: serviceAuditSeveritySchema.parse(entry.severity),
+    summary: entry.summary,
+    details: parseAuditDetails(entry.detailsJson),
+    amountDeltaCents: entry.amountDeltaCents === 0 ? null : entry.amountDeltaCents,
+    waiterName: entry.waiterName ?? null,
+    actorId: entry.actorId,
+    actorLabel: entry.actorLabel,
+    createdAt: entry.createdAt.toISOString(),
+  }));
+  const cancellationCount = lines.reduce((sum, line) => sum + line.cancelledQuantity, 0);
+  const recordedAlertCount = auditLogs.filter((entry) => entry.severity === "WARNING").length;
+  const legacyHasAlerts = cancellationCount > 0 || (discountCents ?? 0) > 0;
+  const auditAlertCount = recordedAlertCount > 0 ? recordedAlertCount : legacyHasAlerts ? 1 : 0;
   return { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName,
     assignedWaiterId: assignedWaiterId ?? null, assignedWaiterName: assignedWaiterName ?? null, version,
     openedAt: openedAt.toISOString(), closedAt: closedAt?.toISOString() ?? null, businessDate,
     paymentMethod: paymentMethod === null ? null : servicePaymentMethodSchema.parse(paymentMethod), totalCents, receiptNumber,
     tipCents: tipCents ?? 0, discountCents: discountCents ?? 0, discountReason: discountReason ?? null,
     cashCents: cashCents ?? 0, cardCents: cardCents ?? 0, transferCents: transferCents ?? 0,
-    tableIds: row.tables.map(({ tableId }) => tableId), tableLabels: row.tables.map(({ label }) => label), lines, ...totals };
+    tableIds: row.tables.map(({ tableId }) => tableId), tableLabels: row.tables.map(({ label }) => label), lines, ...totals,
+    auditLogs, hasAuditAlerts: auditAlertCount > 0, auditAlertCount, cancellationCount };
 }
 
 function toCashEvent(row: Prisma.ServiceCashEventGetPayload<object>): ServiceCashEventView {
@@ -188,16 +296,37 @@ async function openAccount(tx: Prisma.TransactionClient, restaurantId: string, a
     assignedWaiterName: waiter.name,
     tables: { create: group.map(({ tableId, label }) => ({ tableId, label })) },
   }, include: accountInclude });
-  return toAccount(account);
+  const tableLabels = account.tables.map(({ label }) => label).join(", ");
+  await appendAuditLogs(tx, account.id, restaurantId, waiter.name, actorId, now, [{
+    action: "ACCOUNT_OPENED",
+    severity: "INFO",
+    summary: `Abrió cuenta en ${tableLabels} · Camarero: ${waiter.name}`,
+    details: {
+      tables: tableLabels,
+      reservationCode: allocation.reservation.code,
+      waiterId: waiter.id,
+      waiterName: waiter.name,
+    },
+  }]);
+  return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function assignWaiter(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"assign-waiter">) {
+async function assignWaiter(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"assign-waiter">, now: Date) {
   const waiter = await requireActiveWaiter(tx, restaurantId, command.waiterId);
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion, {
     assignedWaiterId: waiter.id,
     assignedWaiterName: waiter.name,
   });
+  const previousWaiterName = account.assignedWaiterName ?? null;
+  await appendAuditLogs(tx, account.id, restaurantId, waiter.name, actorId, now, [{
+    action: previousWaiterName ? "WAITER_CHANGED" : "WAITER_ASSIGNED",
+    severity: "INFO",
+    summary: previousWaiterName
+      ? `Cambió camarero de ${previousWaiterName} a ${waiter.name}`
+      : `Asignó camarero: ${waiter.name}`,
+    details: { previousWaiterName, waiterId: waiter.id, waiterName: waiter.name },
+  }]);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
@@ -248,28 +377,49 @@ async function resolveOrderLineData(
   };
 }
 
-async function addLine(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"add-line">, now: Date) {
+async function addLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"add-line">, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const currentRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 1);
   const data = await resolveOrderLineData(tx, restaurantId, account.id, currentRound, now, command);
-  if (toAccount(account).orderedCents + data.unitPriceCents * data.quantity > maxStoredCents) {
+  const lineTotalCents = data.unitPriceCents * data.quantity;
+  if (toAccount(account).orderedCents + lineTotalCents > maxStoredCents) {
     throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
   }
   await tx.serviceOrderLine.create({ data });
+  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, [
+    data.productId
+      ? {
+          action: "LINE_ADDED",
+          severity: "INFO",
+          summary: `Agregó ${data.quantity}x ${data.name} (${currencyFormatter.format(lineTotalCents / 100)})`,
+          details: { itemName: data.name, quantity: data.quantity, unitPriceCents: data.unitPriceCents, round: currentRound, station: data.station },
+          amountDeltaCents: lineTotalCents,
+        }
+      : {
+          action: "MANUAL_ITEM_CREATED",
+          severity: "WARNING",
+          summary: `Creó ítem manual fuera de catálogo: ${data.quantity}x ${data.name} (${currencyFormatter.format(lineTotalCents / 100)})`,
+          details: { itemName: data.name, quantity: data.quantity, unitPriceCents: data.unitPriceCents, round: currentRound, station: data.station },
+          amountDeltaCents: lineTotalCents,
+        },
+  ]);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"confirm-order">, now: Date) {
+async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"confirm-order">, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const nextRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 0) + 1;
   const productsById = new Map<string, { id: string; name: string; unitPriceCents: number }>();
   const linesToCreate: Awaited<ReturnType<typeof resolveOrderLineData>>[] = [];
   let runningOrderedCents = toAccount(account).orderedCents;
+  let confirmedTotalCents = 0;
   for (const item of command.items) {
     const data = await resolveOrderLineData(tx, restaurantId, account.id, nextRound, now, item, productsById);
-    runningOrderedCents += data.unitPriceCents * data.quantity;
+    const lineTotal = data.unitPriceCents * data.quantity;
+    runningOrderedCents += lineTotal;
+    confirmedTotalCents += lineTotal;
     if (runningOrderedCents > maxStoredCents) {
       throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
     }
@@ -278,10 +428,34 @@ async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, 
   for (const data of linesToCreate) {
     await tx.serviceOrderLine.create({ data });
   }
+  const manualEntries: AuditEntryInput[] = linesToCreate
+    .filter((data) => !data.productId)
+    .map((data) => {
+      const totalCents = data.unitPriceCents * data.quantity;
+      return {
+        action: "MANUAL_ITEM_CREATED",
+        severity: "WARNING",
+        summary: `Creó ítem manual fuera de catálogo: ${data.quantity}x ${data.name} (${currencyFormatter.format(totalCents / 100)})`,
+        details: { itemName: data.name, quantity: data.quantity, unitPriceCents: data.unitPriceCents, round: nextRound, station: data.station },
+        amountDeltaCents: totalCents,
+      };
+    });
+  const totalUnits = linesToCreate.reduce((sum, line) => sum + line.quantity, 0);
+  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, [
+    ...buildDraftRemovalAuditEntries(command.draftRemovals),
+    {
+      action: "ORDER_CONFIRMED",
+      severity: "INFO",
+      summary: `Confirmó Tanda ${nextRound} (${linesToCreate.length} ${linesToCreate.length === 1 ? "ítem" : "ítems"}, ${totalUnits} uds.)`,
+      details: { round: nextRound, itemCount: linesToCreate.length, totalUnits, items: linesToCreate.map((l) => `${l.quantity}x ${l.name}`).join(", ") },
+      amountDeltaCents: confirmedTotalCents,
+    },
+    ...manualEntries,
+  ]);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"update-line">) {
+async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"update-line">, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const line = account.lines.find(({ id }) => id === command.lineId);
@@ -302,37 +476,96 @@ async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, co
         ? "SERVED"
         : line.kitchenStatus;
   await tx.serviceOrderLine.update({ where: { id: line.id }, data: { deliveredQuantity, cancelledQuantity, kitchenStatus: nextStatus } });
+  const entries: AuditEntryInput[] = [];
+  if (cancelledQuantity > line.cancelledQuantity) {
+    const delta = cancelledQuantity - line.cancelledQuantity;
+    const deltaCents = -(delta * line.unitPriceCents);
+    entries.push({
+      action: "ITEM_CANCELLED",
+      severity: "WARNING",
+      summary: `Anuló ${delta}x ${line.name} (${currencyFormatter.format((delta * line.unitPriceCents) / 100)})`,
+      details: { lineId: line.id, itemName: line.name, deltaQuantity: delta, round: line.round ?? 1 },
+      amountDeltaCents: deltaCents,
+    });
+  } else if (cancelledQuantity < line.cancelledQuantity) {
+    const delta = line.cancelledQuantity - cancelledQuantity;
+    const deltaCents = delta * line.unitPriceCents;
+    entries.push({
+      action: "CANCELLATION_REVERTED",
+      severity: "WARNING",
+      summary: `Deshizo anulación de ${delta}x ${line.name}`,
+      details: { lineId: line.id, itemName: line.name, deltaQuantity: delta, round: line.round ?? 1 },
+      amountDeltaCents: deltaCents,
+    });
+  }
+  if (deliveredQuantity > line.deliveredQuantity) {
+    const delta = deliveredQuantity - line.deliveredQuantity;
+    entries.push({
+      action: "ITEM_DELIVERED",
+      severity: "INFO",
+      summary: `Entregó ${delta}x ${line.name}`,
+      details: { lineId: line.id, itemName: line.name, deltaQuantity: delta, round: line.round ?? 1 },
+    });
+  } else if (deliveredQuantity < line.deliveredQuantity) {
+    const delta = line.deliveredQuantity - deliveredQuantity;
+    entries.push({
+      action: "DELIVERY_REVERTED",
+      severity: "WARNING",
+      summary: `Revirtió entrega de ${delta}x ${line.name}`,
+      details: { lineId: line.id, itemName: line.name, deltaQuantity: delta, round: line.round ?? 1 },
+    });
+  }
+  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, entries);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function deliverAll(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"deliver-all">) {
+async function deliverAll(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"deliver-all">, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
+  let deliveredUnits = 0;
+  let deliveredLines = 0;
   for (const line of account.lines) {
     const unserved = line.quantity - line.cancelledQuantity;
     if (unserved > line.deliveredQuantity) {
+      deliveredUnits += unserved - line.deliveredQuantity;
+      deliveredLines += 1;
       await tx.serviceOrderLine.update({
         where: { id: line.id },
         data: { deliveredQuantity: unserved, kitchenStatus: "SERVED" },
       });
     }
   }
+  if (deliveredUnits > 0) {
+    await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, [{
+      action: "ALL_ITEMS_DELIVERED",
+      severity: "INFO",
+      summary: `Entregó todos los pendientes (${deliveredLines} ${deliveredLines === 1 ? "línea" : "líneas"}, ${deliveredUnits} uds.)`,
+      details: { deliveredLines, deliveredUnits },
+    }]);
+  }
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function marchRound(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"march-round">) {
+async function marchRound(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"march-round">, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
-  await tx.serviceOrderLine.updateMany({
+  const marched = await tx.serviceOrderLine.updateMany({
     where: { accountId: account.id, restaurantId, kitchenStatus: "PENDING" },
     data: { kitchenStatus: "IN_PREP" },
   });
+  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, [{
+    action: "ROUND_MARCHED",
+    severity: "INFO",
+    summary: `Marchó pedido a cocina/barra (${marched.count} ${marched.count === 1 ? "línea" : "líneas"})`,
+    details: { lineCount: marched.count },
+  }]);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
-async function updateKitchenStatus(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"update-kitchen-status">) {
+async function updateKitchenStatus(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"update-kitchen-status">, now: Date) {
   const line = await tx.serviceOrderLine.findFirst({
     where: { id: command.lineId, restaurantId },
+    include: { account: { select: { id: true, assignedWaiterName: true } } },
   });
   if (!line) throw new NotFoundError("Consumo");
   const data: Prisma.ServiceOrderLineUpdateInput = { kitchenStatus: command.status };
@@ -340,6 +573,26 @@ async function updateKitchenStatus(tx: Prisma.TransactionClient, restaurantId: s
     data.deliveredQuantity = line.quantity - line.cancelledQuantity;
   }
   await tx.serviceOrderLine.update({ where: { id: line.id }, data });
+  if (line.kitchenStatus !== command.status) {
+    const isCancel = command.status === "CANCELLED";
+    const lineCents = line.unitPriceCents * line.quantity;
+    await appendAuditLogs(tx, line.account.id, restaurantId, line.account.assignedWaiterName ?? null, actorId, now, [
+      isCancel
+        ? {
+            action: "ITEM_CANCELLED",
+            severity: "WARNING",
+            summary: `Cocina/Barra anuló ${line.quantity}x ${line.name} (${currencyFormatter.format(lineCents / 100)})`,
+            details: { lineId: line.id, itemName: line.name, quantity: line.quantity, previousStatus: line.kitchenStatus, nextStatus: command.status, station: line.station },
+            amountDeltaCents: -lineCents,
+          }
+        : {
+            action: "KITCHEN_STATUS_CHANGED",
+            severity: "INFO",
+            summary: `Cocina/Barra cambió ${line.name} a ${command.status}`,
+            details: { lineId: line.id, itemName: line.name, previousStatus: line.kitchenStatus, nextStatus: command.status, station: line.station },
+          },
+    ]);
+  }
   return { updated: true };
 }
 
@@ -423,6 +676,36 @@ async function checkout(tx: Prisma.TransactionClient, restaurantId: string, acto
   });
   await tx.serviceAccountTable.updateMany({ where: { accountId: account.id, restaurantId, releasedAt: null }, data: { releasedAt: now } });
   await releaseTables(tx, allocation, tableIds, now);
+  const checkoutEntries: AuditEntryInput[] = [...buildDraftRemovalAuditEntries(command.draftRemovals)];
+  if (discount > 0) {
+    checkoutEntries.push({
+      action: "DISCOUNT_APPLIED",
+      severity: "WARNING",
+      summary: `Aplicó descuento de ${currencyFormatter.format(discount / 100)}${command.discountReason ? ` (${command.discountReason})` : ""}`,
+      details: { discountCents: discount, discountReason: command.discountReason ?? null },
+      amountDeltaCents: -discount,
+    });
+  }
+  const suspiciousZeroClose = netDelivered === 0 && account.lines.length > 0;
+  checkoutEntries.push({
+    action: "ACCOUNT_CHECKED_OUT",
+    severity: suspiciousZeroClose ? "WARNING" : "INFO",
+    summary: suspiciousZeroClose
+      ? "Cerró cuenta en $ 0,00 tras anulaciones o descuento"
+      : `Cerró cuenta · Total ${currencyFormatter.format(netDelivered / 100)}${method ? ` · ${method}` : ""}`,
+    details: {
+      paymentMethod: method ?? null,
+      totalCents: netDelivered,
+      tipCents: tip,
+      discountCents: discount,
+      cashCents: cash,
+      cardCents: card,
+      transferCents: transfer,
+      receiptNumber: `C-${account.id}`,
+    },
+    amountDeltaCents: netDelivered,
+  });
+  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, checkoutEntries);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
@@ -465,7 +748,13 @@ async function closeEmpty(tx: Prisma.TransactionClient, restaurantId: string, ac
     tables: { create: group.map(({ tableId, label }) => ({ tableId, label, releasedAt: now })) },
   }, include: accountInclude });
   await releaseTables(tx, allocation, tableIds, now);
-  return toAccount(receipt);
+  await appendAuditLogs(tx, receipt.id, restaurantId, null, actorId, now, [{
+    action: "ACCOUNT_CLOSED_EMPTY",
+    severity: "INFO",
+    summary: `Cerró mesa sin consumo (${group.map(({ label }) => label).join(", ")})`,
+    details: { tables: group.map(({ label }) => label).join(", "), receiptNumber: `C-${id}` },
+  }]);
+  return toAccount(await findAccount(tx, restaurantId, receipt.id));
 }
 
 async function saveProduct(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-product">) {
@@ -650,14 +939,14 @@ export class TableService {
       const { timeZone } = await settings(tx, restaurantId, requiresFloor);
       switch (command.action) {
         case "open": return openAccount(tx, restaurantId, actorId, command, now);
-        case "assign-waiter": return assignWaiter(tx, restaurantId, command);
+        case "assign-waiter": return assignWaiter(tx, restaurantId, actorId, command, now);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
-        case "add-line": return addLine(tx, restaurantId, command, now);
-        case "confirm-order": return confirmOrder(tx, restaurantId, command, now);
-        case "update-line": return updateLine(tx, restaurantId, command);
-        case "deliver-all": return deliverAll(tx, restaurantId, command);
-        case "march-round": return marchRound(tx, restaurantId, command);
-        case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, command);
+        case "add-line": return addLine(tx, restaurantId, actorId, command, now);
+        case "confirm-order": return confirmOrder(tx, restaurantId, actorId, command, now);
+        case "update-line": return updateLine(tx, restaurantId, actorId, command, now);
+        case "deliver-all": return deliverAll(tx, restaurantId, actorId, command, now);
+        case "march-round": return marchRound(tx, restaurantId, actorId, command, now);
+        case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, actorId, command, now);
         case "checkout": return checkout(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "save-product": return saveProduct(tx, restaurantId, command);
         case "archive-product": return archiveProduct(tx, restaurantId, command.id);

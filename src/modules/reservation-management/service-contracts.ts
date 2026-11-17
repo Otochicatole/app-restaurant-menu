@@ -46,6 +46,42 @@ const hasValidOrderItemSource = (item: { productId?: string; name?: string; unit
 export const serviceOrderItemSchema = z.object(serviceOrderItemFields).refine(hasValidOrderItemSource, orderItemSourceMessage);
 export type ServiceOrderItemInput = z.infer<typeof serviceOrderItemSchema>;
 
+export const serviceAuditSeveritySchema = z.enum(["INFO", "WARNING"]);
+export type ServiceAuditSeverity = z.infer<typeof serviceAuditSeveritySchema>;
+
+export const serviceAuditActionSchema = z.enum([
+  "ACCOUNT_OPENED",
+  "WAITER_ASSIGNED",
+  "WAITER_CHANGED",
+  "ORDER_CONFIRMED",
+  "LINE_ADDED",
+  "MANUAL_ITEM_CREATED",
+  "DRAFT_ITEM_REMOVED",
+  "ITEM_DELIVERED",
+  "ALL_ITEMS_DELIVERED",
+  "DELIVERY_REVERTED",
+  "ITEM_CANCELLED",
+  "CANCELLATION_REVERTED",
+  "ROUND_MARCHED",
+  "KITCHEN_STATUS_CHANGED",
+  "DISCOUNT_APPLIED",
+  "ACCOUNT_CHECKED_OUT",
+  "ACCOUNT_CLOSED_EMPTY",
+]);
+export type ServiceAuditAction = z.infer<typeof serviceAuditActionSchema>;
+
+export const serviceDraftRemovalReasonSchema = z.enum(["REMOVED", "DECREMENTED", "CLEARED"]);
+export type ServiceDraftRemovalReason = z.infer<typeof serviceDraftRemovalReasonSchema>;
+
+export const serviceDraftRemovalSchema = z.object({
+  productId: id.optional(),
+  name,
+  unitPriceCents,
+  quantity: z.number().int().min(1).max(99),
+  reason: serviceDraftRemovalReasonSchema,
+});
+export type ServiceDraftRemovalInput = z.infer<typeof serviceDraftRemovalSchema>;
+
 export const serviceCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open"), allocationId: id, tableId: id, expectedAllocationVersion: revision, waiterId: id }),
   z.object({ action: z.literal("assign-waiter"), accountId: id, expectedVersion: revision, waiterId: id }),
@@ -61,6 +97,7 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
     accountId: id,
     expectedVersion: revision,
     items: z.array(serviceOrderItemSchema).min(1).max(50),
+    draftRemovals: z.array(serviceDraftRemovalSchema).max(50).optional(),
   }),
   z.object({
     action: z.literal("update-line"),
@@ -96,6 +133,7 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
     cashCents: nonNegativeCents.optional(),
     cardCents: nonNegativeCents.optional(),
     transferCents: nonNegativeCents.optional(),
+    draftRemovals: z.array(serviceDraftRemovalSchema).max(50).optional(),
   }),
   z.object({ action: z.literal("save-product"), id: id.optional(), name, unitPriceCents }),
   z.object({ action: z.literal("archive-product"), id }),
@@ -173,6 +211,24 @@ export type ServiceAccountView = {
   deliveredCents: number;
   pendingQuantity: number;
   readyQuantity: number;
+  auditLogs: ServiceAccountAuditLogView[];
+  hasAuditAlerts: boolean;
+  auditAlertCount: number;
+  cancellationCount: number;
+};
+
+export type ServiceAccountAuditLogView = {
+  id: string;
+  sequence: number;
+  action: ServiceAuditAction;
+  severity: ServiceAuditSeverity;
+  summary: string;
+  details: Record<string, string | number | boolean | null> | null;
+  amountDeltaCents: number | null;
+  waiterName: string | null;
+  actorId: string;
+  actorLabel: string;
+  createdAt: string;
 };
 
 export type ServiceCashTotals = {

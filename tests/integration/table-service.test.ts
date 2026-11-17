@@ -417,4 +417,129 @@ describe("table service in SQLite", () => {
       ],
     });
   });
+
+  it("records immutable anti-fraud audit logs across all floor actions and flags alerts in cash report", async () => {
+    await first.admin.create({
+      data: {
+        id: "waiter-admin-1",
+        email: "mozo-auditoria@restaurante.test",
+        passwordHash: "hash",
+        role: "WAITER",
+        organizationId: null,
+        restaurantId,
+      },
+    });
+    const bruno = await service.execute(restaurantId, "waiter-admin-1", {
+      action: "save-staff",
+      name: "Bruno",
+      role: "WAITER",
+      phone: "",
+      notes: "",
+      active: true,
+    }, now);
+    if (!("role" in bruno)) throw new Error("Expected waiter Bruno");
+    const product = productView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "save-product",
+      name: "Café Espresso",
+      unitPriceCents: 2000,
+    }, now));
+
+    const allocation = await visit();
+    const opened = await open(allocation.id, 0, 0, service, waiterId);
+    const reassigned = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "assign-waiter",
+      accountId: opened.id,
+      expectedVersion: opened.version,
+      waiterId: bruno.id,
+    }, now));
+
+    const confirmed = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "confirm-order",
+      accountId: reassigned.id,
+      expectedVersion: reassigned.version,
+      items: [
+        { productId: product.id, quantity: 2, station: "BAR" },
+        { name: "Extra manual", unitPriceCents: 1500, quantity: 1, station: "KITCHEN" },
+      ],
+      draftRemovals: [
+        { name: "Tostado borrado", unitPriceCents: 3000, quantity: 1, reason: "REMOVED" },
+      ],
+    }, now));
+
+    const cafeLine = confirmed.lines.find((line) => line.name === "Café Espresso");
+    const manualLine = confirmed.lines.find((line) => line.name === "Extra manual");
+    if (!cafeLine || !manualLine) throw new Error("Expected lines");
+
+    const deliveredCafe = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "update-line",
+      accountId: confirmed.id,
+      expectedVersion: confirmed.version,
+      lineId: cafeLine.id,
+      deliveredQuantity: 2,
+      cancelledQuantity: 0,
+    }, now));
+
+    const revertedCafe = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "update-line",
+      accountId: deliveredCafe.id,
+      expectedVersion: deliveredCafe.version,
+      lineId: cafeLine.id,
+      deliveredQuantity: 1,
+      cancelledQuantity: 0,
+    }, now));
+
+    const cancelledManual = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "update-line",
+      accountId: revertedCafe.id,
+      expectedVersion: revertedCafe.version,
+      lineId: manualLine.id,
+      deliveredQuantity: 0,
+      cancelledQuantity: 1,
+    }, now));
+
+    const finalCafe = accountView(await service.execute(restaurantId, "waiter-admin-1", {
+      action: "update-line",
+      accountId: cancelledManual.id,
+      expectedVersion: cancelledManual.version,
+      lineId: cafeLine.id,
+      deliveredQuantity: 2,
+      cancelledQuantity: 0,
+    }, now));
+
+    await service.execute(restaurantId, "waiter-admin-1", {
+      action: "checkout",
+      accountId: finalCafe.id,
+      expectedVersion: finalCafe.version,
+      paymentMethod: "CASH",
+      discountCents: 500,
+      discountReason: "Cortesía",
+    }, now);
+
+    const report = await service.report(restaurantId, date, date, now);
+    const receipt = report.receipts.find((item) => item.id === opened.id);
+    if (!receipt) throw new Error("Expected closed receipt in cash report");
+
+    expect(receipt.hasAuditAlerts).toBe(true);
+    expect(receipt.cancellationCount).toBe(1);
+    expect(receipt.auditAlertCount).toBe(4);
+    expect(receipt.auditLogs.map((log) => log.action)).toEqual([
+      "ACCOUNT_OPENED",
+      "WAITER_CHANGED",
+      "DRAFT_ITEM_REMOVED",
+      "ORDER_CONFIRMED",
+      "MANUAL_ITEM_CREATED",
+      "ITEM_DELIVERED",
+      "DELIVERY_REVERTED",
+      "ITEM_CANCELLED",
+      "ITEM_DELIVERED",
+      "DISCOUNT_APPLIED",
+      "ACCOUNT_CHECKED_OUT",
+    ]);
+    expect(receipt.auditLogs[0]).toMatchObject({ sequence: 1, severity: "INFO", waiterName: "Ana" });
+    expect(receipt.auditLogs[1]).toMatchObject({ sequence: 2, actorLabel: "Sala (mozo-auditoria@restaurante.test)", waiterName: "Bruno" });
+    expect(receipt.auditLogs[4]).toMatchObject({ sequence: 5, action: "MANUAL_ITEM_CREATED", severity: "WARNING" });
+    expect(receipt.auditLogs[6]).toMatchObject({ sequence: 7, action: "DELIVERY_REVERTED", severity: "WARNING" });
+    expect(receipt.auditLogs[7]).toMatchObject({ sequence: 8, action: "ITEM_CANCELLED", severity: "WARNING", amountDeltaCents: -1500 });
+    expect(receipt.auditLogs[9]).toMatchObject({ sequence: 10, action: "DISCOUNT_APPLIED", severity: "WARNING", amountDeltaCents: -500 });
+  });
 });

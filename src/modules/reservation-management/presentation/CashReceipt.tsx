@@ -27,8 +27,14 @@ function ReceiptDocument({ receipt, restaurantName, timeZone }: ReceiptProps) {
         <dt className="text-zinc-600">Salón</dt><dd className="break-words">{receipt.roomName}</dd>
         <dt className="text-zinc-600">Mesas</dt><dd className="break-words">{receipt.tableLabels.join(", ")}</dd>
         <dt className="text-zinc-600">Reserva</dt><dd className="break-words">{receipt.reservationCode}</dd>
+        {receipt.assignedWaiterName && <><dt className="text-zinc-600">Camarero</dt><dd className="break-words">{receipt.assignedWaiterName}</dd></>}
         <dt className="text-zinc-600">Pago</dt><dd>{receipt.paymentMethod ? servicePaymentLabels[receipt.paymentMethod] : "Sin consumo"}</dd>
       </dl>
+      {receipt.hasAuditAlerts && (
+        <p role="note" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950">
+          Atención: cuenta con {receipt.auditAlertCount} {receipt.auditAlertCount === 1 ? "alerta de control" : "alertas de control"} ({receipt.auditLogs.length} movimientos en registro).
+        </p>
+      )}
       {items.length === 0 ? <p className="border-t border-zinc-200 pt-3 text-zinc-700">Sin productos cobrados.</p> : (
         <table className="w-full table-fixed border-y border-zinc-200 text-left">
           <thead className="border-b border-zinc-200 text-xs text-zinc-700"><tr>

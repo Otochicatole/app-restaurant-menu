@@ -12,7 +12,8 @@ const hasLatestDelegates =
   typeof cachedClient?.landingCustomModule !== "undefined" &&
   typeof cachedClient?.landingTemplate !== "undefined" &&
   typeof cachedClient?.tableReservation !== "undefined" &&
-  typeof cachedClient?.restaurantStaffMember !== "undefined";
+  typeof cachedClient?.restaurantStaffMember !== "undefined" &&
+  typeof cachedClient?.serviceAccountAuditLog !== "undefined";
 
 export const prisma =
   hasLatestDelegates && cachedClient

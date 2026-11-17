@@ -682,6 +682,7 @@ model ServiceAccount {
   transferCents   Int     @default(0)
   tables          ServiceAccountTable[]
   lines           ServiceOrderLine[]
+  auditLogs       ServiceAccountAuditLog[]
 
   @@unique([id, restaurantId])
   @@unique([id, restaurantId, roomId])
@@ -725,6 +726,27 @@ model ServiceOrderLine {
   station           String   @default("KITCHEN")
 
   @@index([accountId, createdAt])
+}
+
+model ServiceAccountAuditLog {
+  id               String         @id @default(cuid())
+  accountId        String
+  restaurantId     String
+  account          ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  sequence         Int
+  action           String
+  severity         String         @default("INFO")
+  summary          String
+  detailsJson      String?
+  amountDeltaCents Int            @default(0)
+  waiterName       String?
+  actorId          String
+  actorLabel       String
+  createdAt        DateTime       @default(now())
+
+  @@unique([accountId, sequence])
+  @@index([accountId, createdAt])
+  @@index([restaurantId, createdAt])
 }
 
 model ServiceCashEvent {

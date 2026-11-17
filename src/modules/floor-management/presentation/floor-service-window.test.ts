@@ -48,6 +48,10 @@ const openAccount: ServiceAccountView = {
   deliveredCents: 0,
   pendingQuantity: 0,
   readyQuantity: 0,
+  auditLogs: [],
+  hasAuditAlerts: false,
+  auditAlertCount: 0,
+  cancellationCount: 0,
 };
 
 describe("FloorServiceWindow waiter assignment", () => {
@@ -285,5 +289,54 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
     expect(within(confirmedTable).getByText("Tanda 1")).toBeTruthy();
     expect(within(confirmedTable).getByText("2 pend. · 0 ent.")).toBeTruthy();
     expect(within(confirmedTable).getByRole("button", { name: "Entregar uno de Milanesa" })).toBeTruthy();
+  });
+
+  it("tracks draftRemovals when decrementing or removing draft items before confirming", async () => {
+    const onCommand = vi.fn(async () => openAccount);
+    render(createElement(FloorServiceWindow, {
+      target,
+      account: openAccount,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    const picker = screen.getByLabelText("Producto");
+    fireEvent.focus(picker);
+    fireEvent.click(screen.getByRole("option", { name: /Milanesa/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Milanesa" }));
+
+    fireEvent.focus(picker);
+    fireEvent.click(screen.getByRole("option", { name: /Agua sin gas/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restar uno de Milanesa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar Agua sin gas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar pedido y enviar a cocina" }));
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith({
+        action: "confirm-order",
+        accountId: "acc-1",
+        expectedVersion: 2,
+        items: [{ productId: "prod-1", quantity: 1, station: "KITCHEN" }],
+        draftRemovals: [
+          { productId: "prod-1", name: "Milanesa", unitPriceCents: 1200000, quantity: 1, reason: "DECREMENTED" },
+          { productId: "prod-2", name: "Agua sin gas", unitPriceCents: 250000, quantity: 1, reason: "REMOVED" },
+        ],
+      });
+    });
   });
 });

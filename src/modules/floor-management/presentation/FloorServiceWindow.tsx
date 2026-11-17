@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { ArrowRight, Check, CheckCheck, Clock3, Minus, Plus, Printer, ReceiptText, RotateCw, Search, Send, Trash2, UserCheck, Utensils } from "lucide-react";
-import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceOrderItemInput, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup, StaffMemberView } from "@/modules/reservation-management/contracts";
+import type { KitchenStation, KitchenStatus, ServiceAccountView, ServiceDraftRemovalInput, ServiceOrderItemInput, ServiceOrderLineView, ServicePaymentMethod, ServiceProductView, ServiceUnservedGroup, StaffMemberView } from "@/modules/reservation-management/contracts";
 import { floorInputClass } from "./floor-api";
 import { floorPrimaryButtonClass, floorSecondaryButtonClass, floorWindowBodyClass, floorWindowFooterClass } from "./floor-ui";
 import type { FloorServiceCommand } from "./useFloorService";
@@ -102,7 +102,11 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
   const [splitCard, setSplitCard] = useState("");
   const [splitTransfer, setSplitTransfer] = useState("");
   const nextDraftKeyRef = useRef(0);
-  const [draftState, setDraftState] = useState<{ accountId: string | null; items: DraftOrderItem[] }>({ accountId: account?.id ?? null, items: [] });
+  const [draftState, setDraftState] = useState<{ accountId: string | null; items: DraftOrderItem[]; removals: ServiceDraftRemovalInput[] }>({
+    accountId: account?.id ?? null,
+    items: [],
+    removals: [],
+  });
   const draftCaptionId = useId();
   const confirmedCaptionId = useId();
 
@@ -194,22 +198,35 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
   const versionChanged = confirming && checkoutVersion !== account.version;
   const locked = historical || busy || Boolean(loadError);
   const draftItems = draftState.accountId === account.id ? draftState.items : [];
+  const draftRemovals = draftState.accountId === account.id ? draftState.removals : [];
   const canCheckout = !locked && !cashClosed && account.pendingQuantity === 0 && draftItems.length === 0;
   const identity = { accountId: account.id, expectedVersion: account.version };
   const updateLine = (line: ServiceOrderLineView, field: "deliveredQuantity" | "cancelledQuantity", delta: number) => {
     void run({ action: "update-line", ...identity, lineId: line.id, deliveredQuantity: line.deliveredQuantity, cancelledQuantity: line.cancelledQuantity, [field]: line[field] + delta });
   };
 
-  const updateDraftItems = (updater: (current: DraftOrderItem[]) => DraftOrderItem[]) => {
+  const toDraftRemoval = (item: DraftOrderItem, quantity: number, reason: ServiceDraftRemovalInput["reason"]): ServiceDraftRemovalInput => ({
+    ...(item.productId ? { productId: item.productId } : {}),
+    name: item.name,
+    unitPriceCents: item.unitPriceCents,
+    quantity,
+    reason,
+  });
+
+  const updateDraftState = (
+    updater: (items: DraftOrderItem[], removals: ServiceDraftRemovalInput[]) => { items: DraftOrderItem[]; removals: ServiceDraftRemovalInput[] },
+  ) => {
     setFailure(null);
-    setDraftState((current) => ({
-      accountId: account.id,
-      items: updater(current.accountId === account.id ? current.items : []),
-    }));
+    setDraftState((current) => {
+      const currentItems = current.accountId === account.id ? current.items : [];
+      const currentRemovals = current.accountId === account.id ? current.removals : [];
+      const next = updater(currentItems, currentRemovals);
+      return { accountId: account.id, items: next.items, removals: next.removals.slice(-50) };
+    });
   };
 
   const addDraftItem = (item: Omit<DraftOrderItem, "key">) => {
-    updateDraftItems((current) => {
+    updateDraftState((current, removals) => {
       const existingIndex = current.findIndex((entry) =>
         (item.productId ? entry.productId === item.productId : !entry.productId && entry.name === item.name && entry.unitPriceCents === item.unitPriceCents)
         && entry.notes === item.notes
@@ -217,21 +234,46 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
         && entry.quantity + item.quantity <= 99,
       );
       if (existingIndex >= 0) {
-        return current.map((entry, index) => index === existingIndex ? { ...entry, quantity: entry.quantity + item.quantity } : entry);
+        return {
+          items: current.map((entry, index) => index === existingIndex ? { ...entry, quantity: entry.quantity + item.quantity } : entry),
+          removals,
+        };
       }
       nextDraftKeyRef.current += 1;
-      return [...current, { ...item, key: `draft-${nextDraftKeyRef.current}` }];
+      return { items: [...current, { ...item, key: `draft-${nextDraftKeyRef.current}` }], removals };
     });
   };
 
   const changeDraftQuantity = (key: string, delta: number) => {
-    updateDraftItems((current) => current.map((item) =>
-      item.key === key ? { ...item, quantity: Math.min(99, Math.max(1, item.quantity + delta)) } : item,
-    ));
+    updateDraftState((current, removals) => {
+      const target = current.find((item) => item.key === key);
+      if (!target) return { items: current, removals };
+      const nextQuantity = Math.min(99, Math.max(1, target.quantity + delta));
+      const reducedBy = target.quantity - nextQuantity;
+      const nextRemovals = reducedBy > 0 ? [...removals, toDraftRemoval(target, reducedBy, "DECREMENTED")] : removals;
+      return {
+        items: current.map((item) => item.key === key ? { ...item, quantity: nextQuantity } : item),
+        removals: nextRemovals,
+      };
+    });
   };
 
   const removeDraftItem = (key: string) => {
-    updateDraftItems((current) => current.filter((item) => item.key !== key));
+    updateDraftState((current, removals) => {
+      const target = current.find((item) => item.key === key);
+      if (!target) return { items: current, removals };
+      return {
+        items: current.filter((item) => item.key !== key),
+        removals: [...removals, toDraftRemoval(target, target.quantity, "REMOVED")],
+      };
+    });
+  };
+
+  const clearDraftList = () => {
+    updateDraftState((current, removals) => ({
+      items: [],
+      removals: [...removals, ...current.map((item) => toDraftRemoval(item, item.quantity, "CLEARED"))],
+    }));
   };
 
   const confirmDraftOrder = async () => {
@@ -240,9 +282,14 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
       ? { productId: item.productId, quantity: item.quantity, ...(item.notes ? { notes: item.notes } : {}), station: item.station }
       : { name: item.name, unitPriceCents: item.unitPriceCents, quantity: item.quantity, ...(item.notes ? { notes: item.notes } : {}), station: item.station },
     );
-    const ok = await run({ action: "confirm-order", ...identity, items });
+    const ok = await run({
+      action: "confirm-order",
+      ...identity,
+      items,
+      ...(draftRemovals.length > 0 ? { draftRemovals } : {}),
+    });
     if (ok) {
-      setDraftState({ accountId: account.id, items: [] });
+      setDraftState({ accountId: account.id, items: [], removals: [] });
     }
   };
 
@@ -335,7 +382,7 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
                   type="button"
                   className="text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 disabled:opacity-50"
                   disabled={locked}
-                  onClick={() => updateDraftItems(() => [])}
+                  onClick={clearDraftList}
                 >
                   Vaciar lista
                 </button>
@@ -583,6 +630,9 @@ export function FloorServiceWindow({ target, account, products, waiters, staffHr
             cashCents: payment === "SPLIT" ? splitCashCents : undefined,
             cardCents: payment === "SPLIT" ? splitCardCents : undefined,
             transferCents: payment === "SPLIT" ? splitTransferCents : undefined,
+            ...(draftRemovals.length > 0 ? { draftRemovals } : {}),
+          }).then((ok) => {
+            if (ok) setDraftState({ accountId: account.id, items: [], removals: [] });
           });
         }
       }}>

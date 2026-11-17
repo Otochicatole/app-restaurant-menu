@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { CalendarDays, Printer, ReceiptText } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardList, Printer, ReceiptText } from "lucide-react";
 import { AdminCard, AdminPageHeader, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type { ServiceAccountView, ServiceCashEventView, ServiceCashReport } from "../contracts";
 import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
+import { CashAccountAuditModal } from "./CashAccountAuditModal";
 import { CashReceipt } from "./CashReceipt";
 import { formatServiceDate, formatServiceMoney, sendServiceAdmin, serviceAdminError, serviceAdminUrl, servicePaymentLabels, useServiceAdminQuery } from "./service-admin-client";
 
@@ -64,6 +65,8 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
   const [range, setRange] = useState<DateRange>({ from: initialToday, to: initialToday });
   const [action, setAction] = useState<CashAction | null>(null);
   const [selected, setSelected] = useState<ServiceAccountView | null>(null);
+  const [auditReceipt, setAuditReceipt] = useState<ServiceAccountView | null>(null);
+  const [onlyAlerts, setOnlyAlerts] = useState(false);
   const [notice, setNotice] = useState("");
   const { result, refresh } = useServiceAdminQuery<ServiceCashReport>(serviceAdminUrl(restaurantId, { mode: "cash", ...range }));
   const report = result?.data;
@@ -73,6 +76,8 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
   const dayStatus = day ? events.find((entry) => entry.businessDate === day)?.kind : undefined;
   const dayAction = day && day <= today ? dayStatus === "CLOSE" ? (day === today ? "reopen-day" : null) : "close-day" : null;
   const localTime = new Intl.DateTimeFormat("es-AR", { timeZone, hour: "2-digit", minute: "2-digit" });
+  const receiptsWithAlertsCount = report ? report.receipts.filter((receipt) => receipt.hasAuditAlerts).length : 0;
+  const visibleReceipts = report ? (onlyAlerts ? report.receipts.filter((receipt) => receipt.hasAuditAlerts) : report.receipts) : [];
 
   const applyRange = (next: DateRange) => {
     setNotice("");
@@ -107,22 +112,93 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
         </AdminCard>
 
         <AdminCard>
-          <div className="border-b border-zinc-100 px-4 py-4 sm:px-5">
-            <h2 className="text-base font-semibold text-zinc-950">Recibos de consumo</h2>
-            <p className="mt-0.5 text-sm text-zinc-600">{report.totals.receiptCount} {report.totals.receiptCount === 1 ? "recibo registrado" : "recibos registrados"}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-4 py-4 sm:px-5">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-950">Recibos de consumo</h2>
+              <p className="mt-0.5 text-sm text-zinc-600">
+                {report.totals.receiptCount} {report.totals.receiptCount === 1 ? "recibo registrado" : "recibos registrados"}
+                {receiptsWithAlertsCount > 0 && ` · ${receiptsWithAlertsCount} con alertas de auditoría`}
+              </p>
+            </div>
+            {receiptsWithAlertsCount > 0 && (
+              <button
+                type="button"
+                aria-pressed={onlyAlerts}
+                onClick={() => setOnlyAlerts((current) => !current)}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  onlyAlerts
+                    ? "border-amber-400 bg-amber-100 text-amber-950"
+                    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
+              >
+                <AlertTriangle size={14} aria-hidden="true" />
+                Solo con alertas ({receiptsWithAlertsCount})
+              </button>
+            )}
           </div>
-          {report.receipts.length === 0 ? <p className="px-4 py-8 text-center text-sm text-zinc-600">No hay recibos en este período.</p> : (
+          {visibleReceipts.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-zinc-600">
+              {onlyAlerts ? "No hay recibos con alertas en este período." : "No hay recibos en este período."}
+            </p>
+          ) : (
             <ul className="divide-y divide-zinc-100">
-              {report.receipts.map((receipt) => (
-                <li key={receipt.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-5 sm:px-5">
-                  <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-zinc-950">{receipt.receiptNumber ?? "Cierre sin consumo"} · {receipt.tableLabels.join(", ")}</p>
-                    <p className="mt-0.5 break-words text-xs text-zinc-600">{receipt.businessDate && formatServiceDate(receipt.businessDate)}{receipt.closedAt && ` · ${localTime.format(new Date(receipt.closedAt))}`} · {receipt.roomName} · {receipt.paymentMethod ? servicePaymentLabels[receipt.paymentMethod] : "Sin consumo"}</p>
-                  </div>
-                  <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-zinc-950">{formatServiceMoney(receipt.totalCents ?? 0)}</p>
-                  <button type="button" aria-label={`Ver recibo ${receipt.receiptNumber ?? receipt.tableLabels.join(", ")}`} onClick={() => setSelected(receipt)} className={`${adminSecondaryButtonClass} col-span-2 min-h-10 justify-self-end px-3 py-2 sm:col-span-1`}><ReceiptText size={16} aria-hidden="true" /> Ver recibo</button>
-                </li>
-              ))}
+              {visibleReceipts.map((receipt) => {
+                const receiptRef = receipt.receiptNumber ?? receipt.tableLabels.join(", ");
+                const flagged = receipt.hasAuditAlerts;
+                return (
+                  <li
+                    key={receipt.id}
+                    data-audit-alert={flagged ? "true" : "false"}
+                    className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-5 sm:px-5 ${
+                      flagged ? "border-l-4 border-l-amber-400 bg-amber-50/90" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="break-words text-sm font-semibold text-zinc-950">
+                          {receipt.receiptNumber ?? "Cierre sin consumo"} · {receipt.tableLabels.join(", ")}
+                        </p>
+                        {flagged && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-950">
+                            <AlertTriangle size={12} aria-hidden="true" />
+                            {receipt.cancellationCount > 0
+                              ? `${receipt.cancellationCount} ${receipt.cancellationCount === 1 ? "anulación" : "anulaciones"}`
+                              : `${receipt.auditAlertCount} ${receipt.auditAlertCount === 1 ? "alerta" : "alertas"}`}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 break-words text-xs text-zinc-600">
+                        {receipt.businessDate && formatServiceDate(receipt.businessDate)}
+                        {receipt.closedAt && ` · ${localTime.format(new Date(receipt.closedAt))}`}
+                        {" · "}
+                        {receipt.roomName}
+                        {" · "}
+                        {receipt.paymentMethod ? servicePaymentLabels[receipt.paymentMethod] : "Sin consumo"}
+                        {receipt.assignedWaiterName && ` · Mozo: ${receipt.assignedWaiterName}`}
+                      </p>
+                    </div>
+                    <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-zinc-950">{formatServiceMoney(receipt.totalCents ?? 0)}</p>
+                    <div className="col-span-2 flex flex-wrap justify-end gap-2 sm:col-span-1">
+                      <button
+                        type="button"
+                        aria-label={`Ver registro ${receiptRef}`}
+                        onClick={() => setAuditReceipt(receipt)}
+                        className={`${adminSecondaryButtonClass} min-h-10 px-3 py-2`}
+                      >
+                        <ClipboardList size={16} aria-hidden="true" /> Ver registro
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Ver recibo ${receiptRef}`}
+                        onClick={() => setSelected(receipt)}
+                        className={`${adminSecondaryButtonClass} min-h-10 px-3 py-2`}
+                      >
+                        <ReceiptText size={16} aria-hidden="true" /> Ver recibo
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </AdminCard>
@@ -133,11 +209,23 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
         onClose={() => setAction(null)} onSaved={() => { setNotice(action.kind === "close-day" ? "El cierre diario quedó guardado." : "Se reabrió el día y quedó registrado el motivo."); setAction(null); refresh(); }} />}
       {selected && <AdminModal open title="Recibo de consumo" wide onClose={() => setSelected(null)}>
         <CashReceipt receipt={selected} restaurantName={restaurantName} timeZone={timeZone} />
-        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-zinc-100 pt-4">
-          <button type="button" onClick={() => setSelected(null)} className={adminSecondaryButtonClass}>Cerrar</button>
-          <button type="button" onClick={() => window.print()} className={adminPrimaryButtonClass}><Printer size={17} aria-hidden="true" /> Imprimir recibo</button>
+        <div className="mt-5 flex flex-wrap justify-between gap-2 border-t border-zinc-100 pt-4">
+          <button type="button" onClick={() => { const current = selected; setSelected(null); setAuditReceipt(current); }} className={adminSecondaryButtonClass}>
+            <ClipboardList size={16} aria-hidden="true" /> Ver registro
+          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setSelected(null)} className={adminSecondaryButtonClass}>Cerrar</button>
+            <button type="button" onClick={() => window.print()} className={adminPrimaryButtonClass}><Printer size={17} aria-hidden="true" /> Imprimir recibo</button>
+          </div>
         </div>
       </AdminModal>}
+      {auditReceipt && <CashAccountAuditModal
+        receipt={auditReceipt}
+        restaurantName={restaurantName}
+        timeZone={timeZone}
+        onClose={() => setAuditReceipt(null)}
+        onViewReceipt={() => { const current = auditReceipt; setAuditReceipt(null); setSelected(current); }}
+      />}
     </div>
   );
 }
