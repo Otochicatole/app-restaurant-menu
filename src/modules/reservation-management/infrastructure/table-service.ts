@@ -854,13 +854,24 @@ export class TableService {
       });
       const tickets: KitchenTicketView[] = [];
       for (const account of accounts) {
-        const activeLines = account.lines.filter((line) => line.quantity > line.cancelledQuantity && line.kitchenStatus !== "SERVED");
-        if (!activeLines.length) continue;
-        const rounds = [...new Set(activeLines.map((line) => line.round ?? 1))].sort((a, b) => a - b);
+        const uncancelledLines = account.lines.filter((line) => line.quantity > line.cancelledQuantity);
+        if (!uncancelledLines.length) continue;
+        const rounds = [...new Set(uncancelledLines.map((line) => line.round ?? 1))].sort((a, b) => a - b);
         for (const round of rounds) {
-          const roundLines = activeLines.filter((line) => (line.round ?? 1) === round);
-          if (!roundLines.length) continue;
-          const allReady = roundLines.every((line) => line.kitchenStatus === "READY");
+          const roundLines = uncancelledLines.filter((line) => (line.round ?? 1) === round);
+          const hasUnserved = roundLines.some((line) => line.kitchenStatus !== "SERVED");
+          if (!hasUnserved) continue;
+
+          const kitchenLines = roundLines.filter((line) => (line.station ?? "KITCHEN") === "KITCHEN");
+          const barLines = roundLines.filter((line) => line.station === "BAR");
+
+          const hasKitchenItems = kitchenLines.some((line) => line.kitchenStatus !== "SERVED");
+          const hasBarItems = barLines.some((line) => line.kitchenStatus !== "SERVED");
+
+          const allReady = roundLines.every((line) => line.kitchenStatus === "READY" || line.kitchenStatus === "SERVED");
+          const kitchenReady = kitchenLines.length > 0 && kitchenLines.every((line) => line.kitchenStatus === "READY" || line.kitchenStatus === "SERVED");
+          const barReady = barLines.length > 0 && barLines.every((line) => line.kitchenStatus === "READY" || line.kitchenStatus === "SERVED");
+
           tickets.push({
             id: `${account.id}-${round}`,
             accountId: account.id,
@@ -869,9 +880,14 @@ export class TableService {
             tableLabels: account.tables.map((t) => t.label),
             customerName: account.customerName,
             reservationCode: account.reservationCode,
+            waiterName: account.assignedWaiterName ?? null,
             openedAt: account.openedAt.toISOString(),
             createdAt: roundLines[0].createdAt.toISOString(),
             allReady,
+            kitchenReady,
+            barReady,
+            hasKitchenItems,
+            hasBarItems,
             lines: roundLines.map((line) => ({
               id: line.id,
               name: line.name,

@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bell, BellOff, Check, CheckCheck, Clock, Flame, RotateCw, UtensilsCrossed, Wine } from "lucide-react";
+import { createPortal, flushSync } from "react-dom";
+import { ArrowLeft, Bell, BellOff, Check, CheckCheck, Clock, Flame, Printer, RotateCw, UtensilsCrossed, Wine } from "lucide-react";
 import type { KitchenSnapshot, KitchenStation, KitchenStatus, KitchenTicketView } from "../service-contracts";
+import styles from "./kitchen-ticket.module.css";
 
 function playChime() {
   try {
@@ -50,23 +52,34 @@ function urgencyClass(minutes: number): { border: string; header: string; badge:
   };
 }
 
+const statusBadge: Record<KitchenStatus, { label: string; className: string }> = {
+  PENDING: { label: "Pendiente", className: "border border-zinc-200 bg-zinc-100 text-zinc-700" },
+  IN_PREP: { label: "En marcha", className: "border border-amber-200 bg-amber-50 text-amber-900" },
+  READY: { label: "Listo", className: "border border-emerald-200 bg-emerald-50 text-emerald-800" },
+  SERVED: { label: "Servido", className: "border border-zinc-200 bg-zinc-50 text-zinc-400 line-through" },
+  CANCELLED: { label: "Anulado", className: "border border-red-200 bg-red-50 text-red-700 line-through" },
+};
+
 export function KitchenDisplayScreen({
   restaurantId,
   restaurantName,
   initialSnapshot,
+  initialStation = "ALL",
   backUrl = "/floor",
 }: {
   restaurantId: string;
   restaurantName: string;
   initialSnapshot?: KitchenSnapshot | null;
+  initialStation?: "ALL" | KitchenStation;
   backUrl?: string;
 }) {
   const [snapshot, setSnapshot] = useState<KitchenSnapshot | null>(initialSnapshot ?? null);
   const [loading, setLoading] = useState(false);
-  const [stationFilter, setStationFilter] = useState<"ALL" | KitchenStation>("ALL");
+  const [stationFilter, setStationFilter] = useState<"ALL" | KitchenStation>(initialStation);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastTicketCount, setLastTicketCount] = useState(initialSnapshot?.tickets.length ?? 0);
   const [updatingLineId, setUpdatingLineId] = useState<string | null>(null);
+  const [printingTicket, setPrintingTicket] = useState<KitchenTicketView | null>(null);
 
   const fetchKitchen = useCallback(async () => {
     try {
@@ -118,26 +131,45 @@ export function KitchenDisplayScreen({
     }
   };
 
-  const markAllTicketReady = async (ticket: KitchenTicketView) => {
-    for (const line of ticket.lines) {
+  const markTicketStationReady = async (ticket: KitchenTicketView, station: "ALL" | KitchenStation) => {
+    const targetLines = station === "ALL" ? ticket.lines : ticket.lines.filter((l) => (l.station ?? "KITCHEN") === station);
+    for (const line of targetLines) {
       if (line.kitchenStatus !== "READY" && line.kitchenStatus !== "SERVED" && line.kitchenStatus !== "CANCELLED") {
         await updateLineStatus(line.id, "READY");
       }
     }
   };
 
-  const markAllTicketServed = async (ticket: KitchenTicketView) => {
-    for (const line of ticket.lines) {
+  const markTicketStationServed = async (ticket: KitchenTicketView, station: "ALL" | KitchenStation) => {
+    const targetLines = station === "ALL" ? ticket.lines : ticket.lines.filter((l) => (l.station ?? "KITCHEN") === station);
+    for (const line of targetLines) {
       if (line.kitchenStatus !== "SERVED" && line.kitchenStatus !== "CANCELLED") {
         await updateLineStatus(line.id, "SERVED");
       }
     }
   };
 
+  const printTicket = (ticket: KitchenTicketView) => {
+    flushSync(() => setPrintingTicket(ticket));
+    try {
+      window.print();
+    } finally {
+      setPrintingTicket(null);
+    }
+  };
+
   const rawTickets = snapshot?.tickets ?? [];
+  const kitchenTicketsCount = rawTickets.filter((t) => t.hasKitchenItems ?? t.lines.some((l) => (l.station ?? "KITCHEN") === "KITCHEN" && l.kitchenStatus !== "SERVED")).length;
+  const barTicketsCount = rawTickets.filter((t) => t.hasBarItems ?? t.lines.some((l) => l.station === "BAR" && l.kitchenStatus !== "SERVED")).length;
+
   const tickets = rawTickets.filter((ticket) => {
-    if (stationFilter === "ALL") return true;
-    return ticket.lines.some((line) => line.station === stationFilter);
+    if (stationFilter === "KITCHEN") {
+      return ticket.hasKitchenItems ?? ticket.lines.some((line) => (line.station ?? "KITCHEN") === "KITCHEN" && line.kitchenStatus !== "SERVED");
+    }
+    if (stationFilter === "BAR") {
+      return ticket.hasBarItems ?? ticket.lines.some((line) => line.station === "BAR" && line.kitchenStatus !== "SERVED");
+    }
+    return true;
   });
 
   return (
@@ -160,7 +192,7 @@ export function KitchenDisplayScreen({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-zinc-950 sm:text-lg">
-                  Comandas de Cocina
+                  {stationFilter === "KITCHEN" ? "Comandas de Cocina" : stationFilter === "BAR" ? "Comandas de Barra" : "Comandas de Cocina y Barra"}
                 </h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -176,17 +208,6 @@ export function KitchenDisplayScreen({
         <div className="flex items-center gap-1 rounded-xl border border-zinc-200/90 bg-[#f3f6f1] p-1">
           <button
             type="button"
-            onClick={() => setStationFilter("ALL")}
-            className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              stationFilter === "ALL"
-                ? "bg-white text-zinc-950 shadow-2xs"
-                : "text-zinc-600 hover:text-zinc-950"
-            }`}
-          >
-            Todos ({rawTickets.length})
-          </button>
-          <button
-            type="button"
             onClick={() => setStationFilter("KITCHEN")}
             className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
               stationFilter === "KITCHEN"
@@ -194,7 +215,7 @@ export function KitchenDisplayScreen({
                 : "text-zinc-600 hover:text-zinc-950"
             }`}
           >
-            <UtensilsCrossed size={13} /> Cocina
+            <UtensilsCrossed size={13} /> Cocina ({kitchenTicketsCount})
           </button>
           <button
             type="button"
@@ -205,7 +226,18 @@ export function KitchenDisplayScreen({
                 : "text-zinc-600 hover:text-zinc-950"
             }`}
           >
-            <Wine size={13} /> Barra
+            <Wine size={13} /> Barra ({barTicketsCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStationFilter("ALL")}
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              stationFilter === "ALL"
+                ? "bg-white text-zinc-950 shadow-2xs"
+                : "text-zinc-600 hover:text-zinc-950"
+            }`}
+          >
+            Todos ({rawTickets.length})
           </button>
         </div>
 
@@ -240,9 +272,15 @@ export function KitchenDisplayScreen({
         {!tickets.length ? (
           <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white p-12 text-center shadow-[0_4px_24px_-8px_rgba(24,24,27,0.04)]">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8efe6] text-[#2b4226]">
-              <UtensilsCrossed size={26} />
+              {stationFilter === "BAR" ? <Wine size={26} /> : <UtensilsCrossed size={26} />}
             </div>
-            <p className="mt-4 text-lg font-semibold text-zinc-900">No hay comandas pendientes</p>
+            <p className="mt-4 text-lg font-semibold text-zinc-900">
+              {stationFilter === "KITCHEN"
+                ? "No hay comandas pendientes en cocina"
+                : stationFilter === "BAR"
+                  ? "No hay comandas pendientes en barra"
+                  : "No hay comandas pendientes"}
+            </p>
             <p className="mt-1 max-w-md text-sm text-zinc-500">Los pedidos enviados desde la sala aparecerán aquí automáticamente.</p>
           </div>
         ) : (
@@ -250,9 +288,15 @@ export function KitchenDisplayScreen({
             {tickets.map((ticket) => {
               const minutes = elapsedMinutes(ticket.createdAt);
               const urgency = urgencyClass(minutes);
-              const visibleLines = ticket.lines.filter((line) =>
-                stationFilter === "ALL" ? true : line.station === stationFilter
-              );
+
+              const isKitchenMode = stationFilter === "KITCHEN";
+              const isBarMode = stationFilter === "BAR";
+
+              const kitchenLines = ticket.lines.filter((l) => (l.station ?? "KITCHEN") === "KITCHEN");
+              const barLines = ticket.lines.filter((l) => l.station === "BAR");
+
+              const primaryLines = isKitchenMode ? kitchenLines : isBarMode ? barLines : ticket.lines;
+              const contextLines = isKitchenMode ? barLines : isBarMode ? kitchenLines : [];
 
               return (
                 <div
@@ -271,7 +315,8 @@ export function KitchenDisplayScreen({
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs font-medium text-zinc-600">
-                        {ticket.customerName} · Ronda {ticket.round}
+                        {ticket.customerName} · Tanda {ticket.round}
+                        {ticket.waiterName && ` · Mozo: ${ticket.waiterName}`}
                       </p>
                     </div>
 
@@ -279,106 +324,195 @@ export function KitchenDisplayScreen({
                       <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${urgency.badge}`}>
                         <Clock size={12} /> {minutes} min
                       </span>
-                      {ticket.allReady && (
+                      {ticket.allReady ? (
                         <span className="flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                          <Check size={11} /> Listo
+                          <Check size={11} /> Todo listo
                         </span>
-                      )}
+                      ) : isKitchenMode && ticket.kitchenReady ? (
+                        <span className="flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                          <Check size={11} /> Cocina lista
+                        </span>
+                      ) : isBarMode && ticket.barReady ? (
+                        <span className="flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                          <Check size={11} /> Bebidas listas
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
-                  {/* Lines List */}
-                  <ul className="flex-1 divide-y divide-zinc-100 bg-white px-3.5 py-2">
-                    {visibleLines.map((line) => {
-                      const isPending = line.kitchenStatus === "PENDING";
-                      const isInPrep = line.kitchenStatus === "IN_PREP";
-                      const isReady = line.kitchenStatus === "READY";
-                      const isBusy = updatingLineId === line.id;
-                      const activeQuantity = line.quantity - line.cancelledQuantity;
+                  {/* Lines List & Context */}
+                  <div className="flex-1 space-y-3 bg-white p-3.5">
+                    {/* Primary Actionable Lines */}
+                    <div>
+                      {stationFilter !== "ALL" && (
+                        <p className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                          {isKitchenMode ? <UtensilsCrossed size={12} /> : <Wine size={12} />}
+                          {isKitchenMode ? "Platos a preparar (Cocina)" : "Bebidas a preparar (Barra)"}
+                        </p>
+                      )}
+                      <ul className="divide-y divide-zinc-100">
+                        {primaryLines.map((line) => {
+                          const isPending = line.kitchenStatus === "PENDING";
+                          const isInPrep = line.kitchenStatus === "IN_PREP";
+                          const isReady = line.kitchenStatus === "READY";
+                          const isServed = line.kitchenStatus === "SERVED";
+                          const isBusy = updatingLineId === line.id;
+                          const activeQuantity = line.quantity - line.cancelledQuantity;
 
-                      return (
-                        <li key={line.id} className="py-2.5">
-                          <div className="flex items-start justify-between gap-2.5">
-                            <div className="min-w-0">
-                              <p className="flex items-baseline gap-1.5 text-sm font-semibold text-zinc-900">
-                                <span className="inline-block text-base font-bold tabular-nums text-[#263e23]">
-                                  {activeQuantity}×
-                                </span>
-                                <span className={isReady ? "line-through text-zinc-400" : "text-zinc-900"}>{line.name}</span>
-                              </p>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                {stationFilter === "ALL" && (
-                                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                                    line.station === "BAR"
-                                      ? "border border-sky-200 bg-sky-50 text-sky-800"
-                                      : "border border-zinc-200 bg-zinc-100 text-zinc-700"
-                                  }`}>
-                                    {line.station === "BAR" ? "Barra" : "Cocina"}
-                                  </span>
-                                )}
-                                {line.notes && (
-                                  <p className="inline-block rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
-                                    ⚠️ {line.notes}
+                          return (
+                            <li key={line.id} className="py-2.5 first:pt-0 last:pb-0">
+                              <div className="flex items-start justify-between gap-2.5">
+                                <div className="min-w-0">
+                                  <p className="flex items-baseline gap-1.5 text-sm font-semibold text-zinc-900">
+                                    <span className="inline-block text-base font-bold tabular-nums text-[#263e23]">
+                                      {activeQuantity}×
+                                    </span>
+                                    <span className={isReady || isServed ? "line-through text-zinc-400" : "text-zinc-900"}>{line.name}</span>
                                   </p>
-                                )}
-                              </div>
-                            </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    {stationFilter === "ALL" && (
+                                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                                        line.station === "BAR"
+                                          ? "border border-sky-200 bg-sky-50 text-sky-800"
+                                          : "border border-zinc-200 bg-zinc-100 text-zinc-700"
+                                      }`}>
+                                        {line.station === "BAR" ? "Barra" : "Cocina"}
+                                      </span>
+                                    )}
+                                    {line.notes && (
+                                      <p className="inline-block rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
+                                        ⚠️ {line.notes}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
 
-                            {/* Item Status Toggle Button */}
-                            <div className="flex shrink-0 items-center gap-1">
-                              {isPending && (
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => void updateLineStatus(line.id, "IN_PREP")}
-                                  className="cursor-pointer rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  Marcha
-                                </button>
-                              )}
-                              {isInPrep && (
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => void updateLineStatus(line.id, "READY")}
-                                  className="flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <Check size={12} /> Listo
-                                </button>
-                              )}
-                              {isReady && (
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => void updateLineStatus(line.id, "SERVED")}
-                                  className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <CheckCheck size={13} /> Servido
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                                {/* Item Status Toggle Button */}
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {isPending && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => void updateLineStatus(line.id, "IN_PREP")}
+                                      className="cursor-pointer rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Marcha
+                                    </button>
+                                  )}
+                                  {isInPrep && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => void updateLineStatus(line.id, "READY")}
+                                      className="flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <Check size={12} /> Listo
+                                    </button>
+                                  )}
+                                  {isReady && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => void updateLineStatus(line.id, "SERVED")}
+                                      className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <CheckCheck size={13} /> Servido
+                                    </button>
+                                  )}
+                                  {isServed && (
+                                    <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
+                                      Servido
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+
+                    {/* Secondary Coordination Context */}
+                    {contextLines.length > 0 && (
+                      <div
+                        data-testid="coordination-context"
+                        className={`rounded-xl border p-2.5 ${
+                          isKitchenMode
+                            ? "border-sky-200/90 bg-sky-50/70"
+                            : "border-amber-200/90 bg-amber-50/70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1.5 pb-1.5 text-xs font-bold border-b border-black/5">
+                          <span className={`flex items-center gap-1.5 ${isKitchenMode ? "text-sky-950" : "text-amber-950"}`}>
+                            {isKitchenMode ? <Wine size={13} className="text-sky-700" /> : <UtensilsCrossed size={13} className="text-amber-800" />}
+                            {isKitchenMode ? "Bebidas de esta tanda (Barra)" : "Comida de esta tanda (Cocina)"}
+                          </span>
+                          {(isKitchenMode ? ticket.barReady : ticket.kitchenReady) && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                              <Check size={10} /> {isKitchenMode ? "Listas" : "Lista"}
+                            </span>
+                          )}
+                        </div>
+                        <ul className="mt-1.5 space-y-1.5">
+                          {contextLines.map((ctxLine) => {
+                            const activeQty = ctxLine.quantity - ctxLine.cancelledQuantity;
+                            const badge = statusBadge[ctxLine.kitchenStatus] ?? statusBadge.PENDING;
+                            return (
+                              <li key={ctxLine.id} className="flex items-center justify-between gap-2 text-xs">
+                                <div className="min-w-0">
+                                  <span className={`font-bold tabular-nums mr-1.5 ${isKitchenMode ? "text-sky-950" : "text-amber-950"}`}>
+                                    {activeQty}×
+                                  </span>
+                                  <span className={`text-zinc-900 ${ctxLine.kitchenStatus === "SERVED" ? "line-through text-zinc-400" : ""}`}>
+                                    {ctxLine.name}
+                                  </span>
+                                  {ctxLine.notes && (
+                                    <span className="ml-1 text-[11px] text-amber-900 italic">
+                                      ({ctxLine.notes})
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+                                  {badge.label}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Ticket Footer Quick Actions */}
-                  <div className="flex items-center justify-between gap-2 border-t border-zinc-100 bg-[#f8faf7] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-zinc-100 bg-[#f8faf7] p-2.5">
                     <button
                       type="button"
-                      onClick={() => void markAllTicketReady(ticket)}
-                      className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700"
+                      title="Imprimir comanda térmica"
+                      aria-label="Imprimir comanda térmica"
+                      onClick={() => printTicket(ticket)}
+                      className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-zinc-200/90 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
                     >
-                      <Check size={14} /> Todo Listo
+                      <Printer size={13} aria-hidden="true" />
+                      <span className="hidden sm:inline">Imprimir</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void markAllTicketServed(ticket)}
-                      className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-zinc-200/90 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
-                    >
-                      <CheckCheck size={14} /> Despachar
-                    </button>
+                    <div className="flex flex-1 items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void markTicketStationReady(ticket, stationFilter)}
+                        className="flex-1 cursor-pointer rounded-xl bg-emerald-600 px-2.5 py-1.5 text-center text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700"
+                      >
+                        <Check size={13} className="inline mr-1" />
+                        {isKitchenMode ? "Cocina Lista" : isBarMode ? "Barra Lista" : "Todo Listo"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void markTicketStationServed(ticket, stationFilter)}
+                        className="flex-1 cursor-pointer rounded-xl border border-zinc-200/90 bg-white px-2.5 py-1.5 text-center text-xs font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
+                      >
+                        <CheckCheck size={13} className="inline mr-1" />
+                        {isKitchenMode ? "Despachar Cocina" : isBarMode ? "Despachar Barra" : "Despachar"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -386,6 +520,71 @@ export function KitchenDisplayScreen({
           </div>
         )}
       </main>
+
+      {/* Printable Thermal Ticket Portal */}
+      {printingTicket &&
+        createPortal(
+          <div aria-hidden="true" className={styles.printTicket}>
+            <CommandTicketPrint ticket={printingTicket} station={stationFilter} />
+          </div>,
+          document.body,
+        )}
     </div>
+  );
+}
+
+function CommandTicketPrint({ ticket, station }: { ticket: KitchenTicketView; station: "ALL" | KitchenStation }) {
+  const isKitchen = station === "KITCHEN";
+  const isBar = station === "BAR";
+  const kitchenLines = ticket.lines.filter((l) => (l.station ?? "KITCHEN") === "KITCHEN");
+  const barLines = ticket.lines.filter((l) => l.station === "BAR");
+
+  const primaryLines = isKitchen ? kitchenLines : isBar ? barLines : ticket.lines;
+  const contextLines = isKitchen ? barLines : isBar ? kitchenLines : [];
+
+  return (
+    <article className="space-y-2 text-black">
+      <header className="border-b border-black pb-2 text-center">
+        <h2 className="text-2xl font-black uppercase tracking-tight">{ticket.tableLabels.join(" + ")}</h2>
+        <p className="text-sm font-bold">{ticket.roomName} · Tanda {ticket.round}</p>
+        <p className="text-xs">{ticket.customerName} {ticket.waiterName ? `· Mozo: ${ticket.waiterName}` : ""}</p>
+        <p className="text-xs">{new Date(ticket.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</p>
+        <div className="mt-1 border-t border-dashed border-black pt-1 text-xs font-bold uppercase tracking-wider">
+          {isKitchen ? "--- COMANDA COCINA ---" : isBar ? "--- COMANDA BARRA ---" : "--- COMANDA GENERAL ---"}
+        </div>
+      </header>
+
+      {/* Primary Section */}
+      <section className="py-1 border-b border-black">
+        <h3 className="text-xs font-extrabold uppercase mb-1">
+          {isKitchen ? "Platos a preparar:" : isBar ? "Bebidas a preparar:" : "Consumos:"}
+        </h3>
+        <ul className="space-y-1 text-sm">
+          {primaryLines.map((line) => (
+            <li key={line.id} className="leading-tight">
+              <span className="font-black text-base mr-1.5">{line.quantity - line.cancelledQuantity}×</span>
+              <span className="font-bold">{line.name}</span>
+              {line.notes && <div className="text-xs pl-4 font-bold italic">** NOTA: {line.notes} **</div>}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Secondary Coordination Context */}
+      {contextLines.length > 0 && (
+        <section className="pt-1 text-xs">
+          <h4 className="font-bold uppercase text-[11px] mb-0.5">
+            {isKitchen ? "[Bebidas de la tanda - Barra]:" : "[Comida de la tanda - Cocina]:"}
+          </h4>
+          <ul className="space-y-0.5 text-xs">
+            {contextLines.map((line) => (
+              <li key={line.id}>
+                - {line.quantity - line.cancelledQuantity}× {line.name} ({line.kitchenStatus})
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </article>
   );
 }

@@ -294,9 +294,14 @@ export type KitchenTicketView = {
   tableLabels: string[];
   customerName: string;
   reservationCode: string;
+  waiterName?: string | null;
   openedAt: string;
   createdAt: string;
   allReady: boolean;
+  kitchenReady?: boolean;
+  barReady?: boolean;
+  hasKitchenItems?: boolean;
+  hasBarItems?: boolean;
   lines: KitchenTicketLine[];
 };
 

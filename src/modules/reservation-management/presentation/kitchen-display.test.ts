@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { KitchenSnapshot } from "../service-contracts";
 import { KitchenDisplayScreen } from "./KitchenDisplayScreen";
@@ -17,9 +17,14 @@ const snapshot: KitchenSnapshot = {
       tableLabels: ["M1"],
       customerName: "Sin reserva",
       reservationCode: "W1",
+      waiterName: "Nico",
       openedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       allReady: false,
+      kitchenReady: false,
+      barReady: false,
+      hasKitchenItems: true,
+      hasBarItems: true,
       lines: [
         {
           id: "line-1",
@@ -38,7 +43,7 @@ const snapshot: KitchenSnapshot = {
           quantity: 1,
           deliveredQuantity: 0,
           cancelledQuantity: 0,
-          notes: "",
+          notes: "Con hielo",
           kitchenStatus: "IN_PREP",
           station: "BAR",
           createdAt: new Date().toISOString(),
@@ -68,22 +73,48 @@ describe("kitchen display screen", () => {
     expect(screen.queryByRole("link", { name: /Volver/i })).toBeNull();
     expect(screen.getByText("2×")).toBeTruthy();
     expect(screen.getByText("Milanesa napolitana")).toBeTruthy();
+    expect(screen.getByText(/Mozo: Nico/)).toBeTruthy();
   });
 
-  it("shows back link when backUrl is provided and filters by station", () => {
+  it("separates primary items and secondary coordination context between Cocina and Barra", () => {
     render(
       createElement(KitchenDisplayScreen, {
         restaurantId: "rest-1",
         restaurantName: "Pepe Café",
         initialSnapshot: snapshot,
+        initialStation: "KITCHEN",
         backUrl: "/floor",
       }),
     );
 
     expect(screen.getByRole("link", { name: /Volver a Sala/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Barra" }));
-    expect(screen.queryByText("Milanesa napolitana")).toBeNull();
+
+    // In Cocina mode: food is primary actionable; drink is in secondary context box
+    expect(screen.getByText("Platos a preparar (Cocina)")).toBeTruthy();
+    expect(screen.getByText("Milanesa napolitana")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Marcha" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cocina Lista" })).toBeTruthy();
+
+    const contextCocina = screen.getByTestId("coordination-context");
+    expect(within(contextCocina).getByText("Bebidas de esta tanda (Barra)")).toBeTruthy();
+    expect(within(contextCocina).getByText("Limonada")).toBeTruthy();
+    expect(within(contextCocina).getByText("(Con hielo)")).toBeTruthy();
+    expect(within(contextCocina).getByText("En marcha")).toBeTruthy();
+
+    // Switch to Barra mode
+    fireEvent.click(screen.getByRole("button", { name: /Barra/i }));
+
+    // In Barra mode: drink is primary actionable; food is in secondary context box
+    expect(screen.getByText("Bebidas a preparar (Barra)")).toBeTruthy();
     expect(screen.getByText("Limonada")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Listo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Barra Lista" })).toBeTruthy();
+
+    const contextBarra = screen.getByTestId("coordination-context");
+    expect(within(contextBarra).getByText("Comida de esta tanda (Cocina)")).toBeTruthy();
+    expect(within(contextBarra).getByText("Milanesa napolitana")).toBeTruthy();
+    expect(within(contextBarra).getByText("Pendiente")).toBeTruthy();
   });
 });
+
 

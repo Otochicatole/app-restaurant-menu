@@ -405,6 +405,9 @@ describe("table service in SQLite", () => {
     expect(kitchen.tickets).toHaveLength(2);
     expect(kitchen.tickets[0]).toMatchObject({
       round: 1,
+      hasKitchenItems: true,
+      hasBarItems: true,
+      waiterName: "Ana",
       lines: [
         expect.objectContaining({ name: "Empanada", quantity: 3, notes: "Bien doradas", station: "KITCHEN" }),
         expect.objectContaining({ name: "Limonada", quantity: 2, station: "BAR" }),
@@ -412,6 +415,9 @@ describe("table service in SQLite", () => {
     });
     expect(kitchen.tickets[1]).toMatchObject({
       round: 2,
+      hasKitchenItems: true,
+      hasBarItems: false,
+      waiterName: "Ana",
       lines: [
         expect.objectContaining({ name: "Flan casero", quantity: 1, notes: "Con dulce", station: "KITCHEN" }),
       ],

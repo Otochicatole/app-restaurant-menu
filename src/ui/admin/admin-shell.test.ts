@@ -36,11 +36,12 @@ describe("administrative full-screen floor editor", () => {
     expect(view.container.querySelector("header")).not.toBeNull();
   });
 
-  it("renders cocina in main navigation and displays full-screen light container without CMS header", () => {
+  it("renders cocina and barra in main navigation and displays full-screen light container without CMS header", () => {
     route.pathname = "/admin/restaurants/restaurant/kitchen";
     const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
     expect(screen.getByTestId("editor")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Cocina" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Barra" })).toBeTruthy();
     expect(view.container.querySelector("header")).toBeNull();
     expect(view.container.querySelector(".bg-zinc-950")).toBeNull();
     expect(view.container.querySelector("[class*='md:pl-16']")?.classList.contains("bg-[#f8faf7]")).toBe(true);
