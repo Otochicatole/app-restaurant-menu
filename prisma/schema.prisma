@@ -447,8 +447,8 @@ model DiningRoom {
   restaurantId  String
   restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name          String
-  width         Float @default(1200)
-  height        Float @default(800)
+  width         Float @default(2000)
+  height        Float @default(2000)
   fixturesJson  String @default("[]")
   revision      Int @default(0)
   active        Boolean @default(true)

@@ -532,6 +532,7 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBeTruthy();
     expect(screen.queryByRole("menu")).toBeNull();
     expect(plan().id).not.toBe("main"); expect(plan().locations).toEqual([]);
+    expect(plan()).toMatchObject({ width: 2000, height: 2000 });
     expect(api.save).toHaveBeenCalledTimes(1);
   });
 

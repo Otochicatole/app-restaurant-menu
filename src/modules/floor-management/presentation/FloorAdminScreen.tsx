@@ -272,7 +272,7 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
   };
   const createRoom = () => discardBefore(() => {
     const name = uniqueName("Nuevo salón", config?.rooms.map((room) => room.name) ?? []);
-    const next: FloorRoom = { id: crypto.randomUUID(), restaurantId, name, width: 1000, height: 700, active: true, revision: 0, fixtures: [], locations: [], tables: [], combinations: [] };
+    const next: FloorRoom = { id: crypto.randomUUID(), restaurantId, name, width: 2000, height: 2000, active: true, revision: 0, fixtures: [], locations: [], tables: [], combinations: [] };
     changeRoom(next, true); openPanel({ kind: "dimensions" }, next);
   });
   const guardLink = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
