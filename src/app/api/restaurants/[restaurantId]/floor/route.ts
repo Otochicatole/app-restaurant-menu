@@ -48,6 +48,7 @@ const revision = z.number().int().nonnegative();
 const writeSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("save-room"), room: floorRoomInputSchema, expectedRevision: revision }),
   z.object({ action: z.literal("archive-room"), roomId: z.string().min(1), expectedRevision: revision }),
+  z.object({ action: z.literal("delete-room"), roomId: z.string().min(1), expectedRevision: revision }),
   z.object({ action: z.literal("settings"), timeZone: z.string().min(1) }),
   z.object({ action: z.literal("activate") }),
   z.object({ action: z.literal("staff"), email: z.string().email(), password: z.string().min(8).max(128) }),
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest, { params }: Context) {
     switch (command.action) {
       case "save-room": await floorManagement.saveRoom(restaurantId, command.room, command.expectedRevision); break;
       case "archive-room": await floorManagement.archiveRoom(restaurantId, command.roomId, command.expectedRevision); break;
+      case "delete-room": await floorManagement.deleteRoom(restaurantId, command.roomId, command.expectedRevision); break;
       case "settings": await floorManagement.updateTimeZone(restaurantId, command.timeZone); break;
       case "activate": await floorManagement.activate(restaurantId); break;
       case "staff": await floorManagement.setStaffAccount(restaurantId, command.email, command.password); break;

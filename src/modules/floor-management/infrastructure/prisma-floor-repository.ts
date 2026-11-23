@@ -121,8 +121,14 @@ export class PrismaFloorRepository {
     for (const old of existing?.tables ?? []) {
       const next = input.tables.find((table) => table.id === old.id);
       const committed = future.some((allocation) => allocation.poses.some((pose) => pose.tableId === old.id));
-      if (committed && (!next || !next.active || next.capacity !== old.capacity || next.shape !== old.shape || next.width !== old.width || next.height !== old.height)) {
-        throw new ConflictError(`La mesa ${old.label} tiene reservas futuras. Reasignala antes de cambiar su capacidad, forma o tamaño.`);
+      if (committed && (!next || !next.active || next.capacity !== old.capacity || next.shape !== old.shape || next.width !== old.width || next.height !== old.height || (old.locationId && next.locationId !== old.locationId))) {
+        throw new ConflictError(`La mesa ${old.label} tiene reservas futuras. Reasignala antes de cambiar su capacidad, forma, sector o tamaño.`);
+      }
+    }
+    const locationIds = new Set(input.locations.map((item) => item.id));
+    for (const table of input.tables) {
+      if (table.locationId && !locationIds.has(table.locationId)) {
+        throw new BadRequestError(`La mesa ${table.label} referencia un sector que no pertenece a este salón.`);
       }
     }
     const candidate: FloorRoom = { ...input, id, restaurantId, revision: (existing?.revision ?? -1) + 1 };
@@ -143,14 +149,16 @@ export class PrismaFloorRepository {
     if (!tablesOnly) {
       await tx.diningRoomLocation.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.locations.map((location) => location.id) } }, data: { active: false } });
       for (const location of input.locations) {
-        const { id: locationId, ...data } = location;
-        await tx.diningRoomLocation.upsert({ where: { id: locationId }, create: { id: locationId, restaurantId, roomId: id, ...data }, update: data });
+        const { id: locationId, maxTables, maxCapacity, ...data } = location;
+        const persisted = { ...data, maxTables: maxTables ?? null, maxCapacity: maxCapacity ?? null };
+        await tx.diningRoomLocation.upsert({ where: { id: locationId }, create: { id: locationId, restaurantId, roomId: id, ...persisted }, update: persisted });
       }
     }
     await tx.diningTable.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.tables.map((table) => table.id) } }, data: { active: false } });
     for (const table of input.tables) {
-      const { id: tableId, ...data } = table;
-      await tx.diningTable.upsert({ where: { id: tableId }, create: { id: tableId, restaurantId, roomId: id, ...data }, update: data });
+      const { id: tableId, locationId, ...data } = table;
+      const persisted = { ...data, locationId: locationId ?? null };
+      await tx.diningTable.upsert({ where: { id: tableId }, create: { id: tableId, restaurantId, roomId: id, ...persisted }, update: persisted });
     }
     await tx.diningTableCombination.updateMany({ where: { restaurantId, roomId: id, id: { notIn: input.combinations.map((item) => item.id) } }, data: { active: false } });
     for (const combination of input.combinations) {
@@ -167,6 +175,60 @@ export class PrismaFloorRepository {
     const room = config.rooms.find((item) => item.id === roomId);
     if (!room) throw new NotFoundError("Salón");
     return this.saveRoom(restaurantId, { ...room, active: false }, expectedRevision);
+  }
+
+  async deleteRoom(restaurantId: string, roomId: string, expectedRevision: number): Promise<void> {
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
+      throw new BadRequestError("La revisión del salón no es válida.");
+    }
+    await withSqliteTransaction(this.database, async (tx) => {
+      const existing = await tx.diningRoom.findUnique({
+        where: { id: roomId },
+        select: { id: true, restaurantId: true, revision: true },
+      });
+      if (!existing || existing.restaurantId !== restaurantId) throw new NotFoundError("Salón");
+      if (existing.revision !== expectedRevision) {
+        throw new ConflictError("El salón cambió en otra pestaña. Actualizalo antes de eliminarlo.");
+      }
+      const now = new Date();
+      const [activeAllocations, openAccounts] = await Promise.all([
+        tx.reservationAllocation.count({
+          where: {
+            restaurantId,
+            roomId,
+            releasedAt: null,
+            OR: [{ blockedUntil: { gt: now } }, { serviceAccounts: { some: { closedAt: null } } }],
+          },
+        }),
+        tx.serviceAccount.count({ where: { restaurantId, roomId, closedAt: null } }),
+      ]);
+      if (activeAllocations > 0 || openAccounts > 0) {
+        throw new ConflictError("El salón tiene reservas futuras o cuentas abiertas. Reasignalas o cerralas antes de eliminarlo.");
+      }
+      const [historicalAllocations, historicalAccounts] = await Promise.all([
+        tx.reservationAllocation.count({ where: { restaurantId, roomId } }),
+        tx.serviceAccount.count({ where: { restaurantId, roomId } }),
+      ]);
+      if (historicalAllocations > 0 || historicalAccounts > 0) {
+        throw new ConflictError("Este salón tiene historial de reservas o cuentas registradas y no puede eliminarse definitivamente. Podés archivarlo para ocultarlo de la sala.");
+      }
+      const restaurant = await tx.restaurant.findUniqueOrThrow({ where: { id: restaurantId }, select: { timeZone: true } });
+      const today = restaurantToday(restaurant.timeZone, now);
+      const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      const upcomingEvents = await tx.restaurantEventRoom.count({
+        where: { restaurantId, roomId, event: { status: "PUBLISHED", date: { gte: yesterday } } },
+      });
+      if (upcomingEvents > 0) {
+        throw new ConflictError("Este salón está asignado a un evento próximo publicado. Quitá el salón del evento antes de eliminarlo.");
+      }
+      // Delete child records in FK-safe order because DiningTable.location references DiningRoomLocation with NoAction.
+      await tx.diningTableCombinationMember.deleteMany({ where: { restaurantId, roomId } });
+      await tx.diningTableCombination.deleteMany({ where: { restaurantId, roomId } });
+      await tx.diningTable.deleteMany({ where: { restaurantId, roomId } });
+      await tx.diningRoomLocation.deleteMany({ where: { restaurantId, roomId } });
+      await tx.restaurantEventRoom.deleteMany({ where: { restaurantId, roomId } });
+      await tx.diningRoom.delete({ where: { id: roomId } });
+    });
   }
 
   async updateTimeZone(restaurantId: string, timeZone: string) {

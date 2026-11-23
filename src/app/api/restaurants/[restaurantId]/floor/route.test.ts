@@ -5,13 +5,13 @@ import { ForbiddenError, NotFoundError } from "@/platform/application/errors";
 
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(), operational: vi.fn(), board: vi.fn(), config: vi.fn(),
-  create: vi.fn(), release: vi.fn(), options: vi.fn(), save: vi.fn(),
+  create: vi.fn(), release: vi.fn(), options: vi.fn(), save: vi.fn(), remove: vi.fn(),
   reassign: vi.fn(), reassignOptions: vi.fn(),
 }));
 vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: mocks.admin }));
 vi.mock("@/modules/floor-management/server", () => ({
   requireFloorReadAccess: mocks.operational,
-  floorManagement: { getBoard: mocks.board, getConfig: mocks.config, saveRoom: mocks.save },
+  floorManagement: { getBoard: mocks.board, getConfig: mocks.config, saveRoom: mocks.save, deleteRoom: mocks.remove },
 }));
 vi.mock("@/modules/reservation-management/server", async () => {
   const actual = await import("@/modules/reservation-management/contracts");
@@ -100,5 +100,15 @@ describe("floor operational permissions", () => {
       assignment: { roomId: "room", optionId: "table:table", x: 100, y: 100, rotation: 0, expectedRoomRevision: 0 } });
     expect(write.status).toBe(404);
     expect(mocks.reassign).not.toHaveBeenCalled();
+  });
+
+  it("allows admins to delete a room via delete-room action and returns updated config", async () => {
+    mocks.admin.mockResolvedValue({ restaurantId: "own" });
+    mocks.config.mockResolvedValue({ restaurantId: "own", rooms: [] });
+    const response = await send({ action: "delete-room", roomId: "room-1", expectedRevision: 3 });
+    expect(response.status).toBe(200);
+    expect(mocks.admin).toHaveBeenCalledWith("own", { allowSuperAdmin: true });
+    expect(mocks.remove).toHaveBeenCalledWith("own", "room-1", 3);
+    expect(await response.json()).toMatchObject({ success: true, data: { restaurantId: "own", rooms: [] } });
   });
 });

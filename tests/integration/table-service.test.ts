@@ -548,4 +548,129 @@ describe("table service in SQLite", () => {
     expect(receipt.auditLogs[7]).toMatchObject({ sequence: 8, action: "ITEM_CANCELLED", severity: "WARNING", amountDeltaCents: -1500 });
     expect(receipt.auditLogs[9]).toMatchObject({ sequence: 10, action: "DISCOUNT_APPLIED", severity: "WARNING", amountDeltaCents: -500 });
   });
+
+  it("opens a fixed table with logical partySize above capacity and settles split-bill payments", async () => {
+    await first.diningTable.update({ where: { id: tableIds[0] }, data: { locationId, x: 200, y: 200 } });
+    const opened = accountView(await service.execute(restaurantId, actor, {
+      action: "open-table",
+      roomId,
+      tableId: tableIds[0],
+      partySize: 10,
+      waiterId,
+      customerName: "Mesa grande",
+    }, now));
+    expect(opened).toMatchObject({ partySize: 10, tableIds: [tableIds[0]], assignedWaiterId: waiterId, closedAt: null });
+
+    const confirmed = accountView(await service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: opened.version,
+      items: [
+        { name: "Coca", unitPriceCents: 1500, quantity: 2, station: "BAR" },
+        { name: "Pizza", unitPriceCents: 7000, quantity: 1, station: "KITCHEN" },
+      ],
+    }, now));
+    const delivered = accountView(await service.execute(restaurantId, actor, {
+      action: "deliver-all",
+      accountId: confirmed.id,
+      expectedVersion: confirmed.version,
+    }, now));
+    const coca = delivered.lines.find((line) => line.name === "Coca")!;
+
+    const partial1 = accountView(await service.execute(restaurantId, actor, {
+      action: "pay-partial",
+      accountId: delivered.id,
+      expectedVersion: delivered.version,
+      splitMode: "BY_ITEMS",
+      paymentMethod: "CASH",
+      payerLabel: "Ana",
+      items: [{ lineId: coca.id, quantity: 1 }],
+    }, now));
+    expect(partial1.closedAt).toBeNull();
+    expect(partial1.paidSubtotalCents).toBe(1500);
+    expect(partial1.remainingCents).toBe(8500);
+    expect(partial1.payments).toHaveLength(1);
+    expect(partial1.payments[0]).toMatchObject({
+      sequence: 1,
+      receiptNumber: `C-${opened.id}-P1`,
+      splitMode: "BY_ITEMS",
+      payerLabel: "Ana",
+      paymentMethod: "CASH",
+      totalCents: 1500,
+    });
+    expect(partial1.lines.find((line) => line.id === coca.id)?.paidQuantity).toBe(1);
+    expect(partial1.auditLogs.some((log) => log.action === "PARTIAL_PAYMENT_RECORDED")).toBe(true);
+
+    // Cannot revert delivered quantity below already-paid quantity
+    await expect(service.execute(restaurantId, actor, {
+      action: "update-line",
+      accountId: partial1.id,
+      expectedVersion: partial1.version,
+      lineId: coca.id,
+      deliveredQuantity: 0,
+      cancelledQuantity: 0,
+    }, now)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    // Cannot close business day while open account holds partial payments on this date
+    await expect(service.execute(restaurantId, actor, { action: "close-day", date }, now)).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const settled = accountView(await service.execute(restaurantId, actor, {
+      action: "pay-partial",
+      accountId: partial1.id,
+      expectedVersion: partial1.version,
+      splitMode: "BY_PEOPLE",
+      paymentMethod: "CARD",
+      payerLabel: "Mesa",
+      amountCents: 8500,
+    }, now));
+    expect(settled.closedAt).not.toBeNull();
+    expect(settled.paymentMethod).toBe("SPLIT");
+    expect(settled.totalCents).toBe(10000);
+    expect(settled.cashCents).toBe(1500);
+    expect(settled.cardCents).toBe(8500);
+    expect(settled.payments).toHaveLength(2);
+    expect(settled).toMatchObject({ paidSubtotalCents: 10000, remainingCents: 0 });
+
+    await expect(service.execute(restaurantId, actor, { action: "close-day", date }, now)).resolves.toMatchObject({ kind: "CLOSE" });
+    const report = await service.report(restaurantId, date, date, now);
+    expect(report.totals).toMatchObject({ cashCents: 1500, cardCents: 8500, totalCents: 10000, receiptCount: 1 });
+    expect(report.receipts[0].payments).toHaveLength(2);
+  });
+
+  it("persists product station and automatically assigns it to order lines added from catalog", async () => {
+    const fernet = productView(await service.execute(restaurantId, actor, {
+      action: "save-product",
+      name: "Fernet con Coca",
+      unitPriceCents: 4500,
+      station: "BAR",
+    }, now));
+    const bife = productView(await service.execute(restaurantId, actor, {
+      action: "save-product",
+      name: "Bife de chorizo",
+      unitPriceCents: 18000,
+      station: "KITCHEN",
+    }, now));
+
+    expect(fernet.station).toBe("BAR");
+    expect(bife.station).toBe("KITCHEN");
+
+    const listed = await service.products(restaurantId);
+    expect(listed.find((p) => p.id === fernet.id)?.station).toBe("BAR");
+    expect(listed.find((p) => p.id === bife.id)?.station).toBe("KITCHEN");
+
+    const allocation = await visit();
+    const opened = await open(allocation.id);
+    const ordered = accountView(await service.execute(restaurantId, actor, {
+      action: "confirm-order",
+      accountId: opened.id,
+      expectedVersion: opened.version,
+      items: [
+        { productId: fernet.id, quantity: 2 },
+        { productId: bife.id, quantity: 1 },
+      ],
+    }, now));
+
+    expect(ordered.lines.find((line) => line.name === "Fernet con Coca")?.station).toBe("BAR");
+    expect(ordered.lines.find((line) => line.name === "Bife de chorizo")?.station).toBe("KITCHEN");
+  });
 });

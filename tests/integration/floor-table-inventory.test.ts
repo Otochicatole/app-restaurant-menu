@@ -116,4 +116,81 @@ describe("narrow table inventory changes on SQLite", () => {
     expect(rejected.reason.message).toContain("cambió en otra pestaña");
     expect((await repository.getConfig(restaurantId)).rooms[0].revision).toBe(room.revision + 1);
   });
+
+  it("persists sector quotas and fixed table locationId and rejects exceeding maxTables", async () => {
+    const updated = await repository.saveRoom(restaurantId, {
+      id: room.id,
+      name: room.name,
+      width: room.width,
+      height: room.height,
+      active: true,
+      fixtures: room.fixtures,
+      locations: [{ id: "window", name: "Window", x: 400, y: 300, width: 600, height: 400, rotation: 0, active: true, maxTables: 2, maxCapacity: 10 }],
+      tables: [
+        { ...room.tables[0], locationId: "window", x: 240, y: 240 },
+        { ...room.tables[1], locationId: "window", x: 420, y: 240 },
+      ],
+      combinations: [],
+    }, room.revision);
+
+    expect(updated.locations[0]).toMatchObject({ maxTables: 2, maxCapacity: 10 });
+    expect(updated.tables.every((t) => t.locationId === "window")).toBe(true);
+
+    const dbLocation = await database.diningRoomLocation.findUniqueOrThrow({ where: { id: "window" } });
+    expect(dbLocation).toMatchObject({ maxTables: 2, maxCapacity: 10 });
+    const dbTables = await database.diningTable.findMany({ where: { roomId: room.id }, orderBy: { label: "asc" } });
+    expect(dbTables.map((t) => [t.locationId, t.x, t.y])).toEqual([
+      ["window", 240, 240],
+      ["window", 420, 240],
+    ]);
+
+    await expect(repository.saveRoom(restaurantId, {
+      id: room.id,
+      name: room.name,
+      width: room.width,
+      height: room.height,
+      active: true,
+      fixtures: room.fixtures,
+      locations: [{ id: "window", name: "Window", x: 400, y: 300, width: 600, height: 400, rotation: 0, active: true, maxTables: 1, maxCapacity: 10 }],
+      tables: updated.tables,
+      combinations: [],
+    }, updated.revision)).rejects.toThrow("El sector Window admite hasta 1 mesas.");
+  });
+
+  it("deletes an unused room with sectors and located tables in FK-safe order and protects rooms with history", async () => {
+    const deletable = await repository.saveRoom(restaurantId, {
+      name: "Patio",
+      width: 900,
+      height: 600,
+      active: true,
+      fixtures: [],
+      locations: [{ id: "patio-sec", name: "Patio Norte", x: 300, y: 250, width: 500, height: 400, rotation: 0, active: true, maxTables: 4, maxCapacity: 16 }],
+      tables: [
+        { id: randomUUID(), label: "P1", shape: "SQUARE", width: 80, height: 80, capacity: 4, x: 200, y: 200, rotation: 0, active: true, locationId: "patio-sec" },
+      ],
+      combinations: [],
+    }, 0);
+
+    // Rejects stale revision
+    await expect(repository.deleteRoom(restaurantId, deletable.id, deletable.revision + 1)).rejects.toThrow("cambió en otra pestaña");
+
+    // Deletes cleanly when no allocations or accounts reference it
+    await repository.deleteRoom(restaurantId, deletable.id, deletable.revision);
+    expect((await repository.getConfig(restaurantId)).rooms.some((r) => r.id === deletable.id)).toBe(false);
+    expect(await database.diningRoomLocation.count({ where: { roomId: deletable.id } })).toBe(0);
+    expect(await database.diningTable.count({ where: { roomId: deletable.id } })).toBe(0);
+
+    // Protects rooms with active or historical reservations (even after release)
+    const arrival = new Date("2099-12-01T20:00:00.000Z");
+    const visit = await createWalkIn(database, restaurantId, {
+      customerName: "Historia",
+      partySize: 2,
+      notes: "",
+      durationMinutes: 90,
+      assignment: { roomId: room.id, locationId: "window", optionId: `table:${room.tables[0].id}`, x: 200, y: 200, rotation: 0, expectedRoomRevision: room.revision },
+    }, () => arrival);
+    await expect(repository.deleteRoom(restaurantId, room.id, room.revision)).rejects.toThrow("reservas futuras o cuentas abiertas");
+    await releaseWalkIn(database, restaurantId, visit.reservationId, 0, new Date());
+    await expect(repository.deleteRoom(restaurantId, room.id, room.revision)).rejects.toThrow("historial de reservas o cuentas");
+  });
 });

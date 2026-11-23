@@ -608,7 +608,7 @@ describe("floor viewport dragging", () => {
     click("floor-table-two");
     click("floor-joined-group-joined");
     click("floor-table-free");
-    expect(onServiceTable.mock.calls).toEqual([["two"], ["one"]]);
+    expect(onServiceTable.mock.calls).toEqual([["two"], ["one"], ["free"]]);
     expect(onSelect).not.toHaveBeenCalled();
     expect(onMove).not.toHaveBeenCalled();
   });

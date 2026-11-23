@@ -79,10 +79,22 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
       && allocation.poses.some((pose) => ids.has(pose.tableId)
         && floorPoseOverlaps(allocation, pose, Date.parse(interval.blockedFrom), Date.parse(interval.blockedUntil))));
     if (occupied) conflict = `La mesa está asignada a ${occupied.customerName} (${occupied.code}).`;
+    const rawTable = option.id.startsWith("table:") ? room.tables.find((table) => `table:${table.id}` === option.id) : undefined;
+    const isFixedLocatedTable = Boolean(rawTable?.locationId);
     const resourceAvailable = !conflict;
-    if (!conflict && option.capacity < partySize) conflict = "La capacidad útil no alcanza para este grupo.";
+    if (!conflict && !isFixedLocatedTable && option.capacity < partySize) conflict = "La capacidad útil no alcanza para este grupo.";
     let placement: ReturnType<typeof findFloorPlacement> = null;
-    if (resourceAvailable && option.capacity >= partySize) {
+    if (isFixedLocatedTable) {
+      if (resourceAvailable) {
+        placement = {
+          locationId: rawTable!.locationId!,
+          x: rawTable!.x,
+          y: rawTable!.y,
+          rotation: rawTable!.rotation,
+          poses: option.poses,
+        };
+      }
+    } else if (resourceAvailable && option.capacity >= partySize) {
       const relative = option.poses.map((pose) => ({ ...pose, x: pose.x - option.x, y: pose.y - option.y }));
       const key = JSON.stringify([room.id, option.rotation, relative.map((pose) => [pose.shape, pose.width, pose.height, pose.x, pose.y, pose.rotation])]);
       if (!fitCache.has(key)) {
@@ -92,7 +104,7 @@ function evaluateOptions(rooms: FloorRoom[], allocations: FloorAllocationView[],
       const found = fitCache.get(key);
       if (found) placement = { ...found, poses: transformPoses(relative, found.x, found.y, ((found.rotation - option.rotation + 360) % 360) as FloorRotation) };
     }
-    if (!conflict && !placement) conflict = "No hay espacio libre en los sectores para este armado.";
+    if (!conflict && !placement) conflict = isFixedLocatedTable ? "La mesa ya no está disponible." : "No hay espacio libre en los sectores para este armado.";
     return { ...option, ...(placement ?? {}), resourceAvailable, available: !conflict, ...(conflict ? { conflict } : {}) };
   }));
 }
@@ -151,7 +163,8 @@ export async function getPhysicalAvailability(database: Database, restaurantId: 
 }
 
 function hasCustomCapacity(room: FloorRoom, options: FloorAssignmentOption[], partySize: number, interval: FloorInterval, allocations: FloorLease[]): boolean {
-  const inventory = options.filter((option) => option.roomId === room.id && option.id.startsWith("table:") && option.resourceAvailable);
+  const inventory = options.filter((option) => option.roomId === room.id && option.id.startsWith("table:") && option.resourceAvailable
+    && !room.tables.find((table) => `table:${table.id}` === option.id)?.locationId);
   // Try bounded rows of tables, with and without the gap used to separate tables on the floor.
   for (const direction of [1, -1]) {
     const ordered = [...inventory].sort((a, b) => direction * (a.capacity - b.capacity)).slice(0, 40);
@@ -226,22 +239,27 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
       poses = assignment.customTables.map((selected) => {
         const table = room!.tables.find((item) => item.id === selected.tableId && item.active);
         if (!table) throw new BadRequestError("El armado usa una mesa inexistente o inactiva.");
-        return { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity, width: table.width, height: table.height, x: selected.x, y: selected.y, rotation: selected.rotation };
+        return table.locationId
+          ? { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity, width: table.width, height: table.height, x: table.x, y: table.y, rotation: table.rotation }
+          : { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity, width: table.width, height: table.height, x: selected.x, y: selected.y, rotation: selected.rotation };
       });
       const invalid = validateTableArrangement(poses); if (invalid) throw new BadRequestError(invalid);
-      capacity = assignment.capacity;
-      if (capacity > usableTableCapacity(poses)) throw new BadRequestError("La capacidad útil supera los lugares disponibles con esa disposición de mesas.");
+      const hasFixed = poses.some((pose) => Boolean(room!.tables.find((item) => item.id === pose.tableId)?.locationId));
+      capacity = hasFixed ? Math.max(assignment.capacity, usableTableCapacity(poses), reservation.partySize) : assignment.capacity;
+      if (!hasFixed && capacity > usableTableCapacity(poses)) throw new BadRequestError("La capacidad útil supera los lugares disponibles con esa disposición de mesas.");
       combinationId = null;
     } else {
       const option = options.options.find((item) => item.id === assignment!.optionId && item.roomId === room!.id);
       if (!option || !option.resourceAvailable) throw new ConflictError(option?.conflict ?? "La opción de mesas ya no está disponible.");
+      const isFixedSingle = option.id.startsWith("table:") && Boolean(room.tables.find((item) => `table:${item.id}` === option.id)?.locationId);
       const relative = option.poses.map((pose) => ({ ...pose, x: pose.x - option.x, y: pose.y - option.y }));
-      const delta = ((assignment.rotation - option.rotation + 360) % 360) as FloorRotation;
-      poses = transformPoses(relative, assignment.x, assignment.y, delta);
-      capacity = Math.min(option.capacity, usableTableCapacity(poses));
+      const delta = isFixedSingle ? (0 as FloorRotation) : (((assignment.rotation - option.rotation + 360) % 360) as FloorRotation);
+      poses = isFixedSingle ? option.poses : transformPoses(relative, assignment.x, assignment.y, delta);
+      capacity = isFixedSingle ? Math.max(option.capacity, reservation.partySize) : Math.min(option.capacity, usableTableCapacity(poses));
       combinationId = option.id.startsWith("combination:") ? option.id.slice("combination:".length) : null;
     }
-    if (!partiallyReleased && !overrun && capacity < reservation.partySize) throw new ConflictError("La capacidad útil no alcanza para este grupo.");
+    const usesFixedTables = poses.some((pose) => Boolean(room!.tables.find((item) => item.id === pose.tableId)?.locationId));
+    if (!usesFixedTables && !partiallyReleased && !overrun && capacity < reservation.partySize) throw new ConflictError("La capacidad útil no alcanza para este grupo.");
   } else {
     if (!existing || existing.releasedAt) throw new ConflictError("La reserva ya no tiene una asignación vigente. Elegí sus mesas nuevamente.");
     room = options.rooms.find((item) => item.id === existing!.roomId);
@@ -251,7 +269,8 @@ export async function prepareReservationAllocation(tx: Prisma.TransactionClient,
     locationId = existing.locationId;
     poses = allocationToView(existing).poses.filter((pose) => !pose.releasedAt);
     capacity = Math.min(existing.capacity, usableTableCapacity(poses));
-    if (!partiallyReleased && capacity < reservation.partySize) throw new ConflictError("El grupo supera la capacidad de las mesas asignadas.");
+    const usesFixedExisting = poses.some((pose) => Boolean(room!.tables.find((item) => item.id === pose.tableId)?.locationId));
+    if (!usesFixedExisting && !partiallyReleased && capacity < reservation.partySize) throw new ConflictError("El grupo supera la capacidad de las mesas asignadas.");
     if (reservation.eventId) {
       const eventRoom = await tx.restaurantEventRoom.findFirst({ where: { eventId: reservation.eventId, restaurantId: reservation.restaurantId, roomId: room.id } });
       if (!eventRoom) throw new ConflictError("Las mesas asignadas no pertenecen a los salones del evento.");

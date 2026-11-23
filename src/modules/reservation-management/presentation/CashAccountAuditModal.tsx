@@ -22,6 +22,7 @@ const auditActionLabels: Record<ServiceAuditAction, string> = {
   ROUND_MARCHED: "Marcha a cocina/barra",
   KITCHEN_STATUS_CHANGED: "Estado cocina/barra",
   DISCOUNT_APPLIED: "Descuento aplicado",
+  PARTIAL_PAYMENT_RECORDED: "Pago parcial (división)",
   ACCOUNT_CHECKED_OUT: "Cierre y cobro",
   ACCOUNT_CLOSED_EMPTY: "Cierre sin consumo",
 };

@@ -28,6 +28,11 @@ vi.mock("@/modules/floor-management/ui", () => ({
       createElement("button", { type: "button", onClick: props.onCancel }, "Cancelar"));
   },
   FloorRoomSelector: () => null,
+  FloorSectorSelector: ({ value, onChange }: { value?: string; onChange: (value: string) => void }) =>
+    createElement("label", null, "Sector preferido",
+      createElement("select", { "aria-label": "Sector preferido", value: value ?? "", onChange: (e: { target: { value: string } }) => onChange(e.target.value) },
+        createElement("option", { value: "" }, "Sin preferencia"),
+        createElement("option", { value: "Ventana · Salón principal" }, "Ventana · Salón principal"))),
 }));
 import { ReservationCmsScreen } from "./ReservationCmsScreen";
 
@@ -218,5 +223,38 @@ describe("reservation floor confirmation flow", () => {
       title: "Noche de Vinilos",
       imageUrl: "https://cdn.example/vinilos.jpg",
     })));
+  });
+
+  it("defaults manual reservations to PENDING with sector selection only and reveals table assignment only when confirming", async () => {
+    actions.createAdminReservationAction.mockResolvedValue({
+      success: true,
+      data: { ...reservation, customerName: "Lucía Gómez", status: "PENDING", adminNotes: "Sector preferido: Ventana · Salón principal" },
+    });
+    render(createElement(ReservationCmsScreen, { initialData: data() }));
+    fireEvent.click(screen.getByRole("button", { name: "Nueva reserva" }));
+    const modal = within(screen.getByRole("dialog", { name: "Nueva Reserva Manual" }));
+
+    const status = modal.getByRole("combobox", { name: "Estado" }) as HTMLSelectElement;
+    expect(status.value).toBe("PENDING");
+    expect(modal.getByRole("combobox", { name: "Sector preferido" })).toBeTruthy();
+    expect(modal.queryByRole("button", { name: "Elegir mesa de prueba" })).toBeNull();
+
+    fireEvent.change(status, { target: { value: "CONFIRMED" } });
+    expect(modal.getByRole("button", { name: "Elegir mesa de prueba" })).toBeTruthy();
+    fireEvent.change(status, { target: { value: "PENDING" } });
+    expect(modal.queryByRole("button", { name: "Elegir mesa de prueba" })).toBeNull();
+
+    fireEvent.change(modal.getByRole("combobox", { name: "Sector preferido" }), { target: { value: "Ventana · Salón principal" } });
+    fireEvent.change(modal.getByRole("textbox", { name: "Nombre y apellido" }), { target: { value: "Lucía Gómez" } });
+    fireEvent.change(modal.getByRole("textbox", { name: "Teléfono / WhatsApp" }), { target: { value: "12345678" } });
+    fireEvent.click(modal.getByRole("button", { name: "Crear reserva" }));
+
+    await waitFor(() => expect(actions.createAdminReservationAction).toHaveBeenCalledWith("restaurant", expect.objectContaining({
+      customerName: "Lucía Gómez",
+      status: "PENDING",
+      adminNotes: "Sector preferido: Ventana · Salón principal",
+    })));
+    const payload = actions.createAdminReservationAction.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.assignment).toBeUndefined();
   });
 });

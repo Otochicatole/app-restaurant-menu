@@ -3,7 +3,8 @@
 }
 
 @media print {
-  body:has(> .printReceipt) > :not(.printReceipt) {
+  body:has(> .printReceipt) > :not(.printReceipt),
+  body:has(> .printReceipt) dialog {
     display: none !important;
   }
 

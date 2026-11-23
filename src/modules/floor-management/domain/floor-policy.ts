@@ -1,4 +1,19 @@
-import type { FloorAssignmentOption, FloorInterval, FloorLease, FloorPose, FloorRoom, FloorRoomInput, FloorRotation, FloorTable } from "../contracts";
+import type { FloorAssignmentOption, FloorInterval, FloorLease, FloorLocation, FloorPose, FloorRoom, FloorRoomInput, FloorRotation, FloorTable } from "../contracts";
+
+export type SectorQuotaStatus = "normal" | "warning" | "exceeded";
+export type SectorQuotaSummary = {
+  locationId: string;
+  name: string;
+  maxTables: number | null;
+  placedTables: number;
+  occupiedTables: number;
+  freeTables: number;
+  maxCapacity: number | null;
+  nominalCapacity: number;
+  occupiedPartySize: number;
+  remainingCapacity: number | null;
+  status: SectorQuotaStatus;
+};
 
 const epsilon = 0.001;
 export const floorTableSeparationGap = 24;
@@ -101,6 +116,20 @@ export function buildFloorOptions(room: FloorRoom): FloorAssignmentOption[] {
   const tables = room.tables.filter((table) => table.active);
   const anchor = room.locations?.find((location) => location.active) ?? { x: room.width / 2, y: room.height / 2 };
   const singles = tables.map((table): FloorAssignmentOption => {
+    if (table.locationId) {
+      return {
+        id: `table:${table.id}`,
+        roomId: room.id,
+        label: `Mesa ${table.label}`,
+        capacity: table.capacity,
+        locationId: table.locationId,
+        x: table.x,
+        y: table.y,
+        rotation: table.rotation,
+        poses: [basePose(table)],
+        available: true,
+      };
+    }
     return { id: `table:${table.id}`, roomId: room.id, label: `Mesa ${table.label}`, capacity: table.capacity,
       x: anchor.x, y: anchor.y, rotation: 0, poses: [{ ...basePose(table), x: anchor.x, y: anchor.y, rotation: 0 }], available: true };
   });
@@ -151,8 +180,31 @@ export function validateRoomLayout(room: FloorRoomInput): string | null {
   for (const location of locations.filter((item) => item.active)) {
     const box = bounds(location);
     if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `El sector ${location.name} queda fuera del salón.`;
+    if (location.maxTables != null) {
+      const placed = room.tables.filter((table) => table.active && table.locationId === location.id).length;
+      if (placed > location.maxTables) return `El sector ${location.name} admite hasta ${location.maxTables} mesas.`;
+    }
   }
   if (new Set(room.tables.map((table) => table.id)).size !== room.tables.length || new Set(room.tables.map((table) => table.label)).size !== room.tables.length) return "Cada mesa debe tener un identificador y número únicos dentro del salón.";
+  const locatedTables = room.tables.filter((table) => table.active && Boolean(table.locationId));
+  for (let i = 0; i < locatedTables.length; i++) {
+    const table = locatedTables[i];
+    const sector = locations.find((item) => item.id === table.locationId && item.active);
+    if (!sector) return `La mesa ${table.label} pertenece a un sector inexistente o inactivo.`;
+    const tableBox = bounds(table);
+    if (tableBox.left < -epsilon || tableBox.top < -epsilon || tableBox.right > room.width + epsilon || tableBox.bottom > room.height + epsilon) {
+      return `La mesa ${table.label} queda fuera del salón.`;
+    }
+    const sectorBox = bounds(sector);
+    if (tableBox.left < sectorBox.left - epsilon || tableBox.right > sectorBox.right + epsilon || tableBox.top < sectorBox.top - epsilon || tableBox.bottom > sectorBox.bottom + epsilon) {
+      return `La mesa ${table.label} queda fuera del sector ${sector.name}.`;
+    }
+    const fixture = room.fixtures.find((item) => item.type !== "LABEL" && intersects(table, item));
+    if (fixture) return `La mesa ${table.label} se superpone con ${fixture.label || (fixture.type === "WALL" ? "una pared" : "la barra")}.`;
+    for (let j = 0; j < i; j++) {
+      if (intersects(table, locatedTables[j])) return `Las mesas ${table.label} y ${locatedTables[j].label} se superponen.`;
+    }
+  }
   if (new Set(room.combinations.map((item) => item.id)).size !== room.combinations.length) return "Hay combinaciones repetidas.";
   for (const combination of room.combinations.filter((item) => item.active)) {
     if (new Set(combination.members.map((member) => member.tableId)).size !== combination.members.length) return `La combinación ${combination.name} repite una mesa.`;
@@ -269,4 +321,61 @@ export function findFloorPlacement(room: FloorRoom, option: FloorAssignmentOptio
     }
   }
   return null;
+}
+
+export function sectorQuotaStatus(occupiedPartySize: number, maxCapacity: number | null): SectorQuotaStatus {
+  if (maxCapacity === null || maxCapacity <= 0) return "normal";
+  if (occupiedPartySize > maxCapacity) return "exceeded";
+  if (occupiedPartySize / maxCapacity >= 0.8) return "warning";
+  return "normal";
+}
+
+export function summarizeSectorQuota(
+  location: Pick<FloorLocation, "id" | "name" | "maxTables" | "maxCapacity">,
+  tables: readonly FloorTable[],
+  allocations: readonly (FloorLease & { partySize?: number })[],
+  at: string | number,
+  additionalPartySize = 0,
+): SectorQuotaSummary {
+  const sectorTables = tables.filter((table) => table.active && table.locationId === location.id);
+  const sectorTableIds = new Set(sectorTables.map((table) => table.id));
+  const instant = typeof at === "number" ? at : Date.parse(at);
+  const occupiedTableIds = new Set<string>();
+  let occupiedPartySize = 0;
+
+  for (const allocation of allocations) {
+    if (Date.parse(allocation.blockedFrom) > instant) continue;
+    const activePoses = allocation.poses.filter((pose) => {
+      const openOverrun = allocation.serviceOverrun && !allocation.releasedAt && !pose.releasedAt;
+      return openOverrun || effectivePoseEnd(allocation, pose) > instant;
+    });
+    if (!activePoses.length) continue;
+    const touchesSector =
+      allocation.locationId === location.id ||
+      activePoses.some((pose) => sectorTableIds.has(pose.tableId));
+    if (!touchesSector) continue;
+    for (const pose of activePoses) {
+      if (sectorTableIds.has(pose.tableId)) occupiedTableIds.add(pose.tableId);
+    }
+    occupiedPartySize += allocation.partySize ?? activePoses.reduce((sum, pose) => sum + pose.capacity, 0);
+  }
+
+  const totalPartySize = occupiedPartySize + Math.max(0, additionalPartySize);
+  const maxTables = location.maxTables ?? null;
+  const maxCapacity = location.maxCapacity ?? null;
+  const placedTables = sectorTables.length;
+  const occupiedTables = occupiedTableIds.size;
+  return {
+    locationId: location.id,
+    name: location.name,
+    maxTables,
+    placedTables,
+    occupiedTables,
+    freeTables: Math.max(0, placedTables - occupiedTables),
+    maxCapacity,
+    nominalCapacity: sectorTables.reduce((sum, table) => sum + table.capacity, 0),
+    occupiedPartySize: totalPartySize,
+    remainingCapacity: maxCapacity === null ? null : maxCapacity - totalPartySize,
+    status: sectorQuotaStatus(totalPartySize, maxCapacity),
+  };
 }

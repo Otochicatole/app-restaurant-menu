@@ -8,6 +8,12 @@
   background: #fff;
 }
 
+.paneTableWrapper {
+  max-block-size: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .serviceTable {
   width: 100%;
   border-collapse: separate;

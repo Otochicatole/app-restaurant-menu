@@ -1,22 +1,48 @@
-import { composeRoomPoses, type FloorLease, type FloorRoom } from "../contracts";
-import { groupInventoryTables } from "./floor-table-groups";
+import {
+  composeRoomPoses,
+  summarizeSectorQuota,
+  type FloorLease,
+  type FloorRoom,
+  type SectorQuotaSummary,
+} from "../contracts";
 
 export type FloorTableCounts = {
   total: number;
   free: number;
+  reserved: number;
   occupied: number;
   inactive: number;
-  freeByType: { key: string; label: string; free: number }[];
+  sectors: SectorQuotaSummary[];
 };
 
-export function summarizeFloorTables(room: FloorRoom, allocations: FloorLease[], at: string): FloorTableCounts {
+export function summarizeFloorTables(
+  room: FloorRoom,
+  allocations: FloorLease[],
+  at: string,
+  openAccountTableIds: Iterable<string> = [],
+): FloorTableCounts {
   const active = new Map(room.tables.filter((table) => table.active).map((table) => [table.id, table]));
-  const occupied = new Set(composeRoomPoses(room, allocations, at).map((pose) => pose.tableId).filter((id) => active.has(id)));
-  const inactive = new Set(room.tables.filter((table) => !table.active).map((table) => table.id)).size;
-  const freeByType = groupInventoryTables([...active.values()]).map(({ key, label, tables }) => ({
-    key,
-    label,
-    free: tables.filter((table) => !occupied.has(table.id)).length,
-  }));
-  return { total: active.size, free: active.size - occupied.size, occupied: occupied.size, inactive, freeByType };
+  const occupiedIds = new Set([...openAccountTableIds].filter((id) => active.has(id)));
+  const allocatedIds = new Set(
+    composeRoomPoses(room, allocations, at)
+      .map((pose) => pose.tableId)
+      .filter((id) => active.has(id)),
+  );
+  let reserved = 0;
+  for (const id of allocatedIds) {
+    if (!occupiedIds.has(id)) reserved += 1;
+  }
+  const occupied = occupiedIds.size;
+  const inactive = room.tables.filter((table) => !table.active).length;
+  const sectors = room.locations
+    .filter((location) => location.active)
+    .map((location) => summarizeSectorQuota(location, room.tables, allocations, at));
+  return {
+    total: active.size,
+    free: Math.max(0, active.size - occupied - reserved),
+    reserved,
+    occupied,
+    inactive,
+    sectors,
+  };
 }

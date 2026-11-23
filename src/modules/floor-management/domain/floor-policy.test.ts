@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FloorLease, FloorPose, FloorRoom } from "../contracts";
-import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, getJoinedTableGroups, leaseOverlaps, transformPoses, usableTableCapacity, validateAssembly, validateFloorPlacement, validateRoomLayout, validateTableArrangement } from "./floor-policy";
+import { buildFloorOptions, composeRoomPoses, effectiveLeaseEnd, findFloorPlacement, getJoinedTableGroups, leaseOverlaps, sectorQuotaStatus, summarizeSectorQuota, transformPoses, usableTableCapacity, validateAssembly, validateFloorPlacement, validateRoomLayout, validateTableArrangement } from "./floor-policy";
 
 function room(overrides: Partial<FloorRoom> = {}): FloorRoom {
   return { id: "room", restaurantId: "restaurant", name: "Main", width: 800, height: 600, fixtures: [], locations: [{ id: "window", name: "Ventana", x: 400, y: 300, width: 800, height: 600, rotation: 0, active: true }], active: true,
@@ -247,5 +247,60 @@ describe("temporal physical table occupancy", () => {
     expect(findFloorPlacement(current, option, interval, [])).toBeNull();
     current.locations = [];
     expect(findFloorPlacement(current, option, interval, [])).toBeNull();
+  });
+
+  it("enforces maxTables per sector and fixed located table bounds and separation", () => {
+    const base = room();
+    base.locations[0] = { id: "window", name: "Ventana", x: 300, y: 200, width: 400, height: 300, rotation: 0, active: true, maxTables: 1, maxCapacity: 10 };
+    base.tables = [
+      { id: "a", label: "1", shape: "SQUARE", capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+      { id: "b", label: "2", shape: "SQUARE", capacity: 4, x: 350, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+    ];
+    expect(validateRoomLayout(base)).toBe("El sector Ventana admite hasta 1 mesas.");
+
+    base.locations[0].maxTables = 2;
+    expect(validateRoomLayout(base)).toBeNull();
+
+    base.tables[0].x = 120;
+    expect(validateRoomLayout(base)).toBe("La mesa 1 queda fuera del sector Ventana.");
+
+    base.tables[0].x = 200;
+    base.tables[1].x = 240;
+    expect(validateRoomLayout(base)).toBe("Las mesas 2 y 1 se superponen.");
+  });
+
+  it("computes sector quota status and summarizes logical party occupancy", () => {
+    expect(sectorQuotaStatus(7, 10)).toBe("normal");
+    expect(sectorQuotaStatus(8, 10)).toBe("warning");
+    expect(sectorQuotaStatus(10, 10)).toBe("warning");
+    expect(sectorQuotaStatus(11, 10)).toBe("exceeded");
+    expect(sectorQuotaStatus(25, null)).toBe("normal");
+
+    const base = room();
+    base.locations[0] = { id: "window", name: "Ventana", x: 300, y: 200, width: 500, height: 300, rotation: 0, active: true, maxTables: 3, maxCapacity: 10 };
+    base.tables = [
+      { id: "a", label: "1", shape: "SQUARE", capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+      { id: "b", label: "2", shape: "SQUARE", capacity: 4, x: 340, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+    ];
+    const activeLease = {
+      ...lease("l1", "18:00", "22:00", { locationId: "window", poses: [pose("a", { x: 200, y: 200 })] }),
+      partySize: 6,
+    };
+    const summary = summarizeSectorQuota(base.locations[0], base.tables, [activeLease], at("20:00"), 3);
+    expect(summary).toMatchObject({
+      locationId: "window",
+      placedTables: 2,
+      occupiedTables: 1,
+      freeTables: 1,
+      maxCapacity: 10,
+      occupiedPartySize: 9,
+      remainingCapacity: 1,
+      status: "warning",
+    });
+    expect(summarizeSectorQuota(base.locations[0], base.tables, [activeLease], at("20:00"), 5)).toMatchObject({
+      occupiedPartySize: 11,
+      remainingCapacity: -1,
+      status: "exceeded",
+    });
   });
 });

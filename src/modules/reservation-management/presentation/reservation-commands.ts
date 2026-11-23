@@ -58,9 +58,8 @@ export function saveReservation(dialogId: number, form: AdminCreateReservationCo
     if (activeWrite || dialog?.kind !== "reservation" || dialog.id !== dialogId) return false;
     const selected = form.status === "CONFIRMED" ? assignment : null;
     const message = form.status === "CONFIRMED" && data.floorManagementEnabled && !selected
-      ? "Seleccioná y ubicá las mesas antes de confirmar la reserva."
-      : selected?.capacity !== undefined && selected.capacity < form.partySize
-        ? "El armado necesita más lugares útiles para esta reserva." : null;
+      ? "Seleccioná la mesa antes de confirmar la reserva."
+      : null;
     if (message) {
       dispatch(feedbackChanged({ type: "error", message, dialogId }));
       return false;
@@ -102,7 +101,6 @@ export function confirmAssignment(dialogId: number, details: ReservationConfirma
     const { data, dialog, assignment } = getState();
     if (dialog?.kind !== "assignment" || dialog.id !== dialogId || !assignment) return false;
     const { reservation } = dialog;
-    if (assignment.capacity !== undefined && assignment.capacity < details.partySize) return false;
     const options = { assignment, expectedRevision: reservation.revision };
     const edited = confirmationFields.some((field) => details[field] !== reservation[field]);
     return dispatch(write(dialogId, () => edited

@@ -11,17 +11,40 @@ export type FloorInteractionMode = "pan" | "select" | "service";
 export type FloorCanvasTable = {
   id: string; label: string; capacity: number; shape: "SQUARE" | "RECTANGLE" | "CIRCLE";
   x: number; y: number; width: number; height: number; rotation: number; active: boolean;
-  state?: "available" | "reserved" | "selected" | "unavailable";
+  state?: "available" | "reserved" | "occupied" | "selected" | "unavailable";
   readyQuantity?: number;
+  partySize?: number;
+  hasPartialPayments?: boolean;
+  subtitle?: string;
 };
 export type FloorCanvasFixture = {
   id: string; type: "WALL" | "BAR" | "LABEL"; label: string;
   x: number; y: number; width: number; height: number; rotation: number;
 };
 export type FloorCanvasJoinedGroup = { id: string; tableIds: string[]; label: string };
-export type FloorCanvasElement = { kind: "sector" | "fixture"; id: string };
+export type FloorCanvasElement = { kind: "sector" | "fixture" | "table"; id: string };
 export type FloorCanvasProps = {
-  room: { id: string; name: string; width: number; height: number; fixtures: FloorCanvasFixture[]; locations?: { id: string; name: string; x: number; y: number; width: number; height: number; rotation: number; active: boolean }[] };
+  room: {
+    id: string;
+    name: string;
+    width: number;
+    height: number;
+    fixtures: FloorCanvasFixture[];
+    locations?: {
+      id: string;
+      name: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      active: boolean;
+      maxTables?: number | null;
+      maxCapacity?: number | null;
+      quotaLabel?: string;
+      quotaStatus?: "normal" | "warning" | "exceeded";
+    }[];
+  };
   tables: FloorCanvasTable[];
   appearance?: "default" | "operational";
   joinedGroups?: FloorCanvasJoinedGroup[];
@@ -102,11 +125,17 @@ export function FloorCanvas(props: FloorCanvasProps) {
   const zoomButtonClass = props.fullScreen ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f5f5f4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:opacity-30" : "rounded p-2 text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)] disabled:opacity-30";
   const selectionHelp = props.selectJoinedTables ? "Clic para seleccionar el grupo, doble clic para elegir una mesa. Usá Shift, Ctrl o Cmd para sumar a la selección." : props.onSelectElements ? "Arrastrá para dibujar un recuadro. Usá Shift, Ctrl o Cmd para sumar a la selección." : "Shift, Ctrl o Cmd para sumar mesas";
   const keyboardHelp = props.editorMode && !props.tables.length ? "Usá las listas Sectores y Elementos para seleccionar con el teclado." : `${props.tables.filter((table) => table.active).length} mesas. Usá la lista para seleccionar mesas con el teclado.`;
-  const modeOptions = [
-    { value: "select", label: "Seleccionar", icon: MousePointer2, help: `Seleccionar · ${selectionHelp}` },
-    { value: "pan", label: "Mover vista", icon: Hand, help: "Mover vista · mantené Espacio para mover temporalmente" },
-    ...(props.onServiceTable ? [{ value: "service", label: "Servicio", icon: ReceiptText, help: "Servicio · tocá una mesa ocupada para ver su cuenta" } as const] : []),
-  ] as const;
+  const operationalServiceOnly = props.appearance === "operational" && Boolean(props.onServiceTable) && !props.onSelect && !props.onMove;
+  const modeOptions = operationalServiceOnly
+    ? [
+        { value: "service" as const, label: "Atender", icon: ReceiptText, help: "Atender · tocá una mesa para abrirla o ver su cuenta" },
+        { value: "pan" as const, label: "Mover vista", icon: Hand, help: "Mover vista · mantené Espacio para mover temporalmente" },
+      ]
+    : ([
+        { value: "select", label: "Seleccionar", icon: MousePointer2, help: `Seleccionar · ${selectionHelp}` },
+        { value: "pan", label: "Mover vista", icon: Hand, help: "Mover vista · mantené Espacio para mover temporalmente" },
+        ...(props.onServiceTable ? [{ value: "service", label: "Servicio", icon: ReceiptText, help: "Servicio · tocá una mesa para ver su cuenta" } as const] : []),
+      ] as const);
   return <div className={`relative isolate overflow-hidden ${props.appearance === "operational" ? "bg-[#eef4f6]" : "bg-[#f5f2e9]"} ${props.fullScreen ? "h-full min-h-0 w-full" : `rounded-xl border border-stone-200 ${props.compact ? "h-[350px]" : "h-[min(65dvh,620px)] min-h-[360px]"}`}`}>
     <div className="h-full w-full" role="img" aria-label={`Plano de ${props.room.name}. ${keyboardHelp}`}>
       <Stage key={`${props.room.id}:${viewReset}`} {...props} interactionMode={interactionMode} zoom={zoom} onZoomChange={setZoom} />

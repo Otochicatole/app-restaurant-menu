@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { getJoinedTableGroups, restaurantToday, validateTableArrangement, type FloorRotation } from "@/modules/floor-management/contracts";
+import { getJoinedTableGroups, restaurantLocalDateTime, restaurantToday, validateTableArrangement, type FloorRotation } from "@/modules/floor-management/contracts";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import {
-  serviceAuditActionSchema, serviceAuditSeveritySchema, serviceCashRangeSchema, serviceCommandSchema, servicePaymentMethodSchema,
+  serviceAuditActionSchema, serviceAuditSeveritySchema, serviceCashRangeSchema, serviceCommandSchema, servicePaymentMethodSchema, serviceSplitModeSchema,
   type KitchenSnapshot, type KitchenStatus, type KitchenStation, type KitchenTicketView,
-  type ServiceAccountAuditLogView, type ServiceAccountView, type ServiceAuditAction, type ServiceAuditSeverity,
-  type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals, type ServiceCommand, type ServiceCommandResult,
-  type ServiceDraftRemovalInput, type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup,
-  type StaffMemberView, type StaffRole,
+  type ServiceAccountAuditLogView, type ServiceAccountPaymentItemView, type ServiceAccountPaymentView, type ServiceAccountView,
+  type ServiceAuditAction, type ServiceAuditSeverity, type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals,
+  type ServiceCommand, type ServiceCommandResult, type ServiceDraftRemovalInput, type ServicePaymentMethod,
+  type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup, type StaffMemberView, type StaffRole,
 } from "../service-contracts";
 import { syncReservationAllocation } from "./floor-allocations";
 
@@ -18,7 +18,9 @@ type Command<Action extends ServiceCommand["action"]> = Extract<ServiceCommand, 
 const accountInclude = {
   lines: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
   tables: { orderBy: [{ label: "asc" }, { tableId: "asc" }] },
+  payments: { orderBy: [{ sequence: "asc" }, { id: "asc" }] },
   auditLogs: { orderBy: [{ sequence: "asc" }, { createdAt: "asc" }, { id: "asc" }] },
+  allocation: { select: { reservation: { select: { partySize: true } } } },
 } satisfies Prisma.ServiceAccountInclude;
 type AccountRow = Prisma.ServiceAccountGetPayload<{ include: typeof accountInclude }>;
 const allocationInclude = {
@@ -27,7 +29,12 @@ const allocationInclude = {
   room: { select: { name: true } },
 } satisfies Prisma.ReservationAllocationInclude;
 type AllocationRow = Prisma.ReservationAllocationGetPayload<{ include: typeof allocationInclude }>;
-const productSelect = { id: true, name: true, unitPriceCents: true, active: true } satisfies Prisma.ServiceProductSelect;
+const productSelect = { id: true, name: true, unitPriceCents: true, station: true, active: true } satisfies Prisma.ServiceProductSelect;
+type ProductRow = Prisma.ServiceProductGetPayload<{ select: typeof productSelect }>;
+
+function toProduct(row: ProductRow): ServiceProductView {
+  return { ...row, station: (row.station === "BAR" ? "BAR" : "KITCHEN") as KitchenStation };
+}
 const staffSelect = { id: true, name: true, role: true, phone: true, notes: true, active: true, createdAt: true } satisfies Prisma.RestaurantStaffMemberSelect;
 const maxStoredCents = 2_147_483_647;
 
@@ -125,13 +132,23 @@ function buildDraftRemovalAuditEntries(removals?: readonly ServiceDraftRemovalIn
   }));
 }
 
+function parsePaymentItems(itemsJson: string | null): ServiceAccountPaymentItemView[] {
+  if (!itemsJson) return [];
+  try {
+    const parsed = JSON.parse(itemsJson);
+    return Array.isArray(parsed) ? parsed as ServiceAccountPaymentItemView[] : [];
+  } catch {
+    return [];
+  }
+}
+
 function toAccount(row: AccountRow): ServiceAccountView {
   const { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName,
     assignedWaiterId, assignedWaiterName,
     version, openedAt, closedAt, businessDate, paymentMethod, totalCents, receiptNumber,
     tipCents, discountCents, discountReason, cashCents, cardCents, transferCents } = row;
-  const lines = row.lines.map(({ id, name, unitPriceCents, quantity, deliveredQuantity, cancelledQuantity, notes, kitchenStatus, round, station, createdAt }) =>
-    ({ id, name, unitPriceCents, quantity, deliveredQuantity, cancelledQuantity,
+  const lines = row.lines.map(({ id, name, unitPriceCents, quantity, deliveredQuantity, cancelledQuantity, paidQuantity, notes, kitchenStatus, round, station, createdAt }) =>
+    ({ id, name, unitPriceCents, quantity, deliveredQuantity, cancelledQuantity, paidQuantity: paidQuantity ?? 0,
       notes: notes ?? "",
       kitchenStatus: (kitchenStatus ?? "PENDING") as KitchenStatus,
       round: round ?? 1,
@@ -146,6 +163,29 @@ function toAccount(row: AccountRow): ServiceAccountView {
     }
     return summary;
   }, { orderedCents: 0, deliveredCents: 0, pendingQuantity: 0, readyQuantity: 0 });
+  const payments: ServiceAccountPaymentView[] = row.payments.map((payment) => ({
+    id: payment.id,
+    sequence: payment.sequence,
+    receiptNumber: payment.receiptNumber,
+    splitMode: serviceSplitModeSchema.parse(payment.splitMode),
+    payerLabel: payment.payerLabel,
+    businessDate: payment.businessDate,
+    paymentMethod: servicePaymentMethodSchema.parse(payment.paymentMethod),
+    subtotalCents: payment.subtotalCents,
+    discountCents: payment.discountCents,
+    discountReason: payment.discountReason ?? null,
+    tipCents: payment.tipCents,
+    totalCents: payment.totalCents,
+    cashCents: payment.cashCents,
+    cardCents: payment.cardCents,
+    transferCents: payment.transferCents,
+    items: parsePaymentItems(payment.itemsJson),
+    paidBy: payment.paidBy,
+    paidAt: payment.paidAt.toISOString(),
+  }));
+  const paidSubtotalCents = payments.reduce((sum, payment) => sum + payment.subtotalCents, 0);
+  const remainingCents = closedAt ? 0 : Math.max(0, totals.deliveredCents - paidSubtotalCents);
+  const partySize = row.allocation?.reservation?.partySize ?? 2;
   const auditLogs: ServiceAccountAuditLogView[] = row.auditLogs.map((entry) => ({
     id: entry.id,
     sequence: entry.sequence,
@@ -163,13 +203,14 @@ function toAccount(row: AccountRow): ServiceAccountView {
   const recordedAlertCount = auditLogs.filter((entry) => entry.severity === "WARNING").length;
   const legacyHasAlerts = cancellationCount > 0 || (discountCents ?? 0) > 0;
   const auditAlertCount = recordedAlertCount > 0 ? recordedAlertCount : legacyHasAlerts ? 1 : 0;
-  return { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName,
+  return { id, allocationId, reservationId, roomId, roomName, reservationCode, customerName, partySize,
     assignedWaiterId: assignedWaiterId ?? null, assignedWaiterName: assignedWaiterName ?? null, version,
     openedAt: openedAt.toISOString(), closedAt: closedAt?.toISOString() ?? null, businessDate,
     paymentMethod: paymentMethod === null ? null : servicePaymentMethodSchema.parse(paymentMethod), totalCents, receiptNumber,
     tipCents: tipCents ?? 0, discountCents: discountCents ?? 0, discountReason: discountReason ?? null,
     cashCents: cashCents ?? 0, cardCents: cardCents ?? 0, transferCents: transferCents ?? 0,
     tableIds: row.tables.map(({ tableId }) => tableId), tableLabels: row.tables.map(({ label }) => label), lines, ...totals,
+    paidSubtotalCents, remainingCents, payments,
     auditLogs, hasAuditAlerts: auditAlertCount > 0, auditAlertCount, cancellationCount };
 }
 
@@ -296,14 +337,127 @@ async function openAccount(tx: Prisma.TransactionClient, restaurantId: string, a
     assignedWaiterName: waiter.name,
     tables: { create: group.map(({ tableId, label }) => ({ tableId, label })) },
   }, include: accountInclude });
+  if (command.partySize !== undefined && command.partySize !== allocation.reservation.partySize) {
+    await tx.tableReservation.update({ where: { id: allocation.reservationId }, data: { partySize: command.partySize } });
+  }
   const tableLabels = account.tables.map(({ label }) => label).join(", ");
+  const seatedPartySize = command.partySize ?? allocation.reservation.partySize;
   await appendAuditLogs(tx, account.id, restaurantId, waiter.name, actorId, now, [{
     action: "ACCOUNT_OPENED",
     severity: "INFO",
-    summary: `Abrió cuenta en ${tableLabels} · Camarero: ${waiter.name}`,
+    summary: `Abrió cuenta en ${tableLabels} · ${seatedPartySize} ${seatedPartySize === 1 ? "persona" : "personas"} · Camarero: ${waiter.name}`,
     details: {
       tables: tableLabels,
+      partySize: seatedPartySize,
       reservationCode: allocation.reservation.code,
+      waiterId: waiter.id,
+      waiterName: waiter.name,
+    },
+  }]);
+  return toAccount(await findAccount(tx, restaurantId, account.id));
+}
+
+async function openTable(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"open-table">, timeZone: string, now: Date) {
+  const waiter = await requireActiveWaiter(tx, restaurantId, command.waiterId);
+  const table = await tx.diningTable.findFirst({
+    where: { id: command.tableId, roomId: command.roomId, restaurantId, active: true },
+    include: { room: true },
+  });
+  if (!table || !table.room.active) throw new NotFoundError("Mesa activa");
+  const location = table.locationId
+    ? await tx.diningRoomLocation.findFirst({ where: { id: table.locationId, restaurantId, roomId: table.roomId, active: true } })
+    : await tx.diningRoomLocation.findFirst({ where: { restaurantId, roomId: table.roomId, active: true }, orderBy: { name: "asc" } });
+  if (!location) throw new BadRequestError("La mesa debe pertenecer a un sector activo del salón.");
+  const [openAccountTable, overlappingAllocation] = await Promise.all([
+    tx.serviceAccountTable.findFirst({ where: { restaurantId, tableId: table.id, releasedAt: null }, select: { label: true } }),
+    tx.reservationAllocationTable.findFirst({
+      where: {
+        restaurantId,
+        tableId: table.id,
+        releasedAt: null,
+        allocation: { releasedAt: null, blockedFrom: { lte: now }, blockedUntil: { gt: now } },
+      },
+      include: { allocation: { include: { reservation: { select: { customerName: true, code: true } } } } },
+    }),
+  ]);
+  if (openAccountTable) throw new ConflictError(`La mesa ${table.label} ya tiene una cuenta abierta.`);
+  if (overlappingAllocation) {
+    throw new ConflictError(`La mesa ${table.label} está reservada para ${overlappingAllocation.allocation.reservation.customerName} (${overlappingAllocation.allocation.reservation.code}).`);
+  }
+  const durationMinutes = command.durationMinutes ?? 120;
+  const endAt = new Date(now.getTime() + durationMinutes * 60_000);
+  const local = restaurantLocalDateTime(timeZone, now);
+  const code = `SALA-${randomUUID()}`;
+  const customerName = command.customerName?.trim() || "Sin reserva";
+  const reservation = await tx.tableReservation.create({
+    data: {
+      restaurantId,
+      code,
+      customerName,
+      customerPhone: "",
+      customerEmail: "",
+      notes: command.notes?.trim() ?? "",
+      partySize: command.partySize,
+      ...local,
+      source: "WALK_IN",
+      status: "CONFIRMED",
+    },
+  });
+  const allocation = await tx.reservationAllocation.create({
+    data: {
+      id: randomUUID(),
+      restaurantId,
+      reservationId: reservation.id,
+      roomId: table.roomId,
+      locationId: location.id,
+      capacity: Math.max(table.capacity, command.partySize),
+      timeZone,
+      serviceStartAt: now,
+      serviceEndAt: endAt,
+      blockedFrom: now,
+      blockedUntil: endAt,
+      roomRevision: table.room.revision,
+      tables: {
+        create: [{
+          tableId: table.id,
+          labelSnapshot: table.label,
+          shapeSnapshot: table.shape,
+          capacitySnapshot: table.capacity,
+          width: table.width,
+          height: table.height,
+          x: table.x,
+          y: table.y,
+          rotation: table.rotation,
+        }],
+      },
+    },
+  });
+  const account = await tx.serviceAccount.create({
+    data: {
+      restaurantId,
+      reservationId: reservation.id,
+      allocationId: allocation.id,
+      roomId: table.roomId,
+      roomName: table.room.name,
+      reservationCode: code,
+      customerName,
+      openedAt: now,
+      openedBy: actorId,
+      assignedWaiterId: waiter.id,
+      assignedWaiterName: waiter.name,
+      tables: { create: [{ tableId: table.id, label: table.label }] },
+    },
+    include: accountInclude,
+  });
+  await appendAuditLogs(tx, account.id, restaurantId, waiter.name, actorId, now, [{
+    action: "ACCOUNT_OPENED",
+    severity: "INFO",
+    summary: `Abrió mesa ${table.label} (${location.name}) · ${command.partySize} ${command.partySize === 1 ? "persona" : "personas"} · Camarero: ${waiter.name}`,
+    details: {
+      tables: table.label,
+      sector: location.name,
+      partySize: command.partySize,
+      reservationCode: code,
       waiterId: waiter.id,
       waiterName: waiter.name,
     },
@@ -346,9 +500,9 @@ async function resolveOrderLineData(
   round: number,
   now: Date,
   item: OrderLineInput,
-  productsById?: Map<string, { id: string; name: string; unitPriceCents: number }>,
+  productsById?: Map<string, ProductRow>,
 ) {
-  let product: { id: string; name: string; unitPriceCents: number } | null = null;
+  let product: ProductRow | null = null;
   if (item.productId) {
     product = productsById?.get(item.productId) ?? await tx.serviceProduct.findFirst({
       where: { id: item.productId, restaurantId, active: true },
@@ -373,7 +527,7 @@ async function resolveOrderLineData(
     notes: item.notes ?? "",
     kitchenStatus: "PENDING" as const,
     round,
-    station: item.station ?? "KITCHEN",
+    station: item.station ?? (product?.station === "BAR" ? "BAR" : "KITCHEN"),
   };
 }
 
@@ -411,7 +565,7 @@ async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, 
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const nextRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 0) + 1;
-  const productsById = new Map<string, { id: string; name: string; unitPriceCents: number }>();
+  const productsById = new Map<string, ProductRow>();
   const linesToCreate: Awaited<ReturnType<typeof resolveOrderLineData>>[] = [];
   let runningOrderedCents = toAccount(account).orderedCents;
   let confirmedTotalCents = 0;
@@ -463,6 +617,14 @@ async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, ac
   const { deliveredQuantity, cancelledQuantity } = command;
   if (deliveredQuantity + cancelledQuantity > line.quantity) {
     throw new BadRequestError("Las cantidades entregadas y canceladas superan la cantidad pedida.");
+  }
+  if (deliveredQuantity < line.paidQuantity) {
+    throw new BadRequestError("No podés reducir entregas por debajo de las unidades ya cobradas.");
+  }
+  const view = toAccount(account);
+  const nextDeliveredCents = view.deliveredCents + (deliveredQuantity - line.deliveredQuantity) * line.unitPriceCents;
+  if (nextDeliveredCents < view.paidSubtotalCents) {
+    throw new BadRequestError("No podés reducir entregas por debajo del monto ya cobrado en pagos parciales.");
   }
   const restoredCents = (line.cancelledQuantity - cancelledQuantity) * line.unitPriceCents;
   if (toAccount(account).orderedCents + restoredCents > maxStoredCents) {
@@ -620,65 +782,257 @@ async function releaseTables(tx: Prisma.TransactionClient, allocation: Pick<Allo
   await syncReservationAllocation(tx, reservation, undefined, now);
 }
 
+function resolvePaymentBreakdown(
+  method: ServicePaymentMethod,
+  netCents: number,
+  tipCents: number,
+  command: { cashCents?: number; cardCents?: number; transferCents?: number },
+) {
+  let cash = command.cashCents ?? 0;
+  let card = command.cardCents ?? 0;
+  let transfer = command.transferCents ?? 0;
+  if (method === "SPLIT") {
+    const totalPaid = cash + card + transfer;
+    const expectedPaid = netCents + tipCents;
+    if (totalPaid !== expectedPaid) {
+      throw new BadRequestError(`La suma de los pagos ($${totalPaid / 100}) debe ser igual al total a cobrar ($${expectedPaid / 100}).`);
+    }
+  } else if (method === "CASH") {
+    cash = netCents + tipCents;
+    card = 0;
+    transfer = 0;
+  } else if (method === "CARD") {
+    card = netCents + tipCents;
+    cash = 0;
+    transfer = 0;
+  } else if (method === "TRANSFER_QR") {
+    transfer = netCents + tipCents;
+    cash = 0;
+    card = 0;
+  }
+  return { cash, card, transfer };
+}
+
+async function finalizeAccountFromPayments(
+  tx: Prisma.TransactionClient,
+  account: AccountRow,
+  actorId: string,
+  businessDate: string,
+  now: Date,
+  auditEntries: AuditEntryInput[],
+) {
+  const allocation = await tx.reservationAllocation.findFirst({
+    where: { id: account.allocationId, restaurantId: account.restaurantId, reservationId: account.reservationId },
+    include: { reservation: true },
+  });
+  if (!allocation || allocation.releasedAt || allocation.reservation.status !== "CONFIRMED") {
+    throw new ConflictError("La asignación cambió. Actualizá el plano antes de cerrar la cuenta.");
+  }
+  const payments = await tx.serviceAccountPayment.findMany({
+    where: { accountId: account.id, restaurantId: account.restaurantId },
+    orderBy: [{ sequence: "asc" }, { id: "asc" }],
+  });
+  const totalCents = payments.reduce((sum, item) => sum + item.totalCents, 0);
+  const tipCents = payments.reduce((sum, item) => sum + item.tipCents, 0);
+  const discountCents = payments.reduce((sum, item) => sum + item.discountCents, 0);
+  const cashCents = payments.reduce((sum, item) => sum + item.cashCents, 0);
+  const cardCents = payments.reduce((sum, item) => sum + item.cardCents, 0);
+  const transferCents = payments.reduce((sum, item) => sum + item.transferCents, 0);
+  const reasons = [...new Set(payments.map((item) => item.discountReason?.trim()).filter(Boolean))];
+  const methods = [...new Set(payments.map((item) => item.paymentMethod))];
+  const consolidatedMethod = totalCents === 0 ? null : methods.length === 1 ? methods[0] : "SPLIT";
+  const receiptNumber = `C-${account.id}`;
+  await tx.serviceAccount.updateMany({
+    where: { id: account.id, restaurantId: account.restaurantId, closedAt: null },
+    data: {
+      closedAt: now,
+      closedBy: actorId,
+      businessDate,
+      totalCents,
+      tipCents,
+      discountCents,
+      discountReason: reasons.length > 0 ? reasons.join(" · ").slice(0, 100) : null,
+      cashCents,
+      cardCents,
+      transferCents,
+      paymentMethod: consolidatedMethod,
+      receiptNumber,
+    },
+  });
+  const tableIds = account.tables.map(({ tableId }) => tableId);
+  await tx.serviceAccountTable.updateMany({ where: { accountId: account.id, restaurantId: account.restaurantId, releasedAt: null }, data: { releasedAt: now } });
+  await releaseTables(tx, allocation, tableIds, now);
+  const suspiciousZeroClose = totalCents === 0 && account.lines.length > 0;
+  auditEntries.push({
+    action: "ACCOUNT_CHECKED_OUT",
+    severity: suspiciousZeroClose ? "WARNING" : "INFO",
+    summary: suspiciousZeroClose
+      ? "Cerró cuenta en $ 0,00 tras anulaciones o descuento"
+      : `Cerró cuenta · Total ${currencyFormatter.format(totalCents / 100)}${consolidatedMethod ? ` · ${consolidatedMethod}` : ""}${payments.length > 1 ? ` (${payments.length} pagos)` : ""}`,
+    details: {
+      paymentMethod: consolidatedMethod ?? null,
+      totalCents,
+      tipCents,
+      discountCents,
+      cashCents,
+      cardCents,
+      transferCents,
+      paymentCount: payments.length,
+      receiptNumber,
+    },
+    amountDeltaCents: totalCents,
+  });
+  await appendAuditLogs(tx, account.id, account.restaurantId, account.assignedWaiterName ?? null, actorId, now, auditEntries);
+}
+
+async function payPartial(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  actorId: string,
+  command: Command<"pay-partial">,
+  businessDate: string,
+  now: Date,
+) {
+  const account = await findAccount(tx, restaurantId, command.accountId);
+  if (account.closedAt) throw new ConflictError("La cuenta ya fue cerrada. Consultá su recibo.");
+  const view = toAccount(account);
+  await ensureCashOpen(tx, restaurantId, businessDate);
+  if (view.remainingCents <= 0) {
+    throw new BadRequestError("La cuenta no tiene saldo pendiente para cobrar.");
+  }
+
+  let subtotalCents = 0;
+  const itemsSnapshot: ServiceAccountPaymentItemView[] = [];
+  const lineUpdates: { lineId: string; quantity: number }[] = [];
+
+  if (command.splitMode === "BY_ITEMS") {
+    if (!command.items?.length) throw new BadRequestError("Seleccioná al menos un producto entregado para cobrar.");
+    const requestedByLine = new Map<string, number>();
+    for (const item of command.items) {
+      requestedByLine.set(item.lineId, (requestedByLine.get(item.lineId) ?? 0) + item.quantity);
+    }
+    for (const [lineId, quantity] of requestedByLine) {
+      const line = account.lines.find((candidate) => candidate.id === lineId);
+      if (!line) throw new NotFoundError("Consumo");
+      const unpaid = line.deliveredQuantity - (line.paidQuantity ?? 0);
+      if (quantity > unpaid) {
+        throw new BadRequestError(`Solo quedan ${unpaid} unidad(es) entregadas sin cobrar de ${line.name}.`);
+      }
+      subtotalCents += line.unitPriceCents * quantity;
+      itemsSnapshot.push({ lineId: line.id, name: line.name, quantity, unitPriceCents: line.unitPriceCents });
+      lineUpdates.push({ lineId: line.id, quantity });
+    }
+    if (subtotalCents <= 0 || subtotalCents > view.remainingCents) {
+      throw new BadRequestError("La selección supera el saldo pendiente de la cuenta.");
+    }
+  } else {
+    subtotalCents = command.splitMode === "FULL" ? view.remainingCents : (command.amountCents ?? 0);
+    if (subtotalCents <= 0 || subtotalCents > view.remainingCents) {
+      throw new BadRequestError("El monto a cobrar debe ser mayor a $0 y no superar el saldo pendiente.");
+    }
+  }
+
+  const discount = Math.min(subtotalCents, command.discountCents ?? 0);
+  const netPaid = Math.max(0, subtotalCents - discount);
+  const tip = command.tipCents ?? 0;
+  const { cash, card, transfer } = resolvePaymentBreakdown(command.paymentMethod, netPaid, tip, command);
+
+  await updateAccount(tx, account, command.expectedVersion);
+  for (const update of lineUpdates) {
+    await tx.serviceOrderLine.update({
+      where: { id: update.lineId },
+      data: { paidQuantity: { increment: update.quantity } },
+    });
+  }
+
+  const sequence = account.payments.reduce((max, item) => Math.max(max, item.sequence), 0) + 1;
+  const payerLabel = command.payerLabel?.trim() || (sequence === 1 ? "Pago 1" : `Pago ${sequence}`);
+  const partialReceiptNumber = `C-${account.id}-P${sequence}`;
+  await tx.serviceAccountPayment.create({
+    data: {
+      accountId: account.id,
+      restaurantId,
+      sequence,
+      receiptNumber: partialReceiptNumber,
+      splitMode: command.splitMode,
+      payerLabel,
+      businessDate,
+      paymentMethod: command.paymentMethod,
+      subtotalCents,
+      discountCents: discount,
+      discountReason: command.discountReason ?? null,
+      tipCents: tip,
+      totalCents: netPaid,
+      cashCents: cash,
+      cardCents: card,
+      transferCents: transfer,
+      itemsJson: itemsSnapshot.length > 0 ? JSON.stringify(itemsSnapshot) : null,
+      paidBy: actorId,
+      paidAt: now,
+    },
+  });
+
+  const auditEntries: AuditEntryInput[] = [...buildDraftRemovalAuditEntries(command.draftRemovals)];
+  if (discount > 0) {
+    auditEntries.push({
+      action: "DISCOUNT_APPLIED",
+      severity: "WARNING",
+      summary: `Aplicó descuento de ${currencyFormatter.format(discount / 100)} en ${payerLabel}${command.discountReason ? ` (${command.discountReason})` : ""}`,
+      details: { discountCents: discount, discountReason: command.discountReason ?? null, partialReceiptNumber },
+      amountDeltaCents: -discount,
+    });
+  }
+  const splitDetail = itemsSnapshot.length > 0 ? ` · ${itemsSnapshot.map((i) => `${i.quantity}x ${i.name}`).join(", ")}` : "";
+  auditEntries.push({
+    action: "PARTIAL_PAYMENT_RECORDED",
+    severity: "INFO",
+    summary: `Cobró parte (${payerLabel}) ${currencyFormatter.format(netPaid / 100)} · ${command.paymentMethod}${splitDetail}`,
+    details: { splitMode: command.splitMode, payerLabel, subtotalCents, discountCents: discount, tipCents: tip, totalCents: netPaid, partialReceiptNumber },
+    amountDeltaCents: netPaid,
+  });
+
+  const nextRemainingCents = view.remainingCents - subtotalCents;
+  if (nextRemainingCents === 0 && view.pendingQuantity === 0) {
+    await finalizeAccountFromPayments(tx, account, actorId, businessDate, now, auditEntries);
+  } else {
+    await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, auditEntries);
+  }
+  return toAccount(await findAccount(tx, restaurantId, account.id));
+}
+
 async function checkout(tx: Prisma.TransactionClient, restaurantId: string, actorId: string,
   command: Command<"checkout">, businessDate: string, now: Date) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   const view = toAccount(account);
   if (account.closedAt) {
-    const paymentMethod = account.totalCents === 0 ? null : command.paymentMethod;
-    if (account.version === command.expectedVersion + 1 && account.paymentMethod === paymentMethod) return view;
+    const lastPaymentMethod = account.payments.length > 0 ? account.payments[account.payments.length - 1].paymentMethod : account.paymentMethod;
+    const expectedMethod = account.totalCents === 0 ? null : command.paymentMethod;
+    if (
+      account.version === command.expectedVersion + 1
+      && (account.paymentMethod === expectedMethod || (account.payments.length > 1 && lastPaymentMethod === expectedMethod))
+    ) {
+      return view;
+    }
     throw new ConflictError("La cuenta ya fue cerrada. Consultá su recibo antes de registrar otro pago.");
   }
   await ensureCashOpen(tx, restaurantId, businessDate);
   if (view.pendingQuantity) throw new ConflictError("Marcá los consumos pendientes como entregados o cancelados antes de cerrar.");
-  const discount = Math.min(view.deliveredCents, command.discountCents ?? 0);
-  const netDelivered = Math.max(0, view.deliveredCents - discount);
+
+  const settleCents = view.remainingCents;
+  const discount = Math.min(settleCents, command.discountCents ?? 0);
+  const netDelivered = Math.max(0, settleCents - discount);
   const tip = command.tipCents ?? 0;
-  if (view.deliveredCents > 0 && !command.paymentMethod) throw new BadRequestError("Elegí un medio de pago.");
+  if (settleCents > 0 && !command.paymentMethod) throw new BadRequestError("Elegí un medio de pago.");
+  const method = settleCents === 0 ? null : (command.paymentMethod ?? "CASH");
+  const { cash, card, transfer } = method
+    ? resolvePaymentBreakdown(method, netDelivered, tip, command)
+    : { cash: 0, card: 0, transfer: 0 };
 
-  const method = view.deliveredCents === 0 ? null : (command.paymentMethod ?? "CASH");
-  let cash = command.cashCents ?? 0;
-  let card = command.cardCents ?? 0;
-  let transfer = command.transferCents ?? 0;
+  await updateAccount(tx, account, command.expectedVersion);
 
-  if (method === "SPLIT") {
-    const totalPaid = cash + card + transfer;
-    const expectedPaid = netDelivered + tip;
-    if (totalPaid !== expectedPaid) {
-      throw new BadRequestError(`La suma de los pagos ($${totalPaid / 100}) debe ser igual al total a cobrar ($${expectedPaid / 100}).`);
-    }
-  } else if (method === "CASH") {
-    cash = netDelivered + tip;
-  } else if (method === "CARD") {
-    card = netDelivered + tip;
-  } else if (method === "TRANSFER_QR") {
-    transfer = netDelivered + tip;
-  }
-
-  const allocation = await tx.reservationAllocation.findFirst({ where: {
-    id: account.allocationId, restaurantId, reservationId: account.reservationId,
-  }, include: { reservation: true } });
-  if (!allocation || allocation.releasedAt || allocation.reservation.status !== "CONFIRMED") {
-    throw new ConflictError("La asignación cambió. Actualizá el plano antes de cerrar la cuenta.");
-  }
-  const tableIds = account.tables.map(({ tableId }) => tableId);
-  await updateAccount(tx, account, command.expectedVersion, {
-    closedAt: now, closedBy: actorId, businessDate,
-    totalCents: netDelivered,
-    tipCents: tip,
-    discountCents: discount,
-    discountReason: command.discountReason ?? null,
-    cashCents: cash,
-    cardCents: card,
-    transferCents: transfer,
-    paymentMethod: method,
-    receiptNumber: `C-${account.id}`,
-  });
-  await tx.serviceAccountTable.updateMany({ where: { accountId: account.id, restaurantId, releasedAt: null }, data: { releasedAt: now } });
-  await releaseTables(tx, allocation, tableIds, now);
-  const checkoutEntries: AuditEntryInput[] = [...buildDraftRemovalAuditEntries(command.draftRemovals)];
+  const auditEntries: AuditEntryInput[] = [...buildDraftRemovalAuditEntries(command.draftRemovals)];
   if (discount > 0) {
-    checkoutEntries.push({
+    auditEntries.push({
       action: "DISCOUNT_APPLIED",
       severity: "WARNING",
       summary: `Aplicó descuento de ${currencyFormatter.format(discount / 100)}${command.discountReason ? ` (${command.discountReason})` : ""}`,
@@ -686,26 +1040,51 @@ async function checkout(tx: Prisma.TransactionClient, restaurantId: string, acto
       amountDeltaCents: -discount,
     });
   }
-  const suspiciousZeroClose = netDelivered === 0 && account.lines.length > 0;
-  checkoutEntries.push({
-    action: "ACCOUNT_CHECKED_OUT",
-    severity: suspiciousZeroClose ? "WARNING" : "INFO",
-    summary: suspiciousZeroClose
-      ? "Cerró cuenta en $ 0,00 tras anulaciones o descuento"
-      : `Cerró cuenta · Total ${currencyFormatter.format(netDelivered / 100)}${method ? ` · ${method}` : ""}`,
-    details: {
-      paymentMethod: method ?? null,
-      totalCents: netDelivered,
-      tipCents: tip,
-      discountCents: discount,
-      cashCents: cash,
-      cardCents: card,
-      transferCents: transfer,
-      receiptNumber: `C-${account.id}`,
-    },
-    amountDeltaCents: netDelivered,
-  });
-  await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, checkoutEntries);
+
+  if (settleCents > 0 && method) {
+    const sequence = account.payments.reduce((max, item) => Math.max(max, item.sequence), 0) + 1;
+    const isFinalPart = account.payments.length > 0;
+    const payerLabel = isFinalPart ? "Saldo final" : "Cuenta completa";
+    const unpaidItems: ServiceAccountPaymentItemView[] = account.lines
+      .filter((line) => line.deliveredQuantity - (line.paidQuantity ?? 0) > 0)
+      .map((line) => ({
+        lineId: line.id,
+        name: line.name,
+        quantity: line.deliveredQuantity - (line.paidQuantity ?? 0),
+        unitPriceCents: line.unitPriceCents,
+      }));
+    for (const line of account.lines) {
+      const diff = line.deliveredQuantity - (line.paidQuantity ?? 0);
+      if (diff > 0) {
+        await tx.serviceOrderLine.update({ where: { id: line.id }, data: { paidQuantity: line.deliveredQuantity } });
+      }
+    }
+    await tx.serviceAccountPayment.create({
+      data: {
+        accountId: account.id,
+        restaurantId,
+        sequence,
+        receiptNumber: `C-${account.id}-P${sequence}`,
+        splitMode: isFinalPart ? "CUSTOM_AMOUNT" : "FULL",
+        payerLabel,
+        businessDate,
+        paymentMethod: method,
+        subtotalCents: settleCents,
+        discountCents: discount,
+        discountReason: command.discountReason ?? null,
+        tipCents: tip,
+        totalCents: netDelivered,
+        cashCents: cash,
+        cardCents: card,
+        transferCents: transfer,
+        itemsJson: unpaidItems.length > 0 ? JSON.stringify(unpaidItems) : null,
+        paidBy: actorId,
+        paidAt: now,
+      },
+    });
+  }
+
+  await finalizeAccountFromPayments(tx, account, actorId, businessDate, now, auditEntries);
   return toAccount(await findAccount(tx, restaurantId, account.id));
 }
 
@@ -758,17 +1137,27 @@ async function closeEmpty(tx: Prisma.TransactionClient, restaurantId: string, ac
 }
 
 async function saveProduct(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-product">) {
-  const data = { name: command.name, unitPriceCents: command.unitPriceCents, active: true };
-  if (!command.id) return tx.serviceProduct.create({ data: { restaurantId, ...data }, select: productSelect });
+  if (!command.id) {
+    return toProduct(await tx.serviceProduct.create({
+      data: { restaurantId, name: command.name, unitPriceCents: command.unitPriceCents, station: command.station ?? "KITCHEN", active: true },
+      select: productSelect,
+    }));
+  }
+  const data = {
+    name: command.name,
+    unitPriceCents: command.unitPriceCents,
+    active: true,
+    ...(command.station !== undefined ? { station: command.station } : {}),
+  };
   const updated = await tx.serviceProduct.updateMany({ where: { id: command.id, restaurantId }, data });
   if (updated.count !== 1) throw new NotFoundError("Producto");
-  return tx.serviceProduct.findUniqueOrThrow({ where: { id: command.id }, select: productSelect });
+  return toProduct(await tx.serviceProduct.findUniqueOrThrow({ where: { id: command.id }, select: productSelect }));
 }
 
 async function archiveProduct(tx: Prisma.TransactionClient, restaurantId: string, id: string) {
   const updated = await tx.serviceProduct.updateMany({ where: { id, restaurantId }, data: { active: false } });
   if (updated.count !== 1) throw new NotFoundError("Producto");
-  return tx.serviceProduct.findUniqueOrThrow({ where: { id }, select: productSelect });
+  return toProduct(await tx.serviceProduct.findUniqueOrThrow({ where: { id }, select: productSelect }));
 }
 
 async function saveStaff(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-staff">) {
@@ -805,6 +1194,16 @@ async function recordCashEvent(tx: Prisma.TransactionClient, restaurantId: strin
   if (kind === "CLOSE" && command.date === today && await tx.serviceAccount.count({ where: { restaurantId, closedAt: null } })) {
     throw new ConflictError("Cerrá las cuentas abiertas antes de cerrar la caja de hoy.");
   }
+  if (kind === "CLOSE") {
+    const openWithPartial = await tx.serviceAccount.findFirst({
+      where: { restaurantId, closedAt: null, payments: { some: { businessDate: command.date } } },
+      select: { tables: { select: { label: true } } },
+    });
+    if (openWithPartial) {
+      const labels = openWithPartial.tables.map((table) => table.label).join(", ");
+      throw new ConflictError(`Hay pagos parciales sin cerrar en ${labels || "una mesa abierta"} para esta fecha. Cerrá esa cuenta antes de cerrar la caja.`);
+    }
+  }
   if (previous?.kind === kind) return toCashEvent(previous);
   if (kind === "REOPEN" && !previous) throw new ConflictError("La caja de ese día todavía no se cerró.");
   const receipts = await tx.serviceAccount.findMany({ where: { restaurantId, businessDate: command.date, closedAt: { not: null } },
@@ -840,7 +1239,13 @@ export class TableService {
         lastCashEvent(tx, restaurantId, today),
         at ? [] : unservedGroups(tx, restaurantId, now),
       ]);
-      return { accounts: accounts.map(toAccount), products, waiters: waiters.map(toStaffMember), cashClosed: cash?.kind === "CLOSE", unserved };
+      return {
+        accounts: accounts.map(toAccount),
+        products: products.map(toProduct),
+        waiters: waiters.map(toStaffMember),
+        cashClosed: cash?.kind === "CLOSE",
+        unserved,
+      };
     });
   }
 
@@ -917,7 +1322,8 @@ export class TableService {
 
   async products(restaurantId: string): Promise<ServiceProductView[]> {
     await settings(this.database, restaurantId);
-    return this.database.serviceProduct.findMany({ where: { restaurantId }, select: productSelect, orderBy: { name: "asc" } });
+    const rows = await this.database.serviceProduct.findMany({ where: { restaurantId }, select: productSelect, orderBy: { name: "asc" } });
+    return rows.map(toProduct);
   }
 
   async staff(restaurantId: string): Promise<StaffMemberView[]> {
@@ -949,12 +1355,13 @@ export class TableService {
   async execute(restaurantId: string, actorId: string, raw: ServiceCommand, now = new Date()): Promise<ServiceCommandResult> {
     const command = serviceCommandSchema.parse(raw);
     return withSqliteTransaction(this.database, async (tx) => {
-      const requiresFloor = command.action === "open" || command.action === "assign-waiter" || command.action === "close-empty"
-        || command.action === "add-line" || command.action === "confirm-order" || command.action === "update-line" || command.action === "checkout"
+      const requiresFloor = command.action === "open" || command.action === "open-table" || command.action === "assign-waiter" || command.action === "close-empty"
+        || command.action === "add-line" || command.action === "confirm-order" || command.action === "update-line" || command.action === "pay-partial" || command.action === "checkout"
         || command.action === "deliver-all" || command.action === "march-round" || command.action === "update-kitchen-status";
       const { timeZone } = await settings(tx, restaurantId, requiresFloor);
       switch (command.action) {
         case "open": return openAccount(tx, restaurantId, actorId, command, now);
+        case "open-table": return openTable(tx, restaurantId, actorId, command, timeZone, now);
         case "assign-waiter": return assignWaiter(tx, restaurantId, actorId, command, now);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "add-line": return addLine(tx, restaurantId, actorId, command, now);
@@ -963,6 +1370,7 @@ export class TableService {
         case "deliver-all": return deliverAll(tx, restaurantId, actorId, command, now);
         case "march-round": return marchRound(tx, restaurantId, actorId, command, now);
         case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, actorId, command, now);
+        case "pay-partial": return payPartial(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "checkout": return checkout(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "save-product": return saveProduct(tx, restaurantId, command);
         case "archive-product": return archiveProduct(tx, restaurantId, command.id);

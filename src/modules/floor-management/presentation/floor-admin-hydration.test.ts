@@ -13,7 +13,7 @@ vi.mock("./FloorCanvas", () => ({ FloorCanvas: ({room}: {room: {name: string}}) 
 
 import { FloorAdminScreen } from "./FloorAdminScreen";
 
-const toolNames = ["Salones", "Medidas", "Inventario", "Sectores", "Elementos", "Configuración"];
+const toolNames = ["Salones", "Medidas", "Mesas", "Sectores", "Elementos", "Configuración"];
 const dynamicNames = ["Guardar plano", ...toolNames];
 const element = () => createElement(FloorAdminScreen, {restaurantId: "restaurant"});
 const config = (loaded: boolean): FloorConfigView => ({
@@ -66,10 +66,10 @@ describe("floor editor hydration and client configuration", () => {
     api.config.mockResolvedValue(config(true));
     const component = element(); container.innerHTML = renderToString(component);
     const errors = vi.spyOn(console, "error").mockImplementation(() => {}); const recoverable = vi.fn();
-    expect((within(container).getByRole("button", {name: "Inventario"}) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(container).getByRole("button", {name: "Mesas"}) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { root = hydrateRoot(container, component, {onRecoverableError: recoverable}); });
     expect(within(container).getByRole("img", {name: "Plano de Ventana"})).toBeTruthy();
-    expect((within(container).getByRole("button", {name: "Inventario"}) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(container).getByRole("button", {name: "Mesas"}) as HTMLButtonElement).disabled).toBe(false);
     expect(errors).not.toHaveBeenCalled(); expect(recoverable).not.toHaveBeenCalled();
   });
 

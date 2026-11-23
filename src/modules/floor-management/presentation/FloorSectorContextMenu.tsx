@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
-import { Pencil, RotateCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import { transientButtonProps } from "@/ui/button-state";
 
 export type FloorSectorContextMenuProps = {
   name: string; point: { x: number; y: number }; disabled: boolean;
-  onEdit: () => void; onRotate: () => void; onDelete: () => void; onClose: () => void;
+  onEdit: () => void; onRotate: () => void; onDelete: () => void; onAddTable?: () => void; onClose: () => void;
 };
 
-export function FloorSectorContextMenu({ name, point, disabled, onEdit, onRotate, onDelete, onClose }: FloorSectorContextMenuProps) {
+export function FloorSectorContextMenu({ name, point, disabled, onEdit, onRotate, onDelete, onAddTable, onClose }: FloorSectorContextMenuProps) {
   const menu = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef(true);
@@ -72,6 +72,9 @@ export function FloorSectorContextMenu({ name, point, disabled, onEdit, onRotate
       <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onEdit} className={itemClass}><Pencil size={15} className="shrink-0" />Editar</button>
       <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onRotate} className={itemClass}><RotateCw size={15} className="shrink-0" />Girar</button>
       <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onDelete} className={`${itemBase} text-red-700 hover:bg-red-50 focus-visible:bg-red-50`}><Trash2 size={15} className="shrink-0" />Eliminar</button>
+      {onAddTable && (
+        <button {...transientButtonProps} type="button" role="menuitem" disabled={disabled} onClick={onAddTable} className={`${itemClass} col-span-3 justify-start px-2 border-t border-stone-100 mt-0.5 pt-2`}><Plus size={15} className="shrink-0" />Agregar mesa aquí</button>
+      )}
     </div>
   </div>;
 }

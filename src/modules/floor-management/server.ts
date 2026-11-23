@@ -35,6 +35,7 @@ export const floorManagement = {
   saveRoom: repository.saveRoom.bind(repository),
   saveTables: repository.saveTables.bind(repository),
   archiveRoom: repository.archiveRoom.bind(repository),
+  deleteRoom: repository.deleteRoom.bind(repository),
   updateTimeZone: repository.updateTimeZone.bind(repository),
   setStaffAccount: repository.setStaffAccount.bind(repository),
   disableStaffAccount: repository.disableStaffAccount.bind(repository),

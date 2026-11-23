@@ -1,9 +1,16 @@
 import { createPortal } from "react-dom";
-import type { ServiceAccountView } from "../contracts";
+import type { ServiceAccountView, ServiceSplitMode } from "../contracts";
 import { formatServiceDate, formatServiceMoney, servicePaymentLabels } from "./service-admin-client";
 import styles from "./cash-receipt.module.css";
 
 type ReceiptProps = { receipt: ServiceAccountView; restaurantName: string; timeZone: string };
+
+const splitModeLabels: Record<ServiceSplitMode, string> = {
+  FULL: "Cuenta completa",
+  BY_ITEMS: "Por productos",
+  BY_PEOPLE: "Por personas",
+  CUSTOM_AMOUNT: "Monto parcial",
+};
 
 export function CashReceipt(props: ReceiptProps) {
   return <>
@@ -26,6 +33,7 @@ function ReceiptDocument({ receipt, restaurantName, timeZone }: ReceiptProps) {
         {receipt.businessDate && <><dt className="text-zinc-600">Fecha</dt><dd>{formatServiceDate(receipt.businessDate)}{time && ` · ${time}`}</dd></>}
         <dt className="text-zinc-600">Salón</dt><dd className="break-words">{receipt.roomName}</dd>
         <dt className="text-zinc-600">Mesas</dt><dd className="break-words">{receipt.tableLabels.join(", ")}</dd>
+        <dt className="text-zinc-600">Comensales</dt><dd>{receipt.partySize}</dd>
         <dt className="text-zinc-600">Reserva</dt><dd className="break-words">{receipt.reservationCode}</dd>
         {receipt.assignedWaiterName && <><dt className="text-zinc-600">Camarero</dt><dd className="break-words">{receipt.assignedWaiterName}</dd></>}
         <dt className="text-zinc-600">Pago</dt><dd>{receipt.paymentMethod ? servicePaymentLabels[receipt.paymentMethod] : "Sin consumo"}</dd>
@@ -68,6 +76,40 @@ function ReceiptDocument({ receipt, restaurantName, timeZone }: ReceiptProps) {
           {receipt.transferCents > 0 && <div className="flex justify-between"><span>Transferencia o QR:</span><span className="tabular-nums">{formatServiceMoney(receipt.transferCents)}</span></div>}
         </div>}
       </div>
+      {(receipt.payments.length > 1 || receipt.payments.some((payment) => payment.splitMode !== "FULL")) && (
+        <section aria-label="Cómo se dividió la cuenta" className="space-y-2 border-t border-zinc-200 pt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-700">
+            Cómo se dividió la cuenta ({receipt.payments.length} {receipt.payments.length === 1 ? "pago" : "pagos"})
+          </h4>
+          <ul className="space-y-2 text-xs">
+            {receipt.payments.map((payment) => (
+              <li key={payment.id} className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-2.5 space-y-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-semibold text-zinc-950">
+                    {payment.receiptNumber} · {payment.payerLabel}
+                  </span>
+                  <span className="font-semibold tabular-nums text-zinc-950">
+                    {formatServiceMoney(payment.totalCents)} · {servicePaymentLabels[payment.paymentMethod]}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600">{splitModeLabels[payment.splitMode]}</p>
+                {payment.items.length > 0 && (
+                  <p className="text-[11px] text-zinc-700">
+                    Productos: {payment.items.map((item) => `${item.quantity}× ${item.name}`).join(", ")}
+                  </p>
+                )}
+                {(payment.discountCents > 0 || payment.tipCents > 0) && (
+                  <p className="text-[11px] text-zinc-600 tabular-nums">
+                    {payment.discountCents > 0 && `Descuento: -${formatServiceMoney(payment.discountCents)}${payment.discountReason ? ` (${payment.discountReason})` : ""}`}
+                    {payment.discountCents > 0 && payment.tipCents > 0 && " · "}
+                    {payment.tipCents > 0 && `Propina: +${formatServiceMoney(payment.tipCents)}`}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   );
 }

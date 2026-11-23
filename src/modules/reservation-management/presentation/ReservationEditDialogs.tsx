@@ -1,5 +1,5 @@
 import { useCallback, useId, useState } from "react";
-import { FloorAssignmentPicker, FloorReservationEditor, FloorRoomSelector } from "@/modules/floor-management/ui";
+import { FloorAssignmentPicker, FloorReservationEditor, FloorRoomSelector, FloorSectorSelector } from "@/modules/floor-management/ui";
 import { ImageLibraryModal, resolveAdminAssetPreviewUrl } from "@/ui/admin/ImageLibraryModal";
 import { type FloorAssignmentInput } from "@/modules/floor-management/contracts";
 import { Image as ImageIcon, LayoutGrid, Loader2, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { AdminModal } from "@/ui/admin/AdminUI";
 import { type AdminCreateReservationCommand, type ReservationStatus, type TimeSlotView, type UpsertRestaurantEventCommand, type UpsertTimeSlotCommand } from "../contracts";
 import { reservationWorkspace, assignmentChanged, dialogClosed, type ActiveReservationDialog } from "./reservation-workspace";
 import { confirmAssignment, saveEvent, saveReservation, saveSlot, type ReservationConfirmationDetails } from "./reservation-commands";
-import { STATUS_LABEL, formatShortDate, preferredSectorLabel } from "./reservation-labels";
+import { STATUS_LABEL, formatShortDate, preferredSectorLabel, stripPreferredSectorNote, withPreferredSectorNote } from "./reservation-labels";
 import { PreferredSector, reservationInputClass, ReservationSelect, ReservationField, ReservationWriteError } from "./ReservationUi";
 
 export function ReservationAssignment({ dialog }: { dialog: ActiveReservationDialog & { kind: "assignment" } }) {
@@ -149,10 +149,9 @@ export function ReservationEdit({ dialog }: { dialog: ActiveReservationDialog & 
     customerName: editingReservation?.customerName ?? "", customerEmail: editingReservation?.customerEmail ?? "",
     customerPhone: editingReservation?.customerPhone ?? "", partySize: editingReservation?.partySize ?? 2,
     date, time, notes: editingReservation?.notes ?? "", adminNotes: editingReservation?.adminNotes ?? "",
-    status: editingReservation?.status ?? "CONFIRMED", source: editingReservation?.source === "LANDING" ? "LANDING" : "ADMIN",
+    status: editingReservation?.status ?? "PENDING", source: editingReservation?.source === "LANDING" ? "LANDING" : "ADMIN",
     eventId: editingReservation?.eventId ?? eventId ?? null,
   }));
-  const resAssignmentTooSmall = resForm.status === "CONFIRMED" && resAssignment?.capacity !== undefined && resAssignment.capacity < resForm.partySize;
   const handleSaveReservation = (event: React.FormEvent) => {
     event.preventDefault();
     void store.dispatch(saveReservation(dialog.id, resForm));
@@ -171,7 +170,7 @@ export function ReservationEdit({ dialog }: { dialog: ActiveReservationDialog & 
         footer={
           <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[#e9eee7] bg-white px-6 py-3 sm:px-8">
             <button type="button" className={adminSecondaryButtonClass} disabled={isPending} onClick={close}>Cancelar</button>
-            <button type="submit" form={reservationFormId} disabled={isPending || resAssignmentTooSmall || (floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment)} className={adminPrimaryButtonClass}>
+            <button type="submit" form={reservationFormId} disabled={isPending || (floorManagementEnabled && resForm.status === "CONFIRMED" && !resAssignment)} className={adminPrimaryButtonClass}>
               {isPending && <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
               {editingReservation ? "Guardar cambios" : "Crear reserva"}
             </button>
@@ -234,6 +233,14 @@ export function ReservationEdit({ dialog }: { dialog: ActiveReservationDialog & 
           {!floorManagementEnabled && resForm.status === "CONFIRMED" && !optionalAssignment && (
             <button type="button" className={adminSecondaryButtonClass} onClick={() => setOptionalAssignment(true)}><LayoutGrid size={15} />Asignar mesas antes de activar salones</button>
           )}
+          {floorManagementEnabled && resForm.status !== "CONFIRMED" && (
+            <FloorSectorSelector
+              restaurantId={restaurantId}
+              disabled={isPending}
+              value={preferredSectorLabel(resForm)}
+              onChange={(sector) => setResForm((previous) => ({ ...previous, adminNotes: withPreferredSectorNote(previous.adminNotes ?? "", sector) }))}
+            />
+          )}
           {(floorManagementEnabled || optionalAssignment) && resForm.status === "CONFIRMED" && (
             <div className="space-y-2">
               {editingReservation && <PreferredSector label={preferredSectorLabel(resForm)} />}
@@ -253,7 +260,13 @@ export function ReservationEdit({ dialog }: { dialog: ActiveReservationDialog & 
               <textarea rows={2} placeholder="Alergias, festejos o preferencias" value={resForm.notes || ""} onChange={(event) => setResForm((previous) => ({ ...previous, notes: event.target.value }))} className={`${reservationInputClass} w-full`} />
             </ReservationField>
             <ReservationField label="Nota interna (opcional)">
-              <input type="text" placeholder="Ej. Cliente frecuente" value={resForm.adminNotes || ""} onChange={(event) => setResForm((previous) => ({ ...previous, adminNotes: event.target.value }))} className={`${reservationInputClass} w-full`} />
+              <input
+                type="text"
+                placeholder="Ej. Cliente frecuente"
+                value={stripPreferredSectorNote(resForm.adminNotes ?? "")}
+                onChange={(event) => setResForm((previous) => ({ ...previous, adminNotes: withPreferredSectorNote(event.target.value, preferredSectorLabel(previous)) }))}
+                className={`${reservationInputClass} w-full`}
+              />
             </ReservationField>
           </fieldset>
 

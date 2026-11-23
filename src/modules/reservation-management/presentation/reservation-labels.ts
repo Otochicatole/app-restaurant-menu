@@ -90,6 +90,20 @@ export function preferredSectorLabel(reservation: Pick<ReservationView, "notes" 
   return /^\[Espacio:\s*([^\]]+)\]/.exec(reservation.notes)?.[1]?.trim() ?? "";
 }
 
+export function stripPreferredSectorNote(adminNotes: string): string {
+  const lines = adminNotes.split(/\r?\n/);
+  if (lines[0]?.startsWith(reservationSectorNotePrefix)) {
+    return lines.slice(1).join("\n").trim();
+  }
+  return adminNotes;
+}
+
+export function withPreferredSectorNote(adminNotes: string, sectorLabel: string): string {
+  const rest = stripPreferredSectorNote(adminNotes).trim();
+  const clean = sectorLabel.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
+  return clean ? [`${reservationSectorNotePrefix}${clean}`, rest].filter(Boolean).join("\n") : rest;
+}
+
 export function reservationCountLabel(count: number) {
   return `${count} ${count === 1 ? "reserva" : "reservas"}`;
 }

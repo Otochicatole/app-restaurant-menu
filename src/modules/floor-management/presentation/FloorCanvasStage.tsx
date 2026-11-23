@@ -261,8 +261,31 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
             onDragStart={(event) => { event.cancelBubble = true; startSpatialDrag("sector", source, event.target); }}
             onDragMove={(event) => { event.cancelBubble = true; moveSpatialDrag(event.target); }}
             onDragEnd={(event) => { event.cancelBubble = true; finishSpatialDrag("sector", location.id, event.target); }}>
-            <Rect x={-location.width / 2} y={-location.height / 2} width={location.width} height={location.height} fill={selected ? paint.sectorSelected : paint.sector} opacity={appearance === "operational" ? 0.8 : 0.65} stroke={selected ? paint.sectorSelectedEdge : paint.sectorEdge} strokeWidth={selected ? 3 : 1.5} dash={[10, 7]} cornerRadius={5} />
-            <Text x={-location.width / 2 + 10} y={-location.height / 2 + 10} width={Math.max(1, location.width - 20)} height={Math.max(1, location.height - 20)} wrap="none" ellipsis text={location.name} fontSize={15} fill={paint.sectorInk} fontStyle="bold" listening={false} />
+            <Rect
+              x={-location.width / 2}
+              y={-location.height / 2}
+              width={location.width}
+              height={location.height}
+              fill={location.quotaStatus === "exceeded" ? "#fef08a" : location.quotaStatus === "warning" ? "#fef9c3" : selected ? paint.sectorSelected : paint.sector}
+              opacity={appearance === "operational" ? 0.85 : 0.65}
+              stroke={location.quotaStatus === "exceeded" ? "#b45309" : location.quotaStatus === "warning" ? "#d97706" : selected ? paint.sectorSelectedEdge : paint.sectorEdge}
+              strokeWidth={location.quotaStatus === "exceeded" ? 2.5 : location.quotaStatus === "warning" ? 2 : selected ? 3 : 1.5}
+              dash={[10, 7]}
+              cornerRadius={5}
+            />
+            <Text
+              x={-location.width / 2 + 10}
+              y={-location.height / 2 + 10}
+              width={Math.max(1, location.width - 20)}
+              height={Math.max(1, location.height - 20)}
+              wrap="none"
+              ellipsis
+              text={location.quotaLabel ? `${location.name} · ${location.quotaLabel}` : location.name}
+              fontSize={14}
+              fill={location.quotaStatus === "exceeded" ? "#78350f" : location.quotaStatus === "warning" ? "#92400e" : paint.sectorInk}
+              fontStyle="bold"
+              listening={false}
+            />
           </Group>;
         })}
         {room.fixtures.map((fixture) => {
@@ -288,7 +311,7 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
         {liveTables.map((table) => <Table key={table.id} table={table} paint={paint} selected={selectedIds.includes(table.id)} selecting={selecting} draggable={selecting && Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id))}
           onSelect={(additive) => selectTable(table.id, additive)}
           onSelectIndividual={joinedIdsByTable.has(table.id) ? () => { if (!multiTouch.current) onSelect?.(table.id, false); } : undefined}
-          onOpenService={service && table.state === "reserved" && onServiceTable ? () => { if (!multiTouch.current) onServiceTable(table.id); } : undefined}
+          onOpenService={service && table.active && onServiceTable ? () => { if (!multiTouch.current) onServiceTable(table.id); } : undefined}
           onContextMenu={!service && onContextMenuTable ? (point) => onContextMenuTable(table.id, point) : undefined}
           onDragStart={(node) => {
             if (!selecting) return;
@@ -352,10 +375,12 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
 
 function Table({ table, selected, selecting, draggable, paint, onSelect, onSelectIndividual, onOpenService, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onOpenService?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
   const gesture = useRef({ dragged: false, selectedOnPress: false });
+  const occupied = table.state === "occupied";
   const reserved = table.state === "reserved";
   const unavailable = table.state === "unavailable" || !table.active;
-  const fill = selected ? paint.tableSelected : reserved ? "#f0d6c4" : unavailable ? paint.tableUnavailable : paint.table;
-  const stroke = selected ? paint.tableSelectedEdge : reserved ? "#95664c" : paint.tableEdge;
+  const fill = selected ? paint.tableSelected : occupied ? "#dbeff5" : reserved ? "#f0d6c4" : unavailable ? paint.tableUnavailable : paint.table;
+  const stroke = selected ? paint.tableSelectedEdge : occupied ? "#0e7490" : reserved ? "#95664c" : paint.tableEdge;
+  const subLabel = table.subtitle ?? (table.partySize ? `${table.partySize}p` : `${table.capacity}p`);
   return <Group id={`floor-table-${table.id}`} x={table.x} y={table.y} rotation={table.rotation} opacity={unavailable ? 0.55 : 1} draggable={draggable && table.active}
     onMouseDown={(event) => { if (!selecting) return; event.cancelBubble = true; if (event.evt.button !== 0) return; const additive = event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey; gesture.current = { dragged: false, selectedOnPress: additive || !selected }; if (gesture.current.selectedOnPress) onSelect(additive); }}
     onTouchStart={() => { gesture.current = { dragged: false, selectedOnPress: false }; }}
@@ -376,11 +401,17 @@ function Table({ table, selected, selecting, draggable, paint, onSelect, onSelec
     onDragStart={(event) => { if (!selecting) return; event.cancelBubble = true; gesture.current.dragged = true; onDragStart(event.target); }} onDragMove={(event) => { if (!selecting) return; event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
     {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}
     <Group rotation={-table.rotation} listening={false}>
-      <Text x={-60} y={-8} width={120} align="center" text={table.label} fontSize={16} fontStyle="bold" fill={paint.tableInk} />
+      <Text x={-60} y={-12} width={120} align="center" text={table.label} fontSize={15} fontStyle="bold" fill={paint.tableInk} />
+      <Text x={-60} y={5} width={120} align="center" text={subLabel} fontSize={10} fill={paint.tableInk} opacity={0.8} />
       {Boolean(table.readyQuantity && table.readyQuantity > 0) && (
         <Group x={18} y={-18}>
           <Circle radius={10} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
           <Text x={-10} y={-5} width={20} align="center" text={String(table.readyQuantity)} fontSize={10} fontStyle="bold" fill="#ffffff" />
+        </Group>
+      )}
+      {table.hasPartialPayments && (
+        <Group x={-18} y={-18}>
+          <Circle radius={6} fill="#d97706" stroke="#ffffff" strokeWidth={1.5} />
         </Group>
       )}
     </Group>

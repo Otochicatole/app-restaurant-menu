@@ -158,6 +158,11 @@ export function CashCmsScreen({ restaurantId, restaurantName, timeZone, initialT
                         <p className="break-words text-sm font-semibold text-zinc-950">
                           {receipt.receiptNumber ?? "Cierre sin consumo"} · {receipt.tableLabels.join(", ")}
                         </p>
+                        {receipt.payments.length > 1 && (
+                          <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+                            Dividida ({receipt.payments.length} pagos)
+                          </span>
+                        )}
                         {flagged && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-950">
                             <AlertTriangle size={12} aria-hidden="true" />

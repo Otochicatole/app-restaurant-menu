@@ -26,6 +26,7 @@ const openAccount: ServiceAccountView = {
   roomName: "Salón",
   reservationCode: "W1",
   customerName: "Sin reserva",
+  partySize: 2,
   assignedWaiterId: "w-1",
   assignedWaiterName: "Ana",
   version: 2,
@@ -48,6 +49,9 @@ const openAccount: ServiceAccountView = {
   deliveredCents: 0,
   pendingQuantity: 0,
   readyQuantity: 0,
+  paidSubtotalCents: 0,
+  remainingCents: 0,
+  payments: [],
   auditLogs: [],
   hasAuditAlerts: false,
   auditAlertCount: 0,
@@ -176,11 +180,11 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
   afterEach(cleanup);
 
   const products: ServiceProductView[] = [
-    { id: "prod-1", name: "Milanesa", unitPriceCents: 1200000, active: true },
-    { id: "prod-2", name: "Agua sin gas", unitPriceCents: 250000, active: true },
+    { id: "prod-1", name: "Milanesa", unitPriceCents: 1200000, station: "KITCHEN", active: true },
+    { id: "prod-2", name: "Agua sin gas", unitPriceCents: 250000, station: "BAR", active: true },
   ];
 
-  it("builds a draft list in a table first and sends confirm-order only when confirmed", async () => {
+  it("auto-selects product station, supports station filter/override and sends confirm-order only when confirmed", async () => {
     const confirmedAccount: ServiceAccountView = {
       ...openAccount,
       version: 3,
@@ -194,6 +198,7 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
           quantity: 2,
           deliveredQuantity: 0,
           cancelledQuantity: 0,
+          paidQuantity: 0,
           notes: "Con papas",
           kitchenStatus: "PENDING",
           round: 1,
@@ -223,18 +228,25 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
       onRefresh: vi.fn(),
     }));
 
-    // Select first catalog product and add 1 unit with note
-    const picker = screen.getByLabelText("Producto");
-    fireEvent.focus(picker);
-    fireEvent.click(screen.getByRole("option", { name: /Milanesa/i }));
-    fireEvent.change(screen.getByLabelText("Notas de elaboración"), { target: { value: "Con papas" } });
-    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+    // Tap Milanesa once, add inline note and increment to 2
+    fireEvent.click(screen.getByRole("button", { name: "Agregar Milanesa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar nota de Milanesa" }));
+    fireEvent.change(screen.getByLabelText("Nota para Milanesa"), { target: { value: "Con papas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Milanesa" }));
 
-    // Select second catalog product to BAR
-    fireEvent.focus(picker);
-    fireEvent.click(screen.getByRole("option", { name: /Agua sin gas/i }));
-    fireEvent.change(screen.getByLabelText("Estación"), { target: { value: "BAR" } });
-    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+    // Tap Agua sin gas -> automatically uses BAR without manual toggle!
+    fireEvent.click(screen.getByRole("button", { name: "Agregar Agua sin gas" }));
+
+    // Station filter narrows the quick catalog tiles cleanly
+    const filterGroup = screen.getByRole("group", { name: "Filtrar por estación" });
+    fireEvent.click(within(filterGroup).getByRole("button", { name: "Barra" }));
+    expect(screen.queryByRole("button", { name: "Agregar Milanesa" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Agregar Agua sin gas" })).toBeTruthy();
+    fireEvent.click(within(filterGroup).getByRole("button", { name: "Todos" }));
+
+    // Waiter can still toggle an individual draft line if needed, then switch back to BAR
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar estación de Agua sin gas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar estación de Agua sin gas" }));
 
     // Nothing sent to server / kitchen yet!
     expect(onCommand).not.toHaveBeenCalled();
@@ -244,8 +256,6 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
     expect(within(draftTable).getByRole("rowheader", { name: /Agua sin gas/i })).toBeTruthy();
     expect(within(draftTable).getByText("Barra")).toBeTruthy();
 
-    // Adjust Milanesa quantity +1 and remove Agua sin gas? Let's keep both after incrementing Milanesa to 2!
-    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Milanesa" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar pedido y enviar a cocina" }));
 
     await waitFor(() => {
@@ -291,6 +301,45 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
     expect(within(confirmedTable).getByRole("button", { name: "Entregar uno de Milanesa" })).toBeTruthy();
   });
 
+  it("allows adding a manual custom product via Otro producto", async () => {
+    const onCommand = vi.fn(async () => openAccount);
+    render(createElement(FloorServiceWindow, {
+      target,
+      account: openAccount,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Otro producto" }));
+    const manualForm = screen.getByRole("form", { name: "Cargar producto manual" });
+    fireEvent.change(within(manualForm).getByLabelText("Nombre"), { target: { value: "Copa de vino" } });
+    fireEvent.change(within(manualForm).getByLabelText("Precio unitario ($)"), { target: { value: "3500" } });
+    fireEvent.change(within(manualForm).getByLabelText("Estación"), { target: { value: "BAR" } });
+    fireEvent.click(within(manualForm).getByRole("button", { name: "Agregar a la lista" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar pedido y enviar a cocina" }));
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith({
+        action: "confirm-order",
+        accountId: "acc-1",
+        expectedVersion: 2,
+        items: [{ name: "Copa de vino", unitPriceCents: 350000, quantity: 1, station: "BAR" }],
+      });
+    });
+  });
+
   it("tracks draftRemovals when decrementing or removing draft items before confirming", async () => {
     const onCommand = vi.fn(async () => openAccount);
     render(createElement(FloorServiceWindow, {
@@ -312,15 +361,9 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
       onRefresh: vi.fn(),
     }));
 
-    const picker = screen.getByLabelText("Producto");
-    fireEvent.focus(picker);
-    fireEvent.click(screen.getByRole("option", { name: /Milanesa/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Milanesa" }));
-
-    fireEvent.focus(picker);
-    fireEvent.click(screen.getByRole("option", { name: /Agua sin gas/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Agregar a la lista" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar Milanesa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar Milanesa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar Agua sin gas" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Restar uno de Milanesa" }));
     fireEvent.click(screen.getByRole("button", { name: "Quitar Agua sin gas" }));
@@ -337,6 +380,149 @@ describe("FloorServiceWindow draft order list and kitchen confirmation", () => {
           { productId: "prod-2", name: "Agua sin gas", unitPriceCents: 250000, quantity: 1, reason: "REMOVED" },
         ],
       });
+    });
+  });
+
+  it("supports partial payment by items and by people without closing prematurely", async () => {
+    const deliveredAccount: ServiceAccountView = {
+      ...openAccount,
+      partySize: 3,
+      orderedCents: 150000,
+      deliveredCents: 150000,
+      remainingCents: 150000,
+      lines: [
+        {
+          id: "line-coca",
+          name: "Coca",
+          unitPriceCents: 50000,
+          quantity: 1,
+          deliveredQuantity: 1,
+          cancelledQuantity: 0,
+          paidQuantity: 0,
+          notes: "",
+          kitchenStatus: "SERVED",
+          round: 1,
+          station: "BAR",
+          createdAt: "2026-11-14T00:05:00.000Z",
+        },
+        {
+          id: "line-pizza",
+          name: "Pizza",
+          unitPriceCents: 100000,
+          quantity: 1,
+          deliveredQuantity: 1,
+          cancelledQuantity: 0,
+          paidQuantity: 0,
+          notes: "",
+          kitchenStatus: "SERVED",
+          round: 1,
+          station: "KITCHEN",
+          createdAt: "2026-11-14T00:05:00.000Z",
+        },
+      ],
+    };
+    const afterPartial: ServiceAccountView = {
+      ...deliveredAccount,
+      version: 3,
+      paidSubtotalCents: 50000,
+      remainingCents: 100000,
+      payments: [
+        {
+          id: "pay-1",
+          sequence: 1,
+          receiptNumber: "C-acc-1-P1",
+          splitMode: "BY_ITEMS",
+          payerLabel: "Ana",
+          businessDate: "2026-11-14",
+          paymentMethod: "CASH",
+          subtotalCents: 50000,
+          discountCents: 0,
+          discountReason: null,
+          tipCents: 0,
+          totalCents: 50000,
+          cashCents: 50000,
+          cardCents: 0,
+          transferCents: 0,
+          items: [{ lineId: "line-coca", name: "Coca", quantity: 1, unitPriceCents: 50000 }],
+          paidBy: "u-1",
+          paidAt: "2026-11-14T00:30:00.000Z",
+        },
+      ],
+    };
+    const onCommand = vi.fn(async () => afterPartial);
+
+    const view = render(createElement(FloorServiceWindow, {
+      target,
+      account: deliveredAccount,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Dividir cuenta" }));
+    expect(screen.getAllByRole("button", { name: "Volver al pedido" }).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole("button", { name: "Sumar uno de Coca al pago" }));
+    fireEvent.change(screen.getByLabelText("Etiqueta / Persona que paga (opcional)"), { target: { value: "Ana" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago parcial" }));
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith({
+        action: "pay-partial",
+        accountId: "acc-1",
+        expectedVersion: 2,
+        splitMode: "BY_ITEMS",
+        payerLabel: "Ana",
+        paymentMethod: "CASH",
+        items: [{ lineId: "line-coca", quantity: 1 }],
+      });
+    });
+
+    view.rerender(createElement(FloorServiceWindow, {
+      target,
+      account: afterPartial,
+      products,
+      waiters,
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      loading: false,
+      loadError: null,
+      busy: false,
+      historical: false,
+      canOpen: true,
+      allocationVersion: 0,
+      conflict: false,
+      cashClosed: false,
+      onCommand,
+      onRefresh: vi.fn(),
+    }));
+
+    expect(screen.getByText(/Pagos registrados \(1\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dividir cuenta" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Por personas" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago parcial" }));
+
+    await waitFor(() => {
+      expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
+        action: "pay-partial",
+        accountId: "acc-1",
+        expectedVersion: 3,
+        splitMode: "BY_PEOPLE",
+        paymentMethod: "CARD",
+        amountCents: 33333,
+      }));
     });
   });
 });

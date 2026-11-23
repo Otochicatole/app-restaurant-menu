@@ -12,16 +12,25 @@ export const fixtureSchema = z.object({
   rotation: rotationSchema.default(0), label: z.string().max(100).default(""),
 });
 export type FloorFixture = z.infer<typeof fixtureSchema>;
+const optionalPositiveInt = (max: number) =>
+  z.preprocess((value) => (value === null ? undefined : value), z.number().int().min(1).max(max).optional());
+const optionalNonEmptyString = z.preprocess((value) => (value === null ? undefined : value), z.string().min(1).optional());
+
 export const floorLocationSchema = z.object({
   id: z.string().min(1), name: z.string().trim().min(1).max(100),
   x: coordinate, y: coordinate, width: dimension, height: dimension,
-  rotation: rotationSchema.default(0), active: z.boolean().default(true),
+  rotation: rotationSchema.default(0),
+  maxTables: optionalPositiveInt(200),
+  maxCapacity: optionalPositiveInt(2000),
+  active: z.boolean().default(true),
 });
 export type FloorLocation = z.infer<typeof floorLocationSchema>;
 export const floorTableSchema = z.object({
   id: z.string().min(1), label: z.string().trim().min(1).max(40), shape: tableShapeSchema,
   capacity: z.number().int().min(1).max(500), x: coordinate, y: coordinate,
-  width: dimension, height: dimension, rotation: rotationSchema.default(0), active: z.boolean().default(true),
+  width: dimension, height: dimension, rotation: rotationSchema.default(0),
+  locationId: optionalNonEmptyString,
+  active: z.boolean().default(true),
 }).refine((table) => table.shape === "RECTANGLE" || table.width === table.height, "Las mesas cuadradas o redondas deben tener ancho y alto iguales.");
 export type FloorTable = z.infer<typeof floorTableSchema>;
 export const combinationMemberSchema = z.object({ tableId: z.string().min(1), x: coordinate, y: coordinate, rotation: rotationSchema.default(0) });
@@ -91,4 +100,4 @@ export function toFloorRoom(value: unknown): FloorRoom {
 }
 
 export { calculateFloorInterval, restaurantToday, restaurantLocalDateTime, validateTimeZone } from "./domain/time-policy";
-export { buildFloorOptions, composeRoomPoses, floorPoseOverlaps, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, floorTableSeparationGap, validateAssembly, validateTableArrangement, getJoinedTableGroups, usableTableCapacity } from "./domain/floor-policy";
+export { buildFloorOptions, composeRoomPoses, floorPoseOverlaps, validateRoomLayout, validateFloorPlacement, transformPoses, findFloorPlacement, floorTableSeparationGap, validateAssembly, validateTableArrangement, getJoinedTableGroups, usableTableCapacity, sectorQuotaStatus, summarizeSectorQuota, type SectorQuotaStatus, type SectorQuotaSummary } from "./domain/floor-policy";

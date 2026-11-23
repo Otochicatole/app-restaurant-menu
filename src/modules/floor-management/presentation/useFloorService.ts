@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ServiceAccountView, ServiceCommand, ServiceSnapshot } from "@/modules/reservation-management/contracts";
 
-export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "assign-waiter" | "add-line" | "confirm-order" | "update-line" | "checkout" | "close-empty" | "deliver-all" | "march-round" }>;
+export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "open-table" | "assign-waiter" | "add-line" | "confirm-order" | "update-line" | "checkout" | "pay-partial" | "close-empty" | "deliver-all" | "march-round" }>;
 
 async function serviceRequest<T>(restaurantId: string, { at, signal, command }: { at?: string; signal?: AbortSignal; command?: FloorServiceCommand }): Promise<T> {
   const params = at ? `?${new URLSearchParams({ at })}` : "";
@@ -63,9 +63,14 @@ export function useFloorService(restaurantId: string, active: boolean, at?: stri
     read.current?.abort();
     writing.current = true;
     setBusy(true);
-    let failed = false;
+    let shouldRefresh = false;
     try {
       const account = await serviceRequest<ServiceAccountView>(restaurantId, { command });
+      shouldRefresh =
+        command.action === "open-table"
+        || command.action === "checkout"
+        || command.action === "close-empty"
+        || (command.action === "pay-partial" && account.closedAt !== null);
       setResult((current) => {
         if (current?.key !== key || !current.snapshot) return current;
         const accounts = current.snapshot.accounts.filter(({ id }) => id !== account.id);
@@ -74,12 +79,12 @@ export function useFloorService(restaurantId: string, active: boolean, at?: stri
       });
       return account;
     } catch (error) {
-      failed = true;
+      shouldRefresh = true;
       throw error;
     } finally {
       writing.current = false;
       setBusy(false);
-      if (failed || command.action === "checkout" || command.action === "close-empty") void refresh();
+      if (shouldRefresh) void refresh();
     }
   };
 

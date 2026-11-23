@@ -57,10 +57,10 @@ const room: FloorRoom = {
   fixtures: [{id: "bar", type: "BAR", label: "Barra", x: 650, y: 450, width: 100, height: 60, rotation: 0}],
   locations: [{id: "window", name: "Ventana", x: 400, y: 300, width: 600, height: 400, rotation: 0, active: true}],
   tables: [
-    {id: "one", label: "M1", shape: "SQUARE", capacity: 4, width: 80, height: 80, x: 0, y: 0, rotation: 0, active: true},
-    {id: "two", label: "M2", shape: "SQUARE", capacity: 4, width: 80, height: 80, x: 0, y: 0, rotation: 0, active: true},
+    {id: "one", label: "M1", shape: "SQUARE", capacity: 4, width: 80, height: 80, x: 240, y: 260, rotation: 0, active: true, locationId: "window"},
+    {id: "two", label: "M2", shape: "SQUARE", capacity: 4, width: 80, height: 80, x: 380, y: 260, rotation: 0, active: true, locationId: "window"},
   ],
-  combinations: [{id: "joined", name: "M1 + M2", capacity: 6, active: true, members: [{tableId: "one", x: -40, y: 0, rotation: 0}, {tableId: "two", x: 40, y: 0, rotation: 0}]}],
+  combinations: [],
 };
 function config(): FloorConfigView {
   return {restaurantId: "restaurant", restaurantName: "Bistró", enabled: true, timeZone: "America/Argentina/Buenos_Aires", rooms: [structuredClone(room)], staffAccount: null, compatibility: {status: "compatible"}};
@@ -106,9 +106,9 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getAllByTestId("admin-canvas")).toHaveLength(1);
     expect(screen.getByTestId("admin-canvas").getAttribute("data-full-screen")).toBe("true");
     expect(screen.getByTestId("admin-canvas").getAttribute("data-editor-mode")).toBe("true");
-    expect(tables()).toEqual([]);
+    expect(tables().map((table) => table.id)).toEqual(["one", "two"]);
     const toolbar = screen.getByRole("navigation", {name: "Herramientas del editor"});
-    for (const name of ["Salones", "Medidas", "Inventario", "Sectores", "Agregar sector", "Elementos", "Configuración"]) {
+    for (const name of ["Salones", "Medidas", "Mesas", "Sectores", "Agregar sector", "Agregar mesa", "Elementos", "Configuración"]) {
       const button = within(toolbar).getByRole("button", {name});
       const text = within(button).getByText(name);
       expect(text.closest("[hidden], [aria-hidden='true'], .hidden, .sr-only")).toBeNull();
@@ -126,7 +126,6 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.getByRole("link", {name: "Ver sala"}).getAttribute("href")).toBe("/floor?restaurantId=restaurant");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByLabelText("Ancho del plano")).toBeNull();
-    expect(screen.queryByLabelText("Cantidad a agregar")).toBeNull();
     expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(true);
     tool("Configuración");
     expect(screen.getByRole("dialog", {name: "Configuración del restaurante"})).toBeTruthy();
@@ -156,7 +155,7 @@ describe("fullscreen room editor workflows", () => {
     expect(plan().width).toBe(1200); expect(screen.getByTestId("admin-canvas")).toBe(canvas); expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("keeps inventory, dimensions and sector tools independent while applying each to the latest room draft", async () => {
+  it("keeps tables, dimensions and sector tools independent while applying each to the latest room draft", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
     tool("Medidas");
@@ -165,10 +164,10 @@ describe("fullscreen room editor workflows", () => {
     fireEvent.change(name, {target: {value: "Salón con ventana"}});
     fireEvent.keyDown(within(dimensions).getByRole("button", {name: "Mover ventana Medidas del salón"}), {key: "ArrowLeft"});
     const position = dimensions.style.left;
-    tool("Inventario");
-    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
-    const quantity = within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement;
-    fireEvent.change(quantity, {target: {value: "3"}});
+    tool("Mesas");
+    const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    const cap = within(tablesDialog).getByLabelText("Capacidad base") as HTMLInputElement;
+    fireEvent.change(cap, {target: {value: "6"}});
     fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
     const sector = screen.getByRole("dialog", {name: "Propiedades del sector"});
     expect(screen.getAllByRole("dialog")).toHaveLength(3);
@@ -176,16 +175,17 @@ describe("fullscreen room editor workflows", () => {
     fireEvent.click(within(sector).getByRole("button", {name: "Aplicar sector"}));
     expect(screen.queryByRole("dialog", {name: "Propiedades del sector"})).toBeNull();
     expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(dimensions);
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
-    expect(name.value).toBe("Salón con ventana"); expect(quantity.value).toBe("3");
-    fireEvent.click(within(inventory).getByRole("button", {name: "Agregar al inventario"}));
-    expect(plan().tables).toHaveLength(5);
+    expect(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).toBe(tablesDialog);
+    expect(name.value).toBe("Salón con ventana"); expect(cap.value).toBe("6");
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Agregar mesa"}));
+    expect(plan().tables).toHaveLength(3);
+    expect(plan().tables[2]).toMatchObject({locationId: "window", capacity: 6});
     fireEvent.click(within(dimensions).getByRole("button", {name: "Aplicar medidas"}));
     expect(plan()).toMatchObject({name: "Salón con ventana", locations: [expect.objectContaining({name: "Ventana norte"})]});
-    expect(plan().tables).toHaveLength(5);
+    expect(plan().tables).toHaveLength(3);
     expect(dimensions.style.left).toBe(position);
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
-    fireEvent.click(within(inventory).getByRole("button", {name: "Volver al plano"}));
+    expect(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).toBe(tablesDialog);
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Volver al plano"}));
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", expect.objectContaining({expectedRevision: 4, room: expect.objectContaining({name: "Salón con ventana", tables: plan().tables})})));
     expect(screen.getByTestId("admin-canvas")).toBe(canvas); expect(screen.getByTestId("admin-pan").textContent).toBe("1");
@@ -194,41 +194,39 @@ describe("fullscreen room editor workflows", () => {
   it("closes only the requested tool while another minimized form preserves its draft", async () => {
     await editor(); tool("Medidas"); const dimensions = screen.getByRole("dialog", {name: "Medidas del sal\u00F3n"});
     fireEvent.change(within(dimensions).getByLabelText("Ancho del plano"), {target: {value: "1200"}});
-    fireEvent.click(within(dimensions).getByRole("button", {name: "Minimizar ventana"})); tool("Inventario");
-    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
-    fireEvent.change(within(inventory).getByLabelText("Cantidad a agregar"), {target: {value: "3"}});
-    fireEvent.click(within(inventory).getByRole("button", {name: "Cerrar ventana"}));
-    expect(inventory.isConnected).toBe(false); expect(dimensions.isConnected).toBe(true);
+    fireEvent.click(within(dimensions).getByRole("button", {name: "Minimizar ventana"})); tool("Mesas");
+    const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    fireEvent.change(within(tablesDialog).getByLabelText("Capacidad base"), {target: {value: "8"}});
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Cerrar ventana"}));
+    expect(tablesDialog.isConnected).toBe(false); expect(dimensions.isConnected).toBe(true);
     expect(within(dimensions).getByRole("button", {name: "Restaurar ventana"})).toBeTruthy();
-    tool("Inventario"); expect((within(screen.getByRole("dialog", {name: "Inventario de mesas"})).getByLabelText("Cantidad a agregar") as HTMLInputElement).value).toBe("1");
+    tool("Mesas"); expect((within(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).getByLabelText("Capacidad base") as HTMLInputElement).value).toBe("4");
     tool("Medidas"); expect((within(dimensions).getByLabelText("Ancho del plano") as HTMLInputElement).value).toBe("1200");
     expect(screen.getAllByRole("dialog")).toHaveLength(2); expect(screen.queryByRole("button", {name: /Abrir ventana/})).toBeNull();
   });
 
-  it("rejects stale table properties after another inventory window changes that table", async () => {
-    const value = config(); value.rooms[0].combinations = []; api.config.mockResolvedValue(value);
-    await editor(); tool("Inventario");
-    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
-    fireEvent.click(within(inventory).getByRole("button", {name: "Editar mesa M1"}));
-    const table = screen.getByRole("dialog", {name: "Editar mesa"});
-    const label = within(table).getByLabelText("Número o nombre") as HTMLInputElement;
+  it("rejects stale table properties after another edit modifies that table", async () => {
+    await editor(); tool("Mesas");
+    const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Editar mesa M1"}));
+    const tableDialog = screen.getByRole("dialog", {name: "Propiedades de la mesa"});
+    const label = within(tableDialog).getByLabelText("Número o nombre") as HTMLInputElement;
     fireEvent.change(label, {target: {value: "Pendiente"}});
-    fireEvent.click(within(inventory).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
-    const group = screen.getByRole("dialog", {name: "Editar tipo de mesa"});
-    fireEvent.change(within(group).getByLabelText("Ancho"), {target: {value: "90"}});
-    fireEvent.click(within(group).getByRole("button", {name: "Aplicar tipo"}));
-    fireEvent.click(within(table).getByRole("button", {name: "Aplicar mesa"}));
-    expect(within(table).getByRole("alert").textContent).toContain("cambiaron en otra herramienta");
-    expect(plan().tables[0]).toMatchObject({id: "one", width: 90, height: 90, label: "M1"});
+    fireEvent.click(within(tableDialog).getByRole("button", {name: "Minimizar ventana"}));
+    fireEvent.click(screen.getByRole("button", {name: "Arrastrar sector Ventana"}));
+    fireEvent.click(within(tableDialog).getByRole("button", {name: "Restaurar ventana"}));
+    fireEvent.click(within(tableDialog).getByRole("button", {name: "Aplicar mesa"}));
+    expect(within(tableDialog).getByRole("alert").textContent).toContain("cambiaron en otra herramienta");
+    expect(plan().tables[0]).toMatchObject({id: "one", label: "M1"});
     expect(label.value).toBe("Pendiente"); expect(label.isConnected).toBe(true);
-    fireEvent.click(within(table).getByRole("button", {name: "Cancelar"}));
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    fireEvent.click(within(tableDialog).getByRole("button", {name: "Cancelar"}));
+    expect(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).toBe(tablesDialog);
     expect(api.save).not.toHaveBeenCalled();
   });
 
   it("opens one independent window per sector and restores the chosen entity with its pending values", async () => {
     const value = config();
-    value.rooms[0].locations.push({...room.locations[0], id: "entrance", name: "Entrada", x: 200, width: 160});
+    value.rooms[0].locations.push({...room.locations[0], id: "entrance", name: "Entrada", x: 160, width: 140});
     api.config.mockResolvedValue(value);
     await editor();
     fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
@@ -282,35 +280,35 @@ describe("fullscreen room editor workflows", () => {
     const dimensions = screen.getByRole("dialog", {name: "Medidas del salón"});
     const name = within(dimensions).getByLabelText("Nombre del salón") as HTMLInputElement;
     fireEvent.change(name, {target: {value: "Nombre pendiente"}});
-    tool("Inventario");
-    const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
-    const quantity = within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement;
-    fireEvent.change(quantity, {target: {value: "5"}});
+    tool("Mesas");
+    const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    const cap = within(tablesDialog).getByLabelText("Capacidad base") as HTMLInputElement;
+    fireEvent.change(cap, {target: {value: "6"}});
     const switchRoom = () => { tool("Salones"); fireEvent.click(within(screen.getByRole("navigation", {name: "Salones del restaurante"})).getByRole("button", {name: "Terraza"})); };
     switchRoom();
     fireEvent.click(within(screen.getByRole("dialog", {name: "Descartar cambios sin guardar"})).getByRole("button", {name: "Cancelar"}));
     expect(screen.getByRole("dialog", {name: "Medidas del salón"})).toBe(dimensions);
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
-    expect(name.value).toBe("Nombre pendiente"); expect(quantity.value).toBe("5");
+    expect(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).toBe(tablesDialog);
+    expect(name.value).toBe("Nombre pendiente"); expect(cap.value).toBe("6");
     expect(plan().id).toBe("main");
     switchRoom(); fireEvent.click(screen.getByRole("button", {name: "Descartar y continuar"}));
-    expect(plan().id).toBe("terrace"); expect(name.isConnected).toBe(false); expect(quantity.isConnected).toBe(false);
+    expect(plan().id).toBe("terrace"); expect(name.isConnected).toBe(false); expect(cap.isConnected).toBe(false);
     expect(screen.queryByRole("dialog")).toBeNull(); expect(screen.queryByRole("complementary", {name: "Ventanas ocultas del salón"})).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
 
   it("discards only the spatial property form on X or Cancelar", async () => {
-    await editor(); tool("Inventario"); const inventory = screen.getByRole("dialog", {name: "Inventario de mesas"});
-    fireEvent.change(within(inventory).getByLabelText("Cantidad a agregar"), {target: {value: "3"}});
+    await editor(); tool("Mesas"); const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    fireEvent.change(within(tablesDialog).getByLabelText("Capacidad base"), {target: {value: "6"}});
     fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
     const pane = screen.getByRole("dialog", {name: "Propiedades del sector"});
     fireEvent.change(within(pane).getByLabelText("Nombre del sector"), {target: {value: "Sin aplicar"}});
     fireEvent.click(within(pane).getByRole("button", {name: "Cerrar ventana"})); expect(pane.isConnected).toBe(false);
-    expect(plan().locations[0].name).toBe("Ventana"); expect((within(inventory).getByLabelText("Cantidad a agregar") as HTMLInputElement).value).toBe("3");
+    expect(plan().locations[0].name).toBe("Ventana"); expect((within(tablesDialog).getByLabelText("Capacidad base") as HTMLInputElement).value).toBe("6");
     fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
     const fresh = screen.getByRole("dialog", {name: "Propiedades del sector"}); expect((within(fresh).getByLabelText("Nombre del sector") as HTMLInputElement).value).toBe("Ventana");
     fireEvent.click(within(fresh).getByRole("button", {name: "Cancelar"})); expect(screen.queryByRole("dialog", {name: "Propiedades del sector"})).toBeNull();
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBe(inventory);
+    expect(screen.getByRole("dialog", {name: "Mesas y cupos por sector"})).toBe(tablesDialog);
   });
 
   it("keeps destructive confirmations modal while returning to the nonmodal editor on cancel", async () => {
@@ -355,106 +353,46 @@ describe("fullscreen room editor workflows", () => {
     expect(within(navigation).getByRole("link", {name: "Configuración"})).toBeTruthy();
   });
 
-  it("adds stable inventory in a tool window and saves custom dimensions and a newly placed sector", async () => {
+  it("configures sector quotas and fixed tables inside sectors, enforcing maxTables limit", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
-    tool("Inventario");
-    fireEvent.change(screen.getByLabelText("Cantidad a agregar"), {target: {value: "3"}});
-    fireEvent.click(screen.getByRole("button", {name: "Agregar al inventario"}));
-    closeDialog();
-    expect(tables()).toEqual([]);
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Editar"}));
+    const sectorDialog = screen.getByRole("dialog", {name: "Propiedades del sector"});
+    fireEvent.change(within(sectorDialog).getByLabelText("Cupo de mesas"), {target: {value: "3"}});
+    fireEvent.change(within(sectorDialog).getByLabelText("Cupo de personas"), {target: {value: "16"}});
+    fireEvent.click(within(sectorDialog).getByRole("button", {name: "Aplicar sector"}));
+
+    tool("Mesas");
+    const tablesDialog = screen.getByRole("dialog", {name: "Mesas y cupos por sector"});
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Agregar mesa"}));
+    expect(tables().map((t) => t.id)).toHaveLength(3);
+    expect((within(tablesDialog).getByRole("button", {name: "Agregar mesa"}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(tablesDialog).getByRole("button", {name: "Volver al plano"}));
+
     applyWidth(1400);
-    tool("Sectores");
-    fireEvent.click(screen.getByRole("button", {name: "Nuevo sector"}));
-    fireEvent.click(screen.getByRole("button", {name: "Colocar en plano"}));
-    expect(screen.getByRole("dialog", {name: "Propiedades del sector"})).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Nombre del sector"), {target: {value: "Fondo"}});
-    expect(plan().locations).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", {name: "Aplicar sector"}));
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalled());
     const command = api.save.mock.calls[0][1];
     expect(command).toMatchObject({action: "save-room", expectedRevision: 4, room: {id: "main", width: 1400}});
-    expect(command.room.tables).toHaveLength(5);
-    expect(command.room.tables.slice(0, 2).map((table: {id: string}) => table.id)).toEqual(["one", "two"]);
-    expect(new Set(command.room.tables.map((table: {id: string}) => table.id)).size).toBe(5);
-    expect(command.room.tables.every((table: {x: number; y: number}) => table.x === 0 && table.y === 0)).toBe(true);
-    expect(command.room.locations).toEqual(expect.arrayContaining([expect.objectContaining({name: "Fondo", x: 500, y: 350})]));
+    expect(command.room.tables).toHaveLength(3);
+    expect(command.room.tables.every((table: {locationId?: string}) => table.locationId === "window")).toBe(true);
+    expect(command.room.locations[0]).toMatchObject({maxTables: 3, maxCapacity: 16});
     await waitFor(() => expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(true));
-    expect(screen.getByTestId("admin-canvas")).toBe(canvas);
-    expect(screen.getByTestId("admin-pan").textContent).toBe("1");
-    expect(tables()).toEqual([]);
-  });
-
-  it("edits a type quantity by preserving physical IDs and mixed capacities, archiving decreases and reactivating increases", async () => {
-    const value = config();
-    value.rooms[0].tables[1].capacity = 6;
-    value.rooms[0].tables.push({...room.tables[0], id: "three", label: "M3", capacity: 2}, {...room.tables[0], id: "four", label: "M4", capacity: 3, active: false});
-    api.config.mockResolvedValue(value);
-    const canvas = await editor();
-    fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
-    const editQuantity = (quantity: number) => {
-      tool("Inventario");
-      const group = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 80 × 80"});
-      expect(within(group).queryByText(/M1|M2|lugares/)).toBeNull();
-      fireEvent.click(within(group).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
-      expect(screen.getByRole("dialog", {name: "Editar tipo de mesa"})).toBeTruthy();
-      fireEvent.change(screen.getByLabelText("Cantidad de mesas"), {target: {value: String(quantity)}});
-      fireEvent.click(screen.getByRole("button", {name: "Aplicar tipo"}));
-      closeDialog();
-    };
-    editQuantity(4);
-    expect(plan().tables.map((table) => table.id)).toEqual(["one", "two", "three", "four"]);
-    expect(plan().tables.every((table) => table.active)).toBe(true);
-    editQuantity(2);
-    expect(plan().tables.map((table) => ({id: table.id, active: table.active, capacity: table.capacity}))).toEqual([
-      {id: "one", active: true, capacity: 4}, {id: "two", active: true, capacity: 6},
-      {id: "three", active: false, capacity: 2}, {id: "four", active: false, capacity: 3},
-    ]);
-    expect(plan().combinations).toEqual(room.combinations);
-    expect(tables()).toEqual([]);
-    expect(api.save).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
-    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1]).toMatchObject({action: "save-room", expectedRevision: 4, room: {tables: plan().tables, combinations: room.combinations}});
-    await waitFor(() => expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(true));
-    editQuantity(4);
-    expect(plan().tables.map((table) => table.id)).toEqual(["one", "two", "three", "four"]);
-    expect(plan().tables.map((table) => table.capacity)).toEqual([4, 6, 2, 3]);
-    expect(plan().tables.every((table) => table.active)).toBe(true);
-    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
-    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(2));
-    expect(api.save.mock.calls[1][1].expectedRevision).toBe(5);
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);
     expect(screen.getByTestId("admin-pan").textContent).toBe("1");
   });
 
-  it("separates types by shape and dimensions and edits only that type without overwriting table capacities", async () => {
+  it("allows assigning legacy unlocated tables into a sector", async () => {
     const value = config();
-    value.rooms[0].combinations = [];
-    value.rooms[0].tables[1].capacity = 6;
-    const large = {...room.tables[0], id: "large", label: "M3", width: 100, height: 100, capacity: 8};
-    value.rooms[0].tables.push(large);
+    value.rooms[0].tables.push({id: "legacy", label: "L1", shape: "SQUARE", capacity: 2, width: 80, height: 80, x: 0, y: 0, rotation: 0, active: true});
     api.config.mockResolvedValue(value);
-    await editor(); tool("Inventario");
-    const smallGroup = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 80 × 80"});
-    const largeGroup = screen.getByRole("group", {name: "Tipo de mesa Cuadrada 100 × 100"});
-    expect((within(smallGroup).getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}) as HTMLInputElement).max).toBe("2");
-    expect((within(largeGroup).getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 100 × 100"}) as HTMLInputElement).max).toBe("1");
-    expect(screen.queryByRole("checkbox", {name: /Incluir mesa/})).toBeNull();
-    const individualDetails = screen.getByRole("button", {name: "Editar mesa M1"}).closest("details");
-    expect(individualDetails).not.toBeNull();
-    expect(individualDetails!.open).toBe(false);
-    fireEvent.click(within(smallGroup).getByRole("button", {name: "Editar tipo Cuadrada 80 × 80"}));
-    fireEvent.change(screen.getByLabelText("Ancho"), {target: {value: "90"}});
-    fireEvent.click(screen.getByRole("button", {name: "Aplicar tipo"}));
-    expect(screen.getByRole("group", {name: "Tipo de mesa Cuadrada 90 × 90"})).toBeTruthy();
-    closeDialog();
-    expect(plan().tables.slice(0, 2)).toEqual([expect.objectContaining({id: "one", width: 90, height: 90, capacity: 4}), expect.objectContaining({id: "two", width: 90, height: 90, capacity: 6})]);
-    expect(plan().tables.find((table) => table.id === "large")).toEqual(large);
-    fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
-    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1]).toMatchObject({expectedRevision: 4, room: {tables: plan().tables}});
+    await editor();
+    expect(tables().map((t) => t.id)).toEqual(["one", "two"]);
+    tool("Mesas");
+    expect(screen.getByText(/Mesas sin ubicar en sector \(1\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name: "Ubicar"}));
+    expect(tables().map((t) => t.id)).toEqual(["one", "two", "legacy"]);
+    expect(plan().tables.find((t) => t.id === "legacy")).toMatchObject({locationId: "window", active: true});
   });
 
   it("moves a marquee selection together and rejects a move that places any member outside the room", async () => {
@@ -512,7 +450,7 @@ describe("fullscreen room editor workflows", () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("opens sector actions at the pointer and removes the sector from the plan on confirmation", async () => {
+  it("opens sector actions at the pointer, adds a fixed table, and archives the sector on confirmation", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
     fireEvent.click(screen.getByRole("button", {name: "Seleccionar sector Ventana"}));
@@ -520,16 +458,18 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.queryByRole("complementary", {name: "Selección del plano"})).toBeNull();
     const menu = sectorMenu();
     expect(menu.style.left).toBe("420px"); expect(menu.style.top).toBe("300px");
-    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Girar", "Eliminar"]);
-    fireEvent.click(within(menu).getByRole("menuitem", {name: "Girar"}));
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Editar", "Girar", "Eliminar", "Agregar mesa aquí"]);
+    fireEvent.click(within(menu).getByRole("menuitem", {name: "Agregar mesa aquí"}));
+    expect(tables()).toHaveLength(3);
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Girar"}));
     expect(screen.queryByRole("menu")).toBeNull();
     expect(plan().locations[0].rotation).toBe(90);
     fireEvent.click(within(sectorMenu()).getByRole("menuitem", {name: "Eliminar"}));
     expect(screen.queryByRole("menu")).toBeNull();
-    const confirmation = screen.getByRole("dialog", {name: "Eliminar sector"});
+    const confirmation = screen.getByRole("dialog", {name: "Archivar sector"});
     expect(plan().locations[0].active).toBe(true);
     expect(api.save).not.toHaveBeenCalled();
-    fireEvent.click(within(confirmation).getByRole("button", {name: "Eliminar sector"}));
+    fireEvent.click(within(confirmation).getByRole("button", {name: "Archivar sector"}));
     expect(plan().locations).toEqual([]);
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", expect.objectContaining({action: "save-room", expectedRevision: 4, room: expect.objectContaining({locations: [expect.objectContaining({id: "window", active: false, rotation: 90})]})})));
@@ -546,7 +486,7 @@ describe("fullscreen room editor workflows", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     sectorMenu(); fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(plan().locations).toEqual(room.locations);
+    expect(plan().locations[0]).toMatchObject(room.locations[0]);
     expect(api.save).not.toHaveBeenCalled();
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);
     expect(screen.getByTestId("admin-pan").textContent).toBe("1");
@@ -624,12 +564,12 @@ describe("fullscreen room editor workflows", () => {
     Object.assign(cursor.resize, {x: 20});
     fireEvent.click(screen.getByRole("button", {name: "Redimensionar sector Ventana"}));
     expect((screen.getByRole("alert")).textContent).toContain("fuera del salón");
-    expect(plan().locations).toEqual(room.locations);
+    expect(plan().locations[0]).toMatchObject(room.locations[0]);
     expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(true);
     applyWidth(900);
     fireEvent.click(screen.getByRole("button", {name: "Redimensionar sector Ventana"}));
     expect((screen.getByRole("alert")).textContent).toContain("fuera del salón");
-    expect(plan()).toMatchObject({width: 900, locations: room.locations});
+    expect(plan()).toMatchObject({width: 900, locations: [expect.objectContaining(room.locations[0])]});
     expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(false);
     expect(api.save).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
@@ -637,7 +577,7 @@ describe("fullscreen room editor workflows", () => {
     expect(api.save.mock.calls[0][1]).toMatchObject({expectedRevision: 4, room: {width: 900, locations: room.locations}});
   });
 
-  it("keeps general tool windows nonmodal and locks geometry only for spatial edits, placement, saving or presets", async () => {
+  it("keeps general tool windows nonmodal and locks geometry only for spatial edits, placement or saving", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Seleccionar sector Ventana"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
@@ -659,13 +599,6 @@ describe("fullscreen room editor workflows", () => {
     expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
     const saved = config(); saved.rooms[0].width = 900; saved.rooms[0].revision = 5;
     await act(async () => { finishSave(saved); });
-    expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
-    tool("Inventario");
-    fireEvent.change(screen.getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}), {target: {value: "2"}});
-    fireEvent.click(screen.getByRole("button", {name: "Crear armado predefinido"}));
-    expect(canvas.getAttribute("data-resize-enabled")).toBe("false");
-    fireEvent.click(screen.getByRole("button", {name: "Cancelar armado"}));
-    fireEvent.click(screen.getByRole("button", {name: "Seleccionar sector Ventana"}));
     expect(canvas.getAttribute("data-resize-enabled")).toBe("true");
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);
     expect(api.save).toHaveBeenCalledTimes(1);
@@ -758,29 +691,56 @@ describe("fullscreen room editor workflows", () => {
     expect((screen.getByRole("button", {name: "Guardar plano"}) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("edits a predefined assembly on the same main canvas while preserving the base inventory", async () => {
-    const value = config(); value.rooms[0].combinations = []; api.config.mockResolvedValue(value);
+  it("translates child fixed tables when dragging their sector and saves fixed layout", async () => {
     const canvas = await editor();
     fireEvent.click(screen.getByRole("button", {name: "Desplazar plano"}));
-    tool("Inventario");
-    fireEvent.change(screen.getByRole("spinbutton", {name: "Cantidad para armado · Cuadrada 80 × 80"}), {target: {value: "2"}});
-    fireEvent.click(screen.getByRole("button", {name: "Crear armado predefinido"}));
-    expect(screen.getByRole("dialog", {name: "Inventario de mesas"})).toBeTruthy();
-    expect(screen.getByRole("complementary", {name: "Edición del armado"})).toBeTruthy();
-    expect(tables().map((table) => table.id)).toEqual(["one", "two"]);
-    expect(screen.getAllByTestId("admin-canvas")).toHaveLength(1);
-    expect(screen.getByTestId("admin-canvas")).toBe(canvas);
-    fireEvent.click(screen.getByRole("button", {name: "Seleccionar todas las mesas"}));
-    fireEvent.click(screen.getByRole("button", {name: "Mover armado"}));
-    fireEvent.click(screen.getByRole("button", {name: "Aplicar armado"}));
-    expect(tables()).toEqual([]);
+    fireEvent.click(screen.getByRole("button", {name: "Arrastrar sector Ventana"}));
+    expect(plan().locations[0]).toMatchObject({x: 460, y: 310});
+    expect(plan().tables.map((t) => ({id: t.id, x: t.x, y: t.y}))).toEqual([
+      {id: "one", x: 300, y: 270},
+      {id: "two", x: 440, y: 270},
+    ]);
     fireEvent.click(screen.getByRole("button", {name: "Guardar plano"}));
     await waitFor(() => expect(api.save).toHaveBeenCalled());
     const saved = api.save.mock.calls[0][1].room as FloorRoom;
-    expect(saved.combinations).toHaveLength(1);
-    expect(saved.combinations.find((combination) => combination.id !== "joined")).toMatchObject({capacity: 6, members: [{tableId: "one", x: -20, y: 10}, {tableId: "two", x: 60, y: 10}]});
-    expect(saved.tables).toEqual(room.tables);
+    expect(saved.combinations).toEqual([]);
+    expect(saved.tables[0]).toMatchObject({id: "one", x: 300, y: 270, locationId: "window"});
     expect(screen.getByTestId("admin-canvas")).toBe(canvas);
     expect(screen.getByTestId("admin-pan").textContent).toBe("1");
+  });
+
+  it("deletes rooms from the rooms flyout and dimensions dialog with confirmation", async () => {
+    const secondRoom: FloorRoom = {...structuredClone(room), id: "terrace", name: "Terraza", revision: 2};
+    const initial = config();
+    initial.rooms.push(secondRoom);
+    api.config.mockResolvedValue(initial);
+    api.save.mockImplementation(async (_restaurantId: string, command: {action: string; roomId?: string}) => {
+      if (command.action === "delete-room") {
+        return {...initial, rooms: initial.rooms.filter((item) => item.id !== command.roomId)};
+      }
+      return initial;
+    });
+
+    await editor();
+    tool("Salones");
+    const flyoutNav = screen.getByRole("navigation", {name: "Salones del restaurante"});
+    fireEvent.click(within(flyoutNav).getByRole("button", {name: "Eliminar salón Terraza"}));
+
+    const confirmModal = screen.getByRole("dialog", {name: "Eliminar salón"});
+    fireEvent.click(within(confirmModal).getByRole("button", {name: "Eliminar salón"}));
+
+    await waitFor(() => {
+      expect(api.save).toHaveBeenCalledWith("restaurant", {action: "delete-room", roomId: "terrace", expectedRevision: 2});
+    });
+
+    // Also supports deleting the currently open room from Medidas
+    tool("Medidas");
+    fireEvent.click(screen.getByRole("button", {name: "Eliminar salón"}));
+    const currentConfirm = screen.getByRole("dialog", {name: "Eliminar salón"});
+    fireEvent.click(within(currentConfirm).getByRole("button", {name: "Eliminar salón"}));
+
+    await waitFor(() => {
+      expect(api.save).toHaveBeenCalledWith("restaurant", {action: "delete-room", roomId: "main", expectedRevision: 4});
+    });
   });
 });

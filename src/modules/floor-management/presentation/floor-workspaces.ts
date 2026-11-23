@@ -1,17 +1,23 @@
 import { createAction } from "@reduxjs/toolkit";
 import { createEditorWorkspace } from "@/ui/editor-workspace";
 import { emptyWindows } from "@/ui/useFloatingWindows";
-import type { FloorAllocationView, FloorAssignmentInput, FloorBoardView, FloorCombination, FloorConfigView, FloorFixture, FloorLocation, FloorRoom, FloorTable } from "../contracts";
+import type { FloorAllocationView, FloorBoardView, FloorConfigView, FloorFixture, FloorLocation, FloorRoom } from "../contracts";
 import type { FloorCanvasElement, FloorInteractionMode } from "./FloorCanvas";
 import type { FloorServiceTarget } from "./FloorServiceWindow";
 
-export type EditorPanel = { kind: "dimensions" | "inventory" | "settings" } | { kind: "combination"; entity: FloorCombination } | { kind: "combination-layout"; id: string } | { kind: "table"; id: string } | { kind: "table-group"; key: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
+export type EditorPanel = { kind: "dimensions" | "tables" | "settings" } | { kind: "table"; id: string } | { kind: "sector"; entity: FloorLocation } | { kind: "fixture"; entity: FloorFixture };
 export type EditorTool = { panel: EditorPanel; roomId: string | null; baseline: unknown };
-export type CombinationMode = { combination: FloorCombination; selectedIds: string[] } | null;
-export type Panel = "rooms" | "schedule" | "reservations" | "walk-in" | "detail" | "release" | "table" | "inventory" | "service" | "service-list" | null;
-export type SelectionSnapshot = { ids: string[]; tables: FloorTable[]; stamp: string; roomId: string };
-export type ToolWindow = { kind: Exclude<Panel, "rooms" | "release" | null> | "assembly"; allocation?: FloorAllocationView; selection?: SelectionSnapshot; room?: FloorRoom; serviceTarget?: FloorServiceTarget };
-export const emptyWalkIn = { customerName: "", partySize: 2, notes: "", durationMinutes: 120 };
+export type Panel = "rooms" | "schedule" | "reservations" | "detail" | "release" | "service-list" | null;
+export type OpenTableTarget = { roomId: string; tableId: string };
+export type ActiveTableModal =
+  | { kind: "open-table"; roomId: string; tableId: string }
+  | { kind: "service"; target: FloorServiceTarget }
+  | null;
+export type ToolWindow = {
+  kind: Exclude<Panel, "rooms" | "release" | null>;
+  allocation?: FloorAllocationView;
+  room?: FloorRoom;
+};
 
 export function floorAdminSeed(initialConfig: FloorConfigView | null = null) {
   return {
@@ -23,9 +29,8 @@ export function floorAdminSeed(initialConfig: FloorConfigView | null = null) {
     notice: null as string | null,
     windows: emptyWindows<EditorTool>(),
     editedTools: {} as Record<string, true>,
-    placement: null as "sector" | FloorFixture["type"] | null,
+    placement: null as "sector" | "table" | FloorFixture["type"] | null,
     selectedElements: [] as FloorCanvasElement[],
-    combinationMode: null as CombinationMode,
   };
 }
 
@@ -43,7 +48,6 @@ export const floorAdminWorkspace = createEditorWorkspace<ReturnType<typeof floor
       state.draft = payload.room;
       state.dirty = payload.dirty;
       state.selectedElements = [];
-      state.combinationMode = null;
       state.placement = null;
       state.windows = emptyWindows();
       state.editedTools = {};
@@ -67,21 +71,16 @@ export function floorBoardSeed(initialBoard: FloorBoardView | null) {
     loading: false,
     error: null as string | null,
     refreshedAt: initialBoard?.updatedAt ?? null,
-    assembling: false,
-    walkIn: emptyWalkIn,
-    assignment: null as FloorAssignmentInput | null,
     saving: false,
     operationError: null as string | null,
-    selectedResourceIds: [] as string[],
-    interactionMode: "select" as FloorInteractionMode,
-    layoutPreview: null as Record<string, Pick<FloorTable, "x" | "y" | "rotation">> | null,
-    inventoryDirty: false,
+    interactionMode: "service" as FloorInteractionMode,
     dirtyWindows: {} as Record<string, boolean>,
+    activeTableModal: null as ActiveTableModal,
+    tableModalDirty: false,
   };
 }
 
 export const floorBoardReceived = createAction<{ board: FloorBoardView; refreshedAt: string }>("floorBoard/received");
-export const floorAssignmentChanged = createAction<FloorAssignmentInput | null>("floorBoard/assignmentChanged");
 export const floorBoardWorkspace = createEditorWorkspace<ReturnType<typeof floorBoardSeed>>("floorBoard", (builder) => {
   builder
     .addCase(floorBoardReceived, (state, { payload }) => {
@@ -91,12 +90,5 @@ export const floorBoardWorkspace = createEditorWorkspace<ReturnType<typeof floor
       if (!payload.board.rooms.some((room) => room.id === state.roomId && room.active)) {
         state.roomId = payload.board.rooms.find((room) => room.active)?.id ?? "";
       }
-    })
-    .addCase(floorAssignmentChanged, (state, { payload }) => {
-      state.assignment = payload;
-      state.operationError = null;
-      const ids = (payload?.customTables ?? []).map((table) => "draft:" + table.tableId);
-      const kept = state.selectedResourceIds.filter((id) => !id.startsWith("draft:") || ids.includes(id));
-      state.selectedResourceIds = kept.some((id) => id.startsWith("draft:")) || !ids.length ? kept : ids;
     });
 });

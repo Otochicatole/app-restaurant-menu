@@ -475,9 +475,12 @@ model DiningRoomLocation {
   width         Float
   height        Float
   rotation      Int @default(0)
+  maxTables     Int?
+  maxCapacity   Int?
   active        Boolean @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  tables        DiningTable[]
   allocations   ReservationAllocation[]
 
   @@unique([id, restaurantId, roomId])
@@ -491,6 +494,8 @@ model DiningTable {
   restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   roomId        String
   room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  locationId    String?
+  location      DiningRoomLocation? @relation(fields: [locationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction, onUpdate: Cascade)
   label         String
   shape         DiningTableShape
   capacity      Int @default(4)
@@ -509,6 +514,7 @@ model DiningTable {
   @@unique([id, restaurantId, roomId])
   @@unique([roomId, label])
   @@index([restaurantId, roomId, active])
+  @@index([restaurantId, roomId, locationId])
 }
 
 model DiningTableCombination {
@@ -616,6 +622,7 @@ model ServiceProduct {
   restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name           String
   unitPriceCents Int
+  station        String @default("KITCHEN")
   active         Boolean @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -682,6 +689,7 @@ model ServiceAccount {
   transferCents   Int     @default(0)
   tables          ServiceAccountTable[]
   lines           ServiceOrderLine[]
+  payments        ServiceAccountPayment[]
   auditLogs       ServiceAccountAuditLog[]
 
   @@unique([id, restaurantId])
@@ -719,6 +727,7 @@ model ServiceOrderLine {
   quantity          Int
   deliveredQuantity Int @default(0)
   cancelledQuantity Int @default(0)
+  paidQuantity      Int @default(0)
   createdAt         DateTime @default(now())
   notes             String   @default("")
   kitchenStatus     String   @default("PENDING")
@@ -726,6 +735,35 @@ model ServiceOrderLine {
   station           String   @default("KITCHEN")
 
   @@index([accountId, createdAt])
+}
+
+model ServiceAccountPayment {
+  id             String         @id @default(cuid())
+  accountId      String
+  restaurantId   String
+  account        ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  sequence       Int
+  receiptNumber  String
+  splitMode      String
+  payerLabel     String         @default("")
+  businessDate   String
+  paymentMethod  String
+  subtotalCents  Int
+  discountCents  Int            @default(0)
+  discountReason String?
+  tipCents       Int            @default(0)
+  totalCents     Int
+  cashCents      Int            @default(0)
+  cardCents      Int            @default(0)
+  transferCents  Int            @default(0)
+  itemsJson      String?
+  paidBy         String
+  paidAt         DateTime       @default(now())
+
+  @@unique([accountId, sequence])
+  @@unique([restaurantId, receiptNumber])
+  @@index([accountId, paidAt])
+  @@index([restaurantId, businessDate])
 }
 
 model ServiceAccountAuditLog {

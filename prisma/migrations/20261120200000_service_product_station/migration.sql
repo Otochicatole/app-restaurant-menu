@@ -1,0 +1,7 @@
+PRAGMA foreign_keys=OFF;
+BEGIN IMMEDIATE;
+
+ALTER TABLE "ServiceProduct" ADD COLUMN "station" TEXT NOT NULL DEFAULT 'KITCHEN' CHECK ("station" IN ('KITCHEN', 'BAR'));
+
+COMMIT;
+PRAGMA foreign_keys=ON;
