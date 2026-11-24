@@ -6,9 +6,12 @@ import type { FloorTableCounts } from "./floor-table-summary";
 const explanation =
   "Mesas fijas activas por sector en el horario consultado y ocupación respecto al cupo configurado. Las cuentas abiertas y asignaciones reflejan el estado operativo.";
 
-export function FloorTableSummary({ counts }: { counts: FloorTableCounts }) {
+export function FloorTableSummary({ counts, embedded = false }: { counts: FloorTableCounts; embedded?: boolean }) {
   const descriptionId = useId();
-  return <div role="group" aria-label="Mesas del salón" aria-describedby={descriptionId} title={explanation} className="w-fit max-w-full rounded-lg bg-white px-3 py-2 text-[var(--floor-ink,#173642)] shadow-[0_2px_10px_rgba(15,45,58,0.08)]">
+  const wrapperClass = embedded
+    ? "w-full min-w-0 text-[var(--floor-ink,#173642)]"
+    : "w-fit max-w-full rounded-lg bg-white px-3 py-2 text-[var(--floor-ink,#173642)] shadow-[0_2px_10px_rgba(15,45,58,0.08)]";
+  return <div role="group" aria-label="Mesas del salón" aria-describedby={descriptionId} title={explanation} className={wrapperClass}>
     <dl aria-live="polite" aria-atomic="true" className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       <div className="flex items-baseline gap-1.5"><dt className="text-[11px] text-[var(--floor-muted,#4b6470)]">Libres</dt><dd className="text-sm font-semibold tabular-nums text-[var(--floor-action,#155e75)]">{counts.free}</dd></div>
       <div className="flex items-baseline gap-1.5"><dt className="text-[11px] text-[var(--floor-muted,#4b6470)]">Reservadas</dt><dd className="text-sm font-semibold tabular-nums text-[#8c4b2e]">{counts.reserved}</dd></div>

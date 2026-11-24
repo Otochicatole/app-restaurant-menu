@@ -270,27 +270,21 @@ describe("floor assignment interactions", () => {
     const nativeConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(createElement(FloorBoardScreen, {restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true}));
     await waitFor(() => expect(api.board).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", {name: "Fecha y hora"}));
-    const scheduleWindow = screen.getByRole("dialog", {name: "Fecha y hora"});
-    fireEvent.change(within(scheduleWindow).getByLabelText("Hora"), {target: {value: "21:15"}});
-    fireEvent.click(screen.getByRole("button", {name: /^Reservas/}));
-    const reservations = screen.getByRole("dialog", {name: "Reservas de Salón principal"});
-    expect(screen.getAllByRole("button", {name: "Liberar mesas"})).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", {name: "Liberar mesas"})[0]);
-    const confirmation = screen.getByRole("dialog", {name: "Liberar mesas"});
-    expect(screen.getByRole("dialog", {name: "Reservas de Salón principal"})).toBe(reservations);
-    expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBe(scheduleWindow);
-    expect((within(scheduleWindow).getByLabelText("Hora") as HTMLInputElement).value).toBe("21:15");
+    fireEvent.click(screen.getByRole("button", { name: "Reservas" }));
+    const reservations = screen.getByRole("region", { name: "Reservas de Salón principal" });
+    expect(within(reservations).getAllByRole("button", { name: "Liberar mesas" })).toHaveLength(2);
+    fireEvent.click(within(reservations).getAllByRole("button", { name: "Liberar mesas" })[0]);
+    const confirmation = screen.getByRole("dialog", { name: "Liberar mesas" });
+    expect(screen.getByRole("region", { name: "Reservas de Salón principal" })).toBe(reservations);
     expect(confirmation.getAttribute("aria-modal")).toBe("true");
     expect(document.body.style.overflow).toBe("hidden");
-    fireEvent.click(within(confirmation).getByRole("button", {name: "Cancelar"}));
-    expect(screen.getByRole("dialog", {name: "Reservas de Salón principal"})).toBe(reservations);
-    expect(reservations.getAttribute("aria-modal")).toBe("false");
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("region", { name: "Reservas de Salón principal" })).toBe(reservations);
     expect(document.body.style.overflow).toBe("");
-    fireEvent.click(within(reservations).getAllByRole("button", {name: "Liberar mesas"})[0]);
+    fireEvent.click(within(reservations).getAllByRole("button", { name: "Liberar mesas" })[0]);
     expect(api.save).not.toHaveBeenCalled();
-    fireEvent.click(within(screen.getByRole("dialog", {name: "Liberar mesas"})).getByRole("button", {name: "Confirmar liberación"}));
-    await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", {action: "release-reservation", reservationId: "reservation", expectedRevision: 3, reason: "COMPLETED"}));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Liberar mesas" })).getByRole("button", { name: "Confirmar liberación" }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith("restaurant", { action: "release-reservation", reservationId: "reservation", expectedRevision: 3, reason: "COMPLETED" }));
     expect(nativeConfirm).not.toHaveBeenCalled();
   });
 
@@ -361,93 +355,52 @@ describe("floor assignment interactions", () => {
     expect(document.body.style.overflow).not.toBe("hidden");
   });
 
-  it("keeps independent floating tool drafts, scroll and geometry while restoring only the requested window", async () => {
-    render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true, initialBoard: board() }));
-    const canvas = screen.getByTestId("floor-canvas");
-    fireEvent.click(screen.getByRole("button", { name: "Fecha y hora" }));
-    const scheduleWindow = screen.getByRole("dialog", { name: "Fecha y hora" });
-    const timeInput = within(scheduleWindow).getByLabelText("Hora") as HTMLInputElement;
-    fireEvent.change(within(scheduleWindow).getByLabelText("Fecha"), { target: { value: "2099-12-01" } });
-    fireEvent.change(timeInput, { target: { value: "22:15" } });
-    const scroller = timeInput.closest<HTMLElement>(".overflow-y-auto")!;
-    scroller.scrollTop = 95;
-    fireEvent.keyDown(within(scheduleWindow).getByRole("button", { name: "Mover ventana Fecha y hora" }), { key: "ArrowLeft" });
-    fireEvent.keyDown(within(scheduleWindow).getByRole("button", { name: "Cambiar tamaño de ventana" }), { key: "ArrowLeft" });
-    const geometry = { left: scheduleWindow.style.left, top: scheduleWindow.style.top, width: scheduleWindow.style.width, height: scheduleWindow.style.height };
-
-    fireEvent.click(screen.getByRole("button", { name: /^Reservas/ }));
-    const reservations = screen.getByRole("dialog", { name: "Reservas de Salón principal" });
-    fireEvent.click(screen.getByRole("button", { name: "Cuentas de servicio" }));
-    const serviceList = screen.getByRole("dialog", { name: "Cuentas de servicio" });
-    expect(screen.getAllByRole("dialog")).toHaveLength(3);
-    expect(timeInput.value).toBe("22:15");
-    expect(scroller.scrollTop).toBe(95);
-
-    fireEvent.click(within(scheduleWindow).getByRole("button", { name: "Minimizar ventana" }));
-    expect(within(scheduleWindow).getByRole("button", { name: "Restaurar ventana" })).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "Reservas de Salón principal" })).toBe(reservations);
-    expect(screen.getByRole("dialog", { name: "Cuentas de servicio" })).toBe(serviceList);
-    fireEvent.click(screen.getByRole("button", { name: "Fecha y hora" }));
-    expect((within(scheduleWindow).getByLabelText("Fecha") as HTMLInputElement).value).toBe("2099-12-01");
-    expect((within(scheduleWindow).getByLabelText("Hora") as HTMLInputElement).value).toBe("22:15");
-    expect({ left: scheduleWindow.style.left, top: scheduleWindow.style.top, width: scheduleWindow.style.width, height: scheduleWindow.style.height }).toEqual(geometry);
-    expect(scroller.scrollTop).toBe(95);
-
-    fireEvent.click(within(reservations).getByRole("button", { name: "Minimizar ventana" }));
-    expect(within(reservations).getByRole("button", { name: "Restaurar ventana" })).toBeTruthy();
-    fireEvent.click(within(scheduleWindow).getByRole("button", { name: "Cerrar ventana" }));
-    expect(screen.queryByRole("dialog", { name: "Fecha y hora" })).toBeNull();
-    expect(screen.getByRole("dialog", { name: "Reservas de Salón principal" })).toBe(reservations);
-    expect(screen.getByRole("dialog", { name: "Cuentas de servicio" })).toBe(serviceList);
-    expect(screen.getByTestId("floor-canvas")).toBe(canvas);
-    expect(document.body.style.overflow).not.toBe("hidden");
-    expect(api.save).not.toHaveBeenCalled();
-  });
-
-  it("promotes a floating tool on pointer or keyboard focus while keeping every tool below confirmation overlays", async () => {
-    render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true, initialBoard: board() }));
-    fireEvent.click(screen.getByRole("button", { name: /^Reservas/ }));
-    const reservations = screen.getByRole("dialog", { name: "Reservas de Salón principal" });
-    fireEvent.click(screen.getByRole("button", { name: "Fecha y hora" }));
-    const scheduleWindow = screen.getByRole("dialog", { name: "Fecha y hora" });
-    const layer = (element: HTMLElement) => Number(element.style.zIndex);
-    expect(layer(scheduleWindow)).toBeGreaterThan(layer(reservations));
-    fireEvent.pointerDown(reservations);
-    expect(layer(reservations)).toBeGreaterThan(layer(scheduleWindow));
-    fireEvent.focus(within(scheduleWindow).getByLabelText("Hora"));
-    expect(layer(scheduleWindow)).toBeGreaterThan(layer(reservations));
-    for (const tool of [reservations, scheduleWindow]) expect(layer(tool)).toBeLessThan(50);
-    expect(reservations.getAttribute("aria-modal")).toBe("false");
-    expect(scheduleWindow.getAttribute("aria-modal")).toBe("false");
-  });
-
-  it("keeps separate reservation detail windows and restores the same reservation without replacing another", () => {
+  it("switches docked studio inspector tabs and filters quick tables without losing canvas viewport or confirmation layering", async () => {
     const value = board();
     value.allocations = options().options.slice(0, 2).map((option, index) => ({ ...interval,
       id: `allocation-${index}`, reservationId: `reservation-${index}`, roomId: "room", combinationId: null,
       capacity: 4, customerName: index === 0 ? "Ana" : "Bruno", partySize: 2, date: query.date, time: query.time,
       notes: index === 0 ? "Silla para bebé" : "Junto a la ventana", code: `BOOK-${index}`, releasedAt: null, version: 1, poses: option.poses,
     }));
-    render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, initialBoard: value }));
+    render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly: true, canManageWalkIns: true, initialBoard: value }));
+    const canvas = screen.getByTestId("floor-canvas");
+    const inspector = screen.getByRole("complementary", { name: "Panel operativo de sala" });
+
+    // 1. Default Sala tab lists summary + quick filterable tables without floating windows
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Desplazar tablero" }));
+    expect(within(inspector).getByRole("tab", { name: "Sala" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(within(inspector).getByRole("button", { name: "Libres" }));
+    expect(within(inspector).queryByRole("button", { name: "Gestionar mesa 1" })).toBeNull();
+    fireEvent.click(within(inspector).getByRole("button", { name: "Reserv." }));
+    expect(within(inspector).getByRole("button", { name: "Gestionar mesa 1" })).toBeTruthy();
+
+    // 2. Cuentas tab switches cleanly inside the docked panel
+    fireEvent.click(screen.getByRole("button", { name: "Cuentas de servicio" }));
+    expect(within(inspector).getByRole("region", { name: "Cuentas abiertas" })).toBeTruthy();
+
+    // 3. Reservas tab renders inline detail with back navigation instead of multiple floating windows
     fireEvent.click(screen.getByRole("button", { name: "Reservas" }));
-    const reservations = screen.getByRole("dialog", { name: "Reservas de Salón principal" });
-    const details = within(reservations).getAllByRole("button", { name: "Ver detalle" });
-    fireEvent.click(details[0]);
-    const ana = screen.getByRole("dialog", { name: "Detalle de la reserva" });
-    fireEvent.click(details[1]);
-    const bruno = screen.getAllByRole("dialog", { name: "Detalle de la reserva" }).find((window) => window !== ana)!;
+    const reservations = within(inspector).getByRole("region", { name: "Reservas de Salón principal" });
+    fireEvent.click(within(reservations).getAllByRole("button", { name: "Ver detalle" })[0]);
+    const ana = within(inspector).getByRole("region", { name: "Detalle de la reserva" });
     expect(within(ana).getByRole("heading", { name: "Ana" })).toBeTruthy();
-    expect(within(bruno).getByRole("heading", { name: "Bruno" })).toBeTruthy();
     expect(within(ana).getByText("Silla para bebé")).toBeTruthy();
-    expect(within(bruno).getByText("Junto a la ventana")).toBeTruthy();
-    fireEvent.click(within(ana).getByRole("button", { name: "Cerrar ventana" }));
-    expect(screen.getByRole("dialog", { name: "Detalle de la reserva" })).toBe(bruno);
-    expect(screen.getByRole("dialog", { name: "Reservas de Salón principal" })).toBe(reservations);
-    fireEvent.click(details[0]);
-    expect(screen.getAllByRole("dialog", { name: "Detalle de la reserva" })).toHaveLength(2);
-    const reopened = screen.getAllByRole("dialog", { name: "Detalle de la reserva" }).find((pane) => pane !== bruno)!;
-    expect(ana.isConnected).toBe(false); expect(within(reopened).getByRole("heading", { name: "Ana" })).toBeTruthy();
-    expect(Number(reopened.style.zIndex)).toBeGreaterThan(Number(bruno.style.zIndex));
+    fireEvent.click(within(ana).getByRole("button", { name: "Volver a reservas" }));
+    expect(within(inspector).getByRole("region", { name: "Reservas de Salón principal" })).toBeTruthy();
+    fireEvent.click(within(reservations).getAllByRole("button", { name: "Ver detalle" })[1]);
+    expect(within(inspector).getByRole("heading", { name: "Bruno" })).toBeTruthy();
+    expect(within(inspector).getByText("Junto a la ventana")).toBeTruthy();
+
+    // 4. Panel can be toggled closed and back open without disturbing the canvas viewport
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar panel lateral" }));
+    expect(screen.queryByRole("complementary", { name: "Panel operativo de sala" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar panel lateral" }));
+    expect(screen.getByRole("complementary", { name: "Panel operativo de sala" })).toBeTruthy();
+    expect(screen.getByTestId("floor-canvas")).toBe(canvas);
+    expect(screen.getByTestId("canvas-pan").textContent).toBe("1");
+    expect(document.body.style.overflow).not.toBe("hidden");
+    expect(api.save).not.toHaveBeenCalled();
   });
 
   it("opens table onboarding inside a fixed native dialog without floating window controls and guards unsaved edits inline", async () => {
@@ -556,11 +509,12 @@ describe("floor assignment interactions", () => {
     expect(screen.queryByRole("button", {name: "Atender mesa 1"})).toBeNull();
     expect(screen.queryByRole("dialog", {name: "Abrir mesa"})).toBeNull();
     const canvas = screen.getByTestId("floor-canvas");
-    fireEvent.click(within(toolbar).getByRole("button", {name: "Reservas"}));
-    expect(screen.getByRole("dialog", {name: "Reservas de Salón principal"})).toBeTruthy();
-    fireEvent.keyDown(document, {key: "Escape"});
-    fireEvent.click(within(toolbar).getByRole("button", {name: "Fecha y hora"}));
-    expect(screen.getByRole("dialog", {name: "Fecha y hora"})).toBeTruthy();
+    fireEvent.click(within(toolbar).getByRole("button", { name: "Reservas" }));
+    expect(screen.getByRole("region", { name: "Reservas de Salón principal" })).toBeTruthy();
+    fireEvent.click(within(toolbar).getByRole("button", { name: "Fecha y hora" }));
+    expect(screen.getByRole("dialog", { name: "Fecha y hora" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("floor-canvas")).toBe(canvas);
   });
 
@@ -604,7 +558,7 @@ describe("floor assignment interactions", () => {
     expect(screen.queryByRole("navigation", {name: "Salones"})).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("floor-canvas").getAttribute("data-room-id")).toBe("terrace");
-    fireEvent.click(screen.getByRole("button", {name: "Reservas"}));
-    expect(screen.getByRole("dialog", {name: "Reservas de Terraza"})).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reservas" }));
+    expect(screen.getByRole("region", { name: "Reservas de Terraza" })).toBeTruthy();
   });
 });

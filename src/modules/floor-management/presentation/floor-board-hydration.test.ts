@@ -56,19 +56,20 @@ describe("floor board server snapshot hydration", () => {
     for (const name of ["Cambiar salón", "Fecha y hora", "Reservas"]) expect(dom.getByRole("button", { name }).getAttribute("autocomplete")).toBe("off");
     expect(api.board).not.toHaveBeenCalled();
 
+    fireEvent.click(dom.getByRole("button", { name: "Reservas" }));
+    const reservations = dom.getByRole("region", { name: "Reservas de Ventana" });
+    expect(reservations).toBeTruthy();
     fireEvent.click(dom.getByRole("button", { name: "Fecha y hora" }));
-    const schedule = dom.getByRole("dialog", {name: "Fecha y hora"});
+    const schedule = dom.getByRole("dialog", { name: "Fecha y hora" });
     expect(schedule.getAttribute("aria-modal")).toBe("false");
     expect(document.body.style.overflow).not.toBe("hidden");
-    fireEvent.click(dom.getByRole("button", {name: "Reservas"}));
-    const reservations = dom.getByRole("dialog", {name: "Reservas de Ventana"});
-    expect(dom.getByRole("dialog", {name: "Fecha y hora"})).toBe(schedule);
+    expect(dom.getByRole("region", { name: "Reservas de Ventana" })).toBe(reservations);
     fireEvent.change(dom.getByLabelText("Hora"), { target: { value: "21:30" } });
     fireEvent.click(dom.getByRole("button", { name: "Ver este horario" }));
     await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 10)); });
     expect(api.board).toHaveBeenCalledWith("restaurant", "2026-11-03T00:30:00Z", expect.any(AbortSignal));
-    expect(dom.queryByRole("dialog", {name: "Fecha y hora"})).toBeNull();
-    expect(dom.getByRole("dialog", {name: "Reservas de Ventana"})).toBe(reservations);
+    expect(dom.queryByRole("dialog", { name: "Fecha y hora" })).toBeNull();
+    expect(dom.getByRole("region", { name: "Reservas de Ventana" })).toBe(reservations);
     expect(errors).not.toHaveBeenCalled();
   });
 
@@ -115,7 +116,7 @@ describe("floor board server snapshot hydration", () => {
     await act(async () => { root = hydrateRoot(container, element); });
     const dom = within(container);
     fireEvent.click(dom.getByRole("button", { name: "Reservas" }));
-    expect(dom.getByRole("dialog", { name: "Reservas de Ventana" })).toBeTruthy();
+    expect(dom.getByRole("region", { name: "Reservas de Ventana" })).toBeTruthy();
     await act(async () => {
       root?.render(createElement(FloorBoardScreen, {
         ...props, readOnly: false, initialBoard: { ...snapshot, rooms: [{ ...snapshot.rooms[0], name: "Terraza" }] },
@@ -123,5 +124,6 @@ describe("floor board server snapshot hydration", () => {
     });
     expect(dom.getByRole("img", { name: "Plano de Terraza" })).toBeTruthy();
     expect(dom.queryByRole("dialog")).toBeNull();
+    expect(dom.getByRole("tab", { name: "Sala" }).getAttribute("aria-selected")).toBe("true");
   });
 });

@@ -118,11 +118,11 @@ export function FloorCanvas(props: FloorCanvasProps) {
     return () => { window.removeEventListener("keydown", keyDown); window.removeEventListener("keyup", keyUp); window.removeEventListener("blur", release); };
   }, []);
   const fitToScreen = () => { setZoom(1); setViewReset((value) => value + 1); };
-  const floatingZoomPosition = props.editorMode
-    ? props.hideModeSwitch
-      ? "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]"
-      : "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] xl:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]"
-    : "bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]";
+  const floatingZoomPosition = props.hideModeSwitch
+    ? "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]"
+    : props.editorMode
+      ? "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] xl:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]"
+      : "bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]";
   const floatingModePosition = props.editorMode
     ? "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)]"
     : "bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] sm:bottom-[calc(env(safe-area-inset-bottom,0px)+6.5rem)]";
