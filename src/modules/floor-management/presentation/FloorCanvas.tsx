@@ -11,6 +11,7 @@ export type FloorInteractionMode = "pan" | "select" | "service";
 export type FloorCanvasTable = {
   id: string; label: string; capacity: number; shape: "SQUARE" | "RECTANGLE" | "CIRCLE";
   x: number; y: number; width: number; height: number; rotation: number; active: boolean;
+  locationId?: string;
   state?: "available" | "reserved" | "occupied" | "selected" | "unavailable";
   readyQuantity?: number;
   partySize?: number;
@@ -76,6 +77,7 @@ export type FloorCanvasProps = {
   compact?: boolean;
   fullScreen?: boolean;
   editorMode?: boolean;
+  hideModeSwitch?: boolean;
 };
 
 const Stage = dynamic(() => import("./FloorCanvasStage"), {
@@ -117,7 +119,9 @@ export function FloorCanvas(props: FloorCanvasProps) {
   }, []);
   const fitToScreen = () => { setZoom(1); setViewReset((value) => value + 1); };
   const floatingZoomPosition = props.editorMode
-    ? "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] xl:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]"
+    ? props.hideModeSwitch
+      ? "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]"
+      : "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)] xl:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]"
     : "bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)]";
   const floatingModePosition = props.editorMode
     ? "bottom-[calc(env(safe-area-inset-bottom,0px)+10rem)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+5rem)]"
@@ -140,9 +144,11 @@ export function FloorCanvas(props: FloorCanvasProps) {
     <div className="h-full w-full" role="img" aria-label={`Plano de ${props.room.name}. ${keyboardHelp}`}>
       <Stage key={`${props.room.id}:${viewReset}`} {...props} interactionMode={interactionMode} zoom={zoom} onZoomChange={setZoom} />
     </div>
-    <div className={`absolute z-10 flex flex-col rounded-xl bg-[var(--floor-surface,#fff)] p-1 shadow-[0_6px_24px_-8px_rgba(30,40,25,0.28)] sm:flex-row ${props.fullScreen ? `${floatingModePosition} left-1/2 w-max max-w-[calc(100%_-_1.5rem)] -translate-x-1/2` : "bottom-16 left-3"}`} role="group" aria-label="Modo del plano">
-      {modeOptions.map(({ value, label, icon: Icon, help }) => <button key={value} {...transientButtonProps} type="button" aria-pressed={interactionMode === value} title={help} onClick={() => changeMode(value)} className={`flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium sm:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] ${interactionMode === value ? "bg-[var(--floor-action,#3d5934)] text-white" : "text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)]"}`}><Icon size={17} aria-hidden="true" />{label}</button>)}
-    </div>
+    {!props.hideModeSwitch && (
+      <div className={`absolute z-10 flex flex-col rounded-xl bg-[var(--floor-surface,#fff)] p-1 shadow-[0_6px_24px_-8px_rgba(30,40,25,0.28)] sm:flex-row ${props.fullScreen ? `${floatingModePosition} left-1/2 w-max max-w-[calc(100%_-_1.5rem)] -translate-x-1/2` : "bottom-16 left-3"}`} role="group" aria-label="Modo del plano">
+        {modeOptions.map(({ value, label, icon: Icon, help }) => <button key={value} {...transientButtonProps} type="button" aria-pressed={interactionMode === value} title={help} onClick={() => changeMode(value)} className={`flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium sm:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] ${interactionMode === value ? "bg-[var(--floor-action,#3d5934)] text-white" : "text-[var(--floor-ink,#3f3f46)] hover:bg-[var(--floor-hover,#f4f4f5)]"}`}><Icon size={17} aria-hidden="true" />{label}</button>)}
+      </div>
+    )}
     <div className={`absolute z-10 flex items-center bg-[var(--floor-surface,#fff)] p-1 ${props.fullScreen ? `${floatingZoomPosition} left-[max(0.75rem,env(safe-area-inset-left,0px))] flex-col rounded-xl shadow-[0_6px_24px_-8px_rgba(30,40,25,0.28)] sm:left-[max(1.25rem,env(safe-area-inset-left,0px))]` : "bottom-3 left-3 rounded-lg border border-stone-200"}`} role="group" aria-label="Zoom del plano">
       <button {...transientButtonProps} type="button" aria-label="Alejar plano" disabled={zoom <= 1} onClick={() => { if (zoom / 1.25 <= 1) fitToScreen(); else setZoom((value) => value / 1.25); }} className={`${zoomButtonClass} ${props.fullScreen ? "order-3" : ""}`}><Minus size={props.fullScreen ? 19 : 16} /></button>
       <span className={props.fullScreen ? "order-2 py-1 text-center text-[11px] tabular-nums text-[var(--floor-muted,#52525b)]" : "min-w-12 text-center text-xs tabular-nums text-[var(--floor-muted,#52525b)]"}>{Math.round(zoom * 100)}%</span>

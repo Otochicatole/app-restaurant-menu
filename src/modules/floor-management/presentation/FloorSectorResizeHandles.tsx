@@ -25,14 +25,16 @@ function cursorFor(anchor: FloorSectorResizeAnchor, rotation: number) {
   return (["top-left", "bottom-right"].includes(anchor) !== swap) ? "nwse-resize" : "nesw-resize";
 }
 
-export function FloorSectorResizeHandles({ location, geometry, room, scale, getPointer, onPreview, onCommit, onCursor, defaultCursor, cancelRef, onContextMenu }: {
-  location: FloorSectorResizeGeometry & { id: string }; geometry: FloorSectorResizeGeometry; room: { width: number; height: number }; scale: number;
+export function FloorSectorResizeHandles({ location, geometry, room, scale, gridSize, getPointer, onPreview, onCommit, onCursor, defaultCursor, cancelRef, onContextMenu }: {
+  location: FloorSectorResizeGeometry & { id: string }; geometry: FloorSectorResizeGeometry; room: { width: number; height: number }; scale: number; gridSize?: number;
   getPointer: () => FloorSectorResizePoint | null; onPreview: (value: FloorSectorResizePreview) => void;
   onCommit: (id: string, geometry: FloorSectorResizeGeometry) => void; onCursor: (cursor: string) => void; defaultCursor: string;
   cancelRef: RefObject<(() => void) | null>; onContextMenu?: (point: FloorSectorResizePoint) => void;
 }) {
   const session = useRef<{ start: FloorSectorResizeGeometry; anchor: FloorSectorResizeAnchor; offset: FloorSectorResizePoint; node: Konva.Node; edge: boolean; dragging: boolean } | null>(null);
-  useEffect(() => () => { const active = session.current; session.current = null; active?.node.stopDrag(); onPreview(null); onCursor(defaultCursor); }, [onPreview, onCursor, defaultCursor]);
+  const defaultCursorRef = useRef(defaultCursor);
+  useLayoutEffect(() => { defaultCursorRef.current = defaultCursor; }, [defaultCursor]);
+  useEffect(() => () => { const active = session.current; session.current = null; active?.node.stopDrag(); onPreview(null); onCursor(defaultCursorRef.current); }, [onPreview, onCursor]);
   const size = 10 / scale;
   const box = (value: FloorSectorResizeGeometry, anchor: FloorSectorResizeAnchor, edge: boolean) => {
     const point = localPoint(value, anchor);
@@ -42,7 +44,7 @@ export function FloorSectorResizeHandles({ location, geometry, room, scale, getP
   };
   const candidate = () => {
     const active = session.current; const pointer = getPointer();
-    return active && pointer ? resizeFloorSector(active.start, active.anchor, { x: pointer.x - active.offset.x, y: pointer.y - active.offset.y }, room) : null;
+    return active && pointer ? resizeFloorSector(active.start, active.anchor, { x: pointer.x - active.offset.x, y: pointer.y - active.offset.y }, room, gridSize) : null;
   };
   useLayoutEffect(() => {
     const cancel = () => {

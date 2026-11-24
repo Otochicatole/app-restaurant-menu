@@ -80,4 +80,11 @@ describe("floor canvas mode controls", () => {
     view.rerender(createElement(Controlled, { placing: true }));
     expect(canvas.props.interactionMode).toBe("select"); expect(canvas.mounts).toBe(1);
   });
+
+  it("hides the floating mode switcher when controlled externally while keeping zoom controls", () => {
+    render(createElement(FloorCanvas, { room, tables: [], fullScreen: true, editorMode: true, hideModeSwitch: true, interactionMode: "pan" }));
+    expect(screen.queryByRole("group", { name: "Modo del plano" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Zoom del plano" })).toBeTruthy();
+    expect(canvas.props.interactionMode).toBe("pan");
+  });
 });

@@ -9,18 +9,18 @@ import { floorInputClass } from "./floor-api";
 
 const copy = <T,>(value: T): T => structuredClone(value);
 const formClass = "flex min-h-0 min-w-0 flex-1 flex-col";
-const bodyClass = "min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-width:thin] [scrollbar-color:var(--floor-scrollbar,#c6cec0)_transparent]";
+const bodyClass = "min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-width:thin] [scrollbar-color:var(--floor-scrollbar,#c6cec0)_transparent]";
 const footerClass = "shrink-0 space-y-2 border-t border-stone-200 bg-white px-4 py-3";
 const quietAction = "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--floor-ink,#263e23)] hover:bg-[var(--floor-hover,#edf2e9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--floor-focus,#3d5934)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export type FixedTablePreset = { shape: FloorTable["shape"]; capacity: number; width: number; height: number };
 
 export function FloorTextField({ label, value, onChange, maxLength = 100 }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number }) {
-  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">{label}<input required maxLength={maxLength} value={value} onChange={(event) => onChange(event.target.value)} className={`${floorInputClass} min-h-11`} /></label>;
+  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">{label}<input required maxLength={maxLength} value={value} onChange={(event) => onChange(event.target.value)} className={`${floorInputClass} min-h-10`} /></label>;
 }
 
 export function FloorNumberField({ label, value, onChange, min, max, step = "any" }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number | "any" }) {
-  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">{label}<input required type="number" step={step} min={min} max={max} value={value} onChange={(event) => { const number = Number(event.target.value); if (Number.isFinite(number)) onChange(number); }} className={`${floorInputClass} min-h-11`} /></label>;
+  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">{label}<input required type="number" step={step} min={min} max={max} value={value} onChange={(event) => { const number = Number(event.target.value); if (Number.isFinite(number)) onChange(number); }} className={`${floorInputClass} min-h-10 tabular-nums`} /></label>;
 }
 
 function OptionalPositiveIntField({ label, placeholder, value, max, onChange }: { label: string; placeholder: string; value?: number; max: number; onChange: (value: number | undefined) => void }) {
@@ -43,40 +43,69 @@ function OptionalPositiveIntField({ label, placeholder, value, max, onChange }: 
           const parsed = Number(raw);
           if (Number.isInteger(parsed) && parsed >= 1 && parsed <= max) onChange(parsed);
         }}
-        className={`${floorInputClass} min-h-11`}
+        className={`${floorInputClass} min-h-10 tabular-nums`}
       />
     </label>
   );
 }
 
 function RotationField({ value, onChange }: { value: FloorRotation; onChange: (value: FloorRotation) => void }) {
-  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">Rotación<select className={`${floorInputClass} min-h-11 px-2`} value={value} onChange={(event) => onChange(Number(event.target.value) as FloorRotation)}>{[0, 90, 180, 270].map((rotation) => <option key={rotation} value={rotation}>{rotation}°</option>)}</select></label>;
+  return <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">Rotación<select className={`${floorInputClass} min-h-10 px-2`} value={value} onChange={(event) => onChange(Number(event.target.value) as FloorRotation)}>{[0, 90, 180, 270].map((rotation) => <option key={rotation} value={rotation}>{rotation}°</option>)}</select></label>;
 }
 
 function FormError({ message }: { message: string | null }) { return message ? <p role="alert" className="text-sm leading-relaxed text-red-800">{message}</p> : null; }
 
-function Actions({ label, onCancel, error, disabled }: { label: string; onCancel: () => void; error?: string | null; disabled?: boolean }) {
-  return <footer className={footerClass}><FormError message={error ?? null} /><div className="flex flex-wrap justify-end gap-2"><button {...transientButtonProps} type="button" onClick={onCancel} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}>Cancelar</button><button {...transientButtonProps} type="submit" disabled={disabled} className={`${adminPrimaryButtonClass} min-h-11 px-3 text-xs`}>{label}</button></div></footer>;
+function Actions({ label, onCancel, error, disabled, embedded = false }: { label: string; onCancel?: () => void; error?: string | null; disabled?: boolean; embedded?: boolean }) {
+  return <footer className={embedded ? "space-y-2 border-t border-stone-200 pt-3" : footerClass}><FormError message={error ?? null} /><div className="flex flex-wrap justify-end gap-2">{onCancel && <button {...transientButtonProps} type="button" onClick={onCancel} className={`${adminSecondaryButtonClass} min-h-10 px-3 text-xs`}>Cancelar</button>}<button {...transientButtonProps} type="submit" disabled={disabled} className={`${adminPrimaryButtonClass} min-h-10 px-3 text-xs`}>{label}</button></div></footer>;
 }
 
-export function RoomDimensionsForm({ room, saved, busy, onApply, onArchive, onDelete, onCancel }: { room: FloorRoom; saved: boolean; busy: boolean; onApply: (fields: Pick<FloorRoom, "name" | "width" | "height" | "active">) => string | null; onArchive: () => void; onDelete: () => void; onCancel: () => void }) {
+export function RoomDimensionsForm({ room, saved, busy, embedded = false, onApply, onArchive, onDelete, onCancel }: { room: FloorRoom; saved: boolean; busy: boolean; embedded?: boolean; onApply: (fields: Pick<FloorRoom, "name" | "width" | "height" | "active">) => string | null; onArchive: () => void; onDelete: () => void; onCancel?: () => void }) {
   const [fields, setFields] = useState({ name: room.name, width: room.width, height: room.height, active: room.active });
   const [error, setError] = useState<string | null>(null);
-  return <form className={formClass} onSubmit={(event) => { event.preventDefault(); setError(onApply(fields)); }}>
-    <div className={bodyClass}>
+  return <form className={embedded ? "space-y-4" : formClass} onSubmit={(event) => { event.preventDefault(); setError(onApply(fields)); }}>
+    <div className={embedded ? "space-y-4" : bodyClass}>
       <FloorTextField label="Nombre del salón" value={fields.name} onChange={(name) => setFields((value) => ({ ...value, name }))} />
+      
+      <div className="space-y-1.5">
+        <span className="block text-xs font-semibold text-[#182618]">Medidas predeterminadas</span>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Medidas predeterminadas">
+          {[
+            { label: "2000 × 2000 px", w: 2000, h: 2000, tag: "Estándar" },
+            { label: "2400 × 1600 px", w: 2400, h: 1600, tag: "Amplio" },
+            { label: "1500 × 1500 px", w: 1500, h: 1500, tag: "Compacto" },
+          ].map((preset) => {
+            const active = fields.width === preset.w && fields.height === preset.h;
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => setFields((value) => ({ ...value, width: preset.w, height: preset.h }))}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold tabular-nums transition-colors ${
+                  active
+                    ? "border-[#182618] bg-[#182618] text-white"
+                    : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                <span>{preset.label}</span>
+                <span className={`text-[10px] ${active ? "text-stone-300" : "text-stone-500"}`}>({preset.tag})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3"><FloorNumberField label="Ancho del plano" value={fields.width} min={100} max={20000} onChange={(width) => setFields((value) => ({ ...value, width }))} /><FloorNumberField label="Alto del plano" value={fields.height} min={100} max={20000} onChange={(height) => setFields((value) => ({ ...value, height }))} /></div>
-      <p className="text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">Estas medidas definen el espacio de trabajo. Los sectores, mesas fijas y elementos deben quedar dentro de sus límites.</p>
-      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[var(--floor-focus,#3d5934)]" checked={fields.active} onChange={(event) => setFields((value) => ({ ...value, active: event.target.checked }))} />Salón activo</label>
+      <p className="text-xs leading-relaxed text-[#52634b]">Estas medidas definen el espacio de trabajo. Los sectores, mesas fijas y elementos deben quedar dentro de sus límites.</p>
+      <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#3d5934]" checked={fields.active} onChange={(event) => setFields((value) => ({ ...value, active: event.target.checked }))} />Salón activo</label>
       <div className="flex flex-wrap items-center gap-4 pt-1">
-        {saved && room.active && <button {...transientButtonProps} type="button" disabled={busy} className="min-h-11 text-xs font-semibold text-amber-800 underline underline-offset-4 disabled:opacity-50" onClick={onArchive}>Archivar salón</button>}
-        <button {...transientButtonProps} type="button" disabled={busy} className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-red-700 underline underline-offset-4 disabled:opacity-50" onClick={onDelete}>
+        {saved && room.active && <button {...transientButtonProps} type="button" disabled={busy} className="min-h-10 text-xs font-semibold text-amber-800 underline underline-offset-4 disabled:opacity-50" onClick={onArchive}>Archivar salón</button>}
+        <button {...transientButtonProps} type="button" disabled={busy} className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-red-700 underline underline-offset-4 disabled:opacity-50" onClick={onDelete}>
           <Trash2 size={14} aria-hidden="true" />
           {saved ? "Eliminar salón" : "Descartar salón"}
         </button>
       </div>
     </div>
-    <Actions label="Aplicar medidas" onCancel={onCancel} error={error} />
+    <Actions label="Aplicar medidas" onCancel={onCancel} error={error} embedded={embedded} />
   </form>;
 }
 
@@ -307,8 +336,59 @@ export function TablePropertiesForm({
           {activeSectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
         </select>
       </label>
-      <FloorNumberField label="Capacidad nominal de referencia (personas)" value={fields.capacity} min={1} max={100} step={1} onChange={(capacity) => setFields((value) => ({ ...value, capacity }))} />
-      <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">Forma<select className={`${floorInputClass} min-h-11`} value={fields.shape} onChange={(event) => setFields((value) => ({ ...value, shape: event.target.value as FloorTable["shape"], ...(event.target.value !== "RECTANGLE" ? { height: value.width } : {}) }))}><option value="SQUARE">Cuadrada</option><option value="RECTANGLE">Rectangular</option><option value="CIRCLE">Redonda</option></select></label>
+      <div className="space-y-1.5">
+        <FloorNumberField label="Capacidad nominal de referencia (personas)" value={fields.capacity} min={1} max={100} step={1} onChange={(capacity) => setFields((value) => ({ ...value, capacity }))} />
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Comensales rápidos">
+          {[2, 4, 6, 8, 10].map((count) => {
+            const active = fields.capacity === count;
+            return (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setFields((value) => ({ ...value, capacity: count }))}
+                className={`min-h-8 min-w-9 rounded-lg border px-2 py-0.5 text-xs font-semibold tabular-nums transition-colors ${
+                  active
+                    ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-action,#155e75)] text-white shadow-xs"
+                    : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                {count}p
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex gap-2" role="group" aria-label="Forma rápida de la mesa">
+          {[
+            { shape: "SQUARE" as const, label: "Cuadrada", Icon: Square },
+            { shape: "RECTANGLE" as const, label: "Rectangular", Icon: RectangleHorizontal },
+            { shape: "CIRCLE" as const, label: "Redonda", Icon: Circle },
+          ].map(({ shape, label, Icon }) => {
+            const active = fields.shape === shape;
+            return (
+              <button
+                key={shape}
+                type="button"
+                onClick={() => setFields((value) => ({
+                  ...value,
+                  shape,
+                  ...(shape !== "RECTANGLE" ? { height: value.width } : {}),
+                }))}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-1.5 text-xs font-semibold transition-colors ${
+                  active
+                    ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-action,#155e75)] text-white shadow-xs"
+                    : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                <Icon size={14} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#46543e)]">Forma<select className={`${floorInputClass} min-h-11`} value={fields.shape} onChange={(event) => setFields((value) => ({ ...value, shape: event.target.value as FloorTable["shape"], ...(event.target.value !== "RECTANGLE" ? { height: value.width } : {}) }))}><option value="SQUARE">Cuadrada</option><option value="RECTANGLE">Rectangular</option><option value="CIRCLE">Redonda</option></select></label>
+      </div>
       <div className="grid grid-cols-2 gap-3"><FloorNumberField label="Ancho" value={fields.width} min={20} max={20000} onChange={(width) => setFields((value) => ({ ...value, width, ...(value.shape !== "RECTANGLE" ? { height: width } : {}) }))} /><FloorNumberField label="Alto" value={fields.height} min={20} max={20000} onChange={(height) => setFields((value) => ({ ...value, height, ...(value.shape !== "RECTANGLE" ? { width: height } : {}) }))} /></div>
       <div className="grid grid-cols-3 gap-2">
         <FloorNumberField label="Posición X" value={fields.x} onChange={(x) => setFields((value) => ({ ...value, x }))} />
@@ -368,14 +448,14 @@ export function SpatialPropertiesForm({ entity, kind, placedTableCount, onApply,
   </form>;
 }
 
-export function FloorSettingsForm({ config, dirty, busy, onAction, onDisableStaff }: { config: FloorConfigView; dirty: boolean; busy: boolean; onAction: (body: unknown, message: string) => Promise<boolean>; onDisableStaff: () => void }) {
+export function FloorSettingsForm({ config, dirty, busy, embedded = false, onAction, onDisableStaff }: { config: FloorConfigView; dirty: boolean; busy: boolean; embedded?: boolean; onAction: (body: unknown, message: string) => Promise<boolean>; onDisableStaff: () => void }) {
   const [timeZone, setTimeZone] = useState(config.timeZone);
   const [staff, setStaff] = useState({ email: config.staffAccount?.email ?? "", password: "" });
   const disabled = dirty || busy;
   const submitStaff = async (event: FormEvent) => { event.preventDefault(); if (await onAction({ action: "staff", ...staff }, "Cuenta de sala actualizada.")) setStaff((value) => ({ ...value, password: "" })); };
   const configured = config.rooms.some((room) => room.active && room.tables.some((table) => table.active) && room.locations.some((location) => location.active));
-  return <fieldset disabled={busy} className={formClass}>
-    <div className={bodyClass}>
+  return <fieldset disabled={busy} className={embedded ? "min-w-0 space-y-5" : formClass}>
+    <div className={embedded ? "space-y-5" : bodyClass}>
       {dirty && <p role="status" className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">Guardá el plano antes de cambiar el funcionamiento o el acceso del personal.</p>}
       <section className="space-y-3"><h3 className="text-sm font-semibold">Asignación de mesas {config.enabled ? "activada" : "sin activar"}</h3><p className="text-xs leading-relaxed text-[var(--floor-muted,#52634b)]">Necesitás sectores activos con mesas fijas ubicadas. Las confirmaciones y apertura en sala usan esta distribución.</p>{config.compatibility.reason && <p className="text-xs leading-relaxed text-amber-900">{config.compatibility.reason}</p>}{!config.enabled && <button {...transientButtonProps} type="button" disabled={disabled || !configured || config.compatibility.status !== "compatible"} className={`${adminPrimaryButtonClass} min-h-11 px-3 text-xs`} onClick={() => void onAction({ action: "activate" }, "Asignación de mesas activada.")}>Activar asignación</button>}</section>
       <form className="space-y-3 border-t border-stone-200 pt-4" onSubmit={(event) => { event.preventDefault(); void onAction({ action: "settings", timeZone }, "Zona horaria guardada."); }}><h3 className="text-sm font-semibold">Zona horaria del restaurante</h3><FloorTextField label="Zona IANA" value={timeZone} onChange={setTimeZone} /><button {...transientButtonProps} type="submit" disabled={disabled} className={`${adminSecondaryButtonClass} min-h-11 px-3 text-xs`}>Guardar zona horaria</button></form>

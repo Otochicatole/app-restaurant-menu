@@ -56,7 +56,8 @@ vi.mock("react-konva", async () => {
   });
   const Rect = (props: Props) => { if (props.id) canvas.rects.set(props.id, { ...props }); return createElement("div"); };
   const Text = (props: Props) => { if (props.id) canvas.texts.set(props.id, { ...props }); return createElement("div"); };
-  return { Stage, Layer, Group, Circle: Node, Line: Node, Rect, Text };
+  const Line = ({ children }: Props) => createElement("div", { "data-konva-line": "" }, children);
+  return { Stage, Layer, Group, Circle: Node, Line, Rect, Text };
 });
 
 import FloorCanvasStage from "./FloorCanvasStage";
@@ -524,7 +525,7 @@ describe("floor viewport dragging", () => {
     gesture.call("onDragEnd", { type: "mouseup" });
     expect(onResizeLocation.mock.calls).toEqual([["window", { x: 450, y: 300, width: 300, height: 100 }]]);
     expect(onMoveLocation).not.toHaveBeenCalled(); expect(offset()).toEqual(before);
-    expect(canvas.surface.element!.style.cursor).toBe("grab");
+    expect(canvas.surface.element!.style.cursor).toBe("default");
   });
 
   it("changes corner width and height independently and ignores Shift ratio locking", () => {
@@ -563,7 +564,7 @@ describe("floor viewport dragging", () => {
     pointAt(600, 300); gesture.call("onDragStart"); gesture.call("onDragMove");
     act(() => stageEvent("onTouchStart", { evt: { touches: [{ clientX: 20, clientY: 20 }, { clientX: 80, clientY: 80 }], preventDefault: vi.fn() } }));
     expect(gesture.node.stopDrag).toHaveBeenCalledOnce(); gesture.call("onDragEnd", { type: "touchend" });
-    expect(onResizeLocation).not.toHaveBeenCalled(); expect(canvas.surface.element!.style.cursor).toBe("grab");
+    expect(onResizeLocation).not.toHaveBeenCalled(); expect(canvas.surface.element!.style.cursor).toBe("default");
   });
 
   it("keeps the sector context menu available over the topmost resize overlay", () => {
@@ -876,6 +877,266 @@ describe("floor viewport dragging", () => {
     expect(onMove).not.toHaveBeenCalled(); expect(onClearSelection).not.toHaveBeenCalled();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(onClearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("translates child tables live during sector dragMove before drop and resets on Escape cancel", () => {
+    const onMoveLocation = vi.fn();
+    const sector = { id: "window", name: "Superior", x: 400, y: 300, width: 600, height: 400, rotation: 0 as const, active: true };
+    const child = { id: "child", label: "M1", shape: "SQUARE" as const, capacity: 4, locationId: "window", x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const other = { id: "other", label: "M2", shape: "SQUARE" as const, capacity: 4, x: 700, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const view = render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [sector] },
+      tables: [child, other],
+      zoom: 1,
+      onZoomChange: vi.fn(),
+      onMoveLocation,
+      onSelectLocation: vi.fn(),
+    }));
+    const position = { x: 400, y: 300 };
+    const stopDrag = vi.fn();
+    const node = {
+      x: () => position.x,
+      y: () => position.y,
+      position: (next: { x: number; y: number }) => { Object.assign(position, next); },
+      stopDrag,
+    };
+    const group = canvas.groups.get("400,300")!;
+    act(() => { (group.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 460, y: 340 });
+    act(() => { (group.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(onMoveLocation).not.toHaveBeenCalled();
+    expect(view.container.querySelector('[data-konva-group][data-x="460"][data-y="340"]')).not.toBeNull();
+    expect(canvas.groups.get("floor-table-child")).toMatchObject({ x: 260, y: 240 });
+    expect(canvas.groups.get("floor-table-other")).toMatchObject({ x: 700, y: 200 });
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(stopDrag).toHaveBeenCalledOnce();
+    expect(canvas.groups.get("floor-table-child")).toMatchObject({ x: 200, y: 200 });
+    act(() => { (group.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(onMoveLocation).not.toHaveBeenCalled();
+
+    Object.assign(position, { x: 400, y: 300 });
+    act(() => { (group.onDragStart as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    Object.assign(position, { x: 460, y: 340 });
+    act(() => { (group.onDragMove as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    act(() => { (group.onDragEnd as (event: unknown) => void)({ target: node, cancelBubble: false }); });
+    expect(onMoveLocation).toHaveBeenCalledWith("window", { x: 460, y: 340 });
+  });
+
+  it("applies distinct cursors for select, hover/drag, marquee, resize, pan/grabbing, place, and service without leaking state", () => {
+    const table = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, locationId: "window", x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const fixtures = [{ id: "bar", type: "BAR" as const, label: "Barra", x: 120, y: 100, width: 100, height: 40, rotation: 0 }];
+    const baseProps = {
+      room: { ...room, locations: [resizable], fixtures },
+      tables: [table],
+      zoom: 2,
+      onZoomChange: vi.fn(),
+      selectedLocationId: "window",
+      onSelect: vi.fn(),
+      onSelectMany: vi.fn(),
+      onSelectElements: vi.fn(),
+      onMove: vi.fn(),
+      onSelectLocation: vi.fn(),
+      onMoveLocation: vi.fn(),
+      onResizeLocation: vi.fn(),
+      onSelectFixture: vi.fn(),
+      onMoveFixture: vi.fn(),
+    };
+    const view = render(createElement(FloorCanvasStage, baseProps));
+
+    // 1. Select mode rests at "default" even when zoomed (> 1)
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+    expect((canvas.stageEvents.style as { cursor?: string })?.cursor).toBe("default");
+
+    // 2. Hovering movable table, sector, or fixture shows "move" and restores "default" on leave
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("move");
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseLeave as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+
+    act(() => { (canvas.groups.get("400,300")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("move");
+    act(() => { (canvas.groups.get("400,300")!.onMouseLeave as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+
+    act(() => { (canvas.groups.get("120,100")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("move");
+
+    // 3. Resize handles show resize cursor and reset cleanly to "default" (not "grab") at zoom 2
+    resizeGesture("top-center").call("onMouseEnter");
+    expect(canvas.surface.element!.style.cursor).toBe("ns-resize");
+    resizeGesture("top-center").call("onMouseLeave");
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+
+    // 4. Drawing a marquee turns cursor into "crosshair" and restores "default" when released
+    pointAt(100, 100);
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0 }) }); });
+    pointAt(260, 260);
+    act(() => { stageEvent("onMouseMove"); });
+    expect(canvas.surface.element!.style.cursor).toBe("crosshair");
+    act(() => { stageEvent("onMouseUp"); });
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+
+    // 5. Pan mode shows "grab", turns into "grabbing" while dragging viewport, and ignores hover overrides
+    view.rerender(createElement(FloorCanvasStage, { ...baseProps, room: { ...room, locations: [resizable], fixtures }, interactionMode: "pan" }));
+    expect(canvas.surface.element!.style.cursor).toBe("grab");
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("grab");
+    act(() => { stageEvent("onMouseDown", { target: canvas.node, evt: new MouseEvent("mousedown", { button: 0 }) }); });
+    expect(canvas.surface.element!.style.cursor).toBe("grabbing");
+    act(() => { stageEvent("onDragEnd", { target: canvas.node }); });
+    expect(canvas.surface.element!.style.cursor).toBe("grab");
+
+    // 6. Placement mode shows "crosshair" everywhere and disables dragging on existing items
+    view.rerender(createElement(FloorCanvasStage, { ...baseProps, room: { ...room, locations: [resizable], fixtures }, interactionMode: "select", onPlace: vi.fn() }));
+    expect(canvas.surface.element!.style.cursor).toBe("crosshair");
+    expect(canvas.groups.get("floor-table-one")!.draggable).toBe(false);
+    expect(canvas.groups.get("400,300")!.draggable).toBe(false);
+    expect(canvas.groups.get("120,100")!.draggable).toBe(false);
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("crosshair");
+
+    // 7. Service mode shows "default" on background and "pointer" on active tables
+    view.rerender(createElement(FloorCanvasStage, { ...baseProps, room: { ...room, locations: [resizable], fixtures }, interactionMode: "service", onServiceTable: vi.fn() }));
+    expect(canvas.surface.element!.style.cursor).toBe("default");
+    act(() => { (canvas.groups.get("floor-table-one")!.onMouseEnter as (event: unknown) => void)({ cancelBubble: false }); });
+    expect(canvas.surface.element!.style.cursor).toBe("pointer");
+  });
+
+  it("toggles background grid lines independently while keeping inactive editor sectors and tables visible", () => {
+    const activeTable = { id: "active", label: "M1", shape: "SQUARE" as const, capacity: 4, x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const archivedTable = { ...activeTable, id: "archived", label: "M2", x: 320, active: false };
+    const archivedSector = { ...resizable, id: "archived-sector", name: "Archivado", x: 500, y: 400, active: false };
+    const view = render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [resizable, archivedSector] },
+      tables: [activeTable, archivedTable],
+      editorMode: true,
+      grid: true,
+      zoom: 1,
+      onZoomChange: vi.fn(),
+    }));
+    expect(view.container.querySelectorAll("[data-konva-line]").length).toBeGreaterThan(0);
+    expect(canvas.groups.get("floor-table-archived")).toBeDefined();
+    expect(canvas.groups.get("500,400")).toBeDefined();
+
+    view.rerender(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [resizable, archivedSector] },
+      tables: [activeTable, archivedTable],
+      editorMode: true,
+      grid: false,
+      zoom: 1,
+      onZoomChange: vi.fn(),
+    }));
+    expect(view.container.querySelectorAll("[data-konva-line]")).toHaveLength(0);
+    expect(canvas.groups.get("floor-table-archived")).toBeDefined();
+    expect(canvas.groups.get("500,400")).toBeDefined();
+  });
+
+  it("snaps tables, sectors (with child tables), fixtures, resized edges, and placed points to the 40px grid when grid is enabled", () => {
+    const onMove = vi.fn();
+    const onMoveLocation = vi.fn();
+    const onMoveFixture = vi.fn();
+    const onResizeLocation = vi.fn();
+    const onPlace = vi.fn();
+    const sector = { id: "window", name: "Superior", x: 380, y: 300, width: 200, height: 120, rotation: 0 as const, active: true };
+    const tableOne = { id: "one", label: "M1", shape: "SQUARE" as const, capacity: 4, locationId: "window", x: 200, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const tableTwo = { id: "two", label: "M2", shape: "SQUARE" as const, capacity: 4, locationId: "window", x: 320, y: 200, width: 80, height: 80, rotation: 0, active: true };
+    const fixture = { id: "bar", type: "BAR" as const, label: "Barra", x: 120, y: 80, width: 160, height: 80, rotation: 0 };
+    const view = render(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [sector], fixtures: [fixture] },
+      tables: [tableOne, tableTwo],
+      selectedIds: ["one", "two"],
+      selectedLocationId: "window",
+      editorMode: true,
+      grid: true,
+      zoom: 1,
+      onZoomChange: vi.fn(),
+      onMove,
+      onMoveLocation,
+      onMoveFixture,
+      onResizeLocation,
+      onSelectLocation: vi.fn(),
+    }));
+
+    // 1. Dragging a table snaps live and commits a grid-aligned delta for co-selected tables
+    const tablePos = { x: 200, y: 200 };
+    const tableNode = {
+      x: () => tablePos.x,
+      y: () => tablePos.y,
+      position: (next: { x: number; y: number }) => Object.assign(tablePos, next),
+    };
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragStart as (event: unknown) => void)({ target: tableNode, cancelBubble: false }); });
+    Object.assign(tablePos, { x: 254, y: 231 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragMove as (event: unknown) => void)({ target: tableNode, cancelBubble: false }); });
+    expect(tablePos).toEqual({ x: 240, y: 240 });
+    expect(canvas.groups.get("floor-table-two")).toMatchObject({ x: 360, y: 240 });
+    act(() => { (canvas.groups.get("floor-table-one")!.onDragEnd as (event: unknown) => void)({ target: tableNode, cancelBubble: false }); });
+    expect(onMove).toHaveBeenCalledWith(["one", "two"], { x: 40, y: 40 });
+
+    // 2. Dragging a sector (width 200 -> half=100, height 120 -> half=60) snaps edges to 40px lines and translates child tables by the exact snapped delta
+    const sectorPos = { x: 380, y: 300 };
+    const sectorNode = {
+      x: () => sectorPos.x,
+      y: () => sectorPos.y,
+      position: (next: { x: number; y: number }) => Object.assign(sectorPos, next),
+    };
+    act(() => { (canvas.groups.get("380,300")!.onDragStart as (event: unknown) => void)({ target: sectorNode, cancelBubble: false }); });
+    Object.assign(sectorPos, { x: 433, y: 355 });
+    act(() => { (canvas.groups.get("380,300")!.onDragMove as (event: unknown) => void)({ target: sectorNode, cancelBubble: false }); });
+    expect(sectorPos).toEqual({ x: 420, y: 340 });
+    expect(canvas.groups.get("floor-table-one")).toMatchObject({ x: 240, y: 240 });
+    act(() => { (canvas.groups.get("380,300")!.onDragEnd as (event: unknown) => void)({ target: sectorNode, cancelBubble: false }); });
+    expect(onMoveLocation).toHaveBeenCalledWith("window", { x: 420, y: 340 });
+
+    // 3. Dragging a fixture snaps its bounds cleanly to the 40px grid
+    const barPos = { x: 120, y: 80 };
+    const barNode = {
+      x: () => barPos.x,
+      y: () => barPos.y,
+      position: (next: { x: number; y: number }) => Object.assign(barPos, next),
+    };
+    act(() => { (canvas.groups.get("120,80")!.onDragStart as (event: unknown) => void)({ target: barNode, cancelBubble: false }); });
+    Object.assign(barPos, { x: 151, y: 117 });
+    act(() => { (canvas.groups.get("120,80")!.onDragMove as (event: unknown) => void)({ target: barNode, cancelBubble: false }); });
+    expect(barPos).toEqual({ x: 160, y: 120 });
+    act(() => { (canvas.groups.get("120,80")!.onDragEnd as (event: unknown) => void)({ target: barNode, cancelBubble: false }); });
+    expect(onMoveFixture).toHaveBeenCalledWith("bar", { x: 160, y: 120 });
+
+    // 4. Resizing a sector snaps the dragged edge to the 40px grid
+    const gesture = resizeGesture("middle-right", true);
+    pointAt(480, 300); gesture.call("onMouseDown");
+    pointAt(533, 300); gesture.call("onDragStart"); gesture.call("onDragMove");
+    gesture.call("onDragEnd", { type: "mouseup" });
+    expect(onResizeLocation).toHaveBeenCalledWith("window", { x: 400, y: 300, width: 240, height: 120 });
+
+    // 5. Placing on the canvas snaps to the nearest 40px intersection when grid is on, and leaves raw coordinates when grid is off
+    view.rerender(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [sector], fixtures: [fixture] },
+      tables: [tableOne, tableTwo],
+      editorMode: true,
+      grid: true,
+      zoom: 1,
+      onZoomChange: vi.fn(),
+      onPlace,
+    }));
+    pointAt(213, 189);
+    act(() => { stageEvent("onClick", { target: canvas.node, evt: new MouseEvent("click", { button: 0 }) }); });
+    expect(onPlace).toHaveBeenLastCalledWith({ x: 200, y: 200 }, undefined);
+
+    view.rerender(createElement(FloorCanvasStage, {
+      room: { ...room, locations: [sector], fixtures: [fixture] },
+      tables: [tableOne, tableTwo],
+      editorMode: true,
+      grid: false,
+      zoom: 1,
+      onZoomChange: vi.fn(),
+      onPlace,
+      onMove,
+    }));
+    act(() => { stageEvent("onClick", { target: canvas.node, evt: new MouseEvent("click", { button: 0 }) }); });
+    const placedPoint = onPlace.mock.calls.at(-1)?.[0] as { x: number; y: number };
+    expect(placedPoint.x).toBeCloseTo(213);
+    expect(placedPoint.y).toBeCloseTo(189);
   });
 
 });

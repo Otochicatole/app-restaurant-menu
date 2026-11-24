@@ -1,4 +1,5 @@
 import type { FloorRotation } from "../contracts";
+import { snapToGrid } from "./floor-grid";
 
 export type FloorSectorResizeAnchor = "top-left" | "top-center" | "top-right" | "middle-left" | "middle-right" | "bottom-left" | "bottom-center" | "bottom-right";
 export type FloorSectorResizeGeometry = { x: number; y: number; width: number; height: number; rotation: FloorRotation };
@@ -16,6 +17,7 @@ export function resizeFloorSector(
   anchor: FloorSectorResizeAnchor,
   pointer: FloorSectorResizePoint,
   room: { width: number; height: number },
+  gridSize?: number,
 ): FloorSectorResizeGeometry | null {
   if (!anchors.has(anchor) || ![0, 90, 180, 270].includes(start.rotation)
     || ![start.x, start.y, start.width, start.height, pointer.x, pointer.y, room.width, room.height].every(Number.isFinite)
@@ -39,11 +41,16 @@ export function resizeFloorSector(
   if (left < limits.left - epsilon || right > limits.right + epsilon || top < limits.top - epsilon || bottom > limits.bottom + epsilon) return null;
 
   const target = local(pointer);
+  const snapGrid = gridSize && Number.isFinite(gridSize) && gridSize > 0 ? gridSize : 0;
+  const worldAlongU = start.x * axes.ux + start.y * axes.uy;
+  const worldAlongV = start.x * axes.vx + start.y * axes.vy;
+  const targetX = snapGrid ? snapToGrid(worldAlongU + target.x, snapGrid) - worldAlongU : target.x;
+  const targetY = snapGrid ? snapToGrid(worldAlongV + target.y, snapGrid) - worldAlongV : target.y;
   // Each moved edge is bounded by its stationary opposite edge, preventing flips.
-  if (anchor.endsWith("left")) left = clamp(target.x, limits.left, right - Math.min(minimumDimension, right - limits.left));
-  if (anchor.endsWith("right")) right = clamp(target.x, left + Math.min(minimumDimension, limits.right - left), limits.right);
-  if (anchor.startsWith("top")) top = clamp(target.y, limits.top, bottom - Math.min(minimumDimension, bottom - limits.top));
-  if (anchor.startsWith("bottom")) bottom = clamp(target.y, top + Math.min(minimumDimension, limits.bottom - top), limits.bottom);
+  if (anchor.endsWith("left")) left = clamp(targetX, limits.left, right - Math.min(minimumDimension, right - limits.left));
+  if (anchor.endsWith("right")) right = clamp(targetX, left + Math.min(minimumDimension, limits.right - left), limits.right);
+  if (anchor.startsWith("top")) top = clamp(targetY, limits.top, bottom - Math.min(minimumDimension, bottom - limits.top));
+  if (anchor.startsWith("bottom")) bottom = clamp(targetY, top + Math.min(minimumDimension, limits.bottom - top), limits.bottom);
 
   const x = (left + right) / 2; const y = (top + bottom) / 2;
   return { x: start.x + x * axes.ux + y * axes.vx, y: start.y + x * axes.uy + y * axes.vy,

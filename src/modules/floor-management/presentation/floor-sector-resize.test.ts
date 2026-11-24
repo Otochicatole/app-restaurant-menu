@@ -92,4 +92,20 @@ describe("sector resize geometry", () => {
     }
     expect(resizeFloorSector(start, "unknown" as FloorSectorResizeAnchor, { x: 100, y: 100 }, room)).toBeNull();
   });
+
+  it("snaps moved world edges to the 40px grid across rotations when gridSize is provided", () => {
+    // start = { x: 200, y: 180, width: 120, height: 80 } -> left=140, right=260, top=140, bottom=220
+    expect(resizeFloorSector(start, "bottom-right", { x: 294, y: 266 }, room, 40)).toEqual({
+      x: 210, y: 210, width: 140, height: 140, rotation: 0,
+    });
+    expect(resizeFloorSector({ ...start, rotation: 90 }, "middle-right", { x: 200, y: 294 }, room, 40)).toEqual({
+      x: 200, y: 200, width: 160, height: 80, rotation: 90,
+    });
+    expect(resizeFloorSector({ ...start, rotation: 180 }, "top-left", { x: 294, y: 266 }, room, 40)).toEqual({
+      x: 210, y: 210, width: 140, height: 140, rotation: 180,
+    });
+    expect(resizeFloorSector({ ...start, rotation: 270 }, "middle-left", { x: 200, y: 294 }, room, 40)).toEqual({
+      x: 200, y: 200, width: 160, height: 80, rotation: 270,
+    });
+  });
 });
