@@ -33,6 +33,10 @@ describe("StaffDirectoryScreen", () => {
     expect(screen.getByText("Ana")).toBeTruthy();
     expect(screen.getByText("Carlos")).toBeTruthy();
     expect(screen.queryByText("Lucía")).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Teléfono" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Notas / Turno" })).toBeNull();
+    expect(screen.queryByText("11223344")).toBeNull();
+    expect(screen.queryByText("Salón principal")).toBeNull();
 
     // Show inactive
     fireEvent.click(screen.getByLabelText("Mostrar inactivos"));
@@ -46,6 +50,8 @@ describe("StaffDirectoryScreen", () => {
     // Reset filter and open create modal
     fireEvent.change(screen.getByLabelText("Rol"), { target: { value: "ALL" } });
     fireEvent.click(screen.getByRole("button", { name: "Nuevo integrante" }));
+    expect(screen.queryByLabelText(/Teléfono/i)).toBeNull();
+    expect(screen.queryByLabelText(/Turno/i)).toBeNull();
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Marcos" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -55,6 +61,22 @@ describe("StaffDirectoryScreen", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({ action: "save-staff", name: "Marcos", role: "WAITER", phone: "", notes: "", active: true }),
+        }),
+      );
+    });
+
+    // Edit modal should also omit phone and shift/notes inputs
+    fireEvent.click(await screen.findByRole("button", { name: "Editar Ana" }));
+    expect(screen.queryByLabelText(/Teléfono/i)).toBeNull();
+    expect(screen.queryByLabelText(/Turno/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/restaurants/rest-1/service",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ action: "save-staff", id: "s1", name: "Ana", role: "WAITER", phone: "", notes: "", active: true }),
         }),
       );
     });

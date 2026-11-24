@@ -25,7 +25,7 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
     if (!showInactive && !member.active) return false;
     if (roleFilter !== "ALL" && member.role !== roleFilter) return false;
     if (!query) return true;
-    return [member.name, member.phone, member.notes, staffRoleLabels[member.role]]
+    return [member.name, staffRoleLabels[member.role]]
       .some((value) => value.toLocaleLowerCase("es-AR").includes(query));
   });
 
@@ -86,7 +86,7 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
                 Buscar integrante
                 <span className="relative block">
                   <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                  <input type="search" value={search} placeholder="Nombre, teléfono o notas" onChange={(event) => setSearch(event.target.value)} className={`${serviceInputClass} w-full pl-9`} />
+                  <input type="search" value={search} placeholder="Nombre o rol" onChange={(event) => setSearch(event.target.value)} className={`${serviceInputClass} w-full pl-9`} />
                 </span>
               </label>
               <label className="grid min-w-44 gap-1 text-sm font-medium text-zinc-800">
@@ -123,8 +123,6 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
                   <tr className="border-b border-zinc-200 bg-[#f8faf7] text-xs font-semibold uppercase tracking-wide text-zinc-600">
                     <th scope="col" className="px-4 py-3 sm:px-5">Nombre</th>
                     <th scope="col" className="px-4 py-3">Rol</th>
-                    <th scope="col" className="px-4 py-3">Teléfono</th>
-                    <th scope="col" className="px-4 py-3">Notas / Turno</th>
                     <th scope="col" className="px-4 py-3">Estado</th>
                     <th scope="col" className="px-4 py-3 text-right sm:px-5">Acciones</th>
                   </tr>
@@ -140,8 +138,6 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
                             {staffRoleLabels[member.role]}
                           </span>
                         </td>
-                        <td className="px-4 py-3 tabular-nums text-zinc-700">{member.phone || "—"}</td>
-                        <td className="max-w-xs px-4 py-3 text-zinc-700">{member.notes || "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${member.active ? "bg-emerald-50 text-emerald-800" : "bg-zinc-200/80 text-zinc-700"}`}>
                             {member.active ? "Activo" : "Inactivo"}
@@ -211,8 +207,6 @@ function StaffMemberModal({ restaurantId, member, onClose, onSaved }: {
 }) {
   const [name, setName] = useState(member?.name ?? "");
   const [role, setRole] = useState<StaffRole>(member?.role ?? "WAITER");
-  const [phone, setPhone] = useState(member?.phone ?? "");
-  const [notes, setNotes] = useState(member?.notes ?? "");
   const [active, setActive] = useState(member?.active ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -232,8 +226,8 @@ function StaffMemberModal({ restaurantId, member, onClose, onSaved }: {
         id: member?.id,
         name: name.trim(),
         role,
-        phone: phone.trim(),
-        notes: notes.trim(),
+        phone: "",
+        notes: "",
         active,
       });
       onSaved(member ? "Integrante actualizado." : "Integrante agregado al plantel.");
@@ -258,14 +252,6 @@ function StaffMemberModal({ restaurantId, member, onClose, onSaved }: {
                 <option key={value} value={value}>{staffRoleLabels[value]}</option>
               ))}
             </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-zinc-800">
-            Teléfono (opcional)
-            <input className={serviceInputClass} maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-zinc-800">
-            Notas / Turno (opcional)
-            <input className={serviceInputClass} maxLength={200} placeholder="Ej. Turno noche, terraza" value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
           <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-800">
             <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} className="size-4 accent-[#3d5934]" />

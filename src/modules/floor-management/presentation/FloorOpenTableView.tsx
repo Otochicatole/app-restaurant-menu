@@ -264,7 +264,6 @@ export function FloorOpenTableView({
                           >
                             <span className="min-w-0">
                               <span className="block truncate font-semibold text-[var(--floor-ink,#173642)]">{waiter.name}</span>
-                              {waiter.notes && <span className="block truncate text-xs text-[var(--floor-muted,#4b6470)]">{waiter.notes}</span>}
                             </span>
                             {selected && <Check size={16} aria-hidden="true" className="shrink-0 text-[var(--floor-action,#155e75)]" />}
                           </button>
