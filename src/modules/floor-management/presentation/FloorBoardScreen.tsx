@@ -1126,6 +1126,14 @@ function FloorBoardContent({
         title={tableModalTitle}
         badge={tableModalBadge}
         subtitle={tableModalSubtitle}
+        size={
+          activeTableModal?.kind === "service" &&
+          modalServiceAccount &&
+          !modalServiceAccount.closedAt &&
+          !modalCurrentTarget?.recovery
+            ? "wide"
+            : "compact"
+        }
         closeDisabled={saving}
         hasUnsavedChanges={tableModalDirty && !modalServiceAccount?.closedAt}
         unsavedMessage={

@@ -144,4 +144,34 @@ describe("FloorTableModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actualizar cuenta" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
+
+  it("applies compact dialog sizing when requested", () => {
+    const view = render(
+      createElement(
+        FloorTableModal,
+        {
+          open: true,
+          title: "Abrir mesa",
+          size: "compact",
+          onClose: vi.fn(),
+        },
+        createElement("p", null, "Compacto"),
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Abrir mesa" }).className).toContain("modalDialogCompact");
+
+    view.rerender(
+      createElement(
+        FloorTableModal,
+        {
+          open: true,
+          title: "Cuenta · Mesa 2",
+          size: "wide",
+          onClose: vi.fn(),
+        },
+        createElement("p", null, "Amplio"),
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Cuenta · Mesa 2" }).className).not.toContain("modalDialogCompact");
+  });
 });

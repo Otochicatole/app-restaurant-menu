@@ -43,7 +43,7 @@
 
 @media (min-width: 768px) {
   .modalDialog {
-    width: min(1480px, calc(100dvw - 1.5rem));
+    width: min(1440px, calc(100dvw - 1.5rem));
     height: calc(100dvh - 1.5rem);
     max-width: none;
     max-height: none;
@@ -51,6 +51,12 @@
     border-radius: 1rem;
     border: 1px solid var(--floor-border);
     box-shadow: 0 24px 64px -16px rgb(16 38 48 / 0.34);
+  }
+
+  .modalDialogCompact {
+    width: min(860px, calc(100dvw - 2rem));
+    height: auto;
+    max-height: calc(100dvh - 2.5rem);
   }
 }
 

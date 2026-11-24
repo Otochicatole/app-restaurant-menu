@@ -88,67 +88,60 @@ export function FloorOpenTableView({
 
   return (
     <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void submit(event)}>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-        <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="space-y-4">
-            <section className="rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-base font-bold text-[var(--floor-ink,#173642)]">
-                    Mesa {table.label}{sector ? ` · ${sector.name}` : ""}
-                  </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--floor-muted,#4b6470)]">
-                    Capacidad nominal de referencia: {table.capacity} {table.capacity === 1 ? "persona" : "personas"}. Podés sentar la cantidad real de comensales sin armar ni unir mesas.
-                  </p>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--floor-hover,#e6f2f6)] px-3 py-1.5 text-xs font-semibold text-[var(--floor-action,#155e75)] tabular-nums">
-                  <Users size={14} aria-hidden="true" />
-                  {table.capacity}p base
-                </span>
-              </div>
-            </section>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white px-3.5 py-2.5 text-xs">
+            <span className="text-[var(--floor-muted,#4b6470)]">
+              Podés sentar la cantidad real de comensales sin armar ni unir mesas.
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--floor-hover,#e6f2f6)] px-2.5 py-1 font-semibold text-[var(--floor-action,#155e75)] tabular-nums">
+              <Users size={13} aria-hidden="true" />
+              {table.capacity}p base{sector ? ` · ${sector.name}` : ""}
+            </span>
+          </div>
 
-            {quota && (quota.status === "warning" || quota.status === "exceeded") && (
-              <div
-                role="status"
-                className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-950"
-              >
-                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-700" aria-hidden="true" />
-                <span>
-                  {quota.status === "exceeded"
-                    ? `Este sector quedará por encima de su cupo (${quota.occupiedPartySize}/${quota.maxCapacity} personas). Podés abrir la mesa igual.`
-                    : `Este sector quedará cerca de su cupo (${quota.occupiedPartySize}/${quota.maxCapacity} personas). Podés abrir la mesa igual.`}
-                </span>
-              </div>
-            )}
+          {quota && (quota.status === "warning" || quota.status === "exceeded") && (
+            <div
+              role="status"
+              className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950"
+            >
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-700" aria-hidden="true" />
+              <span>
+                {quota.status === "exceeded"
+                  ? `Este sector quedará por encima de su cupo (${quota.occupiedPartySize}/${quota.maxCapacity} personas). Podés abrir la mesa igual.`
+                  : `Este sector quedará cerca de su cupo (${quota.occupiedPartySize}/${quota.maxCapacity} personas). Podés abrir la mesa igual.`}
+              </span>
+            </div>
+          )}
 
-            {cashClosed && (
-              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-950">
-                La caja del día está cerrada. Un administrador deberá reabrirla antes de cobrar esta cuenta.
-              </p>
-            )}
+          {cashClosed && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-950">
+              La caja del día está cerrada. Un administrador deberá reabrirla antes de cobrar esta cuenta.
+            </p>
+          )}
 
-            {submitError && (
-              <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
-                {submitError}
-              </p>
-            )}
+          {submitError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+              {submitError}
+            </p>
+          )}
 
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.85fr)]">
             <section className="space-y-4 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
               <div className="space-y-2">
-                <span className="block text-xs font-medium text-[var(--floor-muted,#4b6470)]">
+                <span className="block text-xs font-semibold text-[var(--floor-ink,#173642)]">
                   Cantidad de comensales
                 </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--floor-border,#cad9df)] bg-[var(--floor-canvas,#eef4f6)] p-1">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--floor-border,#cad9df)] bg-[var(--floor-canvas,#eef4f6)] p-1">
                     <button
                       type="button"
                       disabled={busy || partySize <= 1}
                       aria-label="Restar comensal"
                       onClick={() => updatePartySize((validPartySize ? partySize : table.capacity) - 1)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[var(--floor-ink,#173642)] shadow-xs hover:bg-[var(--floor-hover,#e6f2f6)] disabled:opacity-40"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[var(--floor-ink,#173642)] shadow-xs hover:bg-[var(--floor-hover,#e6f2f6)] disabled:opacity-40"
                     >
-                      <Minus size={16} aria-hidden="true" />
+                      <Minus size={15} aria-hidden="true" />
                     </button>
                     <input
                       type="number"
@@ -165,16 +158,16 @@ export function FloorOpenTableView({
                         setPartySize(next);
                         notifyDirty(next, customerName, notes);
                       }}
-                      className="h-10 w-16 rounded-lg bg-white text-center text-base font-bold text-[var(--floor-ink,#173642)] tabular-nums outline-none focus:ring-2 focus:ring-[var(--floor-focus,#0e7490)]"
+                      className="h-9 w-14 rounded-lg bg-white text-center text-sm font-bold text-[var(--floor-ink,#173642)] tabular-nums outline-none focus:ring-2 focus:ring-[var(--floor-focus,#0e7490)]"
                     />
                     <button
                       type="button"
                       disabled={busy || partySize >= 100}
                       aria-label="Sumar comensal"
                       onClick={() => updatePartySize((validPartySize ? partySize : table.capacity) + 1)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[var(--floor-ink,#173642)] shadow-xs hover:bg-[var(--floor-hover,#e6f2f6)] disabled:opacity-40"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[var(--floor-ink,#173642)] shadow-xs hover:bg-[var(--floor-hover,#e6f2f6)] disabled:opacity-40"
                     >
-                      <Plus size={16} aria-hidden="true" />
+                      <Plus size={15} aria-hidden="true" />
                     </button>
                   </div>
 
@@ -187,7 +180,7 @@ export function FloorOpenTableView({
                           type="button"
                           disabled={busy}
                           onClick={() => updatePartySize(count)}
-                          className={`min-h-10 rounded-lg border px-3 text-xs font-semibold tabular-nums transition-colors ${
+                          className={`min-h-9 rounded-lg border px-2.5 text-xs font-semibold tabular-nums transition-colors ${
                             active
                               ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-action,#155e75)] text-white"
                               : "border-[var(--floor-border,#cad9df)] bg-white text-[var(--floor-ink,#173642)] hover:bg-[var(--floor-hover,#e6f2f6)]"
@@ -201,7 +194,7 @@ export function FloorOpenTableView({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 border-t border-[var(--floor-border,#cad9df)]/70 pt-3.5 sm:grid-cols-2">
                 <label className={fieldLabelClass}>
                   Nombre del grupo (opcional)
                   <input
@@ -214,7 +207,7 @@ export function FloorOpenTableView({
                       setCustomerName(event.target.value);
                       notifyDirty(partySize, event.target.value, notes);
                     }}
-                    className={`${floorInputClass} min-h-11`}
+                    className={`${floorInputClass} min-h-10`}
                   />
                 </label>
 
@@ -230,63 +223,63 @@ export function FloorOpenTableView({
                       setNotes(event.target.value);
                       notifyDirty(partySize, customerName, event.target.value);
                     }}
-                    className={`${floorInputClass} min-h-11`}
+                    className={`${floorInputClass} min-h-10`}
                   />
                 </label>
               </div>
             </section>
-          </div>
 
-          <section className="flex flex-col rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
-            <h4 className="text-sm font-bold text-[var(--floor-ink,#173642)]">Camarero asignado</h4>
-            <p className="mt-1 text-xs text-[var(--floor-muted,#4b6470)]">
-              Elegí quién atiende la mesa para abrir la comanda.
-            </p>
-            <div className="mt-3 flex-1">
-              {loadingWaiters ? (
-                <p role="status" className="text-sm text-[var(--floor-muted,#4b6470)]">Cargando camareros…</p>
-              ) : waiters.length === 0 ? (
-                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-                  <p className="text-xs font-medium text-amber-950">No hay camareros activos cargados para asignar a esta mesa.</p>
-                  {staffHref && <Link href={staffHref} className={floorSecondaryButtonClass}>Ir a Personal para cargar camareros</Link>}
-                </div>
-              ) : (
-                <fieldset className="space-y-2">
-                  <legend className="sr-only">Camarero asignado</legend>
-                  <div role="radiogroup" aria-label="Camarero asignado" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                    {waiters.map((waiter) => {
-                      const selected = chosenWaiterId === waiter.id;
-                      return (
-                        <button
-                          key={waiter.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          disabled={busy}
-                          onClick={() => setWaiterId(waiter.id)}
-                          className={`flex min-h-13 w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
-                            selected
-                              ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-hover,#e6f2f6)] ring-2 ring-[var(--floor-focus,#0e7490)]/25"
-                              : "border-[var(--floor-border,#cad9df)] bg-white hover:bg-[var(--floor-hover,#e6f2f6)]"
-                          }`}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate font-semibold text-[var(--floor-ink,#173642)]">{waiter.name}</span>
-                            {waiter.notes && <span className="block truncate text-xs text-[var(--floor-muted,#4b6470)]">{waiter.notes}</span>}
-                          </span>
-                          {selected && <Check size={16} aria-hidden="true" className="shrink-0 text-[var(--floor-action,#155e75)]" />}
-                        </button>
-                      );
-                    })}
+            <section className="rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
+              <h4 className="text-sm font-bold text-[var(--floor-ink,#173642)]">Camarero asignado</h4>
+              <p className="mt-0.5 text-xs text-[var(--floor-muted,#4b6470)]">
+                Elegí quién atiende la mesa para abrir la comanda.
+              </p>
+              <div className="mt-3">
+                {loadingWaiters ? (
+                  <p role="status" className="text-sm text-[var(--floor-muted,#4b6470)]">Cargando camareros…</p>
+                ) : waiters.length === 0 ? (
+                  <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+                    <p className="text-xs font-medium text-amber-950">No hay camareros activos cargados para asignar a esta mesa.</p>
+                    {staffHref && <Link href={staffHref} className={floorSecondaryButtonClass}>Ir a Personal para cargar camareros</Link>}
                   </div>
-                </fieldset>
-              )}
-            </div>
-          </section>
+                ) : (
+                  <fieldset className="space-y-2">
+                    <legend className="sr-only">Camarero asignado</legend>
+                    <div role="radiogroup" aria-label="Camarero asignado" className="grid max-h-60 gap-2 overflow-y-auto pr-0.5 sm:grid-cols-2 lg:grid-cols-1">
+                      {waiters.map((waiter) => {
+                        const selected = chosenWaiterId === waiter.id;
+                        return (
+                          <button
+                            key={waiter.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={busy}
+                            onClick={() => setWaiterId(waiter.id)}
+                            className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2 text-left text-sm transition-colors ${
+                              selected
+                                ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-hover,#e6f2f6)] ring-2 ring-[var(--floor-focus,#0e7490)]/25"
+                                : "border-[var(--floor-border,#cad9df)] bg-white hover:bg-[var(--floor-hover,#e6f2f6)]"
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold text-[var(--floor-ink,#173642)]">{waiter.name}</span>
+                              {waiter.notes && <span className="block truncate text-xs text-[var(--floor-muted,#4b6470)]">{waiter.notes}</span>}
+                            </span>
+                            {selected && <Check size={16} aria-hidden="true" className="shrink-0 text-[var(--floor-action,#155e75)]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                )}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 
-      <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--floor-border,#cad9df)] bg-white px-4 py-3 sm:px-6">
+      <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--floor-border,#cad9df)] bg-white px-4 py-3 sm:px-5">
         <button {...transientButtonProps} type="button" disabled={busy} className={floorSecondaryButtonClass} onClick={onCancel}>
           Cancelar
         </button>

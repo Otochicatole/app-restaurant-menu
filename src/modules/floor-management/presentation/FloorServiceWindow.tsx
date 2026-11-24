@@ -219,15 +219,25 @@ export function FloorServiceWindow({
   const chosenWaiterId = waiters.some((waiter) => waiter.id === selectedWaiterId) ? selectedWaiterId : "";
   const parsedOpenPartySize = openPartySize.trim() ? Number(openPartySize) : undefined;
   if (!account) {
+    const canAssignOpen = !loading && !historical && !conflict && canOpen && allocationVersion !== undefined && waiters.length > 0;
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-          <div className="mx-auto max-w-4xl space-y-4">
-            <div className="rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
-              <h3 className="text-base font-bold text-[var(--floor-ink,#173642)]">{target.customerName}</h3>
-              <p className="mt-1 text-sm text-[var(--floor-muted,#4b6470)]">{target.reservationCode} · {target.tableLabels.join(" + ")}</p>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white px-4 py-3">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--floor-ink,#173642)]">{target.customerName}</h3>
+                <p className="mt-0.5 text-xs text-[var(--floor-muted,#4b6470)]">
+                  {target.reservationCode} · {target.tableLabels.join(" + ")}
+                </p>
+              </div>
+              {target.partySize && (
+                <span className="rounded-lg bg-[var(--floor-hover,#e6f2f6)] px-2.5 py-1 text-xs font-semibold text-[var(--floor-action,#155e75)] tabular-nums">
+                  {target.partySize} {target.partySize === 1 ? "comensal" : "comensales"}
+                </span>
+              )}
             </div>
-            {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+            {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{error}</p>}
             {loading ? (
               <p role="status" className="rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4 text-sm">Consultando el servicio…</p>
             ) : historical ? (
@@ -242,12 +252,15 @@ export function FloorServiceWindow({
                 {staffHref && <Link href={staffHref} className={floorSecondaryButtonClass}>Ir a Personal para cargar camareros</Link>}
               </div>
             ) : (
-              <div className="grid gap-4 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-[var(--floor-ink,#173642)]">
-                    Asigná el camarero que atiende esta mesa para iniciar el servicio.
+              <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                <div className="space-y-3 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
+                  <p className="text-xs font-semibold text-[var(--floor-ink,#173642)]">
+                    Ingreso de reserva
                   </p>
-                  <label className={`${fieldClass} max-w-52`}>
+                  <p className="text-xs leading-relaxed text-[var(--floor-muted,#4b6470)]">
+                    Confirmá la cantidad real si cambió al llegar y asigná un camarero para abrir la cuenta.
+                  </p>
+                  <label className={fieldClass}>
                     Comensales (opcional)
                     <input
                       type="number"
@@ -258,12 +271,13 @@ export function FloorServiceWindow({
                       value={openPartySize}
                       disabled={busy || Boolean(loadError)}
                       onChange={(event) => setOpenPartySize(event.target.value)}
-                      className={`${floorInputClass} min-h-11`}
+                      className={`${floorInputClass} min-h-10`}
                     />
                   </label>
                 </div>
-                <div className="space-y-3">
-                  <div role="radiogroup" aria-label="Camarero asignado" className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--floor-border,#cad9df)] bg-white p-4">
+                  <p className="mb-2.5 text-xs font-semibold text-[var(--floor-ink,#173642)]">Camarero asignado</p>
+                  <div role="radiogroup" aria-label="Camarero asignado" className="grid max-h-60 gap-2 overflow-y-auto pr-0.5 sm:grid-cols-2">
                     {waiters.map((waiter) => {
                       const selected = chosenWaiterId === waiter.id;
                       return (
@@ -274,52 +288,57 @@ export function FloorServiceWindow({
                           aria-checked={selected}
                           disabled={busy || Boolean(loadError)}
                           onClick={() => setSelectedWaiterId(waiter.id)}
-                          className={`${cardClass} flex min-h-13 w-full items-center justify-between gap-3 text-left transition-colors ${
+                          className={`${cardClass} flex min-h-11 w-full items-center justify-between gap-2 text-left transition-colors ${
                             selected
                               ? "border-[var(--floor-action,#155e75)] bg-[var(--floor-hover,#e6f2f6)] ring-2 ring-[var(--floor-focus,#0e7490)]/20"
                               : "hover:bg-[var(--floor-hover,#e6f2f6)]"
                           }`}
                         >
                           <span className="min-w-0">
-                            <span className="block font-semibold text-[var(--floor-ink,#173642)]">{waiter.name}</span>
-                            {waiter.notes && <span className="block text-xs text-[var(--floor-muted,#4b6470)]">{waiter.notes}</span>}
+                            <span className="block truncate text-sm font-semibold text-[var(--floor-ink,#173642)]">{waiter.name}</span>
+                            {waiter.notes && <span className="block truncate text-xs text-[var(--floor-muted,#4b6470)]">{waiter.notes}</span>}
                           </span>
-                          {selected && <Check size={16} aria-hidden="true" className="shrink-0 text-[var(--floor-action,#155e75)]" />}
+                          {selected && <Check size={15} aria-hidden="true" className="shrink-0 text-[var(--floor-action,#155e75)]" />}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="flex flex-wrap justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      className={floorPrimaryButtonClass}
-                      disabled={!chosenWaiterId || busy || conflict || Boolean(loadError)}
-                      onClick={() => void run({
-                        action: "open",
-                        allocationId: target.allocationId,
-                        tableId: target.tableId,
-                        expectedAllocationVersion: allocationVersion,
-                        waiterId: chosenWaiterId,
-                        ...(parsedOpenPartySize && Number.isInteger(parsedOpenPartySize) && parsedOpenPartySize >= 1 && parsedOpenPartySize <= 100
-                          ? { partySize: parsedOpenPartySize }
-                          : {}),
-                      })}
-                    >
-                      <UserCheck size={16} aria-hidden="true" />Asignar camarero y abrir cuenta
-                    </button>
-                  </div>
                 </div>
-              </div>
-            )}
-            {loadError && (
-              <div>
-                <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>
-                  Actualizar cuenta
-                </button>
               </div>
             )}
           </div>
         </div>
+        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--floor-border,#cad9df)] bg-white px-4 py-3 sm:px-5">
+          {loadError && (
+            <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onRefresh}>
+              Actualizar cuenta
+            </button>
+          )}
+          {onClose && (
+            <button type="button" className={floorSecondaryButtonClass} disabled={busy} onClick={onClose}>
+              Cancelar
+            </button>
+          )}
+          {canAssignOpen && (
+            <button
+              type="button"
+              className={floorPrimaryButtonClass}
+              disabled={!chosenWaiterId || busy || conflict || Boolean(loadError)}
+              onClick={() => void run({
+                action: "open",
+                allocationId: target.allocationId,
+                tableId: target.tableId,
+                expectedAllocationVersion: allocationVersion,
+                waiterId: chosenWaiterId,
+                ...(parsedOpenPartySize && Number.isInteger(parsedOpenPartySize) && parsedOpenPartySize >= 1 && parsedOpenPartySize <= 100
+                  ? { partySize: parsedOpenPartySize }
+                  : {}),
+              })}
+            >
+              <UserCheck size={16} aria-hidden="true" />Asignar camarero y abrir cuenta
+            </button>
+          )}
+        </footer>
       </div>
     );
   }

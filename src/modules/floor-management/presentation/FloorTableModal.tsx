@@ -10,6 +10,7 @@ export type FloorTableModalProps = {
   title: string;
   subtitle?: string;
   badge?: string;
+  size?: "compact" | "wide";
   headerMeta?: React.ReactNode;
   onClose: () => void;
   closeDisabled?: boolean;
@@ -25,6 +26,7 @@ export function FloorTableModal({
   title,
   subtitle,
   badge,
+  size = "wide",
   headerMeta,
   onClose,
   closeDisabled = false,
@@ -40,6 +42,7 @@ export function FloorTableModal({
       title={title}
       subtitle={subtitle}
       badge={badge}
+      size={size}
       headerMeta={headerMeta}
       onClose={onClose}
       closeDisabled={closeDisabled}
@@ -57,6 +60,7 @@ function FloorTableModalDialog({
   title,
   subtitle,
   badge,
+  size = "wide",
   headerMeta,
   onClose,
   closeDisabled = false,
@@ -135,7 +139,7 @@ function FloorTableModalDialog({
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
-      className={styles.modalDialog}
+      className={`${styles.modalDialog} ${size === "compact" ? styles.modalDialogCompact : ""}`}
     >
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--floor-border,#cad9df)] bg-white px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
