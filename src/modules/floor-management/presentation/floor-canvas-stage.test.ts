@@ -1139,4 +1139,21 @@ describe("floor viewport dragging", () => {
     expect(placedPoint.y).toBeCloseTo(189);
   });
 
+  it("paints the whole table green when it has ready items to deliver", () => {
+    render(createElement(FloorCanvasStage, {
+      room,
+      appearance: "operational",
+      tables: [
+        { id: "occupied", label: "M1", shape: "SQUARE", capacity: 4, x: 120, y: 120, width: 72, height: 72, rotation: 0, active: true, state: "occupied", readyQuantity: 0 },
+        { id: "ready", label: "M2", shape: "SQUARE", capacity: 4, x: 260, y: 120, width: 72, height: 72, rotation: 0, active: true, state: "occupied", readyQuantity: 3 },
+      ],
+      zoom: 1,
+      onZoomChange: vi.fn(),
+    }));
+
+    expect(canvas.rects.get("floor-table-shape-occupied")).toMatchObject({ fill: "#dbeff5", stroke: "#0e7490", strokeWidth: 1.5 });
+    expect(canvas.rects.get("floor-table-shape-ready")).toMatchObject({ fill: "#bbf7d0", stroke: "#16a34a", strokeWidth: 2 });
+    expect(canvas.groups.get("floor-table-ready-badge-ready")).toMatchObject({ x: 36, y: -36 });
+  });
+
 });

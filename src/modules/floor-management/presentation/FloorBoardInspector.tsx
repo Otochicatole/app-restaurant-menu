@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2, Clock3, ReceiptText, Search, Users } from "lucide-react";
-import type { ServiceAccountView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
+import type { KitchenStatus, ServiceAccountView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
 import { transientButtonProps } from "@/ui/button-state";
 import { getJoinedTableGroups, type FloorAllocationView, type FloorLocation, type FloorPose } from "../contracts";
 import type { FloorTableCounts } from "./floor-table-summary";
 import { FloorTableSummary } from "./FloorTableSummary";
+import { FloorKitchenTicketsPanel, deriveKitchenTickets } from "./FloorKitchenTicketsPanel";
 import { FloorServiceAccounts, type FloorServiceTarget } from "./FloorServiceWindow";
 import { floorSecondaryButtonClass } from "./floor-ui";
 
-export type BoardInspectorTab = "summary" | "accounts" | "reservations";
+export type BoardInspectorTab = "summary" | "accounts" | "kitchen" | "reservations";
 
 export type BoardInspectorTableItem = {
   id: string;
@@ -43,12 +44,14 @@ type FloorBoardInspectorProps = {
   unservedGroups: ServiceUnservedGroup[];
   serviceLoading: boolean;
   serviceError: string | null;
+  kitchenHref?: string;
   selectedAllocationId: string | null;
   onSelectAllocationId: (id: string | null) => void;
   onTableAction: (tableId: string) => void;
   onOpenService: (target: FloorServiceTarget) => void;
   onRecoverGroup: (group: ServiceUnservedGroup) => void;
   onRefreshService: () => void;
+  onUpdateKitchenStatus: (lineId: string, status: KitchenStatus) => Promise<void>;
   onReleaseAllocation: (allocation: FloorAllocationView) => void;
   canReleaseAllocation: (allocation: FloorAllocationView) => boolean;
   serviceTargetsForAllocation: (allocation: FloorAllocationView) => FloorServiceTarget[];
@@ -104,12 +107,14 @@ export function FloorBoardInspector({
   unservedGroups,
   serviceLoading,
   serviceError,
+  kitchenHref,
   selectedAllocationId,
   onSelectAllocationId,
   onTableAction,
   onOpenService,
   onRecoverGroup,
   onRefreshService,
+  onUpdateKitchenStatus,
   onReleaseAllocation,
   canReleaseAllocation,
   serviceTargetsForAllocation,
@@ -120,7 +125,9 @@ export function FloorBoardInspector({
   const [reservationSearch, setReservationSearch] = useState("");
 
   const openAccountsCount = serviceAccounts.filter((acc) => !acc.closedAt).length;
-  const visibleTab: BoardInspectorTab = !canUseService && activeTab === "accounts" ? "summary" : activeTab;
+  const kitchenTicketsCount = deriveKitchenTickets(serviceAccounts).length;
+  const visibleTab: BoardInspectorTab =
+    !canUseService && (activeTab === "accounts" || activeTab === "kitchen") ? "summary" : activeTab;
 
   const sectorNameById = new Map(sectors.map((sector) => [sector.id, sector.name]));
   const normalizedTableQuery = tableSearch.trim().toLocaleLowerCase("es-AR");
@@ -153,7 +160,12 @@ export function FloorBoardInspector({
 
   const tabs: { id: BoardInspectorTab; label: string; count?: number }[] = [
     { id: "summary", label: "Sala" },
-    ...(canUseService ? [{ id: "accounts" as const, label: "Cuentas", count: openAccountsCount }] : []),
+    ...(canUseService
+      ? [
+          { id: "accounts" as const, label: "Cuentas", count: openAccountsCount },
+          { id: "kitchen" as const, label: "Cocina", count: kitchenTicketsCount },
+        ]
+      : []),
     { id: "reservations", label: "Reservas", count: allocations.length },
   ];
 
@@ -284,12 +296,13 @@ export function FloorBoardInspector({
                 <ul className="space-y-1.5">
                   {filteredTables.map((table) => {
                     const meta = stateMeta[table.state];
+                    const ready = Boolean(table.readyQuantity && table.readyQuantity > 0);
                     const sectorName = table.locationId ? sectorNameById.get(table.locationId) : undefined;
                     const canTrigger = canUseService && (!historical || table.state !== "available");
                     const content = (
                       <>
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <span className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg border px-2 text-xs font-bold tabular-nums ${meta.badgeClass}`}>
+                          <span className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg border px-2 text-xs font-bold tabular-nums ${ready ? "border-emerald-400 bg-emerald-100 text-emerald-950" : meta.badgeClass}`}>
                             {table.label}
                           </span>
                           <div className="min-w-0">
@@ -308,10 +321,10 @@ export function FloorBoardInspector({
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          {Boolean(table.readyQuantity && table.readyQuantity > 0) && (
+                          {ready && (
                             <span
                               title="Platos listos para retirar"
-                              className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-900 tabular-nums"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums"
                             >
                               <CheckCircle2 size={10} aria-hidden="true" />
                               {table.readyQuantity}
@@ -325,7 +338,7 @@ export function FloorBoardInspector({
                               Parcial
                             </span>
                           )}
-                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${meta.chipClass}`}>
+                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${ready ? "bg-emerald-100 text-emerald-900" : meta.chipClass}`}>
                             {meta.label}
                           </span>
                         </div>
@@ -340,12 +353,16 @@ export function FloorBoardInspector({
                             disabled={saving}
                             aria-label={`Gestionar mesa ${table.label}`}
                             onClick={() => onTableAction(table.id)}
-                            className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white px-2.5 py-2 text-left transition-colors hover:border-[var(--floor-border-hover,#9fb8c3)] hover:bg-[var(--floor-hover,#e6f2f6)] focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#0e7490)] disabled:opacity-50"
+                            className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#0e7490)] disabled:opacity-50 ${
+                              ready
+                                ? "border-emerald-400 bg-emerald-50/75 hover:border-emerald-500 hover:bg-emerald-100/75"
+                                : "border-[var(--floor-border,#cad9df)] bg-white hover:border-[var(--floor-border-hover,#9fb8c3)] hover:bg-[var(--floor-hover,#e6f2f6)]"
+                            }`}
                           >
                             {content}
                           </button>
                         ) : (
-                          <div className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--floor-border,#cad9df)] bg-white/80 px-2.5 py-2">
+                          <div className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 ${ready ? "border-emerald-400 bg-emerald-50/75" : "border-[var(--floor-border,#cad9df)] bg-white/80"}`}>
                             {content}
                           </div>
                         )}
@@ -371,6 +388,20 @@ export function FloorBoardInspector({
               const target = serviceTargetFromAccount(account);
               if (target) onOpenService(target);
             }}
+          />
+        )}
+
+        {visibleTab === "kitchen" && canUseService && (
+          <FloorKitchenTicketsPanel
+            accounts={serviceAccounts}
+            loading={serviceLoading}
+            error={serviceError}
+            busy={saving}
+            historical={historical}
+            kitchenHref={kitchenHref}
+            onRefresh={onRefreshService}
+            onOpenService={onOpenService}
+            onUpdateStatus={onUpdateKitchenStatus}
           />
         )}
 

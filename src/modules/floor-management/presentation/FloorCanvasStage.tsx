@@ -498,7 +498,8 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
   const height = Math.max(...bounds.map((bound) => bound.bottom)) + 6 - top;
   const selected = tables.every((table) => selectedIds.includes(table.id) || table.state === "selected");
   const reserved = tables.some((table) => table.state === "reserved");
-  const stroke = selected ? paint.tableSelectedEdge : reserved ? "#95664c" : paint.joinEdge;
+  const ready = tables.some((table) => table.state !== "unavailable" && table.active && Boolean(table.readyQuantity && table.readyQuantity > 0));
+  const stroke = selected ? paint.tableSelectedEdge : ready ? "#16a34a" : reserved ? "#95664c" : paint.joinEdge;
   const labelWidth = Math.max(width, 160);
   const labelX = (width - labelWidth) / 2;
   const listening = Boolean(onSelect || onContextMenu);
@@ -518,9 +519,18 @@ function Table({ table, selected, selecting, draggable, hoverCursor, onCursor, p
   const occupied = table.state === "occupied";
   const reserved = table.state === "reserved";
   const unavailable = table.state === "unavailable" || !table.active;
-  const fill = selected ? paint.tableSelected : occupied ? "#dbeff5" : reserved ? "#f0d6c4" : unavailable ? paint.tableUnavailable : paint.table;
-  const stroke = selected ? paint.tableSelectedEdge : occupied ? "#0e7490" : reserved ? "#95664c" : paint.tableEdge;
+  const ready = !unavailable && Boolean(table.readyQuantity && table.readyQuantity > 0);
+  const fill = selected ? paint.tableSelected : ready ? "#bbf7d0" : occupied ? "#dbeff5" : reserved ? "#f0d6c4" : unavailable ? paint.tableUnavailable : paint.table;
+  const stroke = selected ? paint.tableSelectedEdge : ready ? "#16a34a" : occupied ? "#0e7490" : reserved ? "#95664c" : paint.tableEdge;
+  const ink = ready ? "#14532d" : paint.tableInk;
   const subLabel = table.subtitle ?? (table.partySize ? `${table.partySize}p` : `${table.capacity}p`);
+  const bounds = elementBounds(table);
+  const halfWidth = (bounds.right - bounds.left) / 2;
+  const halfHeight = (bounds.bottom - bounds.top) / 2;
+  const readyBadgePosition =
+    table.shape === "CIRCLE"
+      ? { x: Math.round((table.width / 2) * Math.SQRT1_2), y: -Math.round((table.width / 2) * Math.SQRT1_2) }
+      : { x: halfWidth, y: -halfHeight };
   return <Group id={`floor-table-${table.id}`} x={table.x} y={table.y} rotation={table.rotation} opacity={unavailable ? 0.55 : 1} draggable={draggable && table.active}
     onMouseEnter={(event) => { event.cancelBubble = true; onCursor(hoverCursor); }}
     onMouseMove={(event) => { event.cancelBubble = true; onCursor(hoverCursor); }}
@@ -542,13 +552,13 @@ function Table({ table, selected, selecting, draggable, hoverCursor, onCursor, p
     onDblTap={selecting && onSelectIndividual ? (event) => { if (gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
     onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}
     onDragStart={(event) => { if (!selecting) return; event.cancelBubble = true; gesture.current.dragged = true; onDragStart(event.target); }} onDragMove={(event) => { if (!selecting) return; event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
-    {table.shape === "CIRCLE" ? <Circle radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} /> : <Rect x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : 1.5} />}
+    {table.shape === "CIRCLE" ? <Circle id={`floor-table-shape-${table.id}`} radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : ready ? 2 : 1.5} /> : <Rect id={`floor-table-shape-${table.id}`} x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : ready ? 2 : 1.5} />}
     <Group rotation={-table.rotation} listening={false}>
-      <Text x={-60} y={-12} width={120} align="center" text={table.label} fontSize={15} fontStyle="bold" fill={paint.tableInk} />
-      <Text x={-60} y={5} width={120} align="center" text={subLabel} fontSize={10} fill={paint.tableInk} opacity={0.8} />
-      {Boolean(table.readyQuantity && table.readyQuantity > 0) && (
-        <Group x={18} y={-18}>
-          <Circle radius={10} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
+      <Text x={-60} y={-12} width={120} align="center" text={table.label} fontSize={15} fontStyle="bold" fill={ink} />
+      <Text x={-60} y={5} width={120} align="center" text={subLabel} fontSize={10} fill={ink} opacity={0.85} />
+      {ready && (
+        <Group id={`floor-table-ready-badge-${table.id}`} x={readyBadgePosition.x} y={readyBadgePosition.y}>
+          <Circle radius={10} fill="#15803d" stroke="#ffffff" strokeWidth={1.5} />
           <Text x={-10} y={-5} width={20} align="center" text={String(table.readyQuantity)} fontSize={10} fontStyle="bold" fill="#ffffff" />
         </Group>
       )}

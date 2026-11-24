@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarClock,
   Check,
+  ChefHat,
   ChevronDown,
   Clock,
   Hand,
@@ -38,6 +39,7 @@ import {
   type BoardInspectorTab,
   type BoardInspectorTableItem,
 } from "./FloorBoardInspector";
+import { deriveKitchenTickets } from "./FloorKitchenTicketsPanel";
 import { FloorOpenTableView } from "./FloorOpenTableView";
 import { FloorServiceWindow, type FloorServiceTarget } from "./FloorServiceWindow";
 import { FloorTableModal } from "./FloorTableModal";
@@ -571,6 +573,11 @@ function FloorBoardContent({
     : "Consultando…";
 
   const openAccountsCount = serviceAccounts.filter((acc) => !acc.closedAt).length;
+  const kitchenTickets = deriveKitchenTickets(serviceAccounts);
+  const kitchenReadyCount = kitchenTickets.reduce(
+    (sum, ticket) => sum + ticket.lines.filter((line) => line.kitchenStatus === "READY").length,
+    0,
+  );
   const sectorAlert = tableCounts?.sectors.find((sector) => sector.status === "exceeded" || sector.status === "warning");
   const navigationDisabled = saving || hasPendingChanges;
 
@@ -969,6 +976,38 @@ function FloorBoardContent({
             </button>
           )}
 
+          {canUseService && (
+            <button
+              {...transientButtonProps}
+              type="button"
+              aria-label="Tickets de cocina"
+              title="Tickets de cocina y barra"
+              disabled={saving}
+              onClick={() => openInspectorTab("kitchen")}
+              className={`${topBarButton} border ${
+                inspectorOpen && inspectorTab === "kitchen"
+                  ? "border-[var(--floor-action,#155e75)] bg-[#e6f2f6] text-[var(--floor-ink,#173642)]"
+                  : kitchenReadyCount > 0
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-950 hover:bg-emerald-100"
+                    : "border-[var(--floor-border,#cad9df)] bg-white text-[var(--floor-ink,#173642)] hover:bg-[var(--floor-hover,#e6f2f6)]"
+              }`}
+            >
+              <ChefHat size={15} aria-hidden="true" />
+              <span className="hidden sm:inline">Cocina</span>
+              {(kitchenTickets.length > 0 || kitchenReadyCount > 0) && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                    kitchenReadyCount > 0
+                      ? "bg-emerald-700 text-white"
+                      : "bg-[#eef4f6] text-[var(--floor-ink,#173642)]"
+                  }`}
+                >
+                  {kitchenTickets.length}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             {...transientButtonProps}
             type="button"
@@ -1103,12 +1142,14 @@ function FloorBoardContent({
                 unservedGroups={service.snapshot?.unserved ?? []}
                 serviceLoading={serviceLoading}
                 serviceError={service.error}
+                kitchenHref={readOnly ? undefined : `/admin/restaurants/${encodeURIComponent(restaurantId)}/kitchen`}
                 selectedAllocationId={selectedAllocationId}
                 onSelectAllocationId={setSelectedAllocationId}
                 onTableAction={handleTableClick}
                 onOpenService={openServiceWindow}
                 onRecoverGroup={(group) => openServiceWindow({ ...group, recovery: true })}
                 onRefreshService={() => void service.refresh()}
+                onUpdateKitchenStatus={service.updateKitchenStatus}
                 onReleaseAllocation={askRelease}
                 canReleaseAllocation={canRelease}
                 serviceTargetsForAllocation={buildAllocationTargets}

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ServiceAccountView, ServiceCommand, ServiceSnapshot } from "@/modules/reservation-management/contracts";
+import type { KitchenStatus, ServiceAccountView, ServiceCommand, ServiceSnapshot } from "@/modules/reservation-management/contracts";
 
 export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "open-table" | "assign-waiter" | "add-line" | "confirm-order" | "update-line" | "checkout" | "pay-partial" | "close-empty" | "deliver-all" | "march-round" }>;
+type KitchenLineCommand = Extract<ServiceCommand, { action: "update-kitchen-status" }>;
 
-async function serviceRequest<T>(restaurantId: string, { at, signal, command }: { at?: string; signal?: AbortSignal; command?: FloorServiceCommand }): Promise<T> {
+async function serviceRequest<T>(restaurantId: string, { at, signal, command }: { at?: string; signal?: AbortSignal; command?: FloorServiceCommand | KitchenLineCommand }): Promise<T> {
   const params = at ? `?${new URLSearchParams({ at })}` : "";
   const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/service${params}`, {
     cache: "no-store", credentials: "same-origin", signal,
@@ -88,6 +89,40 @@ export function useFloorService(restaurantId: string, active: boolean, at?: stri
     }
   };
 
+  const updateKitchenStatus = async (lineId: string, status: KitchenStatus): Promise<void> => {
+    if (at || writing.current) throw new Error("Esperá a que termine la operación actual y volvé a intentar.");
+    read.current?.abort();
+    writing.current = true;
+    setBusy(true);
+    try {
+      await serviceRequest<{ updated: boolean }>(restaurantId, {
+        command: { action: "update-kitchen-status", lineId, status },
+      });
+      setResult((current) => {
+        if (current?.key !== key || !current.snapshot) return current;
+        const accounts = current.snapshot.accounts.map((account) => {
+          if (!account.lines.some((line) => line.id === lineId)) return account;
+          const lines = account.lines.map((line) => {
+            if (line.id !== lineId) return line;
+            return {
+              ...line,
+              kitchenStatus: status,
+              ...(status === "SERVED" ? { deliveredQuantity: line.quantity - line.cancelledQuantity } : {}),
+            };
+          });
+          const pendingQuantity = lines.reduce((sum, line) => sum + Math.max(0, line.quantity - line.deliveredQuantity - line.cancelledQuantity), 0);
+          const readyQuantity = lines.filter((line) => line.kitchenStatus === "READY").reduce((sum, line) => sum + Math.max(0, line.quantity - line.cancelledQuantity), 0);
+          return { ...account, lines, pendingQuantity, readyQuantity };
+        });
+        return { key, snapshot: { ...current.snapshot, accounts }, error: null };
+      });
+    } finally {
+      writing.current = false;
+      setBusy(false);
+      void refresh();
+    }
+  };
+
   const current = result?.key === key ? result : null;
-  return { snapshot: current?.snapshot ?? null, error: current?.error ?? null, busy, refresh, mutate };
+  return { snapshot: current?.snapshot ?? null, error: current?.error ?? null, busy, refresh, mutate, updateKitchenStatus };
 }

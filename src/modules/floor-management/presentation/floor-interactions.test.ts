@@ -561,4 +561,129 @@ describe("floor assignment interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reservas" }));
     expect(screen.getByRole("region", { name: "Reservas de Terraza" })).toBeTruthy();
   });
+
+  it("displays active kitchen and bar tickets in the docked Cocina tab with filters, status actions, and account shortcut", async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        if (body.action === "update-kitchen-status") {
+          return new Response(JSON.stringify({ success: true, data: { updated: true } }));
+        }
+        return new Response(JSON.stringify({ success: true, data: {} }));
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          accounts: [
+            {
+              id: "acc-1",
+              allocationId: "alloc-1",
+              reservationId: "res-1",
+              roomId: "room",
+              roomName: "Salón principal",
+              reservationCode: "SALA-1",
+              customerName: "Mesa 1",
+              partySize: 4,
+              assignedWaiterId: "w-1",
+              assignedWaiterName: "Ana",
+              version: 2,
+              openedAt: interval.serviceStartAt,
+              closedAt: null,
+              businessDate: null,
+              paymentMethod: null,
+              totalCents: null,
+              receiptNumber: null,
+              tipCents: 0,
+              discountCents: 0,
+              discountReason: null,
+              cashCents: 0,
+              cardCents: 0,
+              transferCents: 0,
+              tableIds: ["one"],
+              tableLabels: ["1"],
+              lines: [
+                {
+                  id: "l-1",
+                  name: "Milanesa",
+                  unitPriceCents: 1350000,
+                  quantity: 1,
+                  deliveredQuantity: 0,
+                  cancelledQuantity: 0,
+                  notes: "Sin sal",
+                  kitchenStatus: "READY",
+                  round: 1,
+                  station: "KITCHEN",
+                  createdAt: interval.serviceStartAt,
+                },
+                {
+                  id: "l-2",
+                  name: "Limonada",
+                  unitPriceCents: 460000,
+                  quantity: 2,
+                  deliveredQuantity: 0,
+                  cancelledQuantity: 0,
+                  notes: "",
+                  kitchenStatus: "IN_PREP",
+                  round: 1,
+                  station: "BAR",
+                  createdAt: interval.serviceStartAt,
+                },
+              ],
+              orderedCents: 2270000,
+              deliveredCents: 0,
+              paidSubtotalCents: 0,
+              remainingCents: 2270000,
+              pendingQuantity: 3,
+              readyQuantity: 1,
+              payments: [],
+              auditLogs: [],
+              hasAuditAlerts: false,
+              auditAlertCount: 0,
+              cancellationCount: 0,
+            },
+          ],
+          products: [],
+          waiters: [{ id: "w-1", name: "Ana", role: "WAITER", phone: "", notes: "", active: true, createdAt: interval.serviceStartAt }],
+          unserved: [],
+          cashClosed: false,
+        },
+      }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(createElement(FloorBoardScreen, { restaurantId: "restaurant", restaurantName: "Bistró", readOnly: false }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Tickets de cocina" }).textContent).toContain("1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Tickets de cocina" }));
+    const kitchenPanel = screen.getByRole("region", { name: "Tickets de cocina y barra" });
+    expect(within(kitchenPanel).getByText("Milanesa")).toBeTruthy();
+    expect(within(kitchenPanel).getByText("Limonada")).toBeTruthy();
+    expect(within(kitchenPanel).getByText("Nota: Sin sal")).toBeTruthy();
+    expect(within(kitchenPanel).getByRole("link", { name: "KDS" }).getAttribute("href")).toBe("/admin/restaurants/restaurant/kitchen");
+
+    // Station filtering
+    const stationGroup = within(kitchenPanel).getByRole("group", { name: "Filtrar tickets por estación" });
+    fireEvent.click(within(stationGroup).getByRole("button", { name: "Barra" }));
+    expect(within(kitchenPanel).queryByText("Milanesa")).toBeNull();
+    expect(within(kitchenPanel).getByText("Limonada")).toBeTruthy();
+
+    fireEvent.click(within(stationGroup).getByRole("button", { name: "Todos" }));
+    expect(within(kitchenPanel).getByText("Milanesa")).toBeTruthy();
+
+    // Update kitchen status
+    fireEvent.click(within(kitchenPanel).getByRole("button", { name: "Entregar Milanesa" }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((call) => call[1]?.method === "POST");
+      expect(post).toBeTruthy();
+      expect(JSON.parse(String(post![1]!.body))).toEqual({
+        action: "update-kitchen-status",
+        lineId: "l-1",
+        status: "SERVED",
+      });
+    });
+
+    // Quick open account from ticket
+    fireEvent.click(within(kitchenPanel).getByRole("button", { name: "Cuenta" }));
+    expect(screen.getByRole("dialog", { name: "Cuenta · Mesa 1" })).toBeTruthy();
+  });
 });
