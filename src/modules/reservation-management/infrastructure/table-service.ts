@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { getJoinedTableGroups, restaurantLocalDateTime, restaurantToday, validateTableArrangement, type FloorRotation } from "@/modules/floor-management/contracts";
+import type { ServiceStockPort, StockStatus } from "@/modules/inventory-management/contracts";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import {
@@ -29,11 +30,102 @@ const allocationInclude = {
   room: { select: { name: true } },
 } satisfies Prisma.ReservationAllocationInclude;
 type AllocationRow = Prisma.ReservationAllocationGetPayload<{ include: typeof allocationInclude }>;
-const productSelect = { id: true, name: true, unitPriceCents: true, station: true, active: true } satisfies Prisma.ServiceProductSelect;
+const productSelect = {
+  id: true,
+  name: true,
+  unitPriceCents: true,
+  station: true,
+  active: true,
+  recipeId: true,
+  inventoryItemId: true,
+  recipe: {
+    select: {
+      name: true,
+      yieldPortions: true,
+      ingredients: {
+        select: {
+          quantityMilli: true,
+          inventoryItem: {
+            select: { currentStockMilli: true, minStockMilli: true, unitCostCents: true },
+          },
+        },
+      },
+    },
+  },
+  inventoryItem: {
+    select: {
+      name: true,
+      unitCostCents: true,
+      currentStockMilli: true,
+      minStockMilli: true,
+    },
+  },
+} satisfies Prisma.ServiceProductSelect;
 type ProductRow = Prisma.ServiceProductGetPayload<{ select: typeof productSelect }>;
 
 function toProduct(row: ProductRow): ServiceProductView {
-  return { ...row, station: (row.station === "BAR" ? "BAR" : "KITCHEN") as KitchenStation };
+  const station = (row.station === "BAR" ? "BAR" : "KITCHEN") as KitchenStation;
+  if (row.recipe) {
+    const safeYield = Math.max(1, row.recipe.yieldPortions);
+    let totalCostCents = 0;
+    let available = row.recipe.ingredients.length === 0 ? 0 : Number.POSITIVE_INFINITY;
+    let hasOut = false;
+    let hasLow = false;
+    for (const ing of row.recipe.ingredients) {
+      totalCostCents += Math.round((ing.quantityMilli * ing.inventoryItem.unitCostCents) / 1000);
+      const perPortion = ing.quantityMilli / safeYield;
+      if (perPortion > 0) {
+        available = Math.min(available, Math.max(0, Math.floor(ing.inventoryItem.currentStockMilli / perPortion)));
+      }
+      if (ing.inventoryItem.currentStockMilli <= 0) hasOut = true;
+      else if (ing.inventoryItem.currentStockMilli <= ing.inventoryItem.minStockMilli) hasLow = true;
+    }
+    const availableUnits = Number.isFinite(available) ? available : 0;
+    const stockStatus: StockStatus = hasOut || availableUnits === 0 ? "OUT" : hasLow ? "LOW" : "OK";
+    return {
+      id: row.id,
+      name: row.name,
+      unitPriceCents: row.unitPriceCents,
+      station,
+      active: row.active,
+      sourceKind: "RECIPE",
+      sourceName: row.recipe.name,
+      unitCostCents: Math.round(totalCostCents / safeYield),
+      stockStatus,
+      availableUnits,
+    };
+  }
+  if (row.inventoryItem) {
+    const stockStatus: StockStatus = row.inventoryItem.currentStockMilli <= 0
+      ? "OUT"
+      : row.inventoryItem.currentStockMilli <= row.inventoryItem.minStockMilli
+        ? "LOW"
+        : "OK";
+    return {
+      id: row.id,
+      name: row.name,
+      unitPriceCents: row.unitPriceCents,
+      station,
+      active: row.active,
+      sourceKind: "INVENTORY_ITEM",
+      sourceName: row.inventoryItem.name,
+      unitCostCents: row.inventoryItem.unitCostCents,
+      stockStatus,
+      availableUnits: Math.max(0, Math.floor(row.inventoryItem.currentStockMilli / 1000)),
+    };
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    unitPriceCents: row.unitPriceCents,
+    station,
+    active: row.active,
+    sourceKind: "MANUAL",
+    sourceName: null,
+    unitCostCents: null,
+    stockStatus: null,
+    availableUnits: null,
+  };
 }
 const staffSelect = { id: true, name: true, role: true, phone: true, notes: true, active: true, createdAt: true } satisfies Prisma.RestaurantStaffMemberSelect;
 const maxStoredCents = 2_147_483_647;
@@ -531,7 +623,7 @@ async function resolveOrderLineData(
   };
 }
 
-async function addLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"add-line">, now: Date) {
+async function addLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"add-line">, now: Date, stockPort?: ServiceStockPort) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const currentRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 1);
@@ -540,7 +632,16 @@ async function addLine(tx: Prisma.TransactionClient, restaurantId: string, actor
   if (toAccount(account).orderedCents + lineTotalCents > maxStoredCents) {
     throw new BadRequestError("El total de la cuenta supera el máximo admitido.");
   }
-  await tx.serviceOrderLine.create({ data });
+  const created = await tx.serviceOrderLine.create({ data });
+  const reference = `${account.roomName} · ${account.tables.map((t) => t.label).join("+") || account.reservationCode}`;
+  const stockWarnings = created.productId && stockPort
+    ? await stockPort.consumeForOrderLines(tx, restaurantId, actorId, reference, [{
+        orderLineId: created.id,
+        productId: created.productId,
+        productName: created.name,
+        quantity: created.quantity,
+      }])
+    : [];
   await appendAuditLogs(tx, account.id, restaurantId, account.assignedWaiterName ?? null, actorId, now, [
     data.productId
       ? {
@@ -558,10 +659,11 @@ async function addLine(tx: Prisma.TransactionClient, restaurantId: string, actor
           amountDeltaCents: lineTotalCents,
         },
   ]);
-  return toAccount(await findAccount(tx, restaurantId, account.id));
+  const result = toAccount(await findAccount(tx, restaurantId, account.id));
+  return stockWarnings.length > 0 ? { ...result, stockWarnings } : result;
 }
 
-async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"confirm-order">, now: Date) {
+async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"confirm-order">, now: Date, stockPort?: ServiceStockPort) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const nextRound = account.lines.reduce((max, line) => Math.max(max, line.round ?? 1), 0) + 1;
@@ -579,9 +681,22 @@ async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, 
     }
     linesToCreate.push(data);
   }
+  const stockTargets: { orderLineId: string; productId: string; productName: string; quantity: number }[] = [];
   for (const data of linesToCreate) {
-    await tx.serviceOrderLine.create({ data });
+    const created = await tx.serviceOrderLine.create({ data });
+    if (created.productId) {
+      stockTargets.push({
+        orderLineId: created.id,
+        productId: created.productId,
+        productName: created.name,
+        quantity: created.quantity,
+      });
+    }
   }
+  const reference = `${account.roomName} · ${account.tables.map((t) => t.label).join("+") || account.reservationCode}`;
+  const stockWarnings = stockTargets.length > 0 && stockPort
+    ? await stockPort.consumeForOrderLines(tx, restaurantId, actorId, reference, stockTargets)
+    : [];
   const manualEntries: AuditEntryInput[] = linesToCreate
     .filter((data) => !data.productId)
     .map((data) => {
@@ -606,10 +721,11 @@ async function confirmOrder(tx: Prisma.TransactionClient, restaurantId: string, 
     },
     ...manualEntries,
   ]);
-  return toAccount(await findAccount(tx, restaurantId, account.id));
+  const result = toAccount(await findAccount(tx, restaurantId, account.id));
+  return stockWarnings.length > 0 ? { ...result, stockWarnings } : result;
 }
 
-async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"update-line">, now: Date) {
+async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, actorId: string, command: Command<"update-line">, now: Date, stockPort?: ServiceStockPort) {
   const account = await findAccount(tx, restaurantId, command.accountId);
   await updateAccount(tx, account, command.expectedVersion);
   const line = account.lines.find(({ id }) => id === command.lineId);
@@ -638,6 +754,15 @@ async function updateLine(tx: Prisma.TransactionClient, restaurantId: string, ac
         ? "SERVED"
         : line.kitchenStatus;
   await tx.serviceOrderLine.update({ where: { id: line.id }, data: { deliveredQuantity, cancelledQuantity, kitchenStatus: nextStatus } });
+  if (line.kitchenStatus === "PENDING" && line.productId && cancelledQuantity !== line.cancelledQuantity && stockPort) {
+    const reference = `${account.roomName} · ${account.tables.map((t) => t.label).join("+") || account.reservationCode}`;
+    await stockPort.syncCancelledOrderLine(tx, restaurantId, actorId, reference, {
+      orderLineId: line.id,
+      productId: line.productId,
+      previousCancelledQuantity: line.cancelledQuantity,
+      nextCancelledQuantity: cancelledQuantity,
+    });
+  }
   const entries: AuditEntryInput[] = [];
   if (cancelledQuantity > line.cancelledQuantity) {
     const delta = cancelledQuantity - line.cancelledQuantity;
@@ -1160,6 +1285,88 @@ async function archiveProduct(tx: Prisma.TransactionClient, restaurantId: string
   return toProduct(await tx.serviceProduct.findUniqueOrThrow({ where: { id }, select: productSelect }));
 }
 
+async function approveCatalogProposal(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  actorId: string,
+  command: Command<"approve-catalog-proposal">,
+  now: Date,
+) {
+  const proposal = await tx.catalogProductProposal.findFirst({
+    where: { id: command.proposalId, restaurantId, status: "PENDING" },
+    select: { id: true, sourceKind: true, recipeId: true, inventoryItemId: true },
+  });
+  if (!proposal) throw new NotFoundError("Solicitud pendiente de aprobación");
+
+  if (proposal.sourceKind === "RECIPE") {
+    if (!proposal.recipeId) throw new BadRequestError("La solicitud no tiene una receta válida.");
+    const recipe = await tx.recipe.findFirst({ where: { id: proposal.recipeId, restaurantId, active: true }, select: { id: true } });
+    if (!recipe) throw new NotFoundError("Receta activa");
+    const duplicate = await tx.serviceProduct.findFirst({
+      where: { restaurantId, recipeId: proposal.recipeId, active: true },
+      select: { id: true },
+    });
+    if (duplicate) throw new ConflictError("Esta receta ya cuenta con un producto activo en el Catálogo.");
+  } else {
+    if (!proposal.inventoryItemId) throw new BadRequestError("La solicitud no tiene un producto de inventario válido.");
+    const item = await tx.inventoryItem.findFirst({
+      where: { id: proposal.inventoryItemId, restaurantId, active: true },
+      select: { id: true },
+    });
+    if (!item) throw new NotFoundError("Producto de inventario activo");
+    const duplicate = await tx.serviceProduct.findFirst({
+      where: { restaurantId, inventoryItemId: proposal.inventoryItemId, active: true },
+      select: { id: true },
+    });
+    if (duplicate) throw new ConflictError("Este producto ya cuenta con un producto activo en el Catálogo.");
+  }
+
+  const created = await tx.serviceProduct.create({
+    data: {
+      restaurantId,
+      name: command.name,
+      unitPriceCents: command.unitPriceCents,
+      station: command.station,
+      recipeId: proposal.recipeId,
+      inventoryItemId: proposal.inventoryItemId,
+      active: true,
+    },
+    select: productSelect,
+  });
+
+  await tx.catalogProductProposal.update({
+    where: { id: proposal.id },
+    data: {
+      status: "APPROVED",
+      approvedProductId: created.id,
+      reviewedBy: actorId,
+      reviewedAt: now,
+    },
+  });
+
+  return toProduct(created);
+}
+
+async function rejectCatalogProposal(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  actorId: string,
+  command: Command<"reject-proposal" extends never ? never : "reject-catalog-proposal">,
+  now: Date,
+) {
+  const updated = await tx.catalogProductProposal.updateMany({
+    where: { id: command.proposalId, restaurantId, status: "PENDING" },
+    data: {
+      status: "REJECTED",
+      rejectionReason: command.reason?.trim() || "Rechazada desde Catálogo.",
+      reviewedBy: actorId,
+      reviewedAt: now,
+    },
+  });
+  if (updated.count !== 1) throw new NotFoundError("Solicitud pendiente de aprobación");
+  return { updated: true };
+}
+
 async function saveStaff(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-staff">) {
   const data = {
     name: command.name,
@@ -1218,7 +1425,10 @@ async function recordCashEvent(tx: Prisma.TransactionClient, restaurantId: strin
 }
 
 export class TableService {
-  constructor(private readonly database: PrismaClient) {}
+  constructor(
+    private readonly database: PrismaClient,
+    private readonly stockPort?: ServiceStockPort,
+  ) {}
 
   async snapshot(restaurantId: string, now = new Date(), at?: Date): Promise<ServiceSnapshot> {
     return withSqliteTransaction(this.database, async (tx) => {
@@ -1364,9 +1574,9 @@ export class TableService {
         case "open-table": return openTable(tx, restaurantId, actorId, command, timeZone, now);
         case "assign-waiter": return assignWaiter(tx, restaurantId, actorId, command, now);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
-        case "add-line": return addLine(tx, restaurantId, actorId, command, now);
-        case "confirm-order": return confirmOrder(tx, restaurantId, actorId, command, now);
-        case "update-line": return updateLine(tx, restaurantId, actorId, command, now);
+        case "add-line": return addLine(tx, restaurantId, actorId, command, now, this.stockPort);
+        case "confirm-order": return confirmOrder(tx, restaurantId, actorId, command, now, this.stockPort);
+        case "update-line": return updateLine(tx, restaurantId, actorId, command, now, this.stockPort);
         case "deliver-all": return deliverAll(tx, restaurantId, actorId, command, now);
         case "march-round": return marchRound(tx, restaurantId, actorId, command, now);
         case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, actorId, command, now);
@@ -1374,6 +1584,8 @@ export class TableService {
         case "checkout": return checkout(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "save-product": return saveProduct(tx, restaurantId, command);
         case "archive-product": return archiveProduct(tx, restaurantId, command.id);
+        case "approve-catalog-proposal": return approveCatalogProposal(tx, restaurantId, actorId, command, now);
+        case "reject-catalog-proposal": return rejectCatalogProposal(tx, restaurantId, actorId, command, now);
         case "save-staff": return saveStaff(tx, restaurantId, command);
         case "set-staff-active": return setStaffActive(tx, restaurantId, command);
         case "close-day":

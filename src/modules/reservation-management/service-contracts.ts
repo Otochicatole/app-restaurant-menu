@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StockStatus, StockWarningView } from "@/modules/inventory-management/contracts";
 
 export const servicePaymentMethodSchema = z.enum(["CASH", "CARD", "TRANSFER_QR", "SPLIT"]);
 export type ServicePaymentMethod = z.infer<typeof servicePaymentMethodSchema>;
@@ -175,6 +176,18 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("save-product"), id: id.optional(), name, unitPriceCents, station: kitchenStationSchema.optional() }),
   z.object({ action: z.literal("archive-product"), id }),
   z.object({
+    action: z.literal("approve-catalog-proposal"),
+    proposalId: id,
+    name,
+    unitPriceCents,
+    station: kitchenStationSchema,
+  }),
+  z.object({
+    action: z.literal("reject-catalog-proposal"),
+    proposalId: id,
+    reason: z.string().trim().max(300).optional(),
+  }),
+  z.object({
     action: z.literal("save-staff"),
     id: id.optional(),
     name: z.string().trim().min(1).max(100),
@@ -192,7 +205,18 @@ export const serviceCashRangeSchema = z.object({ from: date, to: date })
   .refine(({ from, to }) => from <= to, "El inicio del período debe ser anterior o igual al fin.");
 
 export type ServiceCommand = z.infer<typeof serviceCommandSchema>;
-export type ServiceProductView = { id: string; name: string; unitPriceCents: number; station: KitchenStation; active: boolean };
+export type ServiceProductView = {
+  id: string;
+  name: string;
+  unitPriceCents: number;
+  station: KitchenStation;
+  active: boolean;
+  sourceKind?: "MANUAL" | "RECIPE" | "INVENTORY_ITEM";
+  sourceName?: string | null;
+  unitCostCents?: number | null;
+  stockStatus?: StockStatus | null;
+  availableUnits?: number | null;
+};
 
 export type StaffMemberView = {
   id: string;
@@ -285,6 +309,7 @@ export type ServiceAccountView = {
   hasAuditAlerts: boolean;
   auditAlertCount: number;
   cancellationCount: number;
+  stockWarnings?: StockWarningView[];
 };
 
 export type ServiceAccountAuditLogView = {

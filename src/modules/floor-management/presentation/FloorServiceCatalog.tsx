@@ -345,6 +345,16 @@ export function FloorServiceCatalog({
                         {amount(product.unitPriceCents)}
                       </span>
                       <span className="inline-flex items-center gap-1">
+                        {product.stockStatus === "OUT" && (
+                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-800">
+                            Sin stock
+                          </span>
+                        )}
+                        {product.stockStatus === "LOW" && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                            Stock bajo
+                          </span>
+                        )}
                         <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                           isBar ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-950"
                         }`}>

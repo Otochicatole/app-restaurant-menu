@@ -97,6 +97,11 @@ model Restaurant {
   serviceProducts              ServiceProduct[]
   serviceCashEvents            ServiceCashEvent[]
   staffMembers                 RestaurantStaffMember[]
+  suppliers                    Supplier[]
+  inventoryItems               InventoryItem[]
+  recipes                      Recipe[]
+  inventoryMovements           InventoryMovement[]
+  catalogProposals             CatalogProductProposal[]
 
   @@index([organizationId])
 }
@@ -617,19 +622,26 @@ model ReservationAllocationTable {
 }
 
 model ServiceProduct {
-  id             String @id @default(cuid())
-  restaurantId   String
-  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  name           String
-  unitPriceCents Int
-  station        String @default("KITCHEN")
-  active         Boolean @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  lines          ServiceOrderLine[]
+  id              String                   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name            String
+  unitPriceCents  Int
+  station         String                   @default("KITCHEN")
+  recipeId        String?
+  recipe          Recipe?                  @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem?           @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  lines           ServiceOrderLine[]
+  proposals       CatalogProductProposal[]
 
   @@unique([id, restaurantId])
   @@index([restaurantId, active, name])
+  @@index([restaurantId, recipeId])
+  @@index([restaurantId, inventoryItemId])
 }
 
 enum StaffRole {
@@ -803,4 +815,136 @@ model ServiceCashEvent {
   receiptCount  Int @default(0)
 
   @@unique([restaurantId, businessDate, revision])
+}
+
+model Supplier {
+  id           String              @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  contactName  String              @default("")
+  phone        String              @default("")
+  email        String              @default("")
+  notes        String              @default("")
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  items        InventoryItem[]
+  movements    InventoryMovement[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, name])
+}
+
+model InventoryItem {
+  id                String                   @id @default(cuid())
+  restaurantId      String
+  restaurant        Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  unit              String                   @default("U")
+  unitCostCents     Int                      @default(0)
+  currentStockMilli Int                      @default(0)
+  minStockMilli     Int                      @default(0)
+  isDirectSale      Boolean                  @default(false)
+  supplierId        String?
+  supplier          Supplier?                @relation(fields: [supplierId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  active            Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  recipeIngredients RecipeIngredient[]
+  movements         InventoryMovement[]
+  proposals         CatalogProductProposal[]
+  serviceProducts   ServiceProduct[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, code])
+  @@index([restaurantId, active, name])
+  @@index([restaurantId, supplierId])
+}
+
+model Recipe {
+  id              String                   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code            String
+  name            String
+  yieldPortions   Int                      @default(1)
+  notes           String                   @default("")
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  ingredients     RecipeIngredient[]
+  movements       InventoryMovement[]
+  proposals       CatalogProductProposal[]
+  serviceProducts ServiceProduct[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, code])
+  @@index([restaurantId, active, name])
+}
+
+model RecipeIngredient {
+  id              String        @id @default(cuid())
+  recipeId        String
+  restaurantId    String
+  inventoryItemId String
+  quantityMilli   Int
+  displayUnit     String        @default("U")
+  recipe          Recipe        @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+
+  @@unique([recipeId, inventoryItemId])
+  @@index([restaurantId, inventoryItemId])
+}
+
+model InventoryMovement {
+  id              String        @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  kind            String
+  deltaMilli      Int
+  balanceMilli    Int
+  unitCostCents   Int?
+  supplierId      String?
+  supplier        Supplier?     @relation(fields: [supplierId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  recipeId        String?
+  recipe          Recipe?       @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  orderLineId     String?
+  referenceLabel  String        @default("")
+  notes           String        @default("")
+  actorId         String
+  createdAt       DateTime      @default(now())
+
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, inventoryItemId, createdAt])
+  @@index([orderLineId])
+}
+
+model CatalogProductProposal {
+  id                  String          @id @default(cuid())
+  restaurantId        String
+  restaurant          Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sourceKind          String
+  recipeId            String?
+  recipe              Recipe?         @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  inventoryItemId     String?
+  inventoryItem       InventoryItem?  @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  proposedName        String
+  suggestedPriceCents Int?
+  suggestedStation    String          @default("KITCHEN")
+  status              String          @default("PENDING")
+  rejectionReason     String?
+  approvedProductId   String?
+  approvedProduct     ServiceProduct? @relation(fields: [approvedProductId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  createdBy           String
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, status, createdAt])
 }

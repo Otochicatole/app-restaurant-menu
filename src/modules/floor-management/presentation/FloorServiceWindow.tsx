@@ -131,6 +131,7 @@ export function FloorServiceWindow({
   const [mobilePane, setMobilePane] = useState<"catalog" | "ticket">("catalog");
   const [lastPartialPayment, setLastPartialPayment] = useState<ServiceAccountPaymentView | null>(null);
   const [printingPayment, setPrintingPayment] = useState<ServiceAccountPaymentView | null>(null);
+  const [stockWarnings, setStockWarnings] = useState<NonNullable<ServiceAccountView["stockWarnings"]>>([]);
   const nextDraftKeyRef = useRef(0);
   const [draftState, setDraftState] = useState<{ accountId: string | null; items: DraftOrderItem[]; removals: ServiceDraftRemovalInput[] }>({
     accountId: account?.id ?? null,
@@ -162,6 +163,11 @@ export function FloorServiceWindow({
     setFailure(null);
     try {
       const updated = await onCommand(command);
+      if (updated.stockWarnings && updated.stockWarnings.length > 0) {
+        setStockWarnings(updated.stockWarnings);
+      } else if (command.action === "confirm-order" || command.action === "add-line") {
+        setStockWarnings([]);
+      }
       if (command.action === "checkout" || command.action === "close-empty" || (command.action === "pay-partial" && updated.closedAt !== null)) {
         setReceipt(updated);
       } else if (command.action === "pay-partial") {
@@ -588,6 +594,16 @@ export function FloorServiceWindow({
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800 sm:px-6">
             <p role="alert">{error}</p>
             {loadError && <button type="button" className={tableActionButtonClass} disabled={busy} onClick={onRefresh}>Actualizar cuenta</button>}
+          </div>
+        )}
+
+        {stockWarnings.length > 0 && (
+          <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-950 sm:px-6">
+            <p>
+              <strong>Aviso de stock:</strong>{" "}
+              {stockWarnings.map((warning) => `${warning.itemName} (${warning.kind === "INSUFFICIENT" ? "stock insuficiente" : "bajo mínimo"})`).join(", ")}.
+            </p>
+            <button type="button" className={tableActionButtonClass} onClick={() => setStockWarnings([])}>Entendido</button>
           </div>
         )}
 

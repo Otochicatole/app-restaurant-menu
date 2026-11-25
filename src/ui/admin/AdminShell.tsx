@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet, Wine } from "lucide-react";
+import { Boxes, CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet, Wine } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AdminNavigationGuardProvider, useAdminNavigationGuard } from "./AdminNavigationGuard";
 
@@ -55,6 +55,7 @@ function AdminShellContent({
     { label: "Barra", href: `${basePath}/kitchen?station=BAR`, exact: true, icon: Wine },
     { label: "Caja", href: `${basePath}/cash`, exact: true, icon: Wallet },
     { label: "Catálogo", href: `${basePath}/products`, icon: Package },
+    { label: "Inventario", href: `${basePath}/inventory`, icon: Boxes },
     { label: "Personal", href: `${basePath}/staff`, icon: Users },
     { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
     { label: "Mi cuenta", href: "/admin/account", icon: UserRound },

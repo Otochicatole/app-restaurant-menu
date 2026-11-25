@@ -9,7 +9,16 @@ import { handleApiError, successResponse } from "@/platform/http/api-response";
 import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
 
 type Context = { params: Promise<{ restaurantId: string }> };
-const adminActions = new Set(["save-product", "archive-product", "save-staff", "set-staff-active", "close-day", "reopen-day"]);
+const adminActions = new Set([
+  "save-product",
+  "archive-product",
+  "approve-catalog-proposal",
+  "reject-catalog-proposal",
+  "save-staff",
+  "set-staff-active",
+  "close-day",
+  "reopen-day",
+]);
 const modeSchema = z.enum(["board", "cash", "products", "staff"]);
 
 function privateResponse(response: Response) {

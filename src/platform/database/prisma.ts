@@ -14,7 +14,9 @@ const hasLatestDelegates =
   typeof cachedClient?.tableReservation !== "undefined" &&
   typeof cachedClient?.restaurantStaffMember !== "undefined" &&
   typeof cachedClient?.serviceAccountAuditLog !== "undefined" &&
-  typeof cachedClient?.serviceAccountPayment !== "undefined";
+  typeof cachedClient?.serviceAccountPayment !== "undefined" &&
+  typeof cachedClient?.inventoryItem !== "undefined" &&
+  typeof cachedClient?.catalogProductProposal !== "undefined";
 
 export const prisma =
   hasLatestDelegates && cachedClient

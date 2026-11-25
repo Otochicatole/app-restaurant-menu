@@ -353,5 +353,70 @@ describe("CashCmsScreen and ServiceCatalogScreen separation", () => {
       });
     });
   });
+
+  it("shows pending proposals from Inventario in Pendientes de aprobación and approves into Catálogo", async () => {
+    const products: Array<{ id: string; name: string; unitPriceCents: number; station: string; active: boolean; sourceKind?: string }> = [];
+    const proposals = [
+      {
+        id: "prop-1",
+        sourceKind: "RECIPE",
+        recipeId: "rec-1",
+        inventoryItemId: null,
+        sourceCode: "REC-001",
+        sourceName: "Pizza Muzzarella",
+        proposedName: "Pizza Muzzarella",
+        suggestedPriceCents: null,
+        suggestedStation: "KITCHEN",
+        estimatedCostCents: 36000,
+        ingredientSummary: ["200 g Harina 000", "2 u Huevo"],
+        status: "PENDING",
+        rejectionReason: null,
+        approvedProductId: null,
+        createdAt: "2026-11-25T12:00:00.000Z",
+        reviewedAt: null,
+      },
+    ];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/inventory")) {
+        return new Response(JSON.stringify({ success: true, data: { proposals } }), { status: 200 });
+      }
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        if (body.action === "approve-catalog-proposal") {
+          proposals[0] = { ...proposals[0], status: "APPROVED" };
+          const created = { id: "p-approved", name: body.name, unitPriceCents: body.unitPriceCents, station: body.station, active: true, sourceKind: "RECIPE" };
+          products.push(created);
+          return new Response(JSON.stringify({ success: true, data: created }), { status: 200 });
+        }
+      }
+      return new Response(JSON.stringify({ success: true, data: [...products] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(createElement(ServiceCatalogScreen, { restaurantId: "rest-1" }));
+
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Pendientes de aprobación/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: /Pendientes de aprobación/ }));
+
+    const approvalList = await screen.findByRole("list", { name: "Propuestas pendientes de aprobación" });
+    expect(within(approvalList).getByText("Pizza Muzzarella")).toBeTruthy();
+
+    fireEvent.click(within(approvalList).getByRole("button", { name: "Aprobar y crear producto" }));
+    const approveDialog = screen.getByRole("dialog", { name: "Aprobar y crear producto" });
+    fireEvent.change(within(approveDialog).getByLabelText("Precio unitario en pesos"), { target: { value: "12500,00" } });
+    fireEvent.click(within(approveDialog).getByRole("button", { name: "Aprobar y crear producto" }));
+
+    await waitFor(() => expect(screen.getByText("Producto aprobado y creado en el Catálogo.")).toBeTruthy());
+    const approvePost = fetchMock.mock.calls.find((call) => call[1]?.method === "POST");
+    expect(JSON.parse(String(approvePost![1]!.body))).toEqual({
+      action: "approve-catalog-proposal",
+      proposalId: "prop-1",
+      name: "Pizza Muzzarella",
+      unitPriceCents: 1250000,
+      station: "KITCHEN",
+    });
+  });
 });
 
