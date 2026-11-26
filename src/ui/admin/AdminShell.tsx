@@ -41,6 +41,7 @@ function AdminShellContent({
   const [mobileOpen, setMobileOpen] = useState(false);
   const basePath = `/admin/restaurants/${restaurantId}`;
   const isMenusPage = pathname === "/admin/restaurants";
+  const isMenuEditorPage = pathname === basePath;
   const isLandingPage = pathname === `${basePath}/landing`;
   const isFloorEditorPage = pathname === `${basePath}/rooms`;
   const isKitchenPage = pathname === `${basePath}/kitchen`;
@@ -209,21 +210,17 @@ function AdminShellContent({
         <Menu size={18} />
       </button>}
 
-      {/* Contenido principal: vista completa para /admin/landing, /admin/kitchen o contenedor con padding para settings */}
+      {/* Contenido principal: vista completa para editor de carta, landing, salas o cocina */}
       {isFloorEditorPage ? (
         children
-      ) : isKitchenPage ? (
+      ) : isKitchenPage || isMenuEditorPage || isLandingPage ? (
         <div className="min-h-screen bg-[#f8faf7] md:pl-16">{children}</div>
       ) : (
         <div className="md:pl-16">
           <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
             <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
           </header>
-          {isLandingPage ? (
-            <div className="h-[calc(100dvh-3.5rem)] w-full flex flex-col">{children}</div>
-          ) : (
-            <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
-          )}
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
         </div>
       )}
     </div>

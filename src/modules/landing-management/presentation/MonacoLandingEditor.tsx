@@ -39,7 +39,7 @@ function LandingStudio({ restaurant }: { restaurant: LandingRestaurant }) {
   const port = useLandingCanvasPort();
   const commands = useMemo(() => createLandingDocumentCommands(store, restaurant, port), [store, restaurant, port]);
   return (
-    <div className="flex flex-col h-screen w-full bg-zinc-100 text-zinc-900 overflow-hidden select-none">
+    <div className="flex flex-col h-dvh w-full bg-zinc-100 text-zinc-900 overflow-hidden select-none">
       <LandingEditorToolbar restaurant={restaurant} commands={commands} />
       <LandingFeedback />
       <div className="flex flex-1 overflow-hidden min-h-0">

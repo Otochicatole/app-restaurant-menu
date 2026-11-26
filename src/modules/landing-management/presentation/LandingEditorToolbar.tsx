@@ -53,7 +53,7 @@ export function LandingEditorToolbar({ restaurant, commands }: { restaurant: Lan
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSaveDraft, handleUndo, handleRedo, codeDrawerMode, setCodeDrawerMode]);
   return (
-    <header className="flex items-center justify-between h-13 px-4 bg-white border-b border-zinc-200 shrink-0 gap-3 shadow-2xs">
+    <header className="flex items-center justify-between h-12 px-4 bg-white border-b border-zinc-200 shrink-0 gap-3 shadow-2xs">
         {/* Left: Breadcrumb + Status */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="flex items-center gap-2">

@@ -532,9 +532,9 @@ function CanvasEditorContent({ restaurantId, restaurantName, restaurantSlug, pub
       <p className="text-sm leading-6 text-zinc-600">Para diseñar con precisión necesitás una pantalla más grande. Desde acá podés abrir la configuración o ver la carta pública.</p>
       <div className="flex flex-wrap gap-2"><a className="rounded-xl bg-[#182618] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#253621]" href={`/admin/restaurants/${encodeURIComponent(restaurantId)}/settings`}>Configuración</a><a className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" href={`/m/${encodeURIComponent(restaurantSlug)}`} target="_blank">Ver carta pública</a><button type="button" className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50" onClick={() => void downloadQr()}><QrCode size={16} aria-hidden="true" />Descargar QR</button></div>
     </div>
-    <div className="fixed bottom-0 right-0 top-14 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
+    <div className="fixed inset-y-0 right-0 hidden flex-col border-l border-zinc-200 bg-zinc-100 text-zinc-900 md:flex" style={{ left: "var(--admin-nav-width, 0px)" }}>
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-zinc-200 bg-white/95 px-4 shadow-2xs backdrop-blur-md z-20">
+    <header className="z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-4 shadow-2xs backdrop-blur-md">
       {/* Lado izquierdo: Información del Menú y Estado */}
       <div className="flex min-w-0 items-center gap-3">
         <h1 className="sr-only">Editor de carta: {restaurantName}</h1>
