@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { RestaurantFeatureFlags } from "@/modules/restaurant-management/contracts";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { Boxes, CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet, Wine } from "lucide-react";
+import { Boxes, CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AdminNavigationGuardProvider, useAdminNavigationGuard } from "./AdminNavigationGuard";
 
@@ -68,8 +68,7 @@ function AdminShellContent({
       : []),
     ...(resolvedFeatures.floorManagement
       ? [
-          { label: "Cocina", href: `${basePath}/kitchen`, exact: true, icon: ChefHat },
-          { label: "Barra", href: `${basePath}/kitchen?station=BAR`, exact: true, icon: Wine },
+          { label: "Cocina y barra", href: `${basePath}/kitchen`, exact: true, icon: ChefHat },
           { label: "Caja", href: `${basePath}/cash`, exact: true, icon: Wallet },
           { label: "Catálogo", href: `${basePath}/products`, icon: Package },
         ]
