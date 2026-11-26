@@ -129,14 +129,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
 
           {tab === "products" ? (
             <>
-              <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:px-5">
-                <label className="grid gap-1 text-sm font-medium text-zinc-800 sm:w-80">
-                  Buscar producto
-                  <span className="relative block">
-                    <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} className={`${serviceInputClass} w-full pl-9`} />
-                  </span>
-                </label>
+              <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <div role="group" aria-label="Filtrar por estación" className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1">
                     {([
@@ -161,10 +154,21 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
                       </button>
                     ))}
                   </div>
-                  <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-700">
+                  <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-zinc-700">
                     <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} className="size-4 accent-[#3d5934]" />
                     Mostrar archivados
                   </label>
+                </div>
+                <div className="relative sm:w-72">
+                  <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="search"
+                    aria-label="Buscar producto"
+                    placeholder="Buscar producto…"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className={`${serviceInputClass} w-full pl-9`}
+                  />
                 </div>
               </div>
               {visible.length === 0 ? (
