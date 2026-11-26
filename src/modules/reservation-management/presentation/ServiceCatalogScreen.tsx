@@ -91,7 +91,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
       {result?.error && <ServiceLoadError message={result.error} onRetry={refresh} />}
       {result?.data && (
         <AdminCard>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-4 pt-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3.5 sm:px-5">
             <div role="tablist" aria-label="Vistas del catálogo" className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1">
               <button
                 type="button"
