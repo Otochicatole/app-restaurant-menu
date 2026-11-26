@@ -160,8 +160,23 @@ export function FloorBoardInspector({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white text-[var(--floor-ink,#173642)]">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--floor-border,#cad9df)] px-3 py-2">
-        <div role="tablist" aria-label="Panel operativo de sala" className="grid min-w-0 flex-1 grid-flow-col gap-1 rounded-lg bg-[#eef4f6] p-1">
+      {onCloseMobile && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--floor-border,#cad9df)] px-3.5 py-2.5 xl:hidden">
+          <span className="min-w-0 truncate text-xs font-bold text-[var(--floor-ink,#173642)]">
+            Panel operativo · {roomName}
+          </span>
+          <button
+            {...transientButtonProps}
+            type="button"
+            onClick={onCloseMobile}
+            className="inline-flex h-8 shrink-0 items-center rounded-lg border border-[var(--floor-border,#cad9df)] bg-white px-2.5 text-xs font-semibold text-[var(--floor-ink,#173642)] hover:bg-[var(--floor-hover,#e6f2f6)]"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+      <div className="shrink-0 border-b border-[var(--floor-border,#cad9df)] px-2.5 py-2 sm:px-3">
+        <div role="tablist" aria-label="Panel operativo de sala" className="grid min-w-0 w-full grid-flow-col auto-cols-fr gap-1 rounded-lg bg-[#eef4f6] p-1">
           {tabs.map((tab) => {
             const active = visibleTab === tab.id;
             return (
@@ -175,7 +190,7 @@ export function FloorBoardInspector({
                   if (tab.id !== "reservations") onSelectAllocationId(null);
                   onTabChange(tab.id);
                 }}
-                className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#0e7490)] ${
+                className={`inline-flex min-h-8 min-w-0 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[var(--floor-focus,#0e7490)] sm:gap-1.5 sm:px-2 sm:text-xs ${
                   active
                     ? "bg-white text-[var(--floor-ink,#173642)] shadow-xs"
                     : "text-[var(--floor-muted,#4b6470)] hover:text-[var(--floor-ink,#173642)]"
@@ -184,7 +199,7 @@ export function FloorBoardInspector({
                 <span className="truncate">{tab.label}</span>
                 {tab.count !== undefined && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
                       active ? "bg-[#e6f2f6] text-[#155e75]" : "bg-white/80 text-[#4b6470]"
                     }`}
                   >
@@ -195,16 +210,6 @@ export function FloorBoardInspector({
             );
           })}
         </div>
-        {onCloseMobile && (
-          <button
-            {...transientButtonProps}
-            type="button"
-            onClick={onCloseMobile}
-            className="inline-flex h-8 shrink-0 items-center rounded-lg border border-[var(--floor-border,#cad9df)] bg-white px-2.5 text-xs font-semibold text-[var(--floor-ink,#173642)] hover:bg-[var(--floor-hover,#e6f2f6)] xl:hidden"
-          >
-            Cerrar
-          </button>
-        )}
       </div>
 
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4">

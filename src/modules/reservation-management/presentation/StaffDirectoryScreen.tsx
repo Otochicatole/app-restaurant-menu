@@ -115,60 +115,105 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] border-collapse text-left text-sm" aria-label="Listado de personal">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-[#f8faf7] text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                    <th scope="col" className="px-4 py-3 sm:px-5">Nombre</th>
-                    <th scope="col" className="px-4 py-3">Rol</th>
-                    <th scope="col" className="px-4 py-3">Estado</th>
-                    <th scope="col" className="px-4 py-3 text-right sm:px-5">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {visible.map((member) => {
-                    const busy = togglingId === member.id;
-                    return (
-                      <tr key={member.id} className={member.active ? "bg-white hover:bg-zinc-50/70" : "bg-zinc-50/70 text-zinc-500"}>
-                        <td className="px-4 py-3 font-semibold text-zinc-950 sm:px-5">{member.name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${member.role === "WAITER" ? "bg-[#e8efe6] text-[#263e23]" : "bg-zinc-100 text-zinc-700"}`}>
-                            {staffRoleLabels[member.role]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${member.active ? "bg-emerald-50 text-emerald-800" : "bg-zinc-200/80 text-zinc-700"}`}>
-                            {member.active ? "Activo" : "Inactivo"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 sm:px-5">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              aria-label={`Editar ${member.name}`}
-                              disabled={busy}
-                              className={`${adminSecondaryButtonClass} min-h-10 px-3 py-2`}
-                              onClick={() => { setActionError(""); setEditing({ open: true, member }); }}
-                            >
-                              <Pencil size={15} aria-hidden="true" /> Editar
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`${member.active ? "Desactivar" : "Reactivar"} ${member.name}`}
-                              disabled={busy}
-                              className={`${adminSecondaryButtonClass} min-h-10 px-3 py-2`}
-                              onClick={() => { void toggleActive(member); }}
-                            >
-                              <Power size={15} aria-hidden="true" /> {member.active ? "Desactivar" : "Reactivar"}
-                            </button>
+            <>
+              <div className="divide-y divide-stone-100 md:hidden">
+                {visible.map((member) => {
+                  const busy = togglingId === member.id;
+                  return (
+                    <div key={member.id} className="space-y-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-stone-900">{member.name}</p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${member.role === "WAITER" ? "border border-emerald-200 bg-emerald-50 text-emerald-800" : "border border-stone-200 bg-stone-50 text-stone-700"}`}>
+                              {staffRoleLabels[member.role]}
+                            </span>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${member.active ? "bg-emerald-50 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>
+                              {member.active ? "Activo" : "Inactivo"}
+                            </span>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Editar ${member.name}`}
+                          disabled={busy}
+                          className={`${adminSecondaryButtonClass} min-h-10 px-3 py-1.5 text-xs`}
+                          onClick={() => { setActionError(""); setEditing({ open: true, member }); }}
+                        >
+                          <Pencil size={14} aria-hidden="true" /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${member.active ? "Desactivar" : "Reactivar"} ${member.name}`}
+                          disabled={busy}
+                          className={`${adminSecondaryButtonClass} min-h-10 px-3 py-1.5 text-xs`}
+                          onClick={() => { void toggleActive(member); }}
+                        >
+                          <Power size={14} aria-hidden="true" /> {member.active ? "Desactivar" : "Reactivar"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full border-collapse text-left text-sm" aria-label="Listado de personal">
+                  <thead>
+                    <tr className="border-b border-stone-200 bg-stone-50/80 text-xs font-medium text-stone-600">
+                      <th scope="col" className="px-4 py-3 sm:px-5">Nombre</th>
+                      <th scope="col" className="px-4 py-3">Rol</th>
+                      <th scope="col" className="px-4 py-3">Estado</th>
+                      <th scope="col" className="px-4 py-3 text-right sm:px-5">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {visible.map((member) => {
+                      const busy = togglingId === member.id;
+                      return (
+                        <tr key={member.id} className={member.active ? "bg-white hover:bg-stone-50/70" : "bg-stone-50/70 text-stone-500"}>
+                          <td className="px-4 py-3 font-medium text-stone-900 sm:px-5">{member.name}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium ${member.role === "WAITER" ? "border border-emerald-200 bg-emerald-50 text-emerald-800" : "border border-stone-200 bg-stone-50 text-stone-700"}`}>
+                              {staffRoleLabels[member.role]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${member.active ? "bg-emerald-50 text-emerald-800" : "bg-stone-200/80 text-stone-700"}`}>
+                              {member.active ? "Activo" : "Inactivo"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 sm:px-5">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                aria-label={`Editar ${member.name}`}
+                                disabled={busy}
+                                className={`${adminSecondaryButtonClass} min-h-9 px-3 py-1.5 text-xs`}
+                                onClick={() => { setActionError(""); setEditing({ open: true, member }); }}
+                              >
+                                <Pencil size={14} aria-hidden="true" /> Editar
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`${member.active ? "Desactivar" : "Reactivar"} ${member.name}`}
+                                disabled={busy}
+                                className={`${adminSecondaryButtonClass} min-h-9 px-3 py-1.5 text-xs`}
+                                onClick={() => { void toggleActive(member); }}
+                              >
+                                <Power size={14} aria-hidden="true" /> {member.active ? "Desactivar" : "Reactivar"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </AdminCard>
       )}

@@ -367,7 +367,7 @@ export function LayersPanel({ document, layerIndex, selectedIds, selectedGroupId
               </div>
             </SortableContext>
             <RootDropZone active={Boolean(activeRef && !normalizedQuery)} />
-            <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+            <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
               {activeRef ? (
                 <div className="flex h-8 w-full min-w-0 select-none items-center gap-1.5 rounded-lg border border-[#253621]/30 bg-white px-2.5 text-xs font-medium text-[#182618] shadow-2xl ring-2 ring-[#253621]/20 cursor-grabbing">
                   {activeRef.kind === "group" ? (

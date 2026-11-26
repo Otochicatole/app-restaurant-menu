@@ -39,19 +39,44 @@ function LandingStudio({ restaurant }: { restaurant: LandingRestaurant }) {
   const port = useLandingCanvasPort();
   const commands = useMemo(() => createLandingDocumentCommands(store, restaurant, port), [store, restaurant, port]);
   return (
-    <div className="flex flex-col h-dvh w-full bg-zinc-100 text-zinc-900 overflow-hidden select-none">
-      <LandingEditorToolbar restaurant={restaurant} commands={commands} />
-      <LandingFeedback />
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        <LandingLayersPanel restaurant={restaurant} commands={commands} port={port} />
-        <LandingCanvas restaurant={restaurant} commands={commands} port={port} />
-        <LandingInspector restaurant={restaurant} commands={commands} />
+    <>
+      <div className="flex min-h-[70dvh] flex-col justify-center gap-4 p-6 md:hidden">
+        <h1 className="text-2xl font-semibold text-stone-900">Editor de landing</h1>
+        <p className="text-sm leading-6 text-stone-600">
+          Para diseñar los bloques y estilos con precisión necesitás una pantalla más grande. Desde acá podés abrir la configuración o ver la landing pública.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-800"
+            href={`/admin/restaurants/${encodeURIComponent(restaurant.id)}/settings`}
+          >
+            Configuración
+          </a>
+          <a
+            className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+            href={`/l/${encodeURIComponent(restaurant.landingSlug)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Ver landing pública
+          </a>
+        </div>
       </div>
-      <LandingCodeDrawer restaurant={restaurant} commands={commands} />
-      <LandingModule restaurant={restaurant} />
-      <LandingTemplateDialogs restaurant={restaurant} />
-      <LandingMediaDialog restaurant={restaurant} commands={commands} />
-    </div>
+
+      <div className="hidden h-dvh w-full flex-col overflow-hidden bg-zinc-100 text-zinc-900 select-none md:flex">
+        <LandingEditorToolbar restaurant={restaurant} commands={commands} />
+        <LandingFeedback />
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          <LandingLayersPanel restaurant={restaurant} commands={commands} port={port} />
+          <LandingCanvas restaurant={restaurant} commands={commands} port={port} />
+          <LandingInspector restaurant={restaurant} commands={commands} />
+        </div>
+        <LandingCodeDrawer restaurant={restaurant} commands={commands} />
+        <LandingModule restaurant={restaurant} />
+        <LandingTemplateDialogs restaurant={restaurant} />
+        <LandingMediaDialog restaurant={restaurant} commands={commands} />
+      </div>
+    </>
   );
 }
 

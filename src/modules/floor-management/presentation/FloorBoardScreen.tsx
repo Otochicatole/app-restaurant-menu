@@ -651,7 +651,7 @@ function FloorBoardContent({
     "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--floor-focus,#0e7490)] disabled:cursor-not-allowed disabled:opacity-45";
 
   return (
-    <main data-admin-panel data-floor-operations className={`${styles.screen} flex h-dvh flex-col overflow-hidden bg-[#eef4f6]`}>
+    <main data-admin-panel data-floor-operations className={`${styles.screen} flex h-dvh w-full max-w-full flex-col overflow-hidden bg-[#eef4f6]`}>
       <h1 className="sr-only">Sala · {restaurantName}</h1>
 
       {/* Zone 1: Structural Top Operational Bar */}
@@ -1118,11 +1118,11 @@ function FloorBoardContent({
             <div
               aria-hidden="true"
               onClick={() => setInspectorOpen(false)}
-              className="fixed inset-0 z-20 bg-zinc-950/25 xl:hidden"
+              className="fixed inset-0 z-30 bg-zinc-950/25 xl:hidden"
             />
             <aside
               aria-label="Panel operativo de sala"
-              className="fixed inset-y-0 right-0 z-30 flex h-full w-full max-w-sm shrink-0 flex-col border-l border-[var(--floor-border,#cad9df)] bg-white shadow-xl xl:static xl:z-auto xl:w-96 xl:max-w-none xl:shadow-none"
+              className="fixed inset-y-0 right-0 z-40 flex h-full w-full shrink-0 flex-col border-l border-[var(--floor-border,#cad9df)] bg-white shadow-xl sm:max-w-md xl:static xl:z-auto xl:w-96 xl:max-w-none xl:shadow-none"
             >
               <FloorBoardInspector
                 activeTab={inspectorTab}

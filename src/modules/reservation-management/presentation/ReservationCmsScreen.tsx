@@ -59,10 +59,10 @@ function ReservationHeader({ today: todayIso }: { today: string }) {
   ] as const;
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-5">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-[#182618] sm:text-4xl">Reservas</h1>
-          <p className="mt-1 hidden text-sm leading-6 text-zinc-600 sm:block">Organizá los turnos y las reservas del restaurante.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Reservas</h1>
+          <p className="mt-1 hidden text-sm text-stone-600 sm:block">Organizá los turnos y las reservas del restaurante.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => store.dispatch(openManualReservation(todayIso))} className={adminPrimaryButtonClass}>
@@ -119,16 +119,21 @@ function ReservationHeader({ today: todayIso }: { today: string }) {
         </div>
       </section>
 
-      <nav aria-label="Secciones de reservas" className="grid grid-cols-4 gap-1 border-b border-[#dce4d9] sm:flex sm:gap-5">
+      <nav aria-label="Secciones de reservas" className="grid grid-cols-2 gap-1 rounded-xl border border-stone-200 bg-white p-1 sm:inline-flex sm:grid-cols-none">
         {sections.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
             aria-current={activeTab === id ? "true" : undefined}
             onClick={() => setActiveTab(id)}
-            className={`flex min-h-11 items-center justify-center gap-1.5 border-b-2 px-1 text-sm font-semibold transition-colors focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-[#3d5934] sm:px-2 ${activeTab === id ? "border-[#3d5934] text-[#263e23]" : "border-transparent text-zinc-600 hover:border-[#cbd8c7] hover:text-[#263e23]"}`}
+            className={`flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-stone-900 ${
+              activeTab === id
+                ? "bg-stone-900 text-white"
+                : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+            }`}
           >
-            <Icon size={16} className="hidden shrink-0 min-[410px]:block" aria-hidden="true" />{label}
+            <Icon size={15} className="shrink-0" aria-hidden="true" />
+            <span>{label}</span>
           </button>
         ))}
       </nav>

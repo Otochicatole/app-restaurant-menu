@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StaffDirectoryScreen } from "./StaffDirectoryScreen";
 
@@ -30,22 +30,23 @@ describe("StaffDirectoryScreen", () => {
 
     const table = await waitFor(() => screen.getByRole("table", { name: "Listado de personal" }));
     expect(table).toBeTruthy();
-    expect(screen.getByText("Ana")).toBeTruthy();
-    expect(screen.getByText("Carlos")).toBeTruthy();
-    expect(screen.queryByText("Lucía")).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Teléfono" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Notas / Turno" })).toBeNull();
-    expect(screen.queryByText("11223344")).toBeNull();
-    expect(screen.queryByText("Salón principal")).toBeNull();
+    const tableDom = within(table);
+    expect(tableDom.getByText("Ana")).toBeTruthy();
+    expect(tableDom.getByText("Carlos")).toBeTruthy();
+    expect(tableDom.queryByText("Lucía")).toBeNull();
+    expect(tableDom.queryByRole("columnheader", { name: "Teléfono" })).toBeNull();
+    expect(tableDom.queryByRole("columnheader", { name: "Notas / Turno" })).toBeNull();
+    expect(tableDom.queryByText("11223344")).toBeNull();
+    expect(tableDom.queryByText("Salón principal")).toBeNull();
 
     // Show inactive
     fireEvent.click(screen.getByLabelText("Mostrar inactivos"));
-    expect(screen.getByText("Lucía")).toBeTruthy();
+    expect(tableDom.getByText("Lucía")).toBeTruthy();
 
     // Filter by Cocina
     fireEvent.change(screen.getByLabelText("Rol"), { target: { value: "KITCHEN" } });
-    expect(screen.queryByText("Ana")).toBeNull();
-    expect(screen.getByText("Carlos")).toBeTruthy();
+    expect(tableDom.queryByText("Ana")).toBeNull();
+    expect(tableDom.getByText("Carlos")).toBeTruthy();
 
     // Reset filter and open create modal
     fireEvent.change(screen.getByLabelText("Rol"), { target: { value: "ALL" } });
@@ -66,7 +67,8 @@ describe("StaffDirectoryScreen", () => {
     });
 
     // Edit modal should also omit phone and shift/notes inputs
-    fireEvent.click(await screen.findByRole("button", { name: "Editar Ana" }));
+    const refreshedTable = await waitFor(() => screen.getByRole("table", { name: "Listado de personal" }));
+    fireEvent.click(within(refreshedTable).getByRole("button", { name: "Editar Ana" }));
     expect(screen.queryByLabelText(/Teléfono/i)).toBeNull();
     expect(screen.queryByLabelText(/Turno/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));

@@ -101,16 +101,16 @@ function AdminShellContent({
     <div
       data-admin-panel
       style={{ "--admin-nav-width": "4rem" } as React.CSSProperties}
-      className="min-h-screen bg-[#f8faf7] text-zinc-900"
+      className="min-h-screen bg-stone-50 text-stone-900"
     >
       {/* Sidebar Fija Siempre Contraída (w-16 / 64px) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-16 select-none flex-col items-center border-r border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[1px_0_16px_rgba(24,24,27,0.03)] backdrop-blur-md transition-transform duration-200 ease-out ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-16 select-none flex-col items-center border-r border-stone-200 bg-white text-stone-900 transition-transform duration-200 ease-out ${
           isFloorEditorPage || mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
         {/* Logo de la aplicación */}
-        <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b shadow-xs border-zinc-200">
+        <div className="group relative flex h-12 w-full shrink-0 items-center justify-center border-b border-stone-200">
           <Link
             href={basePath}
             onClick={(event) => navigate(event, basePath)}
@@ -136,13 +136,13 @@ function AdminShellContent({
                 aria-current={isMenusPage ? "page" : undefined}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
                   isMenusPage
-                    ? "bg-[#182618] text-white shadow-2xs"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 active:scale-95"
+                    ? "bg-stone-900 text-white"
+                    : "text-stone-500 hover:bg-stone-100 hover:text-stone-950 active:scale-95"
                 }`}
               >
                 <LayoutGrid size={18} strokeWidth={isMenusPage ? 2.3 : 2} />
                 {isMenusPage && (
-                  <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#182618]" />
+                  <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-stone-900" />
                 )}
               </Link>
               <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
@@ -163,13 +163,13 @@ function AdminShellContent({
                   aria-current={active ? "page" : undefined}
                   className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
                     active
-                      ? "bg-[#182618] text-white shadow-2xs"
-                      : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 active:scale-95"
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-500 hover:bg-stone-100 hover:text-stone-950 active:scale-95"
                   }`}
                 >
                   <Icon size={18} strokeWidth={active ? 2.3 : 2} />
                   {active && (
-                    <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#182618]" />
+                    <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-stone-900" />
                   )}
                 </Link>
                 <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
@@ -200,9 +200,9 @@ function AdminShellContent({
           onClick={() => setMobileOpen(false)}
         />
       )}
-      {!isFloorEditorPage && <button
+      {!isFloorEditorPage && (isKitchenPage || isMenuEditorPage || isLandingPage) && <button
         type="button"
-        className="fixed right-4 top-4 z-30 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 md:hidden"
+        className="fixed right-3 top-2.5 z-30 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 md:hidden"
         onClick={() => setMobileOpen(true)}
         aria-label="Abrir menú"
       >
@@ -216,10 +216,22 @@ function AdminShellContent({
         <div className="min-h-screen bg-[#f8faf7] md:pl-16">{children}</div>
       ) : (
         <div className="md:pl-16">
-          <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
-            <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
+          <header className="flex h-12 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 text-sm sm:px-8">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="truncate text-stone-500">{organizationName}</span>
+              <span aria-hidden className="text-stone-300">/</span>
+              <strong className="truncate font-semibold text-stone-900">{brandTitle}</strong>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border border-stone-200 bg-white p-1.5 text-stone-700 transition hover:bg-stone-50 md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Abrir menú"
+            >
+              <Menu size={18} />
+            </button>
           </header>
-          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
+          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
         </div>
       )}
     </div>
