@@ -9,7 +9,10 @@ const access = vi.hoisted(() => ({
 }));
 
 vi.mock("@/modules/floor-management/server", () => ({ requireFloorReadAccess: access.floor }));
-vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: access.admin }));
+vi.mock("@/modules/restaurant-management/server", () => ({
+  requireRestaurantContext: access.admin,
+  requireRestaurantFeature: access.admin,
+}));
 vi.mock("@/modules/identity-access/server", () => ({ requireAuthenticatedAccount: access.actor }));
 vi.mock("@/modules/reservation-management/server", () => ({
   tableService: { snapshot: access.snapshot, report: access.report, products: access.products, staff: access.staff, execute: access.execute },

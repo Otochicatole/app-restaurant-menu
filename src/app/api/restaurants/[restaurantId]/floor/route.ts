@@ -3,7 +3,7 @@ import { z } from "zod";
 import { floorManagement, requireFloorReadAccess } from "@/modules/floor-management/server";
 import { floorRoomInputSchema } from "@/modules/floor-management/contracts";
 import { createWalkInSchema, floorReassignmentSchema, floorReassignments, floorWalkIns, getFloorAssignmentOptions, publicAvailabilityQuerySchema, walkInDurationSchema } from "@/modules/reservation-management/server";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { requireRestaurantFeature } from "@/modules/restaurant-management/server";
 import { successResponse, handleApiError } from "@/platform/http/api-response";
 import { validateOrigin, csrfErrorResponse } from "@/platform/security/csrf";
 import { BadRequestError } from "@/platform/application/errors";
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, { params }: Context) {
       const reservationId = z.string().min(1).parse(request.nextUrl.searchParams.get("reservationId"));
       return noStore(successResponse(await floorReassignments.options(restaurantId, reservationId)));
     }
-    await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
+    await requireRestaurantFeature(restaurantId, "floorManagement", { allowSuperAdmin: true });
     if (mode === "config") return noStore(successResponse(await floorManagement.getConfig(restaurantId)));
     if (mode === "options") {
       const values = Object.fromEntries(request.nextUrl.searchParams);
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, { params }: Context) {
       else await floorWalkIns.release(restaurantId, command.reservationId, command.expectedRevision);
       return noStore(successResponse(await floorManagement.getBoard(restaurantId)));
     }
-    await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
+    await requireRestaurantFeature(restaurantId, "floorManagement", { allowSuperAdmin: true });
     switch (command.action) {
       case "save-room": await floorManagement.saveRoom(restaurantId, command.room, command.expectedRevision); break;
       case "archive-room": await floorManagement.archiveRoom(restaurantId, command.roomId, command.expectedRevision); break;

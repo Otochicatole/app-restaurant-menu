@@ -383,7 +383,7 @@ function summarizeCash(
 
 async function settings(database: Database, restaurantId: string, requireFloor = false) {
   const restaurant = await database.restaurant.findUnique({ where: { id: restaurantId }, select: {
-    name: true, timeZone: true, floorManagementEnabled: true, status: true, organization: { select: { status: true } },
+    name: true, timeZone: true, floorManagementEnabled: true, inventoryEnabled: true, status: true, organization: { select: { status: true } },
   } });
   if (!restaurant) throw new NotFoundError("Restaurante");
   if (restaurant.status !== "ACTIVE" || restaurant.organization.status !== "ACTIVE" || requireFloor && !restaurant.floorManagementEnabled) {
@@ -1713,15 +1713,16 @@ export class TableService {
       const requiresFloor = command.action === "open" || command.action === "open-table" || command.action === "assign-waiter" || command.action === "close-empty"
         || command.action === "add-line" || command.action === "confirm-order" || command.action === "update-line" || command.action === "pay-partial" || command.action === "checkout"
         || command.action === "deliver-all" || command.action === "march-round" || command.action === "update-kitchen-status";
-      const { timeZone } = await settings(tx, restaurantId, requiresFloor);
+      const { timeZone, inventoryEnabled } = await settings(tx, restaurantId, requiresFloor);
+      const activeStockPort = inventoryEnabled ? this.stockPort : undefined;
       switch (command.action) {
         case "open": return openAccount(tx, restaurantId, actorId, command, now);
         case "open-table": return openTable(tx, restaurantId, actorId, command, timeZone, now);
         case "assign-waiter": return assignWaiter(tx, restaurantId, actorId, command, now);
         case "close-empty": return closeEmpty(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
-        case "add-line": return addLine(tx, restaurantId, actorId, command, now, this.stockPort);
-        case "confirm-order": return confirmOrder(tx, restaurantId, actorId, command, now, this.stockPort);
-        case "update-line": return updateLine(tx, restaurantId, actorId, command, now, this.stockPort);
+        case "add-line": return addLine(tx, restaurantId, actorId, command, now, activeStockPort);
+        case "confirm-order": return confirmOrder(tx, restaurantId, actorId, command, now, activeStockPort);
+        case "update-line": return updateLine(tx, restaurantId, actorId, command, now, activeStockPort);
         case "deliver-all": return deliverAll(tx, restaurantId, actorId, command, now);
         case "march-round": return marchRound(tx, restaurantId, actorId, command, now);
         case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, actorId, command, now);

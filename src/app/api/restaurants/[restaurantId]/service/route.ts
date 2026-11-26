@@ -4,7 +4,7 @@ import { requireFloorReadAccess } from "@/modules/floor-management/server";
 import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
 import { serviceCommandSchema } from "@/modules/reservation-management/contracts";
 import { tableService } from "@/modules/reservation-management/server";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { requireRestaurantFeature } from "@/modules/restaurant-management/server";
 import { handleApiError, successResponse } from "@/platform/http/api-response";
 import { csrfErrorResponse, validateOrigin } from "@/platform/security/csrf";
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: Context) {
       }
       return privateResponse(successResponse(await tableService.snapshot(restaurantId, undefined, instant)));
     }
-    await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
+    await requireRestaurantFeature(restaurantId, "floorManagement", { allowSuperAdmin: true });
     const result = mode === "products"
       ? await tableService.products(restaurantId)
       : mode === "staff"
@@ -60,8 +60,12 @@ export async function POST(request: NextRequest, { params }: Context) {
     const { restaurantId } = await params;
     const actor = await requireAuthenticatedAccount();
     const command = serviceCommandSchema.parse(await request.json());
-    if (adminActions.has(command.action)) await requireRestaurantContext(restaurantId, { allowSuperAdmin: true });
-    else await requireFloorReadAccess(restaurantId);
+    if (adminActions.has(command.action)) {
+      await requireRestaurantFeature(restaurantId, "floorManagement", { allowSuperAdmin: true });
+      if (command.action === "approve-catalog-proposal" || command.action === "reject-catalog-proposal") {
+        await requireRestaurantFeature(restaurantId, "inventory", { allowSuperAdmin: true });
+      }
+    } else await requireFloorReadAccess(restaurantId);
     return privateResponse(successResponse(await tableService.execute(restaurantId, actor.adminId, command)));
   } catch (error) {
     return privateResponse(handleApiError(error));

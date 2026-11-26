@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import type { RestaurantFeatureFlags } from "@/modules/restaurant-management/contracts";
 import { LogoutButton } from "@/modules/identity-access/ui";
 import { Boxes, CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet, Wine } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -15,6 +16,7 @@ type AdminShellProps = {
   brandSubtitle: string;
   showMenuPickerLink: boolean;
   landingEnabled?: boolean;
+  features?: RestaurantFeatureFlags;
   restaurantId: string;
   organizationName: string;
 };
@@ -29,6 +31,7 @@ function AdminShellContent({
   brandSubtitle,
   showMenuPickerLink,
   landingEnabled = false,
+  features,
   restaurantId,
   organizationName,
 }: AdminShellProps) {
@@ -42,21 +45,40 @@ function AdminShellContent({
   const isFloorEditorPage = pathname === `${basePath}/rooms`;
   const isKitchenPage = pathname === `${basePath}/kitchen`;
 
+  const resolvedFeatures = features ?? {
+    menu: true,
+    landing: landingEnabled,
+    reservations: landingEnabled,
+    floorManagement: true,
+    inventory: true,
+  };
   const navigation = [
-    { label: "Editor", href: basePath, exact: true, icon: Layers3 },
-    { label: "Salones", href: `${basePath}/rooms`, exact: true, icon: Map },
-    ...(landingEnabled
+    ...(resolvedFeatures.menu
+      ? [{ label: "Editor", href: basePath, exact: true, icon: Layers3 }]
+      : []),
+    ...(resolvedFeatures.floorManagement
+      ? [{ label: "Salones", href: `${basePath}/rooms`, exact: true, icon: Map }]
+      : []),
+    ...(resolvedFeatures.landing
+      ? [{ label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe }]
+      : []),
+    ...(resolvedFeatures.reservations
+      ? [{ label: "Reservas", href: `${basePath}/reservations`, icon: CalendarDays }]
+      : []),
+    ...(resolvedFeatures.floorManagement
       ? [
-          { label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe },
-          { label: "Reservas", href: `${basePath}/reservations`, icon: CalendarDays },
+          { label: "Cocina", href: `${basePath}/kitchen`, exact: true, icon: ChefHat },
+          { label: "Barra", href: `${basePath}/kitchen?station=BAR`, exact: true, icon: Wine },
+          { label: "Caja", href: `${basePath}/cash`, exact: true, icon: Wallet },
+          { label: "Catálogo", href: `${basePath}/products`, icon: Package },
         ]
       : []),
-    { label: "Cocina", href: `${basePath}/kitchen`, exact: true, icon: ChefHat },
-    { label: "Barra", href: `${basePath}/kitchen?station=BAR`, exact: true, icon: Wine },
-    { label: "Caja", href: `${basePath}/cash`, exact: true, icon: Wallet },
-    { label: "Catálogo", href: `${basePath}/products`, icon: Package },
-    { label: "Inventario", href: `${basePath}/inventory`, icon: Boxes },
-    { label: "Personal", href: `${basePath}/staff`, icon: Users },
+    ...(resolvedFeatures.inventory
+      ? [{ label: "Inventario", href: `${basePath}/inventory`, icon: Boxes }]
+      : []),
+    ...(resolvedFeatures.floorManagement
+      ? [{ label: "Personal", href: `${basePath}/staff`, icon: Users }]
+      : []),
     { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
     { label: "Mi cuenta", href: "/admin/account", icon: UserRound },
   ];

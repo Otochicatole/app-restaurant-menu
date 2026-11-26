@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { hasRestaurantFeature, requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { reservationManagement } from "@/modules/reservation-management/server";
 import { ReservationCmsScreen } from "@/modules/reservation-management/ui";
 import { restaurantToday } from "@/modules/floor-management/contracts";
+import { FeatureLockedScreen } from "@/ui/admin/FeatureLockedScreen";
 
 export const metadata: Metadata = { title: "Reservas" };
 export default async function RestaurantReservationsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
  const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
- if (!restaurant.landingEnabled) redirect("/admin/restaurants/" + restaurantId);
+ if (!hasRestaurantFeature(restaurant, "reservations")) return <FeatureLockedScreen restaurant={restaurant} feature="reservations" />;
  const cmsData = await reservationManagement.getCmsData(restaurantId);
  return <ReservationCmsScreen initialData={cmsData} today={restaurantToday(cmsData.timeZone)} />;
 }

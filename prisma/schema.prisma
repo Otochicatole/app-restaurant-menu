@@ -67,13 +67,16 @@ model Restaurant {
   assetQuotaBytes              Int                           @default(262144000)
   dailyReservationCapacity     Int                           @default(50)
   timeZone                     String                        @default("America/Argentina/Buenos_Aires")
-  floorManagementEnabled       Boolean                       @default(false)
+  floorManagementEnabled        Boolean                       @default(false)
   reservationPreparationMinutes Int                           @default(15)
   reservationDurationMinutes    Int                           @default(120)
-  slug                         String                        @unique
-  landingSlug                  String                        @unique
-  status                       TenantStatus                  @default(ACTIVE)
-  landingEnabled               Boolean                       @default(false)
+  slug                          String                        @unique
+  landingSlug                   String                        @unique
+  status                        TenantStatus                  @default(ACTIVE)
+  menuEnabled                   Boolean                       @default(true)
+  landingEnabled                Boolean                       @default(false)
+  reservationsEnabled           Boolean                       @default(false)
+  inventoryEnabled              Boolean                       @default(false)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
   landingPage                  LandingPage?

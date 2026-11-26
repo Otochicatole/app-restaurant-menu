@@ -10,8 +10,14 @@ export const updateOrganizationSchema = z.object({
   email: z.string().trim().toLowerCase().email(), maxRestaurants: z.coerce.number().int().min(1).max(50),
 });
 export const restaurantOptionsSchema = z.object({
-  id: z.string().min(1), status: z.enum(["ACTIVE", "SUSPENDED"]),
-  landingEnabled: z.boolean(), assetQuotaBytes: z.coerce.number().int().min(1).max(2_147_483_647),
+  id: z.string().min(1),
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
+  menuEnabled: z.boolean(),
+  landingEnabled: z.boolean(),
+  reservationsEnabled: z.boolean(),
+  floorManagementEnabled: z.boolean(),
+  inventoryEnabled: z.boolean(),
+  assetQuotaBytes: z.coerce.number().int().min(1).max(2_147_483_647),
 });
 export type CreateOrganizationCommand = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationCommand = z.infer<typeof updateOrganizationSchema>;

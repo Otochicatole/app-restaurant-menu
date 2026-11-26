@@ -21,7 +21,7 @@ type ProductDialog =
   | { kind: "approve"; proposal: CatalogProposalView }
   | { kind: "reject"; proposal: CatalogProposalView };
 
-export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string }) {
+export function ServiceCatalogScreen({ restaurantId, inventoryEnabled = true }: { restaurantId: string; inventoryEnabled?: boolean }) {
   const { result, refresh } = useServiceAdminQuery<ServiceProductView[]>(serviceAdminUrl(restaurantId, { mode: "products" }));
   const [tab, setTab] = useState<"products" | "approvals">("products");
   const [search, setSearch] = useState("");
@@ -34,6 +34,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
   const [inventoryItems, setInventoryItems] = useState<InventoryItemView[]>([]);
 
   const loadInventoryContext = useCallback(async () => {
+    if (!inventoryEnabled) return;
     try {
       const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/inventory`, { cache: "no-store" });
       if (!response.ok) return;
@@ -47,7 +48,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
     } catch {
       // Silencioso para no bloquear el catálogo si solo se consulta el listado operativo
     }
-  }, [restaurantId]);
+  }, [inventoryEnabled, restaurantId]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -74,12 +75,18 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
     <div className="space-y-5">
       <AdminPageHeader
         title="Catálogo de productos"
-        description="Cargá los productos, precios y si pertenecen a cocina o barra, y aprobá solicitudes enviadas desde Inventario y Recetas."
+        description={
+          inventoryEnabled
+            ? "Cargá los productos, precios y si pertenecen a cocina o barra, y aprobá solicitudes enviadas desde Inventario y Recetas."
+            : "Cargá los productos, precios y si pertenecen a cocina o barra para usarlos en el servicio de salón."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link href={`/admin/restaurants/${restaurantId}/inventory`} className={adminSecondaryButtonClass}>
-              Inventario y recetas
-            </Link>
+            {inventoryEnabled && (
+              <Link href={`/admin/restaurants/${restaurantId}/inventory`} className={adminSecondaryButtonClass}>
+                Inventario y recetas
+              </Link>
+            )}
             <button type="button" className={adminPrimaryButtonClass} onClick={() => setDialog({ kind: "edit" })}>
               <Plus size={17} aria-hidden="true" /> Nuevo producto
             </button>
@@ -107,23 +114,25 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
                   {products.filter((product) => product.active).length}
                 </span>
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "approvals"}
-                onClick={() => setTab("approvals")}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
-                  tab === "approvals" ? "bg-[#263e23] text-white shadow-xs" : "text-zinc-700 hover:bg-white"
-                }`}
-              >
-                <ClipboardCheck size={14} aria-hidden="true" />
-                <span>Pendientes de aprobación</span>
-                {pendingProposals.length > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${tab === "approvals" ? "bg-white/20 text-white" : "bg-amber-200 text-amber-950"}`}>
-                    {pendingProposals.length}
-                  </span>
-                )}
-              </button>
+              {inventoryEnabled && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === "approvals"}
+                  onClick={() => setTab("approvals")}
+                  className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
+                    tab === "approvals" ? "bg-[#263e23] text-white shadow-xs" : "text-zinc-700 hover:bg-white"
+                  }`}
+                >
+                  <ClipboardCheck size={14} aria-hidden="true" />
+                  <span>Pendientes de aprobación</span>
+                  {pendingProposals.length > 0 && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${tab === "approvals" ? "bg-white/20 text-white" : "bg-amber-200 text-amber-950"}`}>
+                      {pendingProposals.length}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -294,6 +303,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
           dialog={dialog}
           recipes={recipes}
           inventoryItems={inventoryItems}
+          inventoryEnabled={inventoryEnabled}
           onClose={() => setDialog(null)}
           onSaved={saved}
         />
@@ -304,11 +314,12 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
 
 type ProductLinkKind = "MANUAL" | "RECIPE" | "INVENTORY_ITEM";
 
-function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, onSaved }: {
+function ProductModal({ restaurantId, dialog, recipes, inventoryItems, inventoryEnabled, onClose, onSaved }: {
   restaurantId: string;
   dialog: Extract<ProductDialog, { kind: "edit" | "archive" }>;
   recipes: RecipeView[];
   inventoryItems: InventoryItemView[];
+  inventoryEnabled: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -423,8 +434,9 @@ function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, 
               <span className="text-xs font-normal text-zinc-600">Al agregar este producto en sala se selecciona automáticamente esta estación.</span>
             </fieldset>
 
-            <fieldset className="grid gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
-              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-700">Vínculo con Inventario / Recetas</legend>
+            {inventoryEnabled && (
+              <fieldset className="grid gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-700">Vínculo con Inventario / Recetas</legend>
               <div className="grid grid-cols-3 gap-2">
                 {([
                   ["MANUAL", "Sin vínculo"],
@@ -524,7 +536,8 @@ function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, 
                   Sin vínculo: no descontará insumos ni recetas del inventario al confirmarse en Sala.
                 </p>
               )}
-            </fieldset>
+              </fieldset>
+            )}
           </fieldset>
         )}
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">{error}</p>}

@@ -144,7 +144,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
     const restaurant = await this.database.restaurant.findUnique({
       where: { id: restaurantId },
       select: {
-        landingEnabled: true,
+        reservationsEnabled: true,
         status: true,
         organization: { select: { status: true } },
       },
@@ -153,7 +153,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       restaurant &&
       restaurant.status === "ACTIVE" &&
       restaurant.organization.status === "ACTIVE" &&
-      restaurant.landingEnabled,
+      restaurant.reservationsEnabled,
     );
   }
 
@@ -178,7 +178,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
         id: true,
         name: true,
         landingSlug: true,
-        landingEnabled: true,
+        reservationsEnabled: true,
         floorManagementEnabled: true,
         timeZone: true,
         status: true,
@@ -200,7 +200,7 @@ export class PrismaReservationRepository implements ReservationRepositoryPort {
       restaurantId: restaurant.id,
       name: restaurant.name,
       slug: restaurant.landingSlug,
-      landingEnabled: restaurant.landingEnabled,
+      landingEnabled: restaurant.reservationsEnabled,
       floorManagementEnabled: restaurant.floorManagementEnabled,
       timeZone: restaurant.timeZone,
     };

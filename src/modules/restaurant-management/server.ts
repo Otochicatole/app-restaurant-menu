@@ -4,9 +4,23 @@ import { requireTenantAdmin } from "@/modules/identity-access/server";
 import { loadRestaurantWorkspace } from "./infrastructure/prisma-restaurant-repository";
 import { ACTIVE_RESTAURANT_COOKIE } from "./infrastructure/active-restaurant-cookie";
 
-export type { RestaurantContext, RestaurantSummary, RestaurantWorkspace } from "./contracts";
+export type {
+  RestaurantContext,
+  RestaurantFeatureDefinition,
+  RestaurantFeatureFlags,
+  RestaurantFeatureKey,
+  RestaurantFeatureSource,
+  RestaurantSummary,
+  RestaurantWorkspace,
+} from "./contracts";
+export {
+  RESTAURANT_FEATURE_CATALOG,
+  featureFlagsFromRestaurant,
+  getFirstEnabledRestaurantHref,
+  hasRestaurantFeature,
+} from "./contracts";
 export { createRestaurantAction, deleteRestaurantsAction, selectRestaurantAction } from "./presentation/actions";
-export { requireRestaurantContext } from "./presentation/restaurant-context";
+export { requireRestaurantContext, requireRestaurantFeature } from "./presentation/restaurant-context";
 export { ACTIVE_RESTAURANT_COOKIE, writeActiveRestaurantCookie, clearActiveRestaurantCookie } from "./infrastructure/active-restaurant-cookie";
 
 export async function getRestaurantWorkspace() {

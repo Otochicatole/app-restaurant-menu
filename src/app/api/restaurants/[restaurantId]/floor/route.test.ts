@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(), release: vi.fn(), options: vi.fn(), save: vi.fn(), remove: vi.fn(),
   reassign: vi.fn(), reassignOptions: vi.fn(),
 }));
-vi.mock("@/modules/restaurant-management/server", () => ({ requireRestaurantContext: mocks.admin }));
+vi.mock("@/modules/restaurant-management/server", () => ({
+  requireRestaurantContext: mocks.admin,
+  requireRestaurantFeature: mocks.admin,
+}));
 vi.mock("@/modules/floor-management/server", () => ({
   requireFloorReadAccess: mocks.operational,
   floorManagement: { getBoard: mocks.board, getConfig: mocks.config, saveRoom: mocks.save, deleteRoom: mocks.remove },
@@ -107,7 +110,7 @@ describe("floor operational permissions", () => {
     mocks.config.mockResolvedValue({ restaurantId: "own", rooms: [] });
     const response = await send({ action: "delete-room", roomId: "room-1", expectedRevision: 3 });
     expect(response.status).toBe(200);
-    expect(mocks.admin).toHaveBeenCalledWith("own", { allowSuperAdmin: true });
+    expect(mocks.admin).toHaveBeenCalledWith("own", "floorManagement", { allowSuperAdmin: true });
     expect(mocks.remove).toHaveBeenCalledWith("own", "room-1", 3);
     expect(await response.json()).toMatchObject({ success: true, data: { restaurantId: "own", rooms: [] } });
   });

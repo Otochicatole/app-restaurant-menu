@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { hasRestaurantFeature, requireRestaurantContext } from "@/modules/restaurant-management/server";
 import { tableService } from "@/modules/reservation-management/server";
 import { KitchenDisplayScreen } from "@/modules/reservation-management/ui";
+import { FeatureLockedScreen } from "@/ui/admin/FeatureLockedScreen";
 
 export const metadata: Metadata = { title: "Cocina" };
 
@@ -13,6 +14,9 @@ export default async function AdminKitchenPage({
   searchParams?: Promise<{ station?: string }>;
 }) {
   const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
+  if (!hasRestaurantFeature(restaurant, "floorManagement")) {
+    return <FeatureLockedScreen restaurant={restaurant} feature="floorManagement" />;
+  }
   const stationParam = (await searchParams)?.station;
   const initialStation = stationParam === "BAR" ? "BAR" : stationParam === "KITCHEN" ? "KITCHEN" : "ALL";
   const initialSnapshot = await tableService.kitchen(restaurantId);

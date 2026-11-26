@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { requireAuthenticatedAccount } from "@/modules/identity-access/server";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { requireRestaurantFeature } from "@/modules/restaurant-management/server";
 import { landingManagement } from "@/modules/landing-management/server";
 import { prisma } from "@/platform/database/prisma";
 import { ForbiddenError, NotFoundError, BadRequestError } from "@/platform/application/errors";
@@ -22,7 +22,7 @@ export async function requireFloorReadAccess(requestedId?: string): Promise<{ re
     return { restaurantId: restaurant.id, restaurantName: restaurant.name, readOnly: true, canManageWalkIns: true };
   }
   if (!requestedId) throw new BadRequestError("Elegí un restaurante para consultar el salón.");
-  const context = await requireRestaurantContext(requestedId, { allowSuperAdmin: true });
+  const context = await requireRestaurantFeature(requestedId, "floorManagement", { allowSuperAdmin: true });
   return { restaurantId: context.restaurantId, restaurantName: context.restaurant.name, readOnly: false, canManageWalkIns: true };
 }
 

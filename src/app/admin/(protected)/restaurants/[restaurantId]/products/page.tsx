@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { ServiceCatalogScreen } from "@/modules/reservation-management/ui";
-import { requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { hasRestaurantFeature, requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { FeatureLockedScreen } from "@/ui/admin/FeatureLockedScreen";
 
 export const metadata: Metadata = { title: "Catálogo" };
 
 export default async function ServiceProductsPage({ params }: { params: Promise<{ restaurantId: string }> }) {
-  const { restaurantId } = await requireRestaurantContext((await params).restaurantId);
-  return <ServiceCatalogScreen restaurantId={restaurantId} />;
+  const { restaurantId, restaurant } = await requireRestaurantContext((await params).restaurantId);
+  if (!hasRestaurantFeature(restaurant, "floorManagement")) {
+    return <FeatureLockedScreen restaurant={restaurant} feature="floorManagement" />;
+  }
+  return <ServiceCatalogScreen restaurantId={restaurantId} inventoryEnabled={hasRestaurantFeature(restaurant, "inventory")} />;
 }
 
