@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ChefHat, Plus, Trash2, Wine } from "lucide-react";
 import { adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
+import { AdminSearchableSelect } from "@/ui/admin/AdminSearchableSelect";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type {
   InventoryBaseUnit,
@@ -282,11 +283,18 @@ function ItemModal({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm font-medium text-zinc-800">
               Unidad de medida
-              <select className={inputClass} value={unit} onChange={(e) => setUnit(e.target.value as InventoryBaseUnit)}>
-                <option value="KG">Kilogramos (kg)</option>
-                <option value="L">Litros (L)</option>
-                <option value="U">Unidades (u)</option>
-              </select>
+              <AdminSearchableSelect
+                ariaLabel="Unidad de medida"
+                disabled={busy}
+                searchable={false}
+                value={unit}
+                options={[
+                  { value: "KG", label: "Kilogramos (kg)" },
+                  { value: "L", label: "Litros (L)" },
+                  { value: "U", label: "Unidades (u)" },
+                ]}
+                onChange={(next) => setUnit(next as InventoryBaseUnit)}
+              />
             </label>
             <label className="grid gap-1 text-sm font-medium text-zinc-800">
               Costo por {baseUnitLabels[unit]} ($)
@@ -307,12 +315,22 @@ function ItemModal({
           </div>
           <label className="grid gap-1 text-sm font-medium text-zinc-800">
             Proveedor habitual
-            <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-              <option value="">Sin proveedor asignado</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-              ))}
-            </select>
+            <AdminSearchableSelect
+              ariaLabel="Proveedor habitual"
+              disabled={busy}
+              value={supplierId}
+              placeholder="Sin proveedor asignado"
+              searchPlaceholder="Buscar proveedor…"
+              options={[
+                { value: "", label: "Sin proveedor asignado" },
+                ...suppliers.map((supplier) => ({
+                  value: supplier.id,
+                  label: supplier.name,
+                  hint: supplier.contactName || supplier.phone || undefined,
+                })),
+              ]}
+              onChange={setSupplierId}
+            />
           </label>
           <label className="flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-800">
             <input
@@ -397,11 +415,14 @@ function PurchaseModal({
             </label>
             <label className="grid gap-1 text-sm font-medium text-zinc-800">
               Unidad
-              <select className={inputClass} value={displayUnit} onChange={(e) => setDisplayUnit(e.target.value as RecipeDisplayUnit)}>
-                {units.map((u) => (
-                  <option key={u} value={u}>{displayUnitLabels[u]}</option>
-                ))}
-              </select>
+              <AdminSearchableSelect
+                ariaLabel="Unidad de compra"
+                disabled={busy}
+                searchable={false}
+                value={displayUnit}
+                options={units.map((u) => ({ value: u, label: displayUnitLabels[u] }))}
+                onChange={(next) => setDisplayUnit(next as RecipeDisplayUnit)}
+              />
             </label>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -411,12 +432,22 @@ function PurchaseModal({
             </label>
             <label className="grid gap-1 text-sm font-medium text-zinc-800">
               Proveedor
-              <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">Sin especificar</option>
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                ))}
-              </select>
+              <AdminSearchableSelect
+                ariaLabel="Proveedor"
+                disabled={busy}
+                value={supplierId}
+                placeholder="Sin especificar"
+                searchPlaceholder="Buscar proveedor…"
+                options={[
+                  { value: "", label: "Sin especificar" },
+                  ...suppliers.map((supplier) => ({
+                    value: supplier.id,
+                    label: supplier.name,
+                    hint: supplier.contactName || supplier.phone || undefined,
+                  })),
+                ]}
+                onChange={setSupplierId}
+              />
             </label>
           </div>
           <label className="grid gap-1 text-sm font-medium text-zinc-800">
@@ -487,11 +518,14 @@ function AdjustStockModal({
             </label>
             <label className="grid gap-1 text-sm font-medium text-zinc-800">
               Unidad
-              <select className={inputClass} value={displayUnit} onChange={(e) => setDisplayUnit(e.target.value as RecipeDisplayUnit)}>
-                {units.map((u) => (
-                  <option key={u} value={u}>{displayUnitLabels[u]}</option>
-                ))}
-              </select>
+              <AdminSearchableSelect
+                ariaLabel="Unidad de ajuste"
+                disabled={busy}
+                searchable={false}
+                value={displayUnit}
+                options={units.map((u) => ({ value: u, label: displayUnitLabels[u] }))}
+                onChange={(next) => setDisplayUnit(next as RecipeDisplayUnit)}
+              />
             </label>
           </div>
           <label className="grid gap-1 text-sm font-medium text-zinc-800">
@@ -634,26 +668,28 @@ function RecipeModal({
                   const allowedUnits = selectedItem ? compatibleDisplayUnits(selectedItem.unit) : ["U" as const];
                   return (
                     <div key={`${index}-${row.inventoryItemId}`} className="grid grid-cols-[minmax(0,1fr)_90px_80px_auto] items-center gap-2">
-                      <select
-                        aria-label={`Ingrediente ${index + 1}`}
-                        className={inputClass}
+                      <AdminSearchableSelect
+                        ariaLabel={`Ingrediente ${index + 1}`}
+                        disabled={busy}
                         value={row.inventoryItemId}
-                        onChange={(e) => {
-                          const nextItem = itemById.get(e.target.value);
+                        searchPlaceholder="Buscar ingrediente…"
+                        options={items.map((item) => ({
+                          value: item.id,
+                          label: `${item.name} (${baseUnitLabels[item.unit]})`,
+                          hint: item.code,
+                        }))}
+                        onChange={(nextValue) => {
+                          const nextItem = itemById.get(nextValue);
                           const nextUnits = nextItem ? compatibleDisplayUnits(nextItem.unit) : ["U" as const];
                           setRows((current) =>
                             current.map((entry, idx) =>
                               idx === index
-                                ? { ...entry, inventoryItemId: e.target.value, displayUnit: nextUnits[0] }
+                                ? { ...entry, inventoryItemId: nextValue, displayUnit: nextUnits[0] }
                                 : entry,
                             ),
                           );
                         }}
-                      >
-                        {items.map((item) => (
-                          <option key={item.id} value={item.id}>{item.name} ({baseUnitLabels[item.unit]})</option>
-                        ))}
-                      </select>
+                      />
                       <input
                         aria-label={`Cantidad ingrediente ${index + 1}`}
                         className={inputClass}
@@ -667,22 +703,20 @@ function RecipeModal({
                           )
                         }
                       />
-                      <select
-                        aria-label={`Unidad ingrediente ${index + 1}`}
-                        className={inputClass}
+                      <AdminSearchableSelect
+                        ariaLabel={`Unidad ingrediente ${index + 1}`}
+                        disabled={busy}
+                        searchable={false}
                         value={row.displayUnit}
-                        onChange={(e) =>
+                        options={allowedUnits.map((unit) => ({ value: unit, label: displayUnitLabels[unit] }))}
+                        onChange={(nextValue) =>
                           setRows((current) =>
                             current.map((entry, idx) =>
-                              idx === index ? { ...entry, displayUnit: e.target.value as RecipeDisplayUnit } : entry,
+                              idx === index ? { ...entry, displayUnit: nextValue as RecipeDisplayUnit } : entry,
                             ),
                           )
                         }
-                      >
-                        {allowedUnits.map((unit) => (
-                          <option key={unit} value={unit}>{displayUnitLabels[unit]}</option>
-                        ))}
-                      </select>
+                      />
                       <button
                         type="button"
                         aria-label={`Quitar ingrediente ${index + 1}`}

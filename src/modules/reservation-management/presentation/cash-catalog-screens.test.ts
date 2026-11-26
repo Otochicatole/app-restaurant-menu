@@ -498,8 +498,11 @@ describe("CashCmsScreen and ServiceCatalogScreen separation", () => {
     fireEvent.click(within(list).getByRole("button", { name: "Editar Milanesa clásica" }));
     const editDialog = screen.getByRole("dialog", { name: "Editar producto" });
     fireEvent.click(within(editDialog).getByRole("button", { name: "Receta" }));
-    const recipeSelect = await within(editDialog).findByLabelText("Receta vinculada");
-    fireEvent.change(recipeSelect, { target: { value: "rec-2" } });
+    const recipeTrigger = await within(editDialog).findByRole("combobox", { name: "Receta vinculada" });
+    fireEvent.click(recipeTrigger);
+    const recipeSearch = await screen.findByPlaceholderText("Buscar receta por nombre o código…");
+    fireEvent.change(recipeSearch, { target: { value: "Milanesa" } });
+    fireEvent.click(screen.getByRole("option", { name: /REC-002 · Milanesa con Papas Fritas/ }));
     fireEvent.click(within(editDialog).getByRole("button", { name: "Guardar producto" }));
 
     await waitFor(() => {

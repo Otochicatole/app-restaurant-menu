@@ -8,6 +8,7 @@ import type {
   RecipeView,
 } from "@/modules/inventory-management/contracts";
 import { AdminCard, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
+import { AdminSearchableSelect } from "@/ui/admin/AdminSearchableSelect";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type { KitchenStation, ServiceCommand, ServiceProductView } from "../contracts";
 import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
@@ -445,31 +446,33 @@ function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, 
               {linkKind === "RECIPE" && (
                 <label className="grid gap-1 text-xs font-medium text-zinc-800">
                   Receta vinculada
-                  <select
-                    aria-label="Receta vinculada"
-                    className={serviceInputClass}
+                  <AdminSearchableSelect
+                    ariaLabel="Receta vinculada"
+                    disabled={busy}
                     value={selectedRecipeId}
-                    onChange={(event) => {
-                      const nextId = event.target.value;
+                    placeholder="Elegí una receta…"
+                    searchPlaceholder="Buscar receta por nombre o código…"
+                    options={[
+                      ...(product?.recipeId && !recipes.some((recipe) => recipe.id === product.recipeId)
+                        ? [{
+                            value: product.recipeId,
+                            label: `${product.sourceCode ? `${product.sourceCode} · ` : ""}${product.sourceName ?? product.name}`,
+                          }]
+                        : []),
+                      ...recipes.map((recipe) => ({
+                        value: recipe.id,
+                        label: `${recipe.code} · ${recipe.name}`,
+                        hint: `Costo ref.: ${formatServiceMoney(recipe.costPerPortionCents)}/porc.`,
+                      })),
+                    ]}
+                    onChange={(nextId) => {
                       setSelectedRecipeId(nextId);
                       if (!name.trim()) {
                         const matched = recipes.find((recipe) => recipe.id === nextId);
                         if (matched) setName(matched.name);
                       }
                     }}
-                  >
-                    <option value="">Elegí una receta…</option>
-                    {product?.recipeId && !recipes.some((recipe) => recipe.id === product.recipeId) && (
-                      <option value={product.recipeId}>
-                        {product.sourceCode ? `${product.sourceCode} · ` : ""}{product.sourceName ?? product.name}
-                      </option>
-                    )}
-                    {recipes.map((recipe) => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.code} · {recipe.name} ({formatServiceMoney(recipe.costPerPortionCents)}/porc.)
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <span className="text-[11px] font-normal text-zinc-600">
                     Al vender este producto en Sala se descontarán automáticamente sus ingredientes del inventario.
                   </span>
@@ -479,31 +482,33 @@ function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, 
               {linkKind === "INVENTORY_ITEM" && (
                 <label className="grid gap-1 text-xs font-medium text-zinc-800">
                   Producto de inventario vinculado
-                  <select
-                    aria-label="Insumo vinculado"
-                    className={serviceInputClass}
+                  <AdminSearchableSelect
+                    ariaLabel="Insumo vinculado"
+                    disabled={busy}
                     value={selectedItemId}
-                    onChange={(event) => {
-                      const nextId = event.target.value;
+                    placeholder="Elegí un insumo del inventario…"
+                    searchPlaceholder="Buscar insumo por nombre o código…"
+                    options={[
+                      ...(product?.inventoryItemId && !inventoryItems.some((item) => item.id === product.inventoryItemId)
+                        ? [{
+                            value: product.inventoryItemId,
+                            label: `${product.sourceCode ? `${product.sourceCode} · ` : ""}${product.sourceName ?? product.name}`,
+                          }]
+                        : []),
+                      ...inventoryItems.map((item) => ({
+                        value: item.id,
+                        label: `${item.code} · ${item.name}`,
+                        hint: item.isDirectSale ? "Venta directa" : `Unidad: ${item.unit.toLowerCase()}`,
+                      })),
+                    ]}
+                    onChange={(nextId) => {
                       setSelectedItemId(nextId);
                       if (!name.trim()) {
                         const matched = inventoryItems.find((item) => item.id === nextId);
                         if (matched) setName(matched.name);
                       }
                     }}
-                  >
-                    <option value="">Elegí un insumo del inventario…</option>
-                    {product?.inventoryItemId && !inventoryItems.some((item) => item.id === product.inventoryItemId) && (
-                      <option value={product.inventoryItemId}>
-                        {product.sourceCode ? `${product.sourceCode} · ` : ""}{product.sourceName ?? product.name}
-                      </option>
-                    )}
-                    {inventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.code} · {item.name}{item.isDirectSale ? " (Venta directa)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <span className="text-[11px] font-normal text-zinc-600">
                     Al vender este producto en Sala se descontará 1 unidad directa del inventario.
                   </span>
