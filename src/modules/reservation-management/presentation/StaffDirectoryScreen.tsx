@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Pencil, Plus, Power, Search, UserCheck, Users } from "lucide-react";
 import { AdminCard, AdminPageHeader, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 import { staffRoleLabels, staffRoleSchema, type StaffMemberView, type StaffRole } from "../contracts";
 import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
 import { sendServiceAdmin, serviceAdminError, serviceAdminUrl, useServiceAdminQuery } from "./service-admin-client";
@@ -20,13 +21,10 @@ export function StaffDirectoryScreen({ restaurantId }: { restaurantId: string })
   const [actionError, setActionError] = useState("");
 
   const members = result?.data ?? [];
-  const query = search.trim().toLocaleLowerCase("es-AR");
   const visible = members.filter((member) => {
     if (!showInactive && !member.active) return false;
     if (roleFilter !== "ALL" && member.role !== roleFilter) return false;
-    if (!query) return true;
-    return [member.name, staffRoleLabels[member.role]]
-      .some((value) => value.toLocaleLowerCase("es-AR").includes(query));
+    return matchesNormalizedSearch(search, [member.name, staffRoleLabels[member.role]]);
   });
 
   const activeCount = members.filter((member) => member.active).length;

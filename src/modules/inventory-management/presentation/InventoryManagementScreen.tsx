@@ -22,6 +22,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from "@/ui/admin/AdminPrimitives";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 import type {
   InventoryMovementKind,
   InventorySnapshot,
@@ -84,33 +85,22 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
     setSnapshot(result.snapshot);
   };
 
-  const query = search.trim().toLocaleLowerCase("es-AR");
   const activeItems = (snapshot?.items ?? []).filter((item) => item.active);
   const activeSuppliers = (snapshot?.suppliers ?? []).filter((supplier) => supplier.active);
   const activeRecipes = (snapshot?.recipes ?? []).filter((recipe) => recipe.active);
   const pendingProposalsCount = (snapshot?.proposals ?? []).filter((proposal) => proposal.status === "PENDING").length;
 
-  const filteredItems = activeItems.filter(
-    (item) =>
-      item.name.toLocaleLowerCase("es-AR").includes(query) ||
-      item.code.toLocaleLowerCase("es-AR").includes(query) ||
-      (item.supplierName ?? "").toLocaleLowerCase("es-AR").includes(query),
+  const filteredItems = activeItems.filter((item) =>
+    matchesNormalizedSearch(search, [item.name, item.code, item.supplierName]),
   );
-  const filteredSuppliers = activeSuppliers.filter(
-    (supplier) =>
-      supplier.name.toLocaleLowerCase("es-AR").includes(query) ||
-      supplier.contactName.toLocaleLowerCase("es-AR").includes(query),
+  const filteredSuppliers = activeSuppliers.filter((supplier) =>
+    matchesNormalizedSearch(search, [supplier.name, supplier.contactName, supplier.phone]),
   );
-  const filteredRecipes = activeRecipes.filter(
-    (recipe) =>
-      recipe.name.toLocaleLowerCase("es-AR").includes(query) ||
-      recipe.code.toLocaleLowerCase("es-AR").includes(query),
+  const filteredRecipes = activeRecipes.filter((recipe) =>
+    matchesNormalizedSearch(search, [recipe.name, recipe.code]),
   );
-  const filteredMovements = (snapshot?.movements ?? []).filter(
-    (mov) =>
-      mov.itemName.toLocaleLowerCase("es-AR").includes(query) ||
-      mov.referenceLabel.toLocaleLowerCase("es-AR").includes(query) ||
-      mov.notes.toLocaleLowerCase("es-AR").includes(query),
+  const filteredMovements = (snapshot?.movements ?? []).filter((mov) =>
+    matchesNormalizedSearch(search, [mov.itemName, mov.itemCode, mov.referenceLabel, mov.notes]),
   );
 
   return (

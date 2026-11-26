@@ -3,12 +3,12 @@
 import { useId, useState, type FormEvent } from "react";
 import { ChefHat, Plus, Search, UtensilsCrossed, Wine, X } from "lucide-react";
 import type { KitchenStation, ServiceProductView } from "@/modules/reservation-management/contracts";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 import { floorInputClass } from "./floor-api";
 import { amount, parsePrice, type DraftOrderItem } from "./floor-service-format";
 import { floorSecondaryButtonClass } from "./floor-ui";
 
 const fieldClass = "grid min-w-0 gap-1 text-xs font-medium text-[var(--floor-muted,#4b6470)]";
-const searchNormalize = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es-AR");
 
 export type FloorServiceCatalogProps = {
   products: ServiceProductView[];
@@ -35,10 +35,9 @@ export function FloorServiceCatalog({
   const [manualStation, setManualStation] = useState<KitchenStation>("KITCHEN");
 
   const searchId = useId();
-  const normalizedTerm = searchNormalize(searchQuery).trim();
   const filteredProducts = activeProducts.filter((product) => {
     if (stationFilter !== "ALL" && product.station !== stationFilter) return false;
-    return !normalizedTerm || searchNormalize(product.name).includes(normalizedTerm);
+    return matchesNormalizedSearch(searchQuery, [product.name]);
   });
 
   const draftQtyByProductId = new Map<string, number>();
@@ -276,7 +275,7 @@ export function FloorServiceCatalog({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           {filteredProducts.length === 0 ? (
             <div className="flex flex-col items-start gap-2 rounded-xl border border-dashed border-[var(--floor-border,#cad9df)] p-4 text-xs text-[var(--floor-muted,#4b6470)]">
-              {normalizedTerm ? (
+              {searchQuery.trim() ? (
                 <>
                   <p>No encontramos productos para &ldquo;{searchQuery}&rdquo;.</p>
                   <button

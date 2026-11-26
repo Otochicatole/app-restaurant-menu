@@ -10,6 +10,7 @@ import type {
 import { AdminCard, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminSearchableSelect } from "@/ui/admin/AdminSearchableSelect";
 import { AdminModal } from "@/ui/admin/AdminUI";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 import type { KitchenStation, ServiceCommand, ServiceProductView } from "../contracts";
 import { ServiceLoadError, ServiceLoading, serviceInputClass } from "./ServiceAdminUi";
 import { formatServiceMoney, parseServicePrice, sendServiceAdmin, serviceAdminError, serviceAdminUrl, useServiceAdminQuery } from "./service-admin-client";
@@ -57,11 +58,10 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
 
   const products = result?.data ?? [];
   const pendingProposals = proposals.filter((proposal) => proposal.status === "PENDING");
-  const query = search.trim().toLocaleLowerCase("es-AR");
   const visible = products.filter((product) =>
     (showArchived || product.active)
     && (stationFilter === "ALL" || product.station === stationFilter)
-    && product.name.toLocaleLowerCase("es-AR").includes(query),
+    && matchesNormalizedSearch(search, [product.name, product.sourceCode, product.sourceName]),
   );
   const saved = (message: string) => {
     setDialog(null);

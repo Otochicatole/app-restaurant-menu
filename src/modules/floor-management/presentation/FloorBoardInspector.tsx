@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2, Clock3, ReceiptText, Search, Users } from "lucide-react";
 import type { KitchenStatus, ServiceAccountView, ServiceUnservedGroup } from "@/modules/reservation-management/contracts";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 import { transientButtonProps } from "@/ui/button-state";
 import { getJoinedTableGroups, type FloorAllocationView, type FloorLocation, type FloorPose } from "../contracts";
 import type { FloorTableCounts } from "./floor-table-summary";
@@ -130,32 +131,20 @@ export function FloorBoardInspector({
     !canUseService && (activeTab === "accounts" || activeTab === "kitchen") ? "summary" : activeTab;
 
   const sectorNameById = new Map(sectors.map((sector) => [sector.id, sector.name]));
-  const normalizedTableQuery = tableSearch.trim().toLocaleLowerCase("es-AR");
   const sortedTables = [...tables].sort((a, b) => a.label.localeCompare(b.label, "es-AR", { numeric: true }));
   const filteredTables = sortedTables.filter((table) => {
     if (tableFilter !== "all" && table.state !== tableFilter) return false;
     if (sectorFilter !== "all" && table.locationId !== sectorFilter) return false;
-    if (!normalizedTableQuery) return true;
     const sectorName = (table.locationId && sectorNameById.get(table.locationId)) || "";
-    return (
-      table.label.toLocaleLowerCase("es-AR").includes(normalizedTableQuery) ||
-      (table.customerName ?? "").toLocaleLowerCase("es-AR").includes(normalizedTableQuery) ||
-      sectorName.toLocaleLowerCase("es-AR").includes(normalizedTableQuery)
-    );
+    return matchesNormalizedSearch(tableSearch, [table.label, table.customerName, sectorName]);
   });
 
   const detailAllocation = selectedAllocationId
     ? allocations.find((item) => item.id === selectedAllocationId) ?? null
     : null;
-  const normalizedReservationQuery = reservationSearch.trim().toLocaleLowerCase("es-AR");
   const filteredAllocations = allocations.filter((allocation) => {
-    if (!normalizedReservationQuery) return true;
     const tableLabels = allocation.poses.map((pose) => pose.label).join(" ");
-    return (
-      allocation.customerName.toLocaleLowerCase("es-AR").includes(normalizedReservationQuery) ||
-      allocation.code.toLocaleLowerCase("es-AR").includes(normalizedReservationQuery) ||
-      tableLabels.toLocaleLowerCase("es-AR").includes(normalizedReservationQuery)
-    );
+    return matchesNormalizedSearch(reservationSearch, [allocation.customerName, allocation.code, tableLabels]);
   });
 
   const tabs: { id: BoardInspectorTab; label: string; count?: number }[] = [

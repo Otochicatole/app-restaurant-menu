@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { matchesNormalizedSearch } from "@/platform/text/search";
 
 export type SearchableSelectOption = {
   value: string;
@@ -17,13 +18,6 @@ type MenuPlacement = {
   maxHeight: number;
   openUpward: boolean;
 };
-
-function normalizeSearch(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("es-AR");
-}
 
 export function AdminSearchableSelect({
   value,
@@ -61,14 +55,10 @@ export function AdminSearchableSelect({
     [options, value],
   );
 
-  const filtered = useMemo(() => {
-    const normalized = normalizeSearch(query.trim());
-    if (!normalized) return options;
-    return options.filter((option) => {
-      const target = normalizeSearch(`${option.label} ${option.hint ?? ""}`);
-      return target.includes(normalized);
-    });
-  }, [options, query]);
+  const filtered = useMemo(
+    () => options.filter((option) => matchesNormalizedSearch(query, [option.label, option.hint])),
+    [options, query],
+  );
 
   const computePlacement = (): MenuPlacement | null => {
     const trigger = triggerRef.current;
