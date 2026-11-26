@@ -19,9 +19,9 @@ export function FontLibraryClient({ restaurantId, initialAssets }: { restaurantI
       <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
 
       <div>
-        <p className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-400">
+        <h2 className="mb-3 text-xs font-semibold text-zinc-600">
           Fuentes disponibles sin subir
-        </p>
+        </h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {SYSTEM_FONT_FAMILIES.map((family) => (
             <div
