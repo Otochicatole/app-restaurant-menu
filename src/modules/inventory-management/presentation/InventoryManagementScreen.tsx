@@ -119,20 +119,41 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
         title="Inventario, proveedores y recetas"
         description="Registrá insumos, entradas de proveedores, recetas con ingredientes y envialos a aprobar para publicarlos en el Catálogo."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href={`/admin/restaurants/${restaurantId}/products`} className={adminSecondaryButtonClass}>
-              Catálogo {pendingProposalsCount > 0 ? `(${pendingProposalsCount} pend.)` : ""}
+          <>
+            <Link
+              href={`/admin/restaurants/${restaurantId}/products`}
+              className={`${adminSecondaryButtonClass} whitespace-nowrap px-3.5 py-2`}
+            >
+              <span>Catálogo</span>
+              {pendingProposalsCount > 0 && (
+                <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[11px] font-bold leading-none text-amber-950 tabular-nums">
+                  {pendingProposalsCount}
+                </span>
+              )}
             </Link>
-            <button type="button" className={adminSecondaryButtonClass} onClick={() => setDialog({ kind: "supplier" })}>
+            <button
+              type="button"
+              className={`${adminSecondaryButtonClass} whitespace-nowrap px-3.5 py-2`}
+              onClick={() => setDialog({ kind: "supplier" })}
+            >
               <Truck size={16} aria-hidden="true" /> Proveedor
             </button>
-            <button type="button" className={adminSecondaryButtonClass} onClick={() => setDialog({ kind: "recipe" })} disabled={activeItems.length === 0}>
+            <button
+              type="button"
+              className={`${adminSecondaryButtonClass} whitespace-nowrap px-3.5 py-2`}
+              onClick={() => setDialog({ kind: "recipe" })}
+              disabled={activeItems.length === 0}
+            >
               <ChefHat size={16} aria-hidden="true" /> Receta
             </button>
-            <button type="button" className={adminPrimaryButtonClass} onClick={() => setDialog({ kind: "item" })}>
+            <button
+              type="button"
+              className={`${adminPrimaryButtonClass} whitespace-nowrap px-4 py-2`}
+              onClick={() => setDialog({ kind: "item" })}
+            >
               <Plus size={16} aria-hidden="true" /> Nuevo insumo
             </button>
-          </div>
+          </>
         }
       />
 
@@ -169,10 +190,11 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                   key={alert.inventoryItemId}
                   type="button"
                   onClick={() => targetItem && setDialog({ kind: "purchase", item: targetItem })}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-950 hover:bg-amber-100"
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 shadow-2xs transition hover:border-amber-400 hover:bg-amber-100"
                 >
                   <span>{alert.name}</span>
                   <strong className="tabular-nums">{formatBaseQuantityMilli(alert.currentStockMilli, alert.unit)}</strong>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">+ Reponer</span>
                 </button>
               );
             })}

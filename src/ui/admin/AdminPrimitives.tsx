@@ -19,8 +19,8 @@ export function AdminPageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0 flex-1">
         {eyebrow && (
           <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#3d5934]">
             {eyebrow}
@@ -30,12 +30,12 @@ export function AdminPageHeader({
           {title}
         </h1>
         {description && (
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-500">
+          <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-zinc-500">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">{actions}</div>}
     </div>
   );
 }
