@@ -69,4 +69,45 @@ describe("restaurant picker action feedback", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Abrir" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Este restaurante no está disponible");
   });
+
+  it("filters restaurants with normalized search and shows only enabled module badges and links", async () => {
+    const multiWorkspace: RestaurantWorkspace = {
+      ...workspace,
+      restaurants: [
+        {
+          ...workspace.restaurants[0],
+          menuEnabled: true,
+          landingEnabled: false,
+          reservationsEnabled: false,
+          floorManagementEnabled: false,
+          inventoryEnabled: false,
+        },
+        {
+          id: "restaurant-2",
+          organizationId: "organization-1",
+          name: "Bistró Jardín",
+          slug: "bistro-jardin",
+          landingSlug: "bistro-jardin",
+          publicDescription: "Cocina de autor",
+          status: "SUSPENDED",
+          menuEnabled: false,
+          landingEnabled: true,
+          reservationsEnabled: true,
+          floorManagementEnabled: true,
+          inventoryEnabled: true,
+          assetQuotaBytes: 1000,
+        },
+      ],
+    };
+
+    render(React.createElement(RestaurantPickerScreen, { workspace: multiWorkspace, selectRestaurant: success, createRestaurant: success, deleteRestaurants: success }));
+    expect(screen.getByText("Centro")).toBeTruthy();
+    expect(screen.getByText("Bistró Jardín")).toBeTruthy();
+    expect(screen.getAllByText("Ver carta")).toHaveLength(1);
+    expect(screen.getAllByText("Ver landing")).toHaveLength(1);
+
+    await userEvent.setup().type(screen.getByLabelText("Buscar restaurantes"), "bistro jardin");
+    expect(screen.queryByText("Centro")).toBeNull();
+    expect(screen.getByText("Bistró Jardín")).toBeTruthy();
+  });
 });
