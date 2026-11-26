@@ -1041,7 +1041,7 @@ function FloorBoardContent({
             </Link>
           )}
 
-          <LogoutButton compact disabled={navigationDisabled} />
+          {readOnly && <LogoutButton compact disabled={navigationDisabled} />}
         </div>
         </nav>
       </header>

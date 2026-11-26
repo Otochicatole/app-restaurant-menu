@@ -492,7 +492,7 @@ describe("floor assignment interactions", () => {
     await waitFor(() => expect(api.board).toHaveBeenCalled());
     const toolbar = screen.getByRole("navigation", {name: "Herramientas de sala"});
     expect(within(toolbar).getByRole("link", {name: "Administrar"}).getAttribute("href")).toBe("/admin/restaurants/restaurant/rooms");
-    expect(within(toolbar).getByRole("button", {name: "Cerrar sesión"})).toBeTruthy();
+    expect(within(toolbar).queryByRole("button", {name: "Cerrar sesión"})).toBeNull();
     expect(screen.queryByRole("button", {name: "Menú de sala"})).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
