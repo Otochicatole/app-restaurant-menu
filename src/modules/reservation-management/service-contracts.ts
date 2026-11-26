@@ -4,6 +4,28 @@ import type { StockStatus, StockWarningView } from "@/modules/inventory-manageme
 export const servicePaymentMethodSchema = z.enum(["CASH", "CARD", "TRANSFER_QR", "SPLIT"]);
 export type ServicePaymentMethod = z.infer<typeof servicePaymentMethodSchema>;
 
+export const cashExpensePaymentMethodSchema = z.enum(["CASH", "CARD", "TRANSFER_QR"]);
+export type CashExpensePaymentMethod = z.infer<typeof cashExpensePaymentMethodSchema>;
+
+export const cashExpenseCategorySchema = z.enum([
+  "SUPPLIER_PAYMENT",
+  "LAST_MINUTE",
+  "DELIVERY",
+  "MAINTENANCE",
+  "ADVANCE",
+  "OTHER",
+]);
+export type CashExpenseCategory = z.infer<typeof cashExpenseCategorySchema>;
+
+export const cashExpenseCategoryLabels: Record<CashExpenseCategory, string> = {
+  SUPPLIER_PAYMENT: "Pago a proveedor",
+  LAST_MINUTE: "Gasto de último momento",
+  DELIVERY: "Flete / Envío",
+  MAINTENANCE: "Mantenimiento / Limpieza",
+  ADVANCE: "Adelanto / Viáticos",
+  OTHER: "Otro motivo",
+};
+
 export const kitchenStatusSchema = z.enum(["PENDING", "IN_PREP", "READY", "SERVED", "CANCELLED"]);
 export type KitchenStatus = z.infer<typeof kitchenStatusSchema>;
 
@@ -207,6 +229,16 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("set-staff-active"), id, active: z.boolean() }),
   z.object({ action: z.literal("close-day"), date }),
   z.object({ action: z.literal("reopen-day"), date, reason: z.string().trim().min(1).max(500) }),
+  z.object({
+    action: z.literal("record-cash-expense"),
+    date,
+    category: cashExpenseCategorySchema,
+    paymentMethod: cashExpensePaymentMethodSchema.default("CASH"),
+    amountCents: unitPriceCents,
+    notes: z.string().trim().min(1, "Ingresá una observación o detalle del gasto.").max(400),
+    supplierName: z.string().trim().max(120).default(""),
+  }),
+  z.object({ action: z.literal("delete-cash-expense"), id }),
 ]);
 
 export const serviceCashRangeSchema = z.object({ from: date, to: date })
@@ -345,6 +377,25 @@ export type ServiceCashTotals = {
   discountCents: number;
   receiptCount: number;
   totalCents: number;
+  expensesCents?: number;
+  cashExpensesCents?: number;
+  cardExpensesCents?: number;
+  transferExpensesCents?: number;
+  netTotalCents?: number;
+  netCashCents?: number;
+};
+
+export type ServiceCashExpenseView = {
+  id: string;
+  restaurantId: string;
+  businessDate: string;
+  category: CashExpenseCategory;
+  paymentMethod: CashExpensePaymentMethod;
+  amountCents: number;
+  notes: string;
+  supplierName: string;
+  actorId: string;
+  createdAt: string;
 };
 
 export type ServiceCashEventView = {
@@ -422,8 +473,15 @@ export type ServiceCashReport = {
   from: string;
   to: string;
   receipts: ServiceAccountView[];
+  expenses?: ServiceCashExpenseView[];
   totals: ServiceCashTotals;
   days: ServiceCashEventView[];
 };
 
-export type ServiceCommandResult = ServiceAccountView | ServiceProductView | ServiceCashEventView | StaffMemberView | { updated: boolean };
+export type ServiceCommandResult =
+  | ServiceAccountView
+  | ServiceProductView
+  | ServiceCashEventView
+  | ServiceCashExpenseView
+  | StaffMemberView
+  | { updated: boolean };

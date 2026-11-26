@@ -18,6 +18,8 @@ const adminActions = new Set([
   "set-staff-active",
   "close-day",
   "reopen-day",
+  "record-cash-expense",
+  "delete-cash-expense",
 ]);
 const modeSchema = z.enum(["board", "cash", "products", "staff"]);
 

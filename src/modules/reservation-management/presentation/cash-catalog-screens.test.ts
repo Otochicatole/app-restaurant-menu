@@ -31,7 +31,7 @@ describe("CashCmsScreen and ServiceCatalogScreen separation", () => {
     }));
 
     expect(screen.getByRole("heading", { name: "Caja" })).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Recibos de consumo" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Recibos de consumo/ })).toBeTruthy());
     expect(screen.getByRole("button", { name: "Cerrar día" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Caja y catálogo" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Catálogo" })).toBeNull();
@@ -516,6 +516,83 @@ describe("CashCmsScreen and ServiceCatalogScreen separation", () => {
         station: "KITCHEN",
         recipeId: "rec-2",
         inventoryItemId: null,
+      });
+    });
+  });
+
+  it("displays cash expenses with net totals and records a new expense with observations", async () => {
+    const reportWithExpense = {
+      ...emptyCashReport,
+      expenses: [
+        {
+          id: "exp-1",
+          restaurantId: "rest-1",
+          businessDate: "2026-11-14",
+          category: "LAST_MINUTE",
+          paymentMethod: "CASH",
+          amountCents: 250000,
+          notes: "Compra urgente de hielo",
+          supplierName: "Hielos Sur",
+          actorId: "u-1",
+          createdAt: "2026-11-14T20:15:00.000Z",
+        },
+      ],
+      totals: {
+        cashCents: 1000000,
+        cardCents: 0,
+        transferCents: 0,
+        tipCents: 0,
+        discountCents: 0,
+        receiptCount: 1,
+        totalCents: 1000000,
+        expensesCents: 250000,
+        cashExpensesCents: 250000,
+        cardExpensesCents: 0,
+        transferExpensesCents: 0,
+        netTotalCents: 750000,
+        netCashCents: 750000,
+      },
+    };
+
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return new Response(JSON.stringify({ success: true, data: { id: "exp-2" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, data: reportWithExpense }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(createElement(CashCmsScreen, {
+      restaurantId: "rest-1",
+      restaurantName: "Pepe Café",
+      timeZone: "America/Argentina/Buenos_Aires",
+      initialToday: "2026-11-14",
+    }));
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Egresos de caja/ }));
+    const expenseList = await screen.findByRole("list", { name: "Egresos de caja" });
+    expect(within(expenseList).getByText("Compra urgente de hielo")).toBeTruthy();
+    expect(within(expenseList).getByText("Gasto de último momento")).toBeTruthy();
+    expect(screen.getAllByText(/7\.500,00/).length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Registrar egreso" }));
+    const expenseDialog = screen.getByRole("dialog", { name: "Registrar egreso de caja" });
+    fireEvent.change(within(expenseDialog).getByLabelText("Monto en pesos ($)"), { target: { value: "4000,00" } });
+    fireEvent.change(within(expenseDialog).getByLabelText("Proveedor o destinatario (opcional)"), { target: { value: "Verdulería San Martín" } });
+    fireEvent.change(within(expenseDialog).getByLabelText("Observaciones"), { target: { value: "Reposición de tomates" } });
+    fireEvent.click(within(expenseDialog).getByRole("button", { name: "Guardar egreso" }));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find((call) => call[1]?.method === "POST");
+      expect(postCall).toBeTruthy();
+      expect(JSON.parse(String(postCall![1]!.body))).toEqual({
+        action: "record-cash-expense",
+        date: "2026-11-14",
+        category: "LAST_MINUTE",
+        paymentMethod: "CASH",
+        amountCents: 400000,
+        notes: "Reposición de tomates",
+        supplierName: "Verdulería San Martín",
       });
     });
   });

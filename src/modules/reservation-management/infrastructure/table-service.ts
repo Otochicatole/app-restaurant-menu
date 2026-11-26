@@ -5,10 +5,11 @@ import type { ServiceStockPort, StockStatus } from "@/modules/inventory-manageme
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@/platform/application/errors";
 import { withSqliteTransaction } from "@/platform/database/sqlite-transaction";
 import {
+  cashExpenseCategorySchema, cashExpensePaymentMethodSchema,
   serviceAuditActionSchema, serviceAuditSeveritySchema, serviceCashRangeSchema, serviceCommandSchema, servicePaymentMethodSchema, serviceSplitModeSchema,
   type KitchenSnapshot, type KitchenStatus, type KitchenStation, type KitchenTicketView,
   type ServiceAccountAuditLogView, type ServiceAccountPaymentItemView, type ServiceAccountPaymentView, type ServiceAccountView,
-  type ServiceAuditAction, type ServiceAuditSeverity, type ServiceCashEventView, type ServiceCashReport, type ServiceCashTotals,
+  type ServiceAuditAction, type ServiceAuditSeverity, type ServiceCashEventView, type ServiceCashExpenseView, type ServiceCashReport, type ServiceCashTotals,
   type ServiceCommand, type ServiceCommandResult, type ServiceDraftRemovalInput, type ServicePaymentMethod,
   type ServiceProductView, type ServiceSnapshot, type ServiceUnservedGroup, type StaffMemberView, type StaffRole,
 } from "../service-contracts";
@@ -323,8 +324,40 @@ function toCashEvent(row: Prisma.ServiceCashEventGetPayload<object>): ServiceCas
   return { ...data, kind, createdAt: createdAt.toISOString() };
 }
 
-function summarizeCash(receipts: readonly (Pick<ServiceAccountView, "paymentMethod" | "totalCents"> & Partial<Pick<ServiceAccountView, "cashCents" | "cardCents" | "transferCents" | "tipCents" | "discountCents">> )[]): ServiceCashTotals {
-  const totals = { cashCents: 0, cardCents: 0, transferCents: 0, tipCents: 0, discountCents: 0, receiptCount: receipts.length, totalCents: 0 };
+function toCashExpense(row: Prisma.ServiceCashExpenseGetPayload<object>): ServiceCashExpenseView {
+  return {
+    id: row.id,
+    restaurantId: row.restaurantId,
+    businessDate: row.businessDate,
+    category: cashExpenseCategorySchema.parse(row.category),
+    paymentMethod: cashExpensePaymentMethodSchema.parse(row.paymentMethod),
+    amountCents: row.amountCents,
+    notes: row.notes,
+    supplierName: row.supplierName,
+    actorId: row.actorId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function summarizeCash(
+  receipts: readonly (Pick<ServiceAccountView, "paymentMethod" | "totalCents"> & Partial<Pick<ServiceAccountView, "cashCents" | "cardCents" | "transferCents" | "tipCents" | "discountCents">>) [],
+  expenses: readonly Pick<ServiceCashExpenseView, "paymentMethod" | "amountCents">[] = [],
+): ServiceCashTotals {
+  const totals = {
+    cashCents: 0,
+    cardCents: 0,
+    transferCents: 0,
+    tipCents: 0,
+    discountCents: 0,
+    receiptCount: receipts.length,
+    totalCents: 0,
+    expensesCents: 0,
+    cashExpensesCents: 0,
+    cardExpensesCents: 0,
+    transferExpensesCents: 0,
+    netTotalCents: 0,
+    netCashCents: 0,
+  };
   for (const receipt of receipts) {
     const cents = receipt.totalCents ?? 0;
     const cash = receipt.cashCents ?? (receipt.paymentMethod === "CASH" ? cents : 0);
@@ -337,6 +370,14 @@ function summarizeCash(receipts: readonly (Pick<ServiceAccountView, "paymentMeth
     totals.discountCents += receipt.discountCents ?? 0;
     totals.totalCents += cents;
   }
+  for (const expense of expenses) {
+    totals.expensesCents += expense.amountCents;
+    if (expense.paymentMethod === "CASH") totals.cashExpensesCents += expense.amountCents;
+    else if (expense.paymentMethod === "CARD") totals.cardExpensesCents += expense.amountCents;
+    else if (expense.paymentMethod === "TRANSFER_QR") totals.transferExpensesCents += expense.amountCents;
+  }
+  totals.netTotalCents = totals.totalCents - totals.expensesCents;
+  totals.netCashCents = totals.cashCents - totals.cashExpensesCents;
   return totals;
 }
 
@@ -1467,15 +1508,63 @@ async function recordCashEvent(tx: Prisma.TransactionClient, restaurantId: strin
   }
   if (previous?.kind === kind) return toCashEvent(previous);
   if (kind === "REOPEN" && !previous) throw new ConflictError("La caja de ese día todavía no se cerró.");
-  const receipts = await tx.serviceAccount.findMany({ where: { restaurantId, businessDate: command.date, closedAt: { not: null } },
-    include: accountInclude });
-  const { cashCents, cardCents, transferCents, receiptCount } = summarizeCash(receipts.map(toAccount));
+  const [receipts, expenses] = await Promise.all([
+    tx.serviceAccount.findMany({
+      where: { restaurantId, businessDate: command.date, closedAt: { not: null } },
+      include: accountInclude,
+    }),
+    tx.serviceCashExpense.findMany({
+      where: { restaurantId, businessDate: command.date },
+    }),
+  ]);
+  const summary = summarizeCash(receipts.map(toAccount), expenses.map(toCashExpense));
+  const cashCents = summary.cashCents - (summary.cashExpensesCents ?? 0);
+  const cardCents = summary.cardCents - (summary.cardExpensesCents ?? 0);
+  const transferCents = summary.transferCents - (summary.transferExpensesCents ?? 0);
+  const receiptCount = summary.receiptCount;
   if ([cashCents, cardCents, transferCents].some((amount) => amount > maxStoredCents)) {
     throw new BadRequestError("El total de un medio de pago supera el máximo admitido para el cierre.");
   }
   return toCashEvent(await tx.serviceCashEvent.create({ data: { restaurantId, businessDate: command.date,
     revision: (previous?.revision ?? 0) + 1, kind, actorId, createdAt: now,
     reason: command.action === "reopen-day" ? command.reason : null, cashCents, cardCents, transferCents, receiptCount } }));
+}
+
+async function recordCashExpense(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  actorId: string,
+  command: Command<"record-cash-expense">,
+  today: string,
+  now: Date,
+): Promise<ServiceCashExpenseView> {
+  if (command.date > today) throw new BadRequestError("No podés registrar egresos en un día futuro.");
+  await ensureCashOpen(tx, restaurantId, command.date);
+  return toCashExpense(await tx.serviceCashExpense.create({
+    data: {
+      restaurantId,
+      businessDate: command.date,
+      category: command.category,
+      paymentMethod: command.paymentMethod,
+      amountCents: command.amountCents,
+      notes: command.notes,
+      supplierName: command.supplierName,
+      actorId,
+      createdAt: now,
+    },
+  }));
+}
+
+async function deleteCashExpense(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  id: string,
+) {
+  const existing = await tx.serviceCashExpense.findFirst({ where: { id, restaurantId } });
+  if (!existing) throw new NotFoundError("Egreso de caja");
+  await ensureCashOpen(tx, restaurantId, existing.businessDate);
+  await tx.serviceCashExpense.delete({ where: { id: existing.id } });
+  return { updated: true };
 }
 
 export class TableService {
@@ -1606,13 +1695,15 @@ export class TableService {
       const today = restaurantToday(timeZone, now);
       const range = serviceCashRangeSchema.parse({ from: from ?? to ?? today, to: to ?? from ?? today });
       const businessDate = { gte: range.from, lte: range.to };
-      const [rows, events] = await Promise.all([
+      const [rows, events, expenseRows] = await Promise.all([
         tx.serviceAccount.findMany({ where: { restaurantId, businessDate, closedAt: { not: null } },
           include: accountInclude, orderBy: [{ closedAt: "desc" }, { id: "asc" }] }),
         tx.serviceCashEvent.findMany({ where: { restaurantId, businessDate }, orderBy: [{ businessDate: "desc" }, { revision: "desc" }] }),
+        tx.serviceCashExpense.findMany({ where: { restaurantId, businessDate }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }),
       ]);
       const receipts = rows.map(toAccount);
-      return { today, ...range, receipts, totals: summarizeCash(receipts), days: events.map(toCashEvent) };
+      const expenses = expenseRows.map(toCashExpense);
+      return { today, ...range, receipts, expenses, totals: summarizeCash(receipts, expenses), days: events.map(toCashEvent) };
     });
   }
 
@@ -1644,6 +1735,8 @@ export class TableService {
         case "set-staff-active": return setStaffActive(tx, restaurantId, command);
         case "close-day":
         case "reopen-day": return recordCashEvent(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
+        case "record-cash-expense": return recordCashExpense(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
+        case "delete-cash-expense": return deleteCashExpense(tx, restaurantId, command.id);
       }
     });
   }

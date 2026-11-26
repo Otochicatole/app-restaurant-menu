@@ -96,6 +96,7 @@ model Restaurant {
   reservationAllocations       ReservationAllocation[]
   serviceProducts              ServiceProduct[]
   serviceCashEvents            ServiceCashEvent[]
+  serviceCashExpenses          ServiceCashExpense[]
   staffMembers                 RestaurantStaffMember[]
   suppliers                    Supplier[]
   inventoryItems               InventoryItem[]
@@ -947,4 +948,21 @@ model CatalogProductProposal {
 
   @@unique([id, restaurantId])
   @@index([restaurantId, status, createdAt])
+}
+
+model ServiceCashExpense {
+  id            String     @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  businessDate  String
+  category      String
+  paymentMethod String     @default("CASH")
+  amountCents   Int
+  notes         String
+  supplierName  String     @default("")
+  actorId       String
+  createdAt     DateTime   @default(now())
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, businessDate, createdAt])
 }
