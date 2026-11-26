@@ -59,6 +59,7 @@ export type FloorAdminInspectorProps = {
   onDeleteRoom: (room: FloorRoom) => void;
   onConfigurationAction: (body: unknown, message: string) => Promise<boolean>;
   onDisableStaff: () => void;
+  onCloseMobile?: () => void;
 };
 
 const defaultPreset: FixedTablePreset = { shape: "SQUARE", capacity: 4, width: 80, height: 80 };
@@ -330,6 +331,7 @@ export function FloorAdminInspector({
   onDeleteRoom,
   onConfigurationAction,
   onDisableStaff,
+  onCloseMobile,
 }: FloorAdminInspectorProps) {
   const [tablePreset, setTablePreset] = useState<FixedTablePreset>(defaultPreset);
   const [targetSectorByTable, setTargetSectorByTable] = useState<Record<string, string>>({});
@@ -854,6 +856,21 @@ export function FloorAdminInspector({
 
   return (
     <section role="region" aria-label="Inspector del salón" className="flex h-full w-full flex-col bg-white">
+      {onCloseMobile && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200 px-3.5 py-2.5 xl:hidden">
+          <span className="min-w-0 truncate text-xs font-semibold text-stone-900">
+            Inspector del salón
+          </span>
+          <button
+            {...transientButtonProps}
+            type="button"
+            onClick={onCloseMobile}
+            className="inline-flex h-8 shrink-0 items-center rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 hover:bg-stone-50"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
       <div className="shrink-0 border-b border-stone-200 px-3 pt-2.5 pb-2">
         <div role="tablist" aria-label="Secciones del panel" className="grid grid-cols-3 gap-1 rounded-xl bg-stone-100 p-1">
           {tabs.map((tab) => {

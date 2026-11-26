@@ -1105,7 +1105,7 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
       </header>
 
       {/* Main Content Area: Unobstructed Canvas + Full-Height Docked Right Sidebar */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* Zone 2: Clean 2D Canvas */}
         <div role="region" aria-label="Editor del salón" className="relative min-w-0 flex-1 bg-[#f5f2e9]">
           {draft && (
@@ -1220,9 +1220,16 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
 
         {/* Zone 3: Full-Height Docked Right Inspector Sidebar */}
         {inspectorOpen && (
-          <aside className="flex h-full w-80 shrink-0 flex-col border-l border-stone-200 bg-white lg:w-96">
-            <FloorAdminInspector
-              room={draft}
+          <>
+            <div
+              aria-hidden="true"
+              onClick={() => setInspectorOpen(false)}
+              className="fixed inset-0 z-30 bg-zinc-950/25 xl:hidden"
+            />
+            <aside className="fixed inset-y-0 right-0 left-16 z-40 flex h-full flex-col border-l border-stone-200 bg-white shadow-xl sm:left-auto sm:w-full sm:max-w-md xl:static xl:z-auto xl:w-96 xl:max-w-none xl:shadow-none">
+              <FloorAdminInspector
+                onCloseMobile={() => setInspectorOpen(false)}
+                room={draft}
               config={config}
               dirty={dirty}
               activeTab={sidebarTab}
@@ -1287,6 +1294,7 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
               }
             />
           </aside>
+          </>
         )}
       </div>
 
