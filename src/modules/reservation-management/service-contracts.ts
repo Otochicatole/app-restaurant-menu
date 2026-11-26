@@ -173,7 +173,15 @@ export const serviceCommandSchema = z.discriminatedUnion("action", [
     transferCents: nonNegativeCents.optional(),
     draftRemovals: z.array(serviceDraftRemovalSchema).max(50).optional(),
   }),
-  z.object({ action: z.literal("save-product"), id: id.optional(), name, unitPriceCents, station: kitchenStationSchema.optional() }),
+  z.object({
+    action: z.literal("save-product"),
+    id: id.optional(),
+    name,
+    unitPriceCents,
+    station: kitchenStationSchema.optional(),
+    recipeId: id.nullable().optional(),
+    inventoryItemId: id.nullable().optional(),
+  }).refine((cmd) => !(cmd.recipeId && cmd.inventoryItemId), "Elegí una receta o un insumo de inventario, no ambos."),
   z.object({ action: z.literal("archive-product"), id }),
   z.object({
     action: z.literal("approve-catalog-proposal"),
@@ -211,7 +219,10 @@ export type ServiceProductView = {
   unitPriceCents: number;
   station: KitchenStation;
   active: boolean;
+  recipeId?: string | null;
+  inventoryItemId?: string | null;
   sourceKind?: "MANUAL" | "RECIPE" | "INVENTORY_ITEM";
+  sourceCode?: string | null;
   sourceName?: string | null;
   unitCostCents?: number | null;
   stockStatus?: StockStatus | null;

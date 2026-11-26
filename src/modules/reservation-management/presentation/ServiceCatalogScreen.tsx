@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Archive, Check, ChefHat, ClipboardCheck, Pencil, Plus, Search, Wine, XCircle } from "lucide-react";
-import type { CatalogProposalView, InventorySnapshot } from "@/modules/inventory-management/contracts";
+import type {
+  CatalogProposalView,
+  InventoryItemView,
+  InventorySnapshot,
+  RecipeView,
+} from "@/modules/inventory-management/contracts";
 import { AdminCard, AdminPageHeader, adminDangerButtonClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from "@/ui/admin/AdminPrimitives";
 import { AdminModal } from "@/ui/admin/AdminUI";
 import type { KitchenStation, ServiceCommand, ServiceProductView } from "../contracts";
@@ -23,14 +28,19 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
   const [dialog, setDialog] = useState<ProductDialog | null>(null);
   const [notice, setNotice] = useState("");
   const [proposals, setProposals] = useState<CatalogProposalView[]>([]);
+  const [recipes, setRecipes] = useState<RecipeView[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemView[]>([]);
 
-  const loadProposals = useCallback(async () => {
+  const loadInventoryContext = useCallback(async () => {
     try {
       const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/inventory`, { cache: "no-store" });
       if (!response.ok) return;
       const payload = await response.json().catch(() => null);
       if (payload?.success && payload.data) {
-        setProposals((payload.data as InventorySnapshot).proposals ?? []);
+        const snapshot = payload.data as Partial<InventorySnapshot>;
+        setProposals(snapshot.proposals ?? []);
+        setRecipes((snapshot.recipes ?? []).filter((recipe) => recipe.active));
+        setInventoryItems((snapshot.items ?? []).filter((item) => item.active));
       }
     } catch {
       // Silencioso para no bloquear el catálogo si solo se consulta el listado operativo
@@ -39,10 +49,10 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      void loadProposals();
+      void loadInventoryContext();
     }, 0);
     return () => window.clearTimeout(handle);
-  }, [loadProposals]);
+  }, [loadInventoryContext]);
 
   const products = result?.data ?? [];
   const pendingProposals = proposals.filter((proposal) => proposal.status === "PENDING");
@@ -56,7 +66,7 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
     setDialog(null);
     setNotice(message);
     refresh();
-    void loadProposals();
+    void loadInventoryContext();
   };
 
   return (
@@ -178,12 +188,17 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
                           </span>
                           {product.sourceKind === "RECIPE" && (
                             <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
-                              Receta
+                              Receta{product.sourceCode ? ` · ${product.sourceCode}` : ""}{product.sourceName ? ` · ${product.sourceName}` : ""}
                             </span>
                           )}
                           {product.sourceKind === "INVENTORY_ITEM" && (
                             <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-900">
-                              Stock directo
+                              Inventario{product.sourceCode ? ` · ${product.sourceCode}` : ""}{product.sourceName ? ` · ${product.sourceName}` : ""}
+                            </span>
+                          )}
+                          {(!product.sourceKind || product.sourceKind === "MANUAL") && product.recipeId == null && product.inventoryItemId == null && (
+                            <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+                              Sin vínculo
                             </span>
                           )}
                           {product.stockStatus === "LOW" && (
@@ -268,22 +283,42 @@ export function ServiceCatalogScreen({ restaurantId }: { restaurantId: string })
         />
       )}
       {dialog && (dialog.kind === "edit" || dialog.kind === "archive") && (
-        <ProductModal key={dialog.product?.id ?? "new"} restaurantId={restaurantId} dialog={dialog} onClose={() => setDialog(null)} onSaved={saved} />
+        <ProductModal
+          key={dialog.product?.id ?? "new"}
+          restaurantId={restaurantId}
+          dialog={dialog}
+          recipes={recipes}
+          inventoryItems={inventoryItems}
+          onClose={() => setDialog(null)}
+          onSaved={saved}
+        />
       )}
     </div>
   );
 }
 
-function ProductModal({ restaurantId, dialog, onClose, onSaved }: {
+type ProductLinkKind = "MANUAL" | "RECIPE" | "INVENTORY_ITEM";
+
+function ProductModal({ restaurantId, dialog, recipes, inventoryItems, onClose, onSaved }: {
   restaurantId: string;
   dialog: Extract<ProductDialog, { kind: "edit" | "archive" }>;
+  recipes: RecipeView[];
+  inventoryItems: InventoryItemView[];
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const product = dialog.product;
+  const initialLinkKind: ProductLinkKind = product?.recipeId
+    ? "RECIPE"
+    : product?.inventoryItemId
+      ? "INVENTORY_ITEM"
+      : "MANUAL";
   const [name, setName] = useState(product?.name ?? "");
   const [price, setPrice] = useState(product ? (product.unitPriceCents / 100).toFixed(2).replace(".", ",") : "");
   const [station, setStation] = useState<KitchenStation>(product?.station ?? "KITCHEN");
+  const [linkKind, setLinkKind] = useState<ProductLinkKind>(initialLinkKind);
+  const [selectedRecipeId, setSelectedRecipeId] = useState(product?.recipeId ?? "");
+  const [selectedItemId, setSelectedItemId] = useState(product?.inventoryItemId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const archiving = dialog.kind === "archive";
@@ -300,7 +335,31 @@ function ProductModal({ restaurantId, dialog, onClose, onSaved }: {
         setError("Ingresá un nombre y un precio válido mayor a cero, con hasta dos decimales.");
         return;
       }
-      command = { action: "save-product", id: product?.id, name: name.trim(), unitPriceCents, station };
+      if (linkKind === "RECIPE" && !selectedRecipeId) {
+        setError("Seleccioná la receta que querés vincular a este producto.");
+        return;
+      }
+      if (linkKind === "INVENTORY_ITEM" && !selectedItemId) {
+        setError("Seleccioná el insumo del inventario que querés vincular.");
+        return;
+      }
+      const hadLink = Boolean(product?.recipeId || product?.inventoryItemId);
+      const linkFields =
+        linkKind === "RECIPE"
+          ? { recipeId: selectedRecipeId, inventoryItemId: null }
+          : linkKind === "INVENTORY_ITEM"
+            ? { recipeId: null, inventoryItemId: selectedItemId }
+            : hadLink
+              ? { recipeId: null, inventoryItemId: null }
+              : {};
+      command = {
+        action: "save-product",
+        id: product?.id,
+        name: name.trim(),
+        unitPriceCents,
+        station,
+        ...linkFields,
+      };
     }
     setBusy(true);
     setError("");
@@ -357,6 +416,105 @@ function ProductModal({ restaurantId, dialog, onClose, onSaved }: {
                 </label>
               </div>
               <span className="text-xs font-normal text-zinc-600">Al agregar este producto en sala se selecciona automáticamente esta estación.</span>
+            </fieldset>
+
+            <fieldset className="grid gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-700">Vínculo con Inventario / Recetas</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ["MANUAL", "Sin vínculo"],
+                  ["RECIPE", "Receta"],
+                  ["INVENTORY_ITEM", "Inventario"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={linkKind === value}
+                    onClick={() => setLinkKind(value)}
+                    className={`min-h-9 rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
+                      linkKind === value
+                        ? "border-[#3d5934] bg-[#e8efe6] text-[#263e23]"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {linkKind === "RECIPE" && (
+                <label className="grid gap-1 text-xs font-medium text-zinc-800">
+                  Receta vinculada
+                  <select
+                    aria-label="Receta vinculada"
+                    className={serviceInputClass}
+                    value={selectedRecipeId}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      setSelectedRecipeId(nextId);
+                      if (!name.trim()) {
+                        const matched = recipes.find((recipe) => recipe.id === nextId);
+                        if (matched) setName(matched.name);
+                      }
+                    }}
+                  >
+                    <option value="">Elegí una receta…</option>
+                    {product?.recipeId && !recipes.some((recipe) => recipe.id === product.recipeId) && (
+                      <option value={product.recipeId}>
+                        {product.sourceCode ? `${product.sourceCode} · ` : ""}{product.sourceName ?? product.name}
+                      </option>
+                    )}
+                    {recipes.map((recipe) => (
+                      <option key={recipe.id} value={recipe.id}>
+                        {recipe.code} · {recipe.name} ({formatServiceMoney(recipe.costPerPortionCents)}/porc.)
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] font-normal text-zinc-600">
+                    Al vender este producto en Sala se descontarán automáticamente sus ingredientes del inventario.
+                  </span>
+                </label>
+              )}
+
+              {linkKind === "INVENTORY_ITEM" && (
+                <label className="grid gap-1 text-xs font-medium text-zinc-800">
+                  Producto de inventario vinculado
+                  <select
+                    aria-label="Insumo vinculado"
+                    className={serviceInputClass}
+                    value={selectedItemId}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      setSelectedItemId(nextId);
+                      if (!name.trim()) {
+                        const matched = inventoryItems.find((item) => item.id === nextId);
+                        if (matched) setName(matched.name);
+                      }
+                    }}
+                  >
+                    <option value="">Elegí un insumo del inventario…</option>
+                    {product?.inventoryItemId && !inventoryItems.some((item) => item.id === product.inventoryItemId) && (
+                      <option value={product.inventoryItemId}>
+                        {product.sourceCode ? `${product.sourceCode} · ` : ""}{product.sourceName ?? product.name}
+                      </option>
+                    )}
+                    {inventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} · {item.name}{item.isDirectSale ? " (Venta directa)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] font-normal text-zinc-600">
+                    Al vender este producto en Sala se descontará 1 unidad directa del inventario.
+                  </span>
+                </label>
+              )}
+
+              {linkKind === "MANUAL" && (
+                <p className="text-[11px] text-zinc-600">
+                  Sin vínculo: no descontará insumos ni recetas del inventario al confirmarse en Sala.
+                </p>
+              )}
             </fieldset>
           </fieldset>
         )}

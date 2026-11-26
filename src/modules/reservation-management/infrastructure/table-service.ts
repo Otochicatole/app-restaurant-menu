@@ -40,6 +40,7 @@ const productSelect = {
   inventoryItemId: true,
   recipe: {
     select: {
+      code: true,
       name: true,
       yieldPortions: true,
       ingredients: {
@@ -54,6 +55,7 @@ const productSelect = {
   },
   inventoryItem: {
     select: {
+      code: true,
       name: true,
       unitCostCents: true,
       currentStockMilli: true,
@@ -88,7 +90,10 @@ function toProduct(row: ProductRow): ServiceProductView {
       unitPriceCents: row.unitPriceCents,
       station,
       active: row.active,
+      recipeId: row.recipeId ?? null,
+      inventoryItemId: null,
       sourceKind: "RECIPE",
+      sourceCode: row.recipe.code,
       sourceName: row.recipe.name,
       unitCostCents: Math.round(totalCostCents / safeYield),
       stockStatus,
@@ -107,7 +112,10 @@ function toProduct(row: ProductRow): ServiceProductView {
       unitPriceCents: row.unitPriceCents,
       station,
       active: row.active,
+      recipeId: null,
+      inventoryItemId: row.inventoryItemId ?? null,
       sourceKind: "INVENTORY_ITEM",
+      sourceCode: row.inventoryItem.code,
       sourceName: row.inventoryItem.name,
       unitCostCents: row.inventoryItem.unitCostCents,
       stockStatus,
@@ -120,7 +128,10 @@ function toProduct(row: ProductRow): ServiceProductView {
     unitPriceCents: row.unitPriceCents,
     station,
     active: row.active,
+    recipeId: null,
+    inventoryItemId: null,
     sourceKind: "MANUAL",
+    sourceCode: null,
     sourceName: null,
     unitCostCents: null,
     stockStatus: null,
@@ -1261,22 +1272,65 @@ async function closeEmpty(tx: Prisma.TransactionClient, restaurantId: string, ac
   return toAccount(await findAccount(tx, restaurantId, receipt.id));
 }
 
-async function saveProduct(tx: Prisma.TransactionClient, restaurantId: string, command: Command<"save-product">) {
-  if (!command.id) {
-    return toProduct(await tx.serviceProduct.create({
-      data: { restaurantId, name: command.name, unitPriceCents: command.unitPriceCents, station: command.station ?? "KITCHEN", active: true },
-      select: productSelect,
-    }));
+async function saveProduct(
+  tx: Prisma.TransactionClient,
+  restaurantId: string,
+  actorId: string,
+  command: Command<"save-product">,
+  now: Date,
+) {
+  let linkData: { recipeId?: string | null; inventoryItemId?: string | null } = {};
+  if (command.recipeId) {
+    const recipe = await tx.recipe.findFirst({ where: { id: command.recipeId, restaurantId, active: true }, select: { id: true } });
+    if (!recipe) throw new NotFoundError("Receta activa");
+    linkData = { recipeId: recipe.id, inventoryItemId: null };
+  } else if (command.inventoryItemId) {
+    const item = await tx.inventoryItem.findFirst({ where: { id: command.inventoryItemId, restaurantId, active: true }, select: { id: true } });
+    if (!item) throw new NotFoundError("Producto de inventario activo");
+    linkData = { recipeId: null, inventoryItemId: item.id };
+  } else if (command.recipeId === null || command.inventoryItemId === null) {
+    linkData = { recipeId: null, inventoryItemId: null };
   }
-  const data = {
-    name: command.name,
-    unitPriceCents: command.unitPriceCents,
-    active: true,
-    ...(command.station !== undefined ? { station: command.station } : {}),
-  };
-  const updated = await tx.serviceProduct.updateMany({ where: { id: command.id, restaurantId }, data });
-  if (updated.count !== 1) throw new NotFoundError("Producto");
-  return toProduct(await tx.serviceProduct.findUniqueOrThrow({ where: { id: command.id }, select: productSelect }));
+
+  let saved: ProductRow;
+  if (!command.id) {
+    saved = await tx.serviceProduct.create({
+      data: {
+        restaurantId,
+        name: command.name,
+        unitPriceCents: command.unitPriceCents,
+        station: command.station ?? "KITCHEN",
+        ...linkData,
+        active: true,
+      },
+      select: productSelect,
+    });
+  } else {
+    const data = {
+      name: command.name,
+      unitPriceCents: command.unitPriceCents,
+      active: true,
+      ...(command.station !== undefined ? { station: command.station } : {}),
+      ...linkData,
+    };
+    const updated = await tx.serviceProduct.updateMany({ where: { id: command.id, restaurantId }, data });
+    if (updated.count !== 1) throw new NotFoundError("Producto");
+    saved = await tx.serviceProduct.findUniqueOrThrow({ where: { id: command.id }, select: productSelect });
+  }
+
+  if (linkData.recipeId) {
+    await tx.catalogProductProposal.updateMany({
+      where: { restaurantId, recipeId: linkData.recipeId, status: "PENDING" },
+      data: { status: "APPROVED", approvedProductId: saved.id, reviewedBy: actorId, reviewedAt: now },
+    });
+  } else if (linkData.inventoryItemId) {
+    await tx.catalogProductProposal.updateMany({
+      where: { restaurantId, inventoryItemId: linkData.inventoryItemId, status: "PENDING" },
+      data: { status: "APPROVED", approvedProductId: saved.id, reviewedBy: actorId, reviewedAt: now },
+    });
+  }
+
+  return toProduct(saved);
 }
 
 async function archiveProduct(tx: Prisma.TransactionClient, restaurantId: string, id: string) {
@@ -1582,7 +1636,7 @@ export class TableService {
         case "update-kitchen-status": return updateKitchenStatus(tx, restaurantId, actorId, command, now);
         case "pay-partial": return payPartial(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
         case "checkout": return checkout(tx, restaurantId, actorId, command, restaurantToday(timeZone, now), now);
-        case "save-product": return saveProduct(tx, restaurantId, command);
+        case "save-product": return saveProduct(tx, restaurantId, actorId, command, now);
         case "archive-product": return archiveProduct(tx, restaurantId, command.id);
         case "approve-catalog-proposal": return approveCatalogProposal(tx, restaurantId, actorId, command, now);
         case "reject-catalog-proposal": return rejectCatalogProposal(tx, restaurantId, actorId, command, now);

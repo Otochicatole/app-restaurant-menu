@@ -418,5 +418,103 @@ describe("CashCmsScreen and ServiceCatalogScreen separation", () => {
       station: "KITCHEN",
     });
   });
+
+  it("displays linked recipe/item origin and lets admins link an existing product to a recipe when editing", async () => {
+    const products = [
+      {
+        id: "p-milanesa",
+        name: "Milanesa clásica",
+        unitPriceCents: 1590000,
+        station: "KITCHEN",
+        active: true,
+        recipeId: null,
+        inventoryItemId: null,
+        sourceKind: "MANUAL",
+        sourceCode: null,
+        sourceName: null,
+      },
+      {
+        id: "p-ipa",
+        name: "Cerveza IPA",
+        unitPriceCents: 520000,
+        station: "BAR",
+        active: true,
+        recipeId: null,
+        inventoryItemId: "item-12",
+        sourceKind: "INVENTORY_ITEM",
+        sourceCode: "INS-012",
+        sourceName: "Cerveza IPA Lata 473ml",
+      },
+    ];
+    const recipes = [
+      {
+        id: "rec-2",
+        code: "REC-002",
+        name: "Milanesa con Papas Fritas",
+        yieldPortions: 1,
+        notes: "",
+        active: true,
+        totalCostCents: 318000,
+        costPerPortionCents: 318000,
+        availablePortions: 14,
+        stockStatus: "OK",
+        ingredients: [],
+        linkedProductId: null,
+        pendingProposalId: null,
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/inventory")) {
+        return new Response(JSON.stringify({ success: true, data: { proposals: [], recipes, items: [] } }), { status: 200 });
+      }
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({
+          success: true,
+          data: {
+            id: body.id,
+            name: body.name,
+            unitPriceCents: body.unitPriceCents,
+            station: body.station,
+            active: true,
+            recipeId: body.recipeId,
+            inventoryItemId: body.inventoryItemId,
+            sourceKind: "RECIPE",
+            sourceCode: "REC-002",
+            sourceName: "Milanesa con Papas Fritas",
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, data: products }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(createElement(ServiceCatalogScreen, { restaurantId: "rest-1" }));
+
+    const list = await screen.findByRole("list", { name: "Productos del catálogo" });
+    expect(within(list).getByText("Inventario · INS-012 · Cerveza IPA Lata 473ml")).toBeTruthy();
+    expect(within(list).getByText("Sin vínculo")).toBeTruthy();
+
+    fireEvent.click(within(list).getByRole("button", { name: "Editar Milanesa clásica" }));
+    const editDialog = screen.getByRole("dialog", { name: "Editar producto" });
+    fireEvent.click(within(editDialog).getByRole("button", { name: "Receta" }));
+    const recipeSelect = await within(editDialog).findByLabelText("Receta vinculada");
+    fireEvent.change(recipeSelect, { target: { value: "rec-2" } });
+    fireEvent.click(within(editDialog).getByRole("button", { name: "Guardar producto" }));
+
+    await waitFor(() => {
+      const savePost = fetchMock.mock.calls.find((call) => call[1]?.method === "POST");
+      expect(savePost).toBeTruthy();
+      expect(JSON.parse(String(savePost![1]!.body))).toEqual({
+        action: "save-product",
+        id: "p-milanesa",
+        name: "Milanesa clásica",
+        unitPriceCents: 1590000,
+        station: "KITCHEN",
+        recipeId: "rec-2",
+        inventoryItemId: null,
+      });
+    });
+  });
 });
 
