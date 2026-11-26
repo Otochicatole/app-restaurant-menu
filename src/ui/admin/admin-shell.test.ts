@@ -1,0 +1,64 @@
+/** @vitest-environment jsdom */
+import { createElement } from "react";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const route = vi.hoisted(() => ({ pathname: "", push: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => route.pathname, useRouter: () => ({push: route.push}) }));
+vi.mock("next/image", () => ({ default: ({ alt, src }: { alt: string; src: string }) => createElement("img", { alt, src }) }));
+vi.mock("@/modules/identity-access/ui", () => ({ LogoutButton: () => createElement("button", null, "Cerrar sesión") }));
+import { AdminShell } from "./AdminShell";
+
+const props = { restaurantId: "restaurant", organizationName: "Organización", brandTitle: "Café", brandSubtitle: "", showMenuPickerLink: true };
+const child = createElement("div", { "data-testid": "editor" }, "Plano del salón");
+
+describe("administrative full-screen floor editor", () => {
+  afterEach(cleanup);
+
+  it("keeps the original sidebar visible beside the room editor without the CMS header or a second mobile menu", () => {
+    route.pathname = "/admin/restaurants/restaurant/rooms";
+    const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
+    expect(screen.getByTestId("editor")).toBeTruthy();
+    expect(screen.getAllByRole("navigation", { name: "Navegación principal" })).toHaveLength(1);
+    const navigation = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(navigation.closest("aside")?.classList.contains("-translate-x-full")).toBe(false);
+    expect(navigation.closest("aside")?.classList.contains("translate-x-0")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Abrir menú" })).toBeNull();
+    expect(view.container.querySelector("header")).toBeNull();
+  });
+
+  it("retains the existing administrative shell on other restaurant routes", () => {
+    route.pathname = "/admin/restaurants/restaurant/settings";
+    const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
+    expect(screen.getByTestId("editor")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Abrir menú" })).toBeTruthy();
+    expect(view.container.querySelector("header")).not.toBeNull();
+  });
+
+  it("renders unified cocina y barra link in main navigation and displays full-screen light container without CMS header", () => {
+    route.pathname = "/admin/restaurants/restaurant/kitchen";
+    const view = render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
+    expect(screen.getByTestId("editor")).toBeTruthy();
+    const kitchenLink = screen.getByRole("link", { name: "Cocina y barra" });
+    expect(kitchenLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/kitchen");
+    expect(screen.queryByRole("link", { name: "Barra" })).toBeNull();
+    expect(view.container.querySelector("header")).toBeNull();
+    expect(view.container.querySelector(".bg-zinc-950")).toBeNull();
+    expect(view.container.querySelector("[class*='md:pl-16']")?.classList.contains("bg-[#f8faf7]")).toBe(true);
+  });
+
+  it("renders Caja, Catálogo and Personal as separate routes in the main navigation", () => {
+    route.pathname = "/admin/restaurants/restaurant/products";
+    render(createElement(AdminShell, props as Parameters<typeof AdminShell>[0], child));
+    const cashLink = screen.getByRole("link", { name: "Caja" });
+    const catalogLink = screen.getByRole("link", { name: "Catálogo" });
+    const staffLink = screen.getByRole("link", { name: "Personal" });
+    expect(cashLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/cash");
+    expect(catalogLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/products");
+    expect(staffLink.getAttribute("href")).toBe("/admin/restaurants/restaurant/staff");
+    expect(cashLink.getAttribute("aria-current")).toBeNull();
+    expect(catalogLink.getAttribute("aria-current")).toBe("page");
+    expect(staffLink.getAttribute("aria-current")).toBeNull();
+  });
+});

@@ -51,6 +51,7 @@ export function applicationErrorResponse(error: ApplicationError) {
 }
 
 export function unknownErrorResponse(error: unknown) {
+  console.error("Unhandled application error details:", error);
   logger.error("Unhandled application error", error);
   return errorResponse("INTERNAL_ERROR", "Internal server error", 500);
 }

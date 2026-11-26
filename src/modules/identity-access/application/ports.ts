@@ -9,6 +9,9 @@ export type AccountRecord = {
   organizationId: string | null;
   organizationSlug: string | null;
   organizationStatus: "ACTIVE" | "SUSPENDED" | null;
+  restaurantId?: string | null;
+  restaurantStatus?: "ACTIVE" | "SUSPENDED" | null;
+  floorManagementEnabled?: boolean;
   mustChangePassword: boolean;
 };
 

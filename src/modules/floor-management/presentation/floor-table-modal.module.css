@@ -1,0 +1,112 @@
+.modalDialog {
+  --floor-canvas: #eef4f6;
+  --floor-surface: #ffffff;
+  --floor-ink: #173642;
+  --floor-muted: #4b6470;
+  --floor-action: #155e75;
+  --floor-action-hover: #0e4d63;
+  --floor-hover: #e6f2f6;
+  --floor-border: #cad9df;
+  --floor-border-hover: #9fb8c3;
+  --floor-focus: #0e7490;
+  --floor-scrollbar: #a5bbc4;
+
+  padding: 0;
+  color: var(--floor-ink);
+  background: var(--floor-canvas);
+  border: 0;
+  width: 100dvw;
+  height: 100dvh;
+  max-width: 100dvw;
+  max-height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  caret-color: var(--floor-focus);
+  accent-color: var(--floor-action);
+  scrollbar-color: var(--floor-scrollbar) transparent;
+}
+
+.modalDialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.modalDialog:modal {
+  overscroll-behavior: contain;
+}
+
+.modalDialog::backdrop {
+  background: rgb(16 38 48 / 0.58);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 768px) {
+  .modalDialog {
+    width: min(1440px, calc(100dvw - 1.5rem));
+    height: calc(100dvh - 1.5rem);
+    max-width: none;
+    max-height: none;
+    margin: auto;
+    border-radius: 1rem;
+    border: 1px solid var(--floor-border);
+    box-shadow: 0 24px 64px -16px rgb(16 38 48 / 0.34);
+  }
+
+  .modalDialogCompact {
+    width: min(860px, calc(100dvw - 2rem));
+    height: auto;
+    max-height: calc(100dvh - 2.5rem);
+  }
+}
+
+.tabList {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--floor-border);
+  background: var(--floor-surface);
+  padding-inline: 0.75rem;
+}
+
+.tabList::-webkit-scrollbar {
+  display: none;
+}
+
+.tabButton {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--floor-muted);
+  white-space: nowrap;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.tabButton:hover {
+  color: var(--floor-ink);
+  background: var(--floor-hover);
+}
+
+.tabButton:focus-visible {
+  outline: 2px solid var(--floor-focus);
+  outline-offset: -2px;
+}
+
+.tabButton[aria-selected="true"] {
+  color: var(--floor-action);
+}
+
+.tabButton[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0.25rem 0;
+  border-block-end: 3px solid var(--floor-action);
+}

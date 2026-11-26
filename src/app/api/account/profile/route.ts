@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest) {
     if (input.email !== actor.email) await verifyCurrentPassword({ currentPassword: input.currentPassword ?? "" });
     const email = await updateAccountEmail({ email: input.email });
     const organization = await prisma.organization.update({ where: { id: actor.organizationId }, data: { name: input.name }, select: { name: true } });
-    revalidatePath("/admin", "layout"); revalidatePath("/superadmin/clientes");
+    revalidatePath("/admin", "layout"); revalidatePath("/superadmin/clients");
     return successResponse({ name: organization.name, email });
   } catch (error) { return handleApiError(error); }
 }

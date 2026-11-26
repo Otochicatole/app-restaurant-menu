@@ -401,6 +401,7 @@ function createArcoBarPresetDocument(): LandingDocumentV1 {
   const headerModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "header")!;
   const heroModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "hero")!;
   const resTableModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-table")!;
+  const eventsModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "reservations-events")!;
   const promoModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "promo-banner")!;
   const expModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "experience-split")!;
   const galleryModule = BUILTIN_LANDING_MODULES.find((m) => m.moduleKey === "gallery-grid")!;
@@ -420,6 +421,10 @@ function createArcoBarPresetDocument(): LandingDocumentV1 {
       <a class="acceso es-principal" href="#reservas-mesa">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 18.4h18.8"></path><path d="M4 18.4a8 9 0 0 1 16 0"></path><path d="M12 9.4V7.6"></path><circle cx="12" cy="6.3" r="1.3" fill="currentColor" stroke="none"></circle></svg>
         <span data-i18n="nav.reservar">Reservar</span>
+      </a>
+      <a class="acceso" href="#eventos">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+        <span data-i18n="nav.eventos">Eventos</span>
       </a>
       <a class="acceso" href="https://arco.mise.ar/carta" target="_blank" rel="noreferrer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18M6 3c-1.2 0-2 1.6-2 4s.8 4 2 4M18 3v18M18 3c1.4 0 2 2 2 4.5S19 12 18 12h-1"></path></svg>
@@ -516,6 +521,22 @@ function createArcoBarPresetDocument(): LandingDocumentV1 {
   resTableBlock.values.depositNotice = "Tu mesa, confirmada con la seña.";
   resTableBlock.values.restaurantPhone = "+5492233482402";
   resTableBlock.values.btnSubmitLabel = "Confirmar reserva";
+
+  // 3b. Eventos Especiales & Noches Temáticas (.pap + Portada)
+  const eventsBlock = createBlockFromBuiltinModule(eventsModule, "preset-arco-events");
+  eventsBlock.name = "Eventos Especiales Arco";
+  eventsBlock.values.kicker = "Experiencias · Arco";
+  eventsBlock.values.title = "Eventos Especiales";
+  eventsBlock.values.subtitle = "noches temáticas & DJs en vivo";
+  eventsBlock.values.description = "Asegurá tu lugar en nuestras noches temáticas, degustaciones y shows en vivo con cupos limitados.";
+  eventsBlock.values.coverImage = "https://arco.mise.ar/api/foto/img.galeria-hero?v=1791861570";
+  eventsBlock.values.coverCaption = "Noches especiales en Arco · Cupos limitados y confirmación instantánea.";
+  eventsBlock.values.venueName = "Arco";
+  eventsBlock.values.venueAddress = "Olavarría 3132 · Mar del Plata";
+  eventsBlock.values.depositNotice = "Tu lugar en el evento, confirmado al instante.";
+  eventsBlock.values.emptyMessage = "No hay eventos especiales programados en este momento. ¡Reservá tu mesa arriba o consultanos por WhatsApp!";
+  eventsBlock.values.btnBookLabel = "Confirmar entrada";
+  eventsBlock.values.restaurantPhone = "+5492233482402";
 
   // 4. Cumpleaños en Arco
   const cumpleBlock = createBlockFromBuiltinModule(promoModule, "preset-arco-cumple");
@@ -662,6 +683,7 @@ function createArcoBarPresetDocument(): LandingDocumentV1 {
       bbIzqBlock,
       tapaHeroBlock,
       resTableBlock,
+      eventsBlock,
       cumpleBlock,
       generalBlock,
       galeriaBlock,
@@ -678,7 +700,7 @@ export const LANDING_TEMPLATE_PRESETS: LandingTemplatePreset[] = [
     id: "landing-preset-arco-bar",
     name: "Arco - Bar, Cocina & Música (Mise)",
     description:
-      "Atmósfera nocturna con neones rojos en Mar del Plata, barra de autor, DJ en vivo, wizard interactivo de reservas de mesas (.pap), especiales de cumpleaños y reseñas Google.",
+      "Atmósfera nocturna con neones rojos en Mar del Plata, barra de autor, DJ en vivo, wizard interactivo de reservas de mesas (.pap), reserva de eventos especiales, cumpleaños y reseñas Google.",
     document: createArcoBarPresetDocument(),
     updatedAt: "2026-10-24T00:00:00.000Z",
   },

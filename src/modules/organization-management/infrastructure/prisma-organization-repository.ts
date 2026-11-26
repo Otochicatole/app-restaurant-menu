@@ -64,6 +64,10 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
       const organization = await tx.organization.findUnique({ where: { id }, include: { restaurants: { select: { id: true } } } });
       if (!organization) throw new NotFoundError("Organización");
       if (organization.slug !== confirmationSlug) throw new ConflictError("La confirmación no coincide con el identificador de la organización.");
+      const serviceScope = { restaurantId: { in: organization.restaurants.map((restaurant) => restaurant.id) } };
+      if (await tx.serviceAccount.count({ where: serviceScope }) || await tx.serviceCashEvent.count({ where: serviceScope })) {
+        throw new ConflictError("La organización conserva cuentas o cierres de caja. No se puede eliminar.");
+      }
       const templateAssets = await tx.menuTemplateAsset.findMany({
         where: { template: { restaurantId: { in: organization.restaurants.map((restaurant) => restaurant.id) } } },
         select: { storageKey: true },

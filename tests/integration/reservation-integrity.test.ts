@@ -6,6 +6,8 @@ import { createSqlitePrismaClient } from "../../src/platform/database/sqlite-cli
 import { PrismaReservationRepository } from "../../src/modules/reservation-management/infrastructure/prisma-reservation-repository";
 import { ReservationManagementService } from "../../src/modules/reservation-management/application/reservation-use-cases";
 import type { AdminCreateReservationCommand, UpdateReservationCommand } from "../../src/modules/reservation-management/contracts";
+import { getFloorAssignmentOptions } from "../../src/modules/reservation-management/infrastructure/floor-allocations";
+import type { FloorAssignmentInput } from "../../src/modules/floor-management/contracts";
 
 // The repository clients below belong exclusively to the migrated temporary file.
 vi.mock("@/platform/database/prisma", () => ({ prisma: undefined }));
@@ -28,6 +30,22 @@ describe("reservation integrity on SQLite", () => {
   const createEvent = (capacity: number, overrides: Record<string, unknown> = {}) => first.restaurantEvent.create({
     data: { restaurantId, title: "Cena", date: "2099-01-04", startTime: "21:00", capacity, ...overrides },
   });
+  const floor = async (name = "Principal") => {
+    const room = await first.diningRoom.create({ data: { restaurantId, name, width: 800, height: 600,
+      tables: { create: [
+        { label: "1", shape: "SQUARE", capacity: 4, x: 100, y: 120, width: 80, height: 80 },
+        { label: "2", shape: "SQUARE", capacity: 4, x: 200, y: 120, width: 80, height: 80 },
+      ] },
+    }, include: { tables: { orderBy: { label: "asc" } } } });
+    const location = await first.diningRoomLocation.create({ data: { restaurantId, roomId: room.id, name: "Ventana", x: 400, y: 300, width: 800, height: 600 } });
+    const combination = await first.diningTableCombination.create({ data: { restaurantId, roomId: room.id, name: "Unidas", capacity: 6,
+      members: { create: room.tables.map((table, index) => ({ tableId: table.id, x: index === 0 ? -40 : 40, y: 0 })) },
+    } });
+    await first.restaurant.update({ where: { id: restaurantId }, data: { floorManagementEnabled: true } });
+    const single: FloorAssignmentInput = { roomId: room.id, locationId: location.id, optionId: `table:${room.tables[0].id}`, x: 100, y: 120, rotation: 0, expectedRoomRevision: 0 };
+    const joined: FloorAssignmentInput = { ...single, optionId: `combination:${combination.id}`, x: 150 };
+    return { room, combination, single, joined };
+  };
 
   beforeAll(async () => {
     const resultsDirectory = path.resolve("test-results");
@@ -155,5 +173,73 @@ describe("reservation integrity on SQLite", () => {
       await repository.createReservation(restaurantId, command(), "RES-AAAAA");
       await expect(repository.createReservation(restaurantId, command(), "RES-AAAAA")).rejects.toMatchObject({ code: "CONFLICT" });
     } finally { random.mockRestore(); }
+  });
+
+  it("keeps pending requests unassigned, checks revisions and atomically confirms physical resources", async () => {
+    const { single, joined } = await floor();
+    const a = await reserve(); const b = await reserve();
+    expect(await first.reservationAllocation.count()).toBe(0);
+    await expect(repository.updateReservationStatus(restaurantId, a.id, "CONFIRMED", { expectedRevision: 0 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(repository.updateReservationStatus(restaurantId, a.id, "CONFIRMED", { assignment: single })).rejects.toMatchObject({ code: "CONFLICT" });
+    const competing = await Promise.allSettled([
+      repository.updateReservationStatus(restaurantId, a.id, "CONFIRMED", { expectedRevision: 0, assignment: single }),
+      otherRepository.updateReservationStatus(restaurantId, b.id, "CONFIRMED", { expectedRevision: 0, assignment: single }),
+    ]);
+    expect(competing.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect((competing.find((result) => result.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ code: "CONFLICT" });
+    const winner = (competing.find((result) => result.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof reserve>>>).value;
+    await expect(repository.updateReservationStatus(restaurantId, winner.id, "CONFIRMED", { expectedRevision: 0, assignment: single })).rejects.toMatchObject({ code: "CONFLICT" });
+    const pending = winner.id === a.id ? b : a;
+    await repository.updateReservation(restaurantId, { ...pending, date: "2099-01-05", partySize: 6, status: "CONFIRMED", expectedRevision: 0, assignment: joined });
+    const allocation = await first.reservationAllocation.findUniqueOrThrow({ where: { reservationId: pending.id }, include: { tables: true } });
+    expect(allocation.capacity).toBe(6); expect(allocation.tables).toHaveLength(2);
+    expect(allocation.tables.map((table) => table.x).sort((x, y) => x - y)).toEqual([110, 190]);
+    const tooLarge = await reserve({ date: "2099-01-06", partySize: 7, source: "ADMIN" });
+    await expect(repository.updateReservationStatus(restaurantId, tooLarge.id, "CONFIRMED", { expectedRevision: 0, assignment: joined })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await repository.getReservationById(restaurantId, tooLarge.id))?.status).toBe("PENDING");
+  });
+
+  it("uses room-scoped event windows, excludes pending aforo and retains released allocation history", async () => {
+    const primary = await floor(); const other = await floor("Patio");
+    const event = await repository.upsertEvent(restaurantId, {
+      title: "Cena exclusiva", description: "", date: "2099-01-04", startTime: "21:00", endTime: "23:45", capacity: 10,
+      priceLabel: "", imageUrl: "", blocksRegularReservations: true, status: "PUBLISHED", roomIds: [primary.room.id],
+    });
+    const pending = await reserve({ eventId: event.id, partySize: 4 });
+    await expect(repository.upsertEvent(restaurantId, { ...event, id: undefined, title: "Exclusivo superpuesto", roomIds: [primary.room.id] })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await repository.getEvents(restaurantId))[0].remainingCapacity).toBe(10);
+    const regular = await getFloorAssignmentOptions(first, restaurantId, { date: event.date, time: "21:00", partySize: 2 });
+    expect(regular.options.filter((option) => option.roomId === primary.room.id).every((option) => !option.available)).toBe(true);
+    expect(regular.options.some((option) => option.roomId === other.room.id && option.available)).toBe(true);
+    await expect(repository.updateReservationStatus(restaurantId, pending.id, "CONFIRMED", { expectedRevision: 0, assignment: other.single })).rejects.toMatchObject({ code: "CONFLICT" });
+    const confirmed = await repository.updateReservationStatus(restaurantId, pending.id, "CONFIRMED", { expectedRevision: 0, assignment: primary.single });
+    const occupied = await first.reservationAllocation.findUniqueOrThrow({ where: { reservationId: pending.id } });
+    expect(occupied.serviceEndAt.toISOString()).toBe("2099-01-05T02:45:00.000Z");
+    expect(occupied.blockedFrom.toISOString()).toBe("2099-01-04T22:00:00.000Z");
+    const eventOptions = await getFloorAssignmentOptions(first, restaurantId, { date: event.date, time: event.startTime, eventId: event.id, partySize: 4 });
+    expect(eventOptions.options.find((option) => option.id === primary.single.optionId)?.available).toBe(false);
+    await repository.updateReservationStatus(restaurantId, confirmed.id, "COMPLETED", { expectedRevision: confirmed.revision });
+    const history = await first.reservationAllocation.findUniqueOrThrow({ where: { reservationId: pending.id } });
+    expect(history.releasedAt).not.toBeNull(); expect(history.blockedUntil).toEqual(occupied.blockedUntil);
+    const released = await getFloorAssignmentOptions(first, restaurantId, { date: event.date, time: event.startTime, eventId: event.id, partySize: 4 });
+    expect(released.options.find((option) => option.id === primary.single.optionId)?.available).toBe(true);
+  });
+
+  it("computes public availability for the actual party and rejects past local hours across UTC midnight", async () => {
+    const { single } = await floor();
+    const confirmed = await reserve({ status: "CONFIRMED", source: "ADMIN", assignment: single });
+    expect(confirmed.revision).toBe(0);
+    const service = new ReservationManagementService(repository);
+    const small = await service.getPublicAvailability(slug, { date: "2099-01-04", partySize: 2 });
+    expect(small.dates[0].available).toBe(true);
+    const large = await service.getPublicAvailability(slug, { date: "2099-01-04", partySize: 6 });
+    expect(large.dates[0].available).toBe(false);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-30T01:00:00Z"));
+    try {
+      const local = await service.getPublicAvailability(slug, { date: "2026-10-29", partySize: 2 });
+      expect(local.from).toBe("2026-10-29"); expect(local.dates[0].availableSlots).toEqual([]);
+      await expect(service.createPublicTableReservation(slug, command({ date: "2026-10-29", time: "20:00" }))).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    } finally { vi.useRealTimers(); }
   });
 });

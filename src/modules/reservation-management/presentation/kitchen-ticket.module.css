@@ -1,0 +1,29 @@
+.printTicket {
+  display: none;
+}
+
+@media print {
+  body:has(> .printTicket) > :not(.printTicket) {
+    display: none !important;
+  }
+
+  body:has(> .printTicket) {
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .printTicket {
+    display: block;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 22rem;
+    padding: 0.5rem;
+    color: #000;
+    background: #fff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  .printTicket li {
+    break-inside: avoid;
+  }
+}

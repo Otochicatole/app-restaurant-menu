@@ -1,5 +1,10 @@
 import { ForbiddenError, NotFoundError } from "@/platform/application/errors";
-import type { RestaurantSummary } from "../contracts";
+import {
+  RESTAURANT_FEATURE_CATALOG,
+  hasRestaurantFeature,
+  type RestaurantFeatureKey,
+  type RestaurantSummary,
+} from "../contracts";
 
 export function assertRestaurantAccess(
   actor: { kind: string; organizationId: string | null; mustChangePassword: boolean },
@@ -15,5 +20,12 @@ export function assertRestaurantAccess(
   }
   if (organizationStatus !== "ACTIVE" || restaurant.status !== "ACTIVE") {
     throw new ForbiddenError("Este restaurante no está disponible");
+  }
+}
+
+export function assertRestaurantFeature(restaurant: RestaurantSummary, feature: RestaurantFeatureKey) {
+  if (!hasRestaurantFeature(restaurant, feature)) {
+    const def = RESTAURANT_FEATURE_CATALOG.find((item) => item.key === feature);
+    throw new ForbiddenError(`Tu plan actual no incluye la funcionalidad "${def?.label ?? feature}"`);
   }
 }

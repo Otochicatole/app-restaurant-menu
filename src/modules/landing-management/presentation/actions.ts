@@ -45,8 +45,8 @@ export async function saveLandingDraftAction(
     const command = saveLandingCommandSchema.parse(input);
     await assertCanManageLanding(command.restaurantId);
     const data = await landingManagementService.saveDraft(command);
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     return actionSuccess(data);
   } catch (error) {
     return actionErrorResult(
@@ -63,8 +63,8 @@ export async function publishLandingAction(
     const command = publishLandingCommandSchema.parse(input);
     await assertCanManageLanding(command.restaurantId);
     const data = await landingManagementService.publishLanding(command);
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     revalidatePath("/l/[slug]", "page");
     return actionSuccess(data);
   } catch (error) {
@@ -79,8 +79,8 @@ export async function createCustomLandingModuleAction(
     const command = createCustomModuleCommandSchema.parse(input);
     await assertCanManageLanding(command.restaurantId);
     const created = await landingManagementService.createCustomModule(command);
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     return actionSuccess(created);
   } catch (error) {
     return actionErrorResult(
@@ -97,8 +97,8 @@ export async function deleteCustomLandingModuleAction(
   try {
     await assertCanManageLanding(restaurantId);
     await landingManagementService.deleteCustomModule(restaurantId, moduleId);
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     return actionSuccess({ deletedId: moduleId });
   } catch (error) {
     return actionErrorResult(
@@ -121,9 +121,9 @@ export async function createLandingTemplateAction(input: {
       input.document,
       parsedCmd,
     );
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/plantillas");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/templates");
     return actionSuccess(created);
   } catch (error) {
     return actionErrorResult(
@@ -140,8 +140,8 @@ export async function deletePrivateLandingTemplateAction(
   try {
     await assertCanManageLanding(restaurantId);
     await landingManagementService.deletePrivateTemplate(restaurantId, templateId);
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     return actionSuccess({ deletedId: templateId });
   } catch (error) {
     return actionErrorResult(
@@ -184,8 +184,8 @@ export async function importLandingTemplateAction(
       restaurantId,
       bytes,
     );
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
-    revalidatePath("/superadmin/clientes/[id]/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/clients/[id]/restaurants/[restaurantId]/landing", "page");
     return actionSuccess(imported);
   } catch (error) {
     return actionErrorResult(
@@ -228,8 +228,8 @@ export async function moderateLandingTemplateAction(input: {
         input.reason,
       );
     }
-    revalidatePath("/superadmin/plantillas");
-    revalidatePath("/admin/restaurantes/[restaurantId]/landing", "page");
+    revalidatePath("/superadmin/templates");
+    revalidatePath("/admin/restaurants/[restaurantId]/landing", "page");
     return actionSuccess({ ok: true });
   } catch (error) {
     return actionErrorResult(

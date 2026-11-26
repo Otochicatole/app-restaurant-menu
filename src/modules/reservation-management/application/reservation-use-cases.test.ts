@@ -24,12 +24,16 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     getRestaurantInfo: vi.fn().mockResolvedValue({
       name: "Bistró Test",
       landingSlug: "bistro-test",
+      floorManagementEnabled: false,
+      timeZone: "America/Argentina/Buenos_Aires",
     }),
     getRestaurantPublicContext: vi.fn().mockResolvedValue({
       restaurantId: "t1",
       name: "Bistró Test",
       slug: "bistro-test",
       landingEnabled: true,
+      floorManagementEnabled: false,
+      timeZone: "America/Argentina/Buenos_Aires",
     }),
     getTimeSlots: vi.fn().mockResolvedValue(defaultSlots),
     upsertTimeSlot: vi.fn(),
@@ -42,6 +46,9 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     getEvents: vi.fn().mockResolvedValue(defaultEvents),
     getEventById: vi.fn().mockResolvedValue(null),
     getAvailabilityEvents: vi.fn().mockResolvedValue(defaultEvents),
+    getPhysicalAvailability: vi.fn().mockResolvedValue({}),
+    getPublicSectors: vi.fn().mockResolvedValue([]),
+    hasEventPhysicalAvailability: vi.fn().mockResolvedValue(true),
     upsertEvent: vi.fn(),
     deleteEvent: vi.fn(),
     getReservations: vi.fn().mockResolvedValue(defaultReservations),
@@ -49,6 +56,7 @@ function createMockRepo(overrides: Partial<ReservationRepositoryPort> = {}): Res
     createReservation: vi.fn().mockImplementation((restaurantId, cmd, code) =>
       Promise.resolve({
         id: "res-new",
+        revision: 0,
         restaurantId,
         code,
         customerName: cmd.customerName,
@@ -92,6 +100,7 @@ describe("ReservationManagementService", () => {
     await expect(service.createPublicReservation("unknown", publicCommand)).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(service.createPublicEventReservation("unknown", { ...publicCommand, eventId: "event-a" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(repo.getReservations).not.toHaveBeenCalled();
+    expect(repo.getPublicSectors).not.toHaveBeenCalled();
     expect(repo.createReservation).not.toHaveBeenCalled();
   });
 
@@ -105,6 +114,7 @@ describe("ReservationManagementService", () => {
     await expect(service.getPublicAvailability("resto", {})).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(service.createPublicEventReservation("resto", { ...publicCommand, eventId: "event-a" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(repo.getReservations).not.toHaveBeenCalled();
+    expect(repo.getPublicSectors).not.toHaveBeenCalled();
   });
 
   it("rejects past reservation dates without consulting availability or writing a booking", async () => {
@@ -123,6 +133,24 @@ describe("ReservationManagementService", () => {
       await expect(service.createPublicEventReservation("bistro-test", { ...publicCommand, eventId })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
     await expect(service.createPublicReservation("bistro-test", { ...publicCommand, eventId: "other-restaurant-event" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(repo.createReservation).not.toHaveBeenCalled();
+  });
+
+  it("includes the current restaurant's sectors in both availability responses", async () => {
+    const sectors = [{ id: "window", name: "Ventana", roomName: "Salón" }];
+    const repo = createMockRepo({ getPublicSectors: vi.fn().mockResolvedValue(sectors) });
+    const service = new ReservationManagementService(repo);
+    await expect(service.getPublicAvailability("bistro-test", { date: publicCommand.date })).resolves.toMatchObject({ sectors });
+    await expect(service.getPublicTableAvailability("bistro-test", { date: publicCommand.date })).resolves.toMatchObject({ sectors });
+    expect(repo.getPublicSectors).toHaveBeenCalledWith("t1");
+  });
+
+  it("rejects a sector preference on a public event reservation", async () => {
+    const repo = createMockRepo();
+    const service = new ReservationManagementService(repo);
+    await expect(service.createPublicReservation("bistro-test", {
+      ...publicCommand, eventId: "event-a", preferredSectorId: "window",
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(repo.createReservation).not.toHaveBeenCalled();
   });
 
@@ -166,14 +194,19 @@ describe("ReservationManagementService", () => {
   });
 
   it("clamps past availability requests to today and limits excessively long ranges", async () => {
-    const service = new ReservationManagementService(createMockRepo());
-    const today = new Date().toISOString().slice(0, 10);
-    const clamped = await service.getPublicAvailability("bistro-test", { from: "2000-01-01", to: "2099-12-31" });
-    expect(clamped.from).toBe(today);
-    expect(clamped.dates).toHaveLength(120);
-    const defaultRange = await service.getPublicAvailability("bistro-test", {});
-    expect(defaultRange.dates).toHaveLength(61);
-    await expect(service.getPublicAvailability("bistro-test", { from: "2099-02-01", to: "2099-01-01" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T01:30:00Z"));
+    try {
+      const service = new ReservationManagementService(createMockRepo());
+      const clamped = await service.getPublicAvailability("bistro-test", { from: "2000-01-01", to: "2099-12-31" });
+      expect(clamped.from).toBe("2026-11-06");
+      expect(clamped.dates).toHaveLength(120);
+      const defaultRange = await service.getPublicAvailability("bistro-test", {});
+      expect(defaultRange.dates).toHaveLength(61);
+      await expect(service.getPublicAvailability("bistro-test", { from: "2099-02-01", to: "2099-01-01" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uses minimal event aggregates for public availability without loading customer history", async () => {
@@ -270,6 +303,7 @@ describe("ReservationManagementService", () => {
     const existingReservations: ReservationView[] = [
       {
         id: "r1",
+        revision: 0,
         restaurantId: "t1",
         code: "RES-EXIST",
         customerName: "Pedro",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBlockedDateSchema, publicAvailabilityQuerySchema, publicCreateTableReservationSchema, upsertRestaurantEventSchema } from "./contracts";
+import { addBlockedDateSchema, adminCreateReservationSchema, publicAvailabilityQuerySchema, publicCreateReservationSchema, publicCreateTableReservationSchema, upsertRestaurantEventSchema } from "./contracts";
 
 describe("reservation calendar contracts", () => {
   it.each(["2026-02-29", "2026-02-31", "2026-04-31", "2026-00-01", "2026-13-01", "0000-01-01"])("rejects a nonexistent civil date: %s", (date) => {
@@ -18,4 +18,12 @@ describe("reservation calendar contracts", () => {
     expect(upsertRestaurantEventSchema.safeParse({ ...event, endTime: "23:30" }).success).toBe(true);
     expect(upsertRestaurantEventSchema.safeParse({ ...event, endTime: "99:99" }).success).toBe(false);
   });
+});
+
+it("accepts a sector ID on public table requests and strips it from admin creation", () => {
+  const request = { customerName: "Test", customerPhone: "12345678", date: "2099-12-01", time: "20:00", preferredSectorId: "terrace" };
+  expect(publicCreateTableReservationSchema.parse(request).preferredSectorId).toBe("terrace");
+  expect(publicCreateReservationSchema.parse(request).preferredSectorId).toBe("terrace");
+  expect(adminCreateReservationSchema.parse(request)).not.toHaveProperty("preferredSectorId");
+  expect(publicCreateTableReservationSchema.safeParse({ ...request, preferredSectorId: " " }).success).toBe(false);
 });

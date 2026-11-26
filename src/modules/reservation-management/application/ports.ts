@@ -1,8 +1,11 @@
 import type {
   AdminCreateReservationCommand,
   BlockedDateView,
+  PublicCreateReservationCommand,
+  PublicReservationSectorView,
   RecurringClosureView,
   ReservationStatus,
+  ReservationStatusOptions,
   ReservationView,
   RestaurantEventView,
   TimeSlotView,
@@ -12,17 +15,23 @@ import type {
 } from "../contracts";
 import type { DomainRestaurantEvent } from "../domain/availability-engine";
 
+export type ReservationCreateCommand = AdminCreateReservationCommand & Pick<PublicCreateReservationCommand, "preferredSectorId">;
+
 export interface ReservationRepositoryPort {
   isLandingEnabled(restaurantId: string): Promise<boolean>;
   getRestaurantInfo(restaurantId: string): Promise<{
     name: string;
     landingSlug: string;
+    floorManagementEnabled: boolean;
+    timeZone: string;
   } | null>;
   getRestaurantPublicContext(slug: string): Promise<{
     restaurantId: string;
     name: string;
     slug: string;
     landingEnabled: boolean;
+    floorManagementEnabled: boolean;
+    timeZone: string;
   } | null>;
 
   // Time slots
@@ -49,6 +58,12 @@ export interface ReservationRepositoryPort {
     restaurantId: string,
     range: { from: string; to: string },
   ): Promise<DomainRestaurantEvent[]>;
+  getPhysicalAvailability(
+    restaurantId: string,
+    query: { dates: string[]; times: string[]; partySize: number },
+  ): Promise<Record<string, string[]>>;
+  getPublicSectors(restaurantId: string): Promise<PublicReservationSectorView[]>;
+  hasEventPhysicalAvailability(restaurantId: string, eventId: string, partySize: number): Promise<boolean>;
   upsertEvent(restaurantId: string, cmd: UpsertRestaurantEventCommand): Promise<RestaurantEventView>;
   deleteEvent(restaurantId: string, eventId: string): Promise<void>;
 
@@ -60,7 +75,7 @@ export interface ReservationRepositoryPort {
   getReservationById(restaurantId: string, reservationId: string): Promise<ReservationView | null>;
   createReservation(
     restaurantId: string,
-    cmd: AdminCreateReservationCommand,
+    cmd: ReservationCreateCommand,
     code: string,
   ): Promise<ReservationView>;
   updateReservation(restaurantId: string, cmd: UpdateReservationCommand): Promise<ReservationView>;
@@ -68,6 +83,7 @@ export interface ReservationRepositoryPort {
     restaurantId: string,
     id: string,
     status: ReservationStatus,
+    options?: ReservationStatusOptions,
   ): Promise<ReservationView>;
   deleteReservation(restaurantId: string, id: string): Promise<void>;
 }

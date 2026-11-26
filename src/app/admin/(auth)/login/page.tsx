@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
             </p>
 
             <div className={styles.editorialCard}>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b8c9b2]">
+              <p className="text-xs font-semibold text-[#b8c9b2]">
                 Estudio de diseño gastronómico
               </p>
               <ul className="mt-4 space-y-2.5 text-sm text-[#e2ded4]">
@@ -61,7 +61,7 @@ export default function AdminLoginPage() {
 
         {/* Right Side: Login Card */}
         <section className="flex min-h-[100svh] items-center justify-center p-4 sm:p-8 lg:p-10 xl:p-14">
-          <div className={`${styles.panel} w-full max-w-[460px] p-8 sm:p-10`}>
+          <div className={`${styles.panel} w-full max-w-[460px] p-6 sm:p-10`}>
             <div className="mb-6 lg:hidden">
               <Brand dark />
             </div>

@@ -1,0 +1,27 @@
+.printReceipt {
+  display: none;
+}
+
+@media print {
+  body:has(> .printReceipt) > :not(.printReceipt),
+  body:has(> .printReceipt) dialog {
+    display: none !important;
+  }
+
+  body:has(> .printReceipt) {
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .printReceipt {
+    display: block;
+    margin: 0 auto;
+    max-width: 32rem;
+    padding: 1rem;
+    color: #18181b;
+  }
+
+  .printReceipt li {
+    break-inside: avoid;
+  }
+}

@@ -133,7 +133,7 @@ export function TemplatePickerDrawer({ editorApi, templates, assets, onClose, on
   );
 }
 
-export function TemplateLibrary({ editorApi, templates, assets, onApply, onSaveTemplate, onDelete, onImport }: { editorApi: string; templates: MenuTemplateView[]; assets: MenuAssetView[]; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
+export function TemplateLibrary({ editorApi, templates, assets, applyDisabled = false, onApply, onSaveTemplate, onDelete, onImport }: { editorApi: string; templates: MenuTemplateView[]; assets: MenuAssetView[]; applyDisabled?: boolean; onApply: (template: MenuTemplateView) => void; onSaveTemplate: (submitPublic: boolean) => void; onDelete: (template: MenuTemplateView) => void; onImport: (file: File) => Promise<void> }) {
   const [filter, setFilter] = useState<"ALL" | "PUBLIC" | "PRIVATE">("ALL");
   const [importing, setImporting] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -212,7 +212,7 @@ export function TemplateLibrary({ editorApi, templates, assets, onApply, onSaveT
                       {exporting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" size={11} aria-hidden="true" /> : <Download size={11} aria-hidden="true" />}
                       {exporting ? "Exportando…" : "Exportar"}
                     </button>
-                    <button className="rounded-lg bg-[#182618] px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-[#253621]" onClick={() => onApply(template)}>Usar</button>
+                    <button type="button" disabled={applyDisabled} className="rounded-lg bg-[#182618] px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-[#253621] disabled:opacity-50" onClick={() => onApply(template)}>Usar</button>
                     {!template.isSystem && template.visibility === "PRIVATE" && <button className="rounded-lg border border-red-200 px-2 py-1 text-[10px] text-red-700 hover:bg-red-50" onClick={() => onDelete(template)} aria-label={`Eliminar ${template.name}`}>×</button>}
                   </div>
                 </div>

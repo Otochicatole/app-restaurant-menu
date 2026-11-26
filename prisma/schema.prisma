@@ -13,6 +13,7 @@ datasource db {
 enum AdminRole {
   SUPER_ADMIN
   TENANT_ADMIN
+  WAITER
 }
 
 enum TenantStatus {
@@ -28,6 +29,8 @@ model Admin {
   role               AdminRole     @default(TENANT_ADMIN)
   organizationId     String?       @unique
   organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  restaurantId       String?       @unique
+  restaurant         Restaurant?   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   mustChangePassword Boolean       @default(false)
   lastLoginAt        DateTime?
   createdAt          DateTime      @default(now())
@@ -49,7 +52,7 @@ model Organization {
 
 model AppSchemaState {
   id            String   @id @default("singleton")
-  generation    Int      @default(2)
+  generation    Int      @default(5)
   state         String   @default("READY")
   migrationJson String?
   updatedAt     DateTime @updatedAt
@@ -63,10 +66,17 @@ model Restaurant {
   publicDescription            String                        @default("Menú digital")
   assetQuotaBytes              Int                           @default(262144000)
   dailyReservationCapacity     Int                           @default(50)
-  slug                         String                        @unique
-  landingSlug                  String                        @unique
-  status                       TenantStatus                  @default(ACTIVE)
-  landingEnabled               Boolean                       @default(false)
+  timeZone                     String                        @default("America/Argentina/Buenos_Aires")
+  floorManagementEnabled        Boolean                       @default(false)
+  reservationPreparationMinutes Int                           @default(15)
+  reservationDurationMinutes    Int                           @default(120)
+  slug                          String                        @unique
+  landingSlug                   String                        @unique
+  status                        TenantStatus                  @default(ACTIVE)
+  menuEnabled                   Boolean                       @default(true)
+  landingEnabled                Boolean                       @default(false)
+  reservationsEnabled           Boolean                       @default(false)
+  inventoryEnabled              Boolean                       @default(false)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
   landingPage                  LandingPage?
@@ -82,6 +92,20 @@ model Restaurant {
   reservationBlockedDates      ReservationBlockedDate[]
   restaurantEvents             RestaurantEvent[]
   tableReservations            TableReservation[]
+  waiterAccount                Admin?
+  diningRooms                  DiningRoom[]
+  diningTables                 DiningTable[]
+  diningTableCombinations      DiningTableCombination[]
+  reservationAllocations       ReservationAllocation[]
+  serviceProducts              ServiceProduct[]
+  serviceCashEvents            ServiceCashEvent[]
+  serviceCashExpenses          ServiceCashExpense[]
+  staffMembers                 RestaurantStaffMember[]
+  suppliers                    Supplier[]
+  inventoryItems               InventoryItem[]
+  recipes                      Recipe[]
+  inventoryMovements           InventoryMovement[]
+  catalogProposals             CatalogProductProposal[]
 
   @@index([organizationId])
 }
@@ -320,6 +344,7 @@ enum ReservationStatus {
   COMPLETED
   CANCELLED
   REJECTED
+  NO_SHOW
 }
 
 enum RestaurantEventStatus {
@@ -385,6 +410,7 @@ model RestaurantEvent {
   createdAt                 DateTime              @default(now())
   updatedAt                 DateTime              @updatedAt
   reservations              TableReservation[]
+  rooms                     RestaurantEventRoom[]
 
   @@unique([id, restaurantId])
   @@index([restaurantId, date, status])
@@ -409,9 +435,537 @@ model TableReservation {
   event         RestaurantEvent?  @relation(fields: [eventId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: NoAction)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  revision      Int               @default(0)
+  allocation    ReservationAllocation?
 
+  @@unique([id, restaurantId])
   @@unique([restaurantId, code])
   @@index([restaurantId, date, status])
   @@index([restaurantId, status])
   @@index([eventId])
+}
+
+enum DiningTableShape {
+  SQUARE
+  RECTANGLE
+  CIRCLE
+}
+
+model DiningRoom {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name          String
+  width         Float @default(2000)
+  height        Float @default(2000)
+  fixturesJson  String @default("[]")
+  revision      Int @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tables        DiningTable[]
+  combinations  DiningTableCombination[]
+  locations     DiningRoomLocation[]
+  events        RestaurantEventRoom[]
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, name])
+}
+
+model DiningRoomLocation {
+  id            String @id @default(cuid())
+  restaurantId  String
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  name          String
+  x             Float
+  y             Float
+  width         Float
+  height        Float
+  rotation      Int @default(0)
+  maxTables     Int?
+  maxCapacity   Int?
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tables        DiningTable[]
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, name])
+  @@index([restaurantId, roomId, active])
+}
+
+model DiningTable {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  locationId    String?
+  location      DiningRoomLocation? @relation(fields: [locationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction, onUpdate: Cascade)
+  label         String
+  shape         DiningTableShape
+  capacity      Int @default(4)
+  x             Float
+  y             Float
+  width         Float @default(80)
+  height        Float @default(80)
+  rotation      Int @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  combinationMembers DiningTableCombinationMember[]
+  allocations   ReservationAllocationTable[]
+  serviceAccounts ServiceAccountTable[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, label])
+  @@index([restaurantId, roomId, active])
+  @@index([restaurantId, roomId, locationId])
+}
+
+model DiningTableCombination {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  roomId        String
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  name          String
+  capacity      Int
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  members       DiningTableCombinationMember[]
+  allocations   ReservationAllocation[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([roomId, name])
+}
+
+model DiningTableCombinationMember {
+  combinationId String
+  tableId       String
+  restaurantId  String
+  roomId        String
+  x             Float
+  y             Float
+  rotation      Int @default(0)
+  combination   DiningTableCombination @relation(fields: [combinationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table         DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+
+  @@id([combinationId, tableId])
+  @@index([restaurantId, tableId])
+}
+
+model RestaurantEventRoom {
+  eventId       String
+  roomId        String
+  restaurantId  String
+  event         RestaurantEvent @relation(fields: [eventId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  room          DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+
+  @@id([eventId, roomId])
+  @@index([restaurantId, roomId])
+}
+
+model ReservationAllocation {
+  id             String @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reservationId  String @unique
+  reservation    TableReservation @relation(fields: [reservationId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  roomId         String
+  room           DiningRoom @relation(fields: [roomId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  combinationId  String?
+  combination    DiningTableCombination? @relation(fields: [combinationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+  locationId     String?
+  location       DiningRoomLocation? @relation(fields: [locationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+  capacity       Int
+  timeZone       String
+  serviceStartAt DateTime
+  serviceEndAt   DateTime
+  blockedFrom    DateTime
+  blockedUntil   DateTime
+  releasedAt     DateTime?
+  roomRevision   Int
+  version        Int @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tables         ReservationAllocationTable[]
+  serviceAccounts ServiceAccount[]
+
+  @@unique([id, restaurantId, roomId])
+  @@unique([id, restaurantId, reservationId, roomId])
+  @@unique([reservationId, restaurantId])
+  @@index([restaurantId, blockedFrom])
+  @@index([restaurantId, roomId, blockedFrom])
+  @@index([restaurantId, roomId, locationId, blockedFrom])
+}
+
+model ReservationAllocationTable {
+  allocationId    String
+  tableId         String
+  restaurantId    String
+  roomId          String
+  labelSnapshot   String
+  shapeSnapshot   DiningTableShape
+  capacitySnapshot Int
+  width           Float
+  height          Float
+  x               Float
+  y               Float
+  rotation        Int
+  releasedAt      DateTime?
+  allocation      ReservationAllocation @relation(fields: [allocationId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table           DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: NoAction)
+
+  @@id([allocationId, tableId])
+  @@index([restaurantId, tableId, allocationId])
+}
+
+model ServiceProduct {
+  id              String                   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name            String
+  unitPriceCents  Int
+  station         String                   @default("KITCHEN")
+  recipeId        String?
+  recipe          Recipe?                  @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem?           @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  lines           ServiceOrderLine[]
+  proposals       CatalogProductProposal[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, name])
+  @@index([restaurantId, recipeId])
+  @@index([restaurantId, inventoryItemId])
+}
+
+enum StaffRole {
+  WAITER
+  KITCHEN
+  BAR
+  CASHIER
+  HOST
+  MANAGER
+  OTHER
+}
+
+model RestaurantStaffMember {
+  id              String           @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name            String
+  role            StaffRole        @default(WAITER)
+  phone           String           @default("")
+  notes           String           @default("")
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  serviceAccounts ServiceAccount[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, role, name])
+}
+
+model ServiceAccount {
+  id              String @id @default(cuid())
+  restaurantId    String
+  reservationId   String
+  allocationId    String
+  roomId          String
+  allocation      ReservationAllocation @relation(fields: [allocationId, restaurantId, reservationId, roomId], references: [id, restaurantId, reservationId, roomId], onDelete: Restrict, onUpdate: Restrict)
+  roomName        String
+  reservationCode String
+  customerName    String
+  assignedWaiterId   String?
+  assignedWaiterName String?
+  assignedWaiter     RestaurantStaffMember? @relation(fields: [assignedWaiterId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  version         Int @default(0)
+  openedAt        DateTime @default(now())
+  openedBy        String
+  closedAt        DateTime?
+  closedBy        String?
+  businessDate    String?
+  paymentMethod   String?
+  totalCents      Int?
+  receiptNumber   String?
+  tipCents        Int     @default(0)
+  discountCents   Int     @default(0)
+  discountReason  String?
+  cashCents       Int     @default(0)
+  cardCents       Int     @default(0)
+  transferCents   Int     @default(0)
+  tables          ServiceAccountTable[]
+  lines           ServiceOrderLine[]
+  payments        ServiceAccountPayment[]
+  auditLogs       ServiceAccountAuditLog[]
+
+  @@unique([id, restaurantId])
+  @@unique([id, restaurantId, roomId])
+  @@unique([restaurantId, receiptNumber])
+  @@index([restaurantId, closedAt])
+  @@index([restaurantId, businessDate, closedAt])
+  @@index([allocationId, closedAt])
+  @@index([restaurantId, assignedWaiterId])
+}
+
+model ServiceAccountTable {
+  accountId    String
+  restaurantId String
+  roomId       String
+  tableId      String
+  label        String
+  releasedAt   DateTime?
+  account      ServiceAccount @relation(fields: [accountId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Cascade)
+  table        DiningTable @relation(fields: [tableId, restaurantId, roomId], references: [id, restaurantId, roomId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([accountId, tableId])
+  @@index([restaurantId, tableId])
+}
+
+model ServiceOrderLine {
+  id                String @id @default(cuid())
+  accountId         String
+  restaurantId      String
+  productId         String?
+  account           ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  product           ServiceProduct? @relation(fields: [productId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  name              String
+  unitPriceCents    Int
+  quantity          Int
+  deliveredQuantity Int @default(0)
+  cancelledQuantity Int @default(0)
+  paidQuantity      Int @default(0)
+  createdAt         DateTime @default(now())
+  notes             String   @default("")
+  kitchenStatus     String   @default("PENDING")
+  round             Int      @default(1)
+  station           String   @default("KITCHEN")
+
+  @@index([accountId, createdAt])
+}
+
+model ServiceAccountPayment {
+  id             String         @id @default(cuid())
+  accountId      String
+  restaurantId   String
+  account        ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  sequence       Int
+  receiptNumber  String
+  splitMode      String
+  payerLabel     String         @default("")
+  businessDate   String
+  paymentMethod  String
+  subtotalCents  Int
+  discountCents  Int            @default(0)
+  discountReason String?
+  tipCents       Int            @default(0)
+  totalCents     Int
+  cashCents      Int            @default(0)
+  cardCents      Int            @default(0)
+  transferCents  Int            @default(0)
+  itemsJson      String?
+  paidBy         String
+  paidAt         DateTime       @default(now())
+
+  @@unique([accountId, sequence])
+  @@unique([restaurantId, receiptNumber])
+  @@index([accountId, paidAt])
+  @@index([restaurantId, businessDate])
+}
+
+model ServiceAccountAuditLog {
+  id               String         @id @default(cuid())
+  accountId        String
+  restaurantId     String
+  account          ServiceAccount @relation(fields: [accountId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  sequence         Int
+  action           String
+  severity         String         @default("INFO")
+  summary          String
+  detailsJson      String?
+  amountDeltaCents Int            @default(0)
+  waiterName       String?
+  actorId          String
+  actorLabel       String
+  createdAt        DateTime       @default(now())
+
+  @@unique([accountId, sequence])
+  @@index([accountId, createdAt])
+  @@index([restaurantId, createdAt])
+}
+
+model ServiceCashEvent {
+  id            String @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  businessDate  String
+  revision      Int
+  kind          String
+  actorId       String
+  reason        String?
+  createdAt     DateTime @default(now())
+  cashCents     Int @default(0)
+  cardCents     Int @default(0)
+  transferCents Int @default(0)
+  receiptCount  Int @default(0)
+
+  @@unique([restaurantId, businessDate, revision])
+}
+
+model Supplier {
+  id           String              @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  contactName  String              @default("")
+  phone        String              @default("")
+  email        String              @default("")
+  notes        String              @default("")
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  items        InventoryItem[]
+  movements    InventoryMovement[]
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, active, name])
+}
+
+model InventoryItem {
+  id                String                   @id @default(cuid())
+  restaurantId      String
+  restaurant        Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  unit              String                   @default("U")
+  unitCostCents     Int                      @default(0)
+  currentStockMilli Int                      @default(0)
+  minStockMilli     Int                      @default(0)
+  isDirectSale      Boolean                  @default(false)
+  supplierId        String?
+  supplier          Supplier?                @relation(fields: [supplierId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  active            Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  recipeIngredients RecipeIngredient[]
+  movements         InventoryMovement[]
+  proposals         CatalogProductProposal[]
+  serviceProducts   ServiceProduct[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, code])
+  @@index([restaurantId, active, name])
+  @@index([restaurantId, supplierId])
+}
+
+model Recipe {
+  id              String                   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code            String
+  name            String
+  yieldPortions   Int                      @default(1)
+  notes           String                   @default("")
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  ingredients     RecipeIngredient[]
+  movements       InventoryMovement[]
+  proposals       CatalogProductProposal[]
+  serviceProducts ServiceProduct[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, code])
+  @@index([restaurantId, active, name])
+}
+
+model RecipeIngredient {
+  id              String        @id @default(cuid())
+  recipeId        String
+  restaurantId    String
+  inventoryItemId String
+  quantityMilli   Int
+  displayUnit     String        @default("U")
+  recipe          Recipe        @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+
+  @@unique([recipeId, inventoryItemId])
+  @@index([restaurantId, inventoryItemId])
+}
+
+model InventoryMovement {
+  id              String        @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  kind            String
+  deltaMilli      Int
+  balanceMilli    Int
+  unitCostCents   Int?
+  supplierId      String?
+  supplier        Supplier?     @relation(fields: [supplierId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  recipeId        String?
+  recipe          Recipe?       @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: NoAction)
+  orderLineId     String?
+  referenceLabel  String        @default("")
+  notes           String        @default("")
+  actorId         String
+  createdAt       DateTime      @default(now())
+
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, inventoryItemId, createdAt])
+  @@index([orderLineId])
+}
+
+model CatalogProductProposal {
+  id                  String          @id @default(cuid())
+  restaurantId        String
+  restaurant          Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sourceKind          String
+  recipeId            String?
+  recipe              Recipe?         @relation(fields: [recipeId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  inventoryItemId     String?
+  inventoryItem       InventoryItem?  @relation(fields: [inventoryItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  proposedName        String
+  suggestedPriceCents Int?
+  suggestedStation    String          @default("KITCHEN")
+  status              String          @default("PENDING")
+  rejectionReason     String?
+  approvedProductId   String?
+  approvedProduct     ServiceProduct? @relation(fields: [approvedProductId, restaurantId], references: [id, restaurantId], onDelete: NoAction, onUpdate: Cascade)
+  createdBy           String
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, status, createdAt])
+}
+
+model ServiceCashExpense {
+  id            String     @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  businessDate  String
+  category      String
+  paymentMethod String     @default("CASH")
+  amountCents   Int
+  notes         String
+  supplierName  String     @default("")
+  actorId       String
+  createdAt     DateTime   @default(now())
+
+  @@unique([id, restaurantId])
+  @@index([restaurantId, businessDate, createdAt])
 }

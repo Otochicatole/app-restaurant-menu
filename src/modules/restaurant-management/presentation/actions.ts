@@ -16,7 +16,7 @@ export async function selectRestaurantAction(form: FormData): Promise<Restaurant
   try {
     const context = await requireRestaurantContext(String(form.get("restaurantId") ?? ""));
     await writeActiveRestaurantCookie(context.restaurantId);
-    redirect(`/admin/restaurantes/${context.restaurantId}`);
+    redirect(`/admin/restaurants/${context.restaurantId}`);
   } catch (error) { return handle(error, "No se pudo abrir el restaurante"); }
 }
 
@@ -27,8 +27,8 @@ export async function createRestaurantAction(form: FormData): Promise<Restaurant
       name: form.get("name"), slug: form.get("slug"), publicDescription: form.get("publicDescription") || "Menú digital",
     }));
     await writeActiveRestaurantCookie(restaurant.id);
-    revalidatePath("/admin/restaurantes");
-    redirect(`/admin/restaurantes/${restaurant.id}`);
+    revalidatePath("/admin/restaurants");
+    redirect(`/admin/restaurants/${restaurant.id}`);
   } catch (error) { return handle(error, "No se pudo crear el restaurante"); }
 }
 
@@ -42,7 +42,7 @@ export async function deleteRestaurantsAction(form: FormData): Promise<Restauran
     const deleted = await deleteRestaurants(actor.organizationId, ids);
     await clearActiveRestaurantCookie();
     revalidatePath("/admin", "layout");
-    revalidatePath("/superadmin/clientes");
+    revalidatePath("/superadmin/clients");
     revalidatePath("/m/[slug]", "page");
     revalidatePath("/l/[slug]", "page");
     return actionSuccess({ deletedCount: deleted.length });

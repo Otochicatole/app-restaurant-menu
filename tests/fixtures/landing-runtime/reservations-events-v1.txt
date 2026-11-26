@@ -1,0 +1,323 @@
+(function() {
+  function isEditorMode() {
+    return !!document.getElementById('__landing-blocks-root') &&
+      document.documentElement.getAttribute('data-preview-mode') !== 'true';
+  }
+
+  function setupEventsWidget(root) {
+    if (root.__resEventsMounted) return;
+    root.__resEventsMounted = true;
+
+  function resolveRestaurantSlug(root) {
+    var slug = root ? (root.getAttribute('data-restaurant-slug') || '') : '';
+    if (slug && slug.indexOf('{{') === -1) return slug;
+
+    var elWithSlug = document.querySelector('[data-restaurant-slug]');
+    if (elWithSlug) {
+      var s = elWithSlug.getAttribute('data-restaurant-slug');
+      if (s && s.indexOf('{{') === -1) return s;
+    }
+
+    var pathParts = window.location.pathname.split('/');
+    var lIdx = pathParts.indexOf('l');
+    if (lIdx !== -1 && pathParts[lIdx + 1]) {
+      return pathParts[lIdx + 1];
+    }
+
+    try {
+      if (window.parent && window.parent !== window && window.parent.location) {
+        var pParts = window.parent.location.pathname.split('/');
+        var pIdx = pParts.indexOf('l');
+        if (pIdx !== -1 && pParts[pIdx + 1]) {
+          return pParts[pIdx + 1];
+        }
+      }
+    } catch (_) {}
+
+    return '';
+  }
+    var slug = resolveRestaurantSlug(root);
+
+    var grid = root.querySelector('#eventsListGrid');
+    var emptyState = root.querySelector('#eventsEmptyState');
+    var modalBackdrop = root.querySelector('#eventModalBackdrop');
+    var modalClose = root.querySelector('#eventModalClose');
+    var modalTitle = root.querySelector('#eventModalTitle');
+    var modalSubtitle = root.querySelector('#eventModalSubtitle');
+    var modalEventIdInput = root.querySelector('#eventModalEventId');
+    var modalSpotsInput = root.querySelector('#eventModalSpots');
+    var spotsPills = root.querySelectorAll('#eventSpotsPills .res-party-pill');
+    var form = root.querySelector('#eventBookingForm');
+    var customerNameInput = root.querySelector('#eventCustomerName');
+    var customerPhoneInput = root.querySelector('#eventCustomerPhone');
+    var customerEmailInput = root.querySelector('#eventCustomerEmail');
+    var notesInput = root.querySelector('#eventNotes');
+    var submitBtn = root.querySelector('#eventSubmitBtn');
+    var btnText = root.querySelector('.event-btn-text');
+    var btnSpinner = root.querySelector('.event-btn-spinner');
+    var errorBox = root.querySelector('#eventErrorBox');
+
+    var successView = root.querySelector('#eventSuccessView');
+    var voucherCode = root.querySelector('#eventVoucherCode');
+    var voucherTitle = root.querySelector('#eventVoucherTitle');
+    var voucherDate = root.querySelector('#eventVoucherDate');
+    var voucherGuests = root.querySelector('#eventVoucherGuests');
+    var voucherName = root.querySelector('#eventVoucherName');
+    var voucherWaBtn = root.querySelector('#eventVoucherWaBtn');
+    var closeSuccessBtn = root.querySelector('#eventCloseSuccessBtn');
+
+    spotsPills.forEach(function(p) {
+      p.addEventListener('click', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+        spotsPills.forEach(function(pill) { pill.classList.remove('active'); });
+        p.classList.add('active');
+        if (modalSpotsInput) modalSpotsInput.value = p.getAttribute('data-spots') || '2';
+      });
+    });
+
+    if (modalClose) {
+      modalClose.addEventListener('click', function() {
+        if (modalBackdrop) modalBackdrop.style.display = 'none';
+      });
+    }
+
+    if (closeSuccessBtn) {
+      closeSuccessBtn.addEventListener('click', function() {
+        if (modalBackdrop) modalBackdrop.style.display = 'none';
+      });
+    }
+
+    function fetchEvents() {
+      if (!slug) return;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events';
+
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data || !data.success || !data.data) {
+            return;
+          }
+          var events = data.data.events || [];
+          renderEvents(events);
+        })
+        .catch(function(err) {
+          console.warn('Error al obtener eventos especiales:', err);
+        });
+    }
+
+    function renderEvents(events) {
+      if (!grid) return;
+      if (!events || events.length === 0) {
+        grid.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+        return;
+      }
+
+      if (emptyState) emptyState.style.display = 'none';
+      grid.style.display = 'grid';
+
+      var html = [];
+      events.forEach(function(evt) {
+        var isSoldOut = evt.remainingSpots <= 0;
+        var spotsText = isSoldOut ? '🚫 Cupos agotados' : ('👥 ' + evt.remainingSpots + ' lugares disponibles');
+        var spotsBadgeClass = isSoldOut ? 'event-spots-badge sold-out' : 'event-spots-badge';
+        var disabledAttr = isSoldOut ? ' disabled' : '';
+
+        var mediaHtml = evt.imageUrl
+          ? '<img src="' + evt.imageUrl + '" alt="' + evt.title + '" class="event-card-img" />'
+          : '<div class="event-icon-placeholder">🎟️</div>';
+
+        var priceBadge = evt.priceLabel
+          ? '<span class="event-badge-price">' + evt.priceLabel + '</span>'
+          : '';
+
+        html.push(
+          '<div class="event-card">' +
+          '  <div class="event-card-media">' + mediaHtml + priceBadge + '</div>' +
+          '  <div class="event-card-content">' +
+          '    <div class="event-meta-row">' +
+          '      <span class="event-meta-pill">📅 ' + evt.date + '</span>' +
+          '      <span class="event-meta-pill">⏰ ' + evt.startTime + ' hs</span>' +
+          '    </div>' +
+          '    <h3 class="event-card-title">' + evt.title + '</h3>' +
+          '    <p class="event-card-desc">' + (evt.description || '') + '</p>' +
+          '    <div class="event-card-footer">' +
+          '      <span class="' + spotsBadgeClass + '">' + spotsText + '</span>' +
+          '      <button type="button" class="btn btn-primary event-book-btn" data-event-id="' + evt.id + '" data-event-title="' + evt.title + '" data-event-date="' + evt.date + '" data-event-time="' + evt.startTime + '" data-event-spots="' + evt.remainingSpots + '"' + disabledAttr + '>Reservar mi Lugar</button>' +
+          '    </div>' +
+          '  </div>' +
+          '</div>'
+        );
+      });
+
+      grid.innerHTML = html.join('\n');
+      bindEventButtons();
+    }
+
+    function bindEventButtons() {
+      var bookBtns = grid ? grid.querySelectorAll('.event-book-btn:not(:disabled)') : [];
+      bookBtns.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          if (isEditorMode()) return;
+          e.preventDefault();
+
+          var eventId = btn.getAttribute('data-event-id');
+          var title = btn.getAttribute('data-event-title');
+          var date = btn.getAttribute('data-event-date');
+          var time = btn.getAttribute('data-event-time');
+          var spots = parseInt(btn.getAttribute('data-event-spots') || '10', 10);
+
+          if (modalEventIdInput) modalEventIdInput.value = eventId || '';
+          if (modalTitle) modalTitle.textContent = title || 'Evento Especial';
+          if (modalSubtitle) modalSubtitle.textContent = '📅 ' + date + ' • ⏰ ' + time + ' hs';
+
+          if (form) {
+            form.reset();
+            form.style.display = 'block';
+          }
+          if (successView) successView.style.display = 'none';
+          if (errorBox) errorBox.style.display = 'none';
+
+          if (modalSpotsInput) modalSpotsInput.value = '2';
+          spotsPills.forEach(function(p) {
+            var val = parseInt(p.getAttribute('data-spots') || '1', 10);
+            p.style.display = val <= spots ? 'inline-block' : 'none';
+            p.classList.toggle('active', val === 2 || (spots === 1 && val === 1));
+          });
+
+          if (modalBackdrop) modalBackdrop.style.display = 'flex';
+        });
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        if (isEditorMode()) return;
+        e.preventDefault();
+
+        if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+
+        var eventId = modalEventIdInput ? modalEventIdInput.value : '';
+        var customerName = customerNameInput ? customerNameInput.value.trim() : '';
+        var customerPhone = customerPhoneInput ? customerPhoneInput.value.trim() : '';
+        var customerEmail = customerEmailInput ? customerEmailInput.value.trim() : '';
+        var notes = notesInput ? notesInput.value.trim() : '';
+        var partySize = modalSpotsInput ? parseInt(modalSpotsInput.value, 10) : 2;
+
+        if (!eventId) {
+          showModalError('Error: no se identificó el evento seleccionado.');
+          return;
+        }
+        if (!customerName) {
+          showModalError('Por favor ingresá tu nombre completo.');
+          return;
+        }
+        if (!customerPhone) {
+          showModalError('Por favor ingresá un teléfono o WhatsApp de contacto.');
+          return;
+        }
+
+        setModalLoading(true);
+
+        var payload = {
+          eventId: eventId,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          customerEmail: customerEmail || undefined,
+          partySize: partySize,
+          notes: notes || undefined
+        };
+
+        fetch('/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+          .then(function(res) {
+            return res.json().then(function(json) {
+              return { status: res.status, ok: res.ok, data: json };
+            });
+          })
+          .then(function(resObj) {
+            setModalLoading(false);
+            if (!resObj.ok || !resObj.data.success) {
+              var errMsg = (resObj.data && resObj.data.error && resObj.data.error.message)
+                ? resObj.data.error.message
+                : 'Ocurrió un error al registrar tu lugar en el evento. Intentá nuevamente.';
+              showModalError(errMsg);
+              return;
+            }
+
+            var resData = resObj.data.data.reservation;
+            showModalSuccess(resData);
+            fetchEvents();
+          })
+          .catch(function() {
+            setModalLoading(false);
+            showModalError('Error de conexión al enviar la reserva.');
+          });
+      });
+    }
+
+    function showModalError(msg) {
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+      } else {
+        alert(msg);
+      }
+    }
+
+    function setModalLoading(isLoading) {
+      if (submitBtn) submitBtn.disabled = isLoading;
+      if (btnText) btnText.style.display = isLoading ? 'none' : 'inline';
+      if (btnSpinner) btnSpinner.style.display = isLoading ? 'inline' : 'none';
+    }
+
+    function showModalSuccess(reservation) {
+      if (form) form.style.display = 'none';
+      if (successView) {
+        successView.style.display = 'block';
+        if (voucherCode) voucherCode.textContent = reservation.code || '#EVT-OK';
+        if (voucherTitle) voucherTitle.textContent = reservation.eventTitle || 'Evento Especial';
+        if (voucherDate) voucherDate.textContent = reservation.date + ' ' + reservation.time + ' hs';
+        if (voucherGuests) voucherGuests.textContent = reservation.partySize + ' cupos confirmados';
+        if (voucherName) voucherName.textContent = reservation.customerName;
+
+        var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
+        var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
+        var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
+        var waMsg = encodeURIComponent('¡Hola! Reservé lugares para el evento ' + (reservation.eventTitle || '') + ' en ' + restaurantName + '.\nCódigo: ' + (reservation.code || '') + '\nFecha: ' + reservation.date + ' ' + reservation.time + ' hs\nLugares: ' + reservation.partySize + '\nA nombre de: ' + reservation.customerName);
+        var waUrl = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
+        if (voucherWaBtn) voucherWaBtn.href = waUrl;
+      }
+    }
+
+    if (!isEditorMode()) {
+      fetchEvents();
+    }
+  }
+
+  function checkAndInitEvents() {
+    var sections = document.querySelectorAll('.events-section, #eventos, #eventos-especiales');
+    sections.forEach(function(sec) {
+      setupEventsWidget(sec);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAndInitEvents);
+  } else {
+    checkAndInitEvents();
+  }
+
+  if (typeof MutationObserver !== 'undefined') {
+    var observer = new MutationObserver(function() {
+      if (document.documentElement.getAttribute('data-preview-mode') === 'true') {
+        checkAndInitEvents();
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-preview-mode'] });
+  }
+})();

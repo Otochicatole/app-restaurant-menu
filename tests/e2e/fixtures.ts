@@ -8,7 +8,7 @@ export const E2E = {
  otherTenant: { email: "e2e-other@example.test", password: "E2e-other-password-123", slug: "e2e-other", restaurantId: "e2e-restaurant-other" },
 } as const;
 export type E2ECredentials = { email: string; password: string; restaurantId?: string; mustChangePassword?: boolean };
-export function restaurantPath(restaurantId: string) { return "/admin/restaurantes/" + encodeURIComponent(restaurantId); }
+export function restaurantPath(restaurantId: string) { return "/admin/restaurants/" + encodeURIComponent(restaurantId); }
 export function editorApi(restaurantId: string) { return "/api/restaurants/" + encodeURIComponent(restaurantId) + "/editor"; }
 export async function loginAs(page: Page, account: E2ECredentials, options: { openRestaurant?: boolean } = {}): Promise<void> {
  await page.goto("/admin/login");

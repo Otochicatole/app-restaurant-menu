@@ -4281,6 +4281,7 @@ export function createDefaultLandingDocument(
     "hero",
     "specialties-grid",
     "experience-split",
+    "reservations-booking",
     "contact-hours",
     "footer",
   ];

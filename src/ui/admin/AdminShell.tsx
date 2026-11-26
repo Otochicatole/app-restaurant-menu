@@ -2,42 +2,82 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import type { RestaurantFeatureFlags } from "@/modules/restaurant-management/contracts";
 import { LogoutButton } from "@/modules/identity-access/ui";
-import { CalendarDays, Globe, Layers3, LayoutGrid, Menu, Settings, UserRound } from "lucide-react";
+import { Boxes, CalendarDays, ChefHat, Globe, Layers3, LayoutGrid, Map, Menu, Package, Settings, UserRound, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { AdminNavigationGuardProvider, useAdminNavigationGuard } from "./AdminNavigationGuard";
 
-export function AdminShell({
-  children,
-  brandTitle,
-  brandSubtitle,
-  showMenuPickerLink,
-  landingEnabled = false,
-  restaurantId,
-  organizationName,
-}: {
+type AdminShellProps = {
   children: React.ReactNode;
   brandTitle: string;
   brandSubtitle: string;
   showMenuPickerLink: boolean;
   landingEnabled?: boolean;
+  features?: RestaurantFeatureFlags;
   restaurantId: string;
   organizationName: string;
-}) {
-  const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const basePath = `/admin/restaurantes/${restaurantId}`;
-  const isMenusPage = pathname === "/admin/restaurantes";
-  const isLandingPage = pathname === `${basePath}/landing`;
+};
 
+export function AdminShell(props: AdminShellProps) {
+  return <AdminNavigationGuardProvider><AdminShellContent {...props} /></AdminNavigationGuardProvider>;
+}
+
+function AdminShellContent({
+  children,
+  brandTitle,
+  brandSubtitle,
+  showMenuPickerLink,
+  landingEnabled = false,
+  features,
+  restaurantId,
+  organizationName,
+}: AdminShellProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { requestNavigation } = useAdminNavigationGuard();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const basePath = `/admin/restaurants/${restaurantId}`;
+  const isMenusPage = pathname === "/admin/restaurants";
+  const isMenuEditorPage = pathname === basePath;
+  const isLandingPage = pathname === `${basePath}/landing`;
+  const isFloorEditorPage = pathname === `${basePath}/rooms`;
+  const isKitchenPage = pathname === `${basePath}/kitchen`;
+
+  const resolvedFeatures = features ?? {
+    menu: true,
+    landing: landingEnabled,
+    reservations: landingEnabled,
+    floorManagement: true,
+    inventory: true,
+  };
   const navigation = [
-    { label: "Editor", href: basePath, exact: true, icon: Layers3 },
-    ...(landingEnabled
+    ...(resolvedFeatures.menu
+      ? [{ label: "Editor", href: basePath, exact: true, icon: Layers3 }]
+      : []),
+    ...(resolvedFeatures.floorManagement
+      ? [{ label: "Salones", href: `${basePath}/rooms`, exact: true, icon: Map }]
+      : []),
+    ...(resolvedFeatures.landing
+      ? [{ label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe }]
+      : []),
+    ...(resolvedFeatures.reservations
+      ? [{ label: "Reservas", href: `${basePath}/reservations`, icon: CalendarDays }]
+      : []),
+    ...(resolvedFeatures.floorManagement
       ? [
-          { label: "Landing", href: `${basePath}/landing`, exact: true, icon: Globe },
-          { label: "Reservas", href: `${basePath}/reservas`, icon: CalendarDays },
+          { label: "Cocina y barra", href: `${basePath}/kitchen`, exact: true, icon: ChefHat },
+          { label: "Caja", href: `${basePath}/cash`, exact: true, icon: Wallet },
+          { label: "Catálogo", href: `${basePath}/products`, icon: Package },
         ]
+      : []),
+    ...(resolvedFeatures.inventory
+      ? [{ label: "Inventario", href: `${basePath}/inventory`, icon: Boxes }]
+      : []),
+    ...(resolvedFeatures.floorManagement
+      ? [{ label: "Personal", href: `${basePath}/staff`, icon: Users }]
       : []),
     { label: "Configuración", href: `${basePath}/settings`, icon: Settings },
     { label: "Mi cuenta", href: "/admin/account", icon: UserRound },
@@ -45,6 +85,13 @@ export function AdminShell({
 
   const isActive = (item: (typeof navigation)[number]) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
+
+  const navigate = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (href === pathname) { setMobileOpen(false); return; }
+    requestNavigation(() => { setMobileOpen(false); router.push(href); });
+  };
 
   if (isMenusPage) {
     return <>{children}</>;
@@ -54,18 +101,19 @@ export function AdminShell({
     <div
       data-admin-panel
       style={{ "--admin-nav-width": "4rem" } as React.CSSProperties}
-      className="min-h-screen bg-[#f8faf7] text-zinc-900"
+      className="min-h-screen bg-stone-50 text-stone-900"
     >
       {/* Sidebar Fija Siempre Contraída (w-16 / 64px) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-16 select-none flex-col items-center border-r border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[1px_0_16px_rgba(24,24,27,0.03)] backdrop-blur-md transition-transform duration-200 ease-out ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-40 flex w-16 select-none flex-col items-center border-r border-stone-200 bg-white text-stone-900 transition-transform duration-200 ease-out ${
+          isFloorEditorPage || mobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
         {/* Logo de la aplicación */}
-        <div className="group relative flex h-14 w-full shrink-0 items-center justify-center border-b shadow-xs border-zinc-200">
+        <div className="group relative flex h-12 w-full shrink-0 items-center justify-center border-b border-stone-200">
           <Link
             href={basePath}
+            onClick={(event) => navigate(event, basePath)}
             className="flex h-10 w-10 items-center justify-center rounded-xl p-2 transition-all hover:scale-105 hover:bg-black/10 hover:border-zinc-300 active:scale-95"
             aria-label={brandTitle}
           >
@@ -82,19 +130,19 @@ export function AdminShell({
           {showMenuPickerLink && (
             <div className="group relative flex w-full items-center justify-center">
               <Link
-                href="/admin/restaurantes"
-                onClick={() => setMobileOpen(false)}
+                href="/admin/restaurants"
+                onClick={(event) => navigate(event, "/admin/restaurants")}
                 aria-label="Cambiar restaurante"
                 aria-current={isMenusPage ? "page" : undefined}
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
                   isMenusPage
-                    ? "bg-[#182618] text-white shadow-2xs"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 active:scale-95"
+                    ? "bg-stone-900 text-white"
+                    : "text-stone-500 hover:bg-stone-100 hover:text-stone-950 active:scale-95"
                 }`}
               >
                 <LayoutGrid size={18} strokeWidth={isMenusPage ? 2.3 : 2} />
                 {isMenusPage && (
-                  <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#182618]" />
+                  <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-stone-900" />
                 )}
               </Link>
               <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
@@ -110,18 +158,18 @@ export function AdminShell({
               <div key={item.href} className="group relative flex w-full items-center justify-center">
                 <Link
                   href={item.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(event) => navigate(event, item.href)}
                   aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 ${
                     active
-                      ? "bg-[#182618] text-white shadow-2xs"
-                      : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 active:scale-95"
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-500 hover:bg-stone-100 hover:text-stone-950 active:scale-95"
                   }`}
                 >
                   <Icon size={18} strokeWidth={active ? 2.3 : 2} />
                   {active && (
-                    <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#182618]" />
+                    <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-stone-900" />
                   )}
                 </Link>
                 <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
@@ -135,7 +183,7 @@ export function AdminShell({
         {/* Footer con Cerrar Sesión */}
         <div className="mt-auto flex w-full shrink-0 flex-col items-center border-t border-zinc-100 py-3">
           <div className="group relative flex w-full items-center justify-center">
-            <LogoutButton compact />
+            <LogoutButton compact onBeforeLogout={(proceed) => requestNavigation(() => { void proceed(); })} />
             <div className="pointer-events-none absolute left-full ml-3.5 z-50 hidden items-center rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white shadow-xl whitespace-nowrap group-hover:flex">
               <span>Cerrar sesión</span>
             </div>
@@ -144,7 +192,7 @@ export function AdminShell({
       </aside>
 
       {/* Overlay para móviles */}
-      {mobileOpen && (
+      {mobileOpen && !isFloorEditorPage && (
         <button
           type="button"
           aria-label="Cerrar navegación"
@@ -152,26 +200,40 @@ export function AdminShell({
           onClick={() => setMobileOpen(false)}
         />
       )}
-      <button
+      {!isFloorEditorPage && (isKitchenPage || isMenuEditorPage || isLandingPage) && <button
         type="button"
-        className="fixed right-4 top-4 z-30 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 md:hidden"
+        className="fixed right-3 top-2.5 z-30 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 md:hidden"
         onClick={() => setMobileOpen(true)}
         aria-label="Abrir menú"
       >
         <Menu size={18} />
-      </button>
+      </button>}
 
-      {/* Contenido principal: vista completa para /admin/landing o contenedor con padding para settings */}
-      <div className="md:pl-16">
-        <header className="flex min-h-14 items-center gap-3 bg-white px-4 py-2 pr-20 text-sm sm:px-8 md:pr-8">
-          <span className="truncate text-zinc-700">{organizationName}</span><span aria-hidden className="text-zinc-400">/</span><strong className="truncate font-semibold text-zinc-950">{brandTitle}</strong>
-        </header>
-        {isLandingPage ? (
-          <div className="h-[calc(100dvh-3.5rem)] w-full flex flex-col">{children}</div>
-        ) : (
-          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-10">{children}</main>
-        )}
-      </div>
+      {/* Contenido principal: vista completa para editor de carta, landing, salas o cocina */}
+      {isFloorEditorPage ? (
+        children
+      ) : isKitchenPage || isMenuEditorPage || isLandingPage ? (
+        <div className="min-h-screen bg-[#f8faf7] md:pl-16">{children}</div>
+      ) : (
+        <div className="md:pl-16">
+          <header className="flex h-12 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 text-sm sm:px-8">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="truncate text-stone-500">{organizationName}</span>
+              <span aria-hidden className="text-stone-300">/</span>
+              <strong className="truncate font-semibold text-stone-900">{brandTitle}</strong>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border border-stone-200 bg-white p-1.5 text-stone-700 transition hover:bg-stone-50 md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Abrir menú"
+            >
+              <Menu size={18} />
+            </button>
+          </header>
+          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        </div>
+      )}
     </div>
   );
 }

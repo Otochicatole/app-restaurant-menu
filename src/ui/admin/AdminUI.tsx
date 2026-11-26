@@ -10,6 +10,7 @@ export function AdminModal({
   description,
   onClose,
   children,
+  footer,
   wide = false,
 }: {
   open: boolean;
@@ -17,6 +18,7 @@ export function AdminModal({
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   wide?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -94,7 +96,7 @@ export function AdminModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-950/35 p-0 backdrop-blur-[1px] sm:items-center sm:p-6" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -102,18 +104,21 @@ export function AdminModal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl outline-none sm:rounded-3xl sm:p-8 ${wide ? "max-w-2xl" : "max-w-lg"}`}
+        className={`max-h-[90dvh] w-full rounded-t-2xl border border-stone-200 bg-white shadow-xl outline-none sm:rounded-2xl ${wide ? "max-w-2xl" : "max-w-lg"} ${footer ? "flex flex-col overflow-hidden" : "overflow-y-auto p-5 sm:p-6"}`}
       >
-        <div className="mb-6 flex items-start justify-between gap-5">
-          <div>
-            <h2 id={titleId} className="text-xl font-semibold text-zinc-950">{title}</h2>
-            {description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-zinc-500">{description}</p>}
+        <div className={footer ? "min-h-0 overflow-y-auto p-5 sm:p-6" : undefined}>
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 id={titleId} className="text-lg font-semibold text-stone-900">{title}</h2>
+              {description && <p id={descriptionId} className="mt-1 text-sm leading-relaxed text-stone-500">{description}</p>}
+            </div>
+            <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700" aria-label="Cerrar">
+              <X size={18} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Cerrar">
-            <X size={20} />
-          </button>
+          {children}
         </div>
-        {children}
+        {footer}
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ export type {
   LandingTemplateView,
   LandingTemplateVisibility,
   LandingTheme,
+  ManagedReservationRuntimeCompatibility,
   PublicLandingResult,
   PublishLandingCommand,
   SaveLandingCommand,
@@ -36,6 +37,7 @@ export type {
   SuperadminLandingTemplateTab,
   SuperadminLandingTemplateView,
 } from "./contracts";
+export { inspectPublishedReservationRuntime } from "./domain/published-reservation-runtime";
 export {
   createCustomModuleCommandSchema,
   createLandingTemplateSchema,

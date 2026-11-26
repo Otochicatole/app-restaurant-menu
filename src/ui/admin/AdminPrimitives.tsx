@@ -1,11 +1,11 @@
 import { Plus } from "lucide-react";
 
 export const adminButtonClass =
-  "inline-flex cursor-pointer flex-row items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex cursor-pointer flex-row items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50";
 
-export const adminPrimaryButtonClass = `${adminButtonClass} bg-[#182618] text-white shadow-sm hover:bg-[#101c10] active:scale-[0.99] focus:ring-[#182618]/25`;
-export const adminSecondaryButtonClass = `${adminButtonClass} border border-zinc-200/90 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] focus:ring-zinc-400/25`;
-export const adminDangerButtonClass = `${adminButtonClass} border border-red-200 bg-white text-red-700 hover:bg-red-50 hover:border-red-300 focus:ring-red-500/25`;
+export const adminPrimaryButtonClass = `${adminButtonClass} bg-stone-900 text-white hover:bg-stone-800 focus:ring-stone-900/20`;
+export const adminSecondaryButtonClass = `${adminButtonClass} border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 hover:text-stone-900 focus:ring-stone-400/20`;
+export const adminDangerButtonClass = `${adminButtonClass} border border-red-200 bg-white text-red-700 hover:bg-red-50 hover:border-red-300 focus:ring-red-500/20`;
 
 export function AdminPageHeader({
   eyebrow,
@@ -19,23 +19,23 @@ export function AdminPageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div className="flex flex-col gap-4 border-b border-stone-200 pb-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0 flex-1">
         {eyebrow && (
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#3d5934]">
+          <p className="mb-1 text-xs font-medium text-stone-500">
             {eyebrow}
           </p>
         )}
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">
           {title}
         </h1>
         {description && (
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-500">
+          <p className="mt-1 max-w-2xl text-sm text-stone-600">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">{actions}</div>}
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function AdminCard({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-zinc-200/80 bg-white shadow-[0_4px_24px_-8px_rgba(24,24,27,0.06)] ${className}`}
+      className={`rounded-xl border border-stone-200 bg-white ${className}`}
     >
       {children}
     </section>
@@ -70,27 +70,27 @@ export function AdminStatCard({
   accent?: "emerald" | "amber" | "terracotta";
 }) {
   const accentClasses = {
-    emerald: "bg-[#e8efe6] text-[#2b4226]",
-    amber: "bg-amber-50 text-amber-800 border border-amber-200/50",
-    terracotta: "bg-orange-50 text-orange-800 border border-orange-200/50",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+    terracotta: "border-orange-200 bg-orange-50 text-orange-800",
   };
   return (
     <a
       href={href}
-      className="group cursor-pointer rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-[0_4px_24px_-8px_rgba(24,24,27,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md"
+      className="group cursor-pointer rounded-xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300"
     >
       <div className="flex items-start justify-between gap-4">
-        <p className="text-sm font-medium text-zinc-500">{label}</p>
+        <p className="text-xs font-medium text-stone-500">{label}</p>
         <span
-          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${accentClasses[accent]}`}
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${accentClasses[accent]}`}
         >
           Panel
         </span>
       </div>
-      <p className="mt-4 text-3xl font-bold tabular-nums tracking-tight text-zinc-950 sm:text-4xl">
+      <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-stone-900">
         {value}
       </p>
-      <p className="mt-1 text-xs text-zinc-500 transition-colors group-hover:text-zinc-700">
+      <p className="mt-1 text-xs text-stone-500 transition-colors group-hover:text-stone-700">
         {detail}
       </p>
     </a>
@@ -107,12 +107,12 @@ export function AdminEmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/60 p-12 text-center sm:p-16">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8efe6] text-[#2b4226]">
-        <Plus size={22} strokeWidth={2} />
+    <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-stone-300 bg-stone-50/70 p-10 text-center sm:p-14">
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700">
+        <Plus size={20} strokeWidth={2} />
       </div>
-      <h2 className="mt-4 text-base font-semibold text-zinc-900">{title}</h2>
-      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-zinc-500">{description}</p>
+      <h2 className="mt-4 text-base font-semibold text-stone-900">{title}</h2>
+      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-stone-500">{description}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
   );

@@ -5,7 +5,7 @@ test("superadmin manages an organization and the independent options of its rest
  const name = "E2E Organización " + testInfo.retry;
  const slug = "e2e-created-" + testInfo.retry;
  await loginAs(page, E2E.superAdmin);
- await page.goto("/superadmin/clientes");
+ await page.goto("/superadmin/clients");
  await expect(page.getByRole("heading", { name: "Organizaciones", exact: true })).toBeVisible();
  await page.getByRole("button", { name: "Nueva organización", exact: true }).click();
  let dialog = page.getByRole("dialog", { name: "Nueva organización", exact: true });

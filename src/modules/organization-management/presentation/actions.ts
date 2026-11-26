@@ -13,7 +13,7 @@ async function run(operation: () => Promise<{ temporaryPassword?: string }>): Pr
   try {
     await requireSuperAdmin();
     const result = await operation();
-    revalidatePath("/superadmin"); revalidatePath("/superadmin/clientes"); revalidatePath("/admin", "layout");
+    revalidatePath("/superadmin"); revalidatePath("/superadmin/clients"); revalidatePath("/admin", "layout");
     revalidatePath("/m/[slug]", "page"); revalidatePath("/l/[slug]", "page");
     return actionSuccess(result);
   } catch (error) { return actionErrorResult(error, "No se pudo completar la operación"); }
@@ -38,9 +38,27 @@ export async function deleteOrganizationAction(form: FormData) {
 }
 export async function updateRestaurantOptionsAction(form: FormData) {
   return run(async () => {
-    const input = restaurantOptionsSchema.parse({ ...Object.fromEntries(form), landingEnabled: form.get("landingEnabled") === "true" });
+    const input = restaurantOptionsSchema.parse({
+      ...Object.fromEntries(form),
+      menuEnabled: form.get("menuEnabled") === "true",
+      landingEnabled: form.get("landingEnabled") === "true",
+      reservationsEnabled: form.get("reservationsEnabled") === "true",
+      floorManagementEnabled: form.get("floorManagementEnabled") === "true",
+      inventoryEnabled: form.get("inventoryEnabled") === "true",
+    });
     await requireRestaurantContext(input.id, { allowSuperAdmin: true });
-    await prisma.restaurant.update({ where: { id: input.id }, data: { status: input.status, landingEnabled: input.landingEnabled, assetQuotaBytes: input.assetQuotaBytes } });
+    await prisma.restaurant.update({
+      where: { id: input.id },
+      data: {
+        status: input.status,
+        menuEnabled: input.menuEnabled,
+        landingEnabled: input.landingEnabled,
+        reservationsEnabled: input.reservationsEnabled,
+        floorManagementEnabled: input.floorManagementEnabled,
+        inventoryEnabled: input.inventoryEnabled,
+        assetQuotaBytes: input.assetQuotaBytes,
+      },
+    });
     return {};
   });
 }

@@ -32,7 +32,34 @@ const superAdminAccount: AccountRecord = {
   organizationStatus: null,
 };
 
+const waiterAccount: AccountRecord = {
+  ...activeTenantAccount, id: "waiter-1", role: "WAITER", email: "sala@restaurant.test",
+  restaurantId: "restaurant-1", restaurantStatus: "ACTIVE", floorManagementEnabled: true,
+};
+
 describe("identity access", () => {
+  it("authenticates a restaurant-scoped waiter without granting administrator permissions", async () => {
+    const fixture = createFixture({ account: waiterAccount, cookieToken: "signed-token" });
+    const actor = await fixture.service.login({ email: waiterAccount.email, password: "password123" });
+    expect(actor).toMatchObject({ kind: "waiter", role: "WAITER", restaurantId: "restaurant-1", organizationId: "tenant-1" });
+    await expect(fixture.service.requireTenantAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(fixture.service.requireSuperAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(fixture.service.changePassword(actor, passwordCommand())).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(fixture.service.updateAccountEmail(actor, { email: "other@example.test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(fixture.state.passwordChange).toBeNull();
+    expect(fixture.state.emailUpdates).toEqual([]);
+  });
+
+  it.each([
+    { restaurantStatus: "SUSPENDED" as const }, { organizationStatus: "SUSPENDED" as const },
+    { floorManagementEnabled: false }, { restaurantId: null }, { mustChangePassword: true },
+  ])("rejects an unavailable shared waiter and revokes its persisted session: %j", async (unavailable) => {
+    const fixture = createFixture({ account: { ...waiterAccount, ...unavailable }, cookieToken: "signed-token" });
+    await expect(fixture.service.login({ email: waiterAccount.email, password: "password123" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(fixture.service.getCurrentActor()).resolves.toBeNull();
+    expect(fixture.state.revokedJtis).toEqual(["session-jti"]);
+  });
+
   it("normalizes the email and establishes a tenant session after credentials are valid", async () => {
     const fixture = createFixture({ account: activeTenantAccount });
 

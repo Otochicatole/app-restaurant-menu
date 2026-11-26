@@ -1,0 +1,37 @@
+.screen {
+  --floor-canvas: #eef4f6;
+  --floor-surface: #fff;
+  --floor-ink: #173642;
+  --floor-muted: #4b6470;
+  --floor-action: #155e75;
+  --floor-action-hover: #0e4d63;
+  --floor-hover: #e6f2f6;
+  --floor-border: #cad9df;
+  --floor-border-hover: #9fb8c3;
+  --floor-focus: #0e7490;
+  --floor-scrollbar: #a5bbc4;
+  --tool-window-header: #eaf3f6;
+  --tool-window-border: #cad9df;
+  --tool-window-ink: #173642;
+  --tool-window-muted: #4b6470;
+  --tool-window-hover: #dcecf2;
+  --tool-window-focus: #0e7490;
+  color: var(--floor-ink);
+  background: var(--floor-canvas);
+  caret-color: var(--floor-focus);
+  accent-color: var(--floor-action);
+  scrollbar-color: var(--floor-scrollbar) transparent;
+}
+
+.screen ::selection {
+  color: #103746;
+  background: #cce5ee;
+}
+
+.screen :global(button[aria-label="Cerrar sesión"]) {
+  color: var(--floor-ink);
+}
+
+.screen :global(button[aria-label="Cerrar sesión"]:hover) {
+  background: var(--floor-hover);
+}

@@ -1,0 +1,987 @@
+(function() {
+  function resolveRestaurantSlug(root) {
+    var slug = root ? (root.getAttribute('data-restaurant-slug') || '') : '';
+    if (slug && slug.indexOf('{{') === -1) return slug;
+
+    var elWithSlug = document.querySelector('[data-restaurant-slug]');
+    if (elWithSlug) {
+      var s = elWithSlug.getAttribute('data-restaurant-slug');
+      if (s && s.indexOf('{{') === -1) return s;
+    }
+
+    var pathParts = window.location.pathname.split('/');
+    var lIdx = pathParts.indexOf('l');
+    if (lIdx !== -1 && pathParts[lIdx + 1]) {
+      return pathParts[lIdx + 1];
+    }
+
+    try {
+      if (window.parent && window.parent !== window && window.parent.location) {
+        var pParts = window.parent.location.pathname.split('/');
+        var pIdx = pParts.indexOf('l');
+        if (pIdx !== -1 && pParts[pIdx + 1]) {
+          return pParts[pIdx + 1];
+        }
+      }
+    } catch (_) {}
+
+    return '';
+  }
+
+  function normalizeDateObject(d) {
+    var isClosed = !d.available || d.status === 'CLOSED' || d.status === 'BLOCKED' || Boolean(d.isClosed);
+    var isFullyBooked = d.status === 'FULLY_BOOKED';
+
+    var slots = [];
+    if (Array.isArray(d.slots)) {
+      slots = d.slots;
+    } else if (Array.isArray(d.availableSlots)) {
+      d.availableSlots.forEach(function(s) {
+        slots.push({
+          id: s.id,
+          time: s.time,
+          label: s.label || '',
+          available: true
+        });
+      });
+      if (Array.isArray(d.occupiedTimes)) {
+        d.occupiedTimes.forEach(function(t) {
+          slots.push({
+            time: t,
+            label: 'Ocupado',
+            available: false
+          });
+        });
+      }
+      slots.sort(function(a, b) { return a.time.localeCompare(b.time); });
+    }
+
+    if (slots.length > 0 && !isClosed) {
+      var freeCount = slots.filter(function(s) { return s.available; }).length;
+      if (freeCount === 0) isFullyBooked = true;
+    }
+
+    return {
+      date: d.date,
+      dayOfWeek: d.dayOfWeek,
+      available: !isClosed && !isFullyBooked,
+      isClosed: isClosed,
+      isFullyBooked: isFullyBooked,
+      closureReason: d.reason || d.closureReason || (isClosed ? 'Día de descanso' : null),
+      slots: slots,
+      totalSlots: slots.length
+    };
+  }
+
+  function generateFallbackDates() {
+    var dates = [];
+    var today = new Date();
+    for (var i = 0; i < 14; i++) {
+      var d = new Date(today);
+      d.setDate(today.getDate() + i);
+      var iso = d.toISOString().split('T')[0];
+      var isSun = d.getDay() === 0;
+      dates.push({
+        date: iso,
+        dayOfWeek: d.getDay(),
+        available: !isSun,
+        isClosed: isSun,
+        isFullyBooked: false,
+        closureReason: isSun ? 'Cerrado por descanso' : null,
+        slots: isSun ? [] : [
+          { time: '20:00', available: true, label: 'Cena' },
+          { time: '21:00', available: true, label: 'Cena' },
+          { time: '22:00', available: true, label: 'Cena' }
+        ],
+        totalSlots: 3
+      });
+    }
+    return dates;
+  }
+
+  function setupUnifiedWidget(root) {
+    if (!root) return;
+
+    var currentMode = 'tables';
+    var availabilityDates = [];
+    var eventsList = [];
+    var selectedDateStr = '';
+    var selectedTimeStr = '';
+    var selectedPartySize = 2;
+    var selectedEventObj = null;
+    var selectedEventSpots = 2;
+
+    var modeTableBtn = root.querySelector('#resModeTableBtn');
+    var modeEventBtn = root.querySelector('#resModeEventBtn');
+    var eventsCountBadge = root.querySelector('#resEventsCountBadge');
+    var panelTable = root.querySelector('#resPanelTable');
+    var panelEvent = root.querySelector('#resPanelEvent');
+
+    var tableForm = root.querySelector('#resBookingForm');
+    var daysRow = root.querySelector('#resDaysRow');
+    var hiddenDatePicker = root.querySelector('#resDateInput');
+    var dateIndicator = root.querySelector('#resSelectedDateIndicator');
+    var slotsContainer = root.querySelector('#resSlotsContainer');
+    var slotsStatusBadge = root.querySelector('#resSlotsStatusBadge');
+    var selectedTimeInput = root.querySelector('#resSelectedTime');
+    var selectedPartySizeInput = root.querySelector('#resSelectedPartySize');
+    var partyPills = root.querySelectorAll('#resPartyPills .res-party-pill');
+    var customPartyInput = root.querySelector('#resCustomPartyInput');
+    var tableSubmitBtn = root.querySelector('#resSubmitBtn');
+    var tableErrorBox = root.querySelector('#resErrorBox');
+
+    var eventsCardsContainer = root.querySelector('#resEventsCards');
+    var eventsEmptyState = root.querySelector('#resEventsEmpty');
+    var eventsListSection = root.querySelector('#resEventsList');
+    var eventForm = root.querySelector('#resEventForm');
+    var eventSelectedIdInput = root.querySelector('#resEventSelectedId');
+    var eventSelectedSpotsInput = root.querySelector('#resEventSelectedSpots');
+    var eventSpotsPills = root.querySelectorAll('#resEventSpotsPills .res-party-pill');
+    var changeEventBtn = root.querySelector('#resChangeEventBtn');
+    var switchToTableBtn = root.querySelector('#resSwitchToTableBtn');
+    var eventSubmitBtn = root.querySelector('#resEventSubmitBtn');
+    var eventErrorBox = root.querySelector('#resEventErrorBox');
+
+    var successView = root.querySelector('#resSuccessView');
+    var successIcon = root.querySelector('#resSuccessIcon');
+    var voucherCard = root.querySelector('#resVoucherCard');
+    var voucherBadgeType = root.querySelector('#resVoucherBadgeType');
+    var voucherCode = root.querySelector('#resVoucherCode');
+    var voucherEventItem = root.querySelector('#resVoucherEventItem');
+    var voucherEvent = root.querySelector('#resVoucherEvent');
+    var voucherDate = root.querySelector('#resVoucherDate');
+    var voucherTimeLabel = root.querySelector('#resVoucherTimeLabel');
+    var voucherTime = root.querySelector('#resVoucherTime');
+    var voucherGuestsLabel = root.querySelector('#resVoucherGuestsLabel');
+    var voucherGuests = root.querySelector('#resVoucherGuests');
+    var voucherName = root.querySelector('#resVoucherName');
+    var voucherWaBtn = root.querySelector('#resVoucherWaBtn');
+    var newBookingBtn = root.querySelector('#resNewBookingBtn');
+
+    function switchMode(newMode) {
+      currentMode = newMode;
+      if (modeTableBtn) {
+        modeTableBtn.classList.toggle('active', newMode === 'tables');
+        modeTableBtn.setAttribute('aria-selected', newMode === 'tables' ? 'true' : 'false');
+      }
+      if (modeEventBtn) {
+        modeEventBtn.classList.toggle('active', newMode === 'events');
+        modeEventBtn.setAttribute('aria-selected', newMode === 'events' ? 'true' : 'false');
+      }
+      if (panelTable) panelTable.style.display = newMode === 'tables' ? 'block' : 'none';
+      if (panelEvent) panelEvent.style.display = newMode === 'events' ? 'block' : 'none';
+
+      if (newMode === 'events') {
+        if (!eventsList || eventsList.length === 0) {
+          if (eventsEmptyState) eventsEmptyState.style.display = 'block';
+          if (eventsListSection) eventsListSection.style.display = 'block';
+          if (eventForm) eventForm.style.display = 'none';
+        } else if (!selectedEventObj) {
+          if (eventsListSection) eventsListSection.style.display = 'block';
+          if (eventForm) eventForm.style.display = 'none';
+        }
+      }
+
+      if (successView) successView.style.display = 'none';
+      if (tableErrorBox) tableErrorBox.style.display = 'none';
+      if (eventErrorBox) eventErrorBox.style.display = 'none';
+    }
+
+    if (modeTableBtn) {
+      modeTableBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchMode('tables');
+      });
+    }
+
+    if (modeEventBtn) {
+      modeEventBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchMode('events');
+      });
+    }
+
+    if (switchToTableBtn) {
+      switchToTableBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchMode('tables');
+      });
+    }
+
+    partyPills.forEach(function(pill) {
+      pill.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var size = this.getAttribute('data-party');
+        selectedPartySize = parseInt(size, 10);
+        if (selectedPartySizeInput) selectedPartySizeInput.value = size;
+        partyPills.forEach(function(p) { p.classList.remove('active'); });
+        this.classList.add('active');
+        if (customPartyInput) customPartyInput.value = '';
+      });
+    });
+
+    if (customPartyInput) {
+      customPartyInput.addEventListener('input', function() {
+        var val = parseInt(this.value, 10);
+        if (val && val > 0) {
+          selectedPartySize = val;
+          if (selectedPartySizeInput) selectedPartySizeInput.value = String(val);
+          partyPills.forEach(function(p) { p.classList.remove('active'); });
+        }
+      });
+    }
+
+    eventSpotsPills.forEach(function(pill) {
+      pill.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var spots = this.getAttribute('data-spots');
+        selectedEventSpots = parseInt(spots, 10);
+        if (eventSelectedSpotsInput) eventSelectedSpotsInput.value = spots;
+        eventSpotsPills.forEach(function(p) { p.classList.remove('active'); });
+        this.classList.add('active');
+      });
+    });
+
+    if (changeEventBtn) {
+      changeEventBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectedEventObj = null;
+        if (eventForm) eventForm.style.display = 'none';
+        if (eventsListSection) eventsListSection.style.display = 'block';
+      });
+    }
+
+    var resCalPrevBtn = root.querySelector('#resCalPrevBtn');
+    var resCalNextBtn = root.querySelector('#resCalNextBtn');
+    var resCalMonthTitle = root.querySelector('#resCalMonthTitle');
+    var resSelectedDateText = root.querySelector('#resSelectedDateText');
+
+    var todayObj = new Date();
+    var yyyy = todayObj.getFullYear();
+    var mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+    var dd = String(todayObj.getDate()).padStart(2, '0');
+    var todayStr = yyyy + '-' + mm + '-' + dd;
+    var viewYear = todayObj.getFullYear();
+    var viewMonth = todayObj.getMonth();
+    var recurringClosedDays = [];
+    var datesCache = {};
+
+    selectedDateStr = todayStr;
+    if (hiddenDatePicker) {
+      hiddenDatePicker.value = todayStr;
+    }
+
+    var dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    var monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    function formatReadableDate(isoStr) {
+      if (!isoStr) return '';
+      var parts = isoStr.split('-');
+      if (parts.length !== 3) return isoStr;
+      var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      return dayNames[d.getDay()] + ' ' + parseInt(parts[2], 10) + ' de ' + monthNames[d.getMonth()] + ' de ' + parts[0];
+    }
+
+    function renderCalendar(year, month) {
+      if (!daysRow) return;
+      if (resCalMonthTitle) {
+        resCalMonthTitle.textContent = monthNames[month].toLowerCase() + ' de ' + year;
+      }
+      if (resCalPrevBtn) {
+        resCalPrevBtn.disabled = (year < todayObj.getFullYear() || (year === todayObj.getFullYear() && month <= todayObj.getMonth()));
+      }
+
+      var firstDay = new Date(year, month, 1).getDay(); // 0 = Domingo
+      var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      daysRow.innerHTML = '';
+
+      for (var i = 0; i < firstDay; i++) {
+        var empty = document.createElement('div');
+        empty.className = 'res-cal-empty';
+        daysRow.appendChild(empty);
+      }
+
+      for (var d = 1; d <= daysInMonth; d++) {
+        var dStr = String(d).padStart(2, '0');
+        var mStr = String(month + 1).padStart(2, '0');
+        var iso = year + '-' + mStr + '-' + dStr;
+        var dayDate = new Date(year, month, d);
+        var dayOfWeek = dayDate.getDay();
+
+        var isPast = (iso < todayStr);
+        var isSelected = (iso === selectedDateStr);
+        var isClosed = (recurringClosedDays.indexOf(dayOfWeek) !== -1);
+        var isFullyBooked = false;
+
+        var cached = datesCache[iso];
+        if (cached) {
+          if (cached.isClosed || cached.status === 'CLOSED_RECURRING' || cached.status === 'BLOCKED_DATE') isClosed = true;
+          if (cached.isFullyBooked || cached.status === 'FULLY_BOOKED') isFullyBooked = true;
+        }
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'res-cal-day res-day-chip';
+        btn.setAttribute('data-date', iso);
+        btn.setAttribute('role', 'gridcell');
+
+        if (isSelected && !isPast && !isClosed) btn.classList.add('active');
+        if (isPast) btn.classList.add('res-day-past');
+        else if (isClosed) btn.classList.add('res-day-closed');
+        else if (isFullyBooked) btn.classList.add('res-day-busy');
+
+        btn.disabled = (isPast || isClosed || isFullyBooked);
+
+        btn.innerHTML = '<span class="res-cal-day-num">' + d + '</span>' +
+          (!isPast ? '<span class="res-cal-day-dot"></span>' : '');
+
+        (function(targetIso, targetDisabled) {
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (targetDisabled) return;
+            selectDate(targetIso);
+          });
+        })(iso, isPast || isClosed || isFullyBooked);
+
+        daysRow.appendChild(btn);
+      }
+    }
+
+    function selectDate(dateStr) {
+      selectedDateStr = dateStr;
+      if (hiddenDatePicker) hiddenDatePicker.value = dateStr;
+
+      var chips = daysRow ? daysRow.querySelectorAll('.res-cal-day') : [];
+      chips.forEach(function(c) {
+        var match = c.getAttribute('data-date') === dateStr;
+        c.classList.toggle('active', match);
+      });
+
+      if (resSelectedDateText) {
+        resSelectedDateText.textContent = formatReadableDate(dateStr);
+      }
+      if (dateIndicator) {
+        dateIndicator.style.display = 'inline-flex';
+      }
+
+      var matchDateObj = datesCache[dateStr] || availabilityDates.find(function(item) { return item.date === dateStr; });
+      if (matchDateObj) {
+        renderSlots(matchDateObj);
+      } else {
+        fetchSingleDateSlots(dateStr);
+      }
+    }
+
+    if (resCalPrevBtn) {
+      resCalPrevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (viewYear < todayObj.getFullYear() || (viewYear === todayObj.getFullYear() && viewMonth <= todayObj.getMonth())) return;
+        viewMonth--;
+        if (viewMonth < 0) {
+          viewMonth = 11;
+          viewYear--;
+        }
+        renderCalendar(viewYear, viewMonth);
+        fetchMonthAvailability(viewYear, viewMonth);
+      });
+    }
+
+    if (resCalNextBtn) {
+      resCalNextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        viewMonth++;
+        if (viewMonth > 11) {
+          viewMonth = 0;
+          viewYear++;
+        }
+        renderCalendar(viewYear, viewMonth);
+        fetchMonthAvailability(viewYear, viewMonth);
+      });
+    }
+
+    function fetchSingleDateSlots(dateStr) {
+      var slug = resolveRestaurantSlug(root);
+      if (!slug) return;
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables/availability?date=' + encodeURIComponent(dateStr);
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.success || !data.data) return;
+          var datesList = data.data.dates || [];
+          var dayInfo = datesList.find(function(d) { return d.date === dateStr; }) || datesList[0];
+          if (dayInfo) {
+            var norm = normalizeDateObject(dayInfo);
+            datesCache[norm.date] = norm;
+            renderSlots(norm);
+          }
+        })
+        .catch(function(err) {
+          console.warn('Error fetching single date slots:', err);
+        });
+    }
+
+    function renderSlots(dateObj) {
+      if (!slotsContainer) return;
+
+      var slotsAlert = root.querySelector('#resSlotsAlert');
+
+      if (dateObj.isClosed) {
+        slotsContainer.style.display = 'none';
+        if (slotsAlert) {
+          slotsAlert.textContent = 'El restaurante se encuentra cerrado en esta fecha: ' + (dateObj.closureReason || 'Día de descanso');
+          slotsAlert.style.display = 'block';
+        }
+        if (slotsStatusBadge) slotsStatusBadge.textContent = 'Cerrado';
+        selectedTimeStr = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        return;
+      }
+
+      if (dateObj.isFullyBooked) {
+        slotsContainer.style.display = 'none';
+        if (slotsAlert) {
+          slotsAlert.textContent = 'Todos los turnos de este día ya han sido reservados. Por favor seleccioná otra fecha.';
+          slotsAlert.style.display = 'block';
+        }
+        if (slotsStatusBadge) slotsStatusBadge.textContent = 'Agotado';
+        selectedTimeStr = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        return;
+      }
+
+      var slots = dateObj.slots || [];
+      if (slots.length === 0) {
+        slotsContainer.style.display = 'none';
+        if (slotsAlert) {
+          slotsAlert.textContent = 'No hay turnos configurados para este día.';
+          slotsAlert.style.display = 'block';
+        }
+        if (slotsStatusBadge) slotsStatusBadge.textContent = 'Sin turnos';
+        selectedTimeStr = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+        return;
+      }
+
+      if (slotsAlert) slotsAlert.style.display = 'none';
+      slotsContainer.style.display = 'block';
+
+      var availableCount = slots.filter(function(s) { return s.available; }).length;
+      if (slotsStatusBadge) {
+        slotsStatusBadge.textContent = availableCount > 0 ? (availableCount + ' horarios libres') : 'Agotado';
+      }
+
+      var gridHtml = '<div class="res-slots-grid" id="resSlotsGrid">';
+      var firstFreeSlot = '';
+
+      slots.forEach(function(s) {
+        if (!firstFreeSlot) firstFreeSlot = s.time;
+        gridHtml += '<button type="button" class="res-slot-pill" data-time="' + s.time + '">' + s.time + ' hs</button>';
+      });
+      gridHtml += '</div>';
+      slotsContainer.innerHTML = gridHtml;
+
+      var slotPills = slotsContainer.querySelectorAll('.res-slot-pill');
+      slotPills.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var t = this.getAttribute('data-time');
+          selectSlot(t);
+        });
+      });
+
+      if (firstFreeSlot) {
+        selectSlot(firstFreeSlot);
+      } else {
+        selectedTimeStr = '';
+        if (selectedTimeInput) selectedTimeInput.value = '';
+      }
+    }
+
+    function selectSlot(timeStr) {
+      selectedTimeStr = timeStr;
+      if (selectedTimeInput) selectedTimeInput.value = timeStr;
+      var pills = slotsContainer ? slotsContainer.querySelectorAll('.res-slot-pill') : [];
+      pills.forEach(function(p) {
+        p.classList.toggle('active', p.getAttribute('data-time') === timeStr);
+      });
+    }
+
+    function renderEvents(events) {
+      eventsList = events || [];
+      if (eventsCountBadge) {
+        if (eventsList.length > 0) {
+          eventsCountBadge.textContent = String(eventsList.length);
+          eventsCountBadge.style.display = 'inline-block';
+        } else {
+          eventsCountBadge.style.display = 'none';
+        }
+      }
+
+      if (!eventsCardsContainer) return;
+
+      if (eventsList.length === 0) {
+        if (eventsEmptyState) eventsEmptyState.style.display = 'block';
+        if (eventsListSection) eventsListSection.style.display = 'block';
+        eventsCardsContainer.innerHTML = '';
+        return;
+      }
+
+      if (eventsEmptyState) eventsEmptyState.style.display = 'none';
+      if (eventsListSection) eventsListSection.style.display = 'block';
+
+      var cardsHtml = '';
+      eventsList.forEach(function(ev) {
+        var isSoldOut = Boolean(ev.isSoldOut) || (ev.availableSpots !== undefined && ev.availableSpots <= 0);
+        var spotsText = isSoldOut ? 'Agotado' : ((ev.availableSpots !== undefined ? ev.availableSpots : (ev.maxCapacity || 'Cupos')) + ' disponibles');
+
+        cardsHtml += '<div class="res-event-card-item">' +
+          '<div class="res-event-card-info">' +
+            '<h4 class="res-event-card-title">' + (ev.title || 'Evento Especial') + '</h4>' +
+            '<p class="res-event-card-desc">' + (ev.description || 'Experiencia temática exclusiva con menú y propuesta de autor.') + '</p>' +
+            '<div class="res-event-card-meta">' +
+              '<span class="meta-chip">📅 ' + ev.date + '</span>' +
+              '<span class="meta-chip">⏰ ' + ev.time + ' hs</span>' +
+              (ev.price ? ('<span class="meta-chip">💳 ' + ev.price + '</span>') : '') +
+              '<span class="meta-chip ' + (isSoldOut ? 'spots-full' : 'spots-free') + '">👥 ' + spotsText + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<button type="button" class="res-event-pick-btn" data-event-id="' + ev.id + '" ' + (isSoldOut ? 'disabled' : '') + '>' +
+            (isSoldOut ? 'Agotado' : 'Elegir este Evento →') +
+          '</button>' +
+        '</div>';
+      });
+
+      eventsCardsContainer.innerHTML = cardsHtml;
+
+      var pickBtns = eventsCardsContainer.querySelectorAll('.res-event-pick-btn');
+      pickBtns.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var evId = this.getAttribute('data-event-id');
+          var evObj = eventsList.find(function(item) { return item.id === evId; });
+          if (evObj) {
+            selectEvent(evObj);
+          }
+        });
+      });
+    }
+
+    function selectEvent(evObj) {
+      selectedEventObj = evObj;
+      if (eventsListSection) eventsListSection.style.display = 'none';
+      if (eventForm) eventForm.style.display = 'block';
+
+      if (eventSelectedIdInput) eventSelectedIdInput.value = evObj.id;
+      var titleEl = root.querySelector('#resSelectedEventTitle');
+      var descEl = root.querySelector('#resSelectedEventDesc');
+      var dateEl = root.querySelector('#resSelectedEventDate');
+      var timeEl = root.querySelector('#resSelectedEventTime');
+      var spotsEl = root.querySelector('#resSelectedEventSpotsLeft');
+      var priceEl = root.querySelector('#resSelectedEventPrice');
+      var priceWrapper = root.querySelector('#resSelectedPriceWrapper');
+
+      if (titleEl) titleEl.textContent = evObj.title || 'Evento Especial';
+      if (descEl) descEl.textContent = evObj.description || '';
+      if (dateEl) dateEl.textContent = evObj.date;
+      if (timeEl) timeEl.textContent = evObj.time + ' hs';
+      if (spotsEl) spotsEl.textContent = (evObj.availableSpots !== undefined ? evObj.availableSpots : evObj.maxCapacity) + ' lugares restantes';
+
+      if (priceWrapper && priceEl) {
+        if (evObj.price) {
+          priceEl.textContent = evObj.price;
+          priceWrapper.style.display = 'flex';
+        } else {
+          priceWrapper.style.display = 'none';
+        }
+      }
+
+      var maxSpots = evObj.availableSpots !== undefined ? evObj.availableSpots : 6;
+      eventSpotsPills.forEach(function(pill) {
+        var num = parseInt(pill.getAttribute('data-spots') || '1', 10);
+        if (num > maxSpots) {
+          pill.style.display = 'none';
+        } else {
+          pill.style.display = 'inline-block';
+        }
+      });
+
+      var defaultSpots = maxSpots >= 2 ? 2 : 1;
+      selectedEventSpots = defaultSpots;
+      if (eventSelectedSpotsInput) eventSelectedSpotsInput.value = String(defaultSpots);
+      eventSpotsPills.forEach(function(pill) {
+        pill.classList.toggle('active', pill.getAttribute('data-spots') === String(defaultSpots));
+      });
+
+      eventForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function fetchMonthAvailability(year, month) {
+      var slug = resolveRestaurantSlug(root);
+      if (!slug) {
+        renderCalendar(viewYear, viewMonth);
+        return;
+      }
+
+      var mStr = String(month + 1).padStart(2, '0');
+      var lastDay = new Date(year, month + 1, 0).getDate();
+      var fromIso = year + '-' + mStr + '-01';
+      var toIso = year + '-' + mStr + '-' + String(lastDay).padStart(2, '0');
+      if (fromIso < todayStr) fromIso = todayStr;
+
+      var url = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/availability?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso);
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data && data.success && data.data) {
+            var payload = data.data;
+            if (payload.recurringClosedDays && Array.isArray(payload.recurringClosedDays)) {
+              recurringClosedDays = payload.recurringClosedDays;
+            }
+            var rawDates = payload.dates || [];
+            rawDates.forEach(function(d) {
+              var norm = normalizeDateObject(d);
+              datesCache[norm.date] = norm;
+            });
+            availabilityDates = Object.values(datesCache);
+
+            renderCalendar(viewYear, viewMonth);
+
+            if (datesCache[selectedDateStr]) {
+              renderSlots(datesCache[selectedDateStr]);
+            }
+
+            var events = payload.events || [];
+            renderEvents(events);
+          } else {
+            renderCalendar(viewYear, viewMonth);
+          }
+        })
+        .catch(function(err) {
+          console.warn('No se pudo cargar disponibilidad:', err);
+          renderCalendar(viewYear, viewMonth);
+        });
+    }
+
+    function fetchAvailability() {
+      fetchMonthAvailability(viewYear, viewMonth);
+    }
+
+    // Submit Table Reservation
+    if (tableForm) {
+      tableForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (tableErrorBox) tableErrorBox.style.display = 'none';
+
+        var slug = resolveRestaurantSlug(root);
+        if (!slug) {
+          showTableError('No se pudo identificar el restaurante para procesar la reserva.');
+          return;
+        }
+
+        if (!selectedDateStr) {
+          showTableError('Por favor seleccioná una fecha en el calendario.');
+          return;
+        }
+
+        if (!selectedTimeStr) {
+          showTableError('Por favor seleccioná un turno / horario disponible.');
+          return;
+        }
+
+        var nameVal = (root.querySelector('#resNameInput').value || '').trim();
+        var phoneVal = (root.querySelector('#resPhoneInput').value || '').trim();
+        var emailVal = (root.querySelector('#resEmailInput').value || '').trim();
+        var notesVal = (root.querySelector('#resNotesInput').value || '').trim();
+
+        if (!nameVal || !phoneVal) {
+          showTableError('Nombre y teléfono de WhatsApp son requeridos.');
+          return;
+        }
+
+        setTableLoading(true);
+
+        var payload = {
+          date: selectedDateStr,
+          time: selectedTimeStr,
+          partySize: selectedPartySize,
+          customerName: nameVal,
+          customerPhone: phoneVal,
+          customerEmail: emailVal || undefined,
+          notes: notesVal || undefined,
+        };
+
+        var postUrl = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/tables';
+
+        fetch(postUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(function(res) {
+            return res.json().then(function(data) { return { status: res.status, data: data }; });
+          })
+          .then(function(resObj) {
+            setTableLoading(false);
+            if (!resObj.data.success) {
+              var errMsg = resObj.data.error ? resObj.data.error.message : 'Error al procesar tu reserva de mesa.';
+              showTableError(errMsg);
+              if (resObj.status === 409) {
+                fetchAvailability();
+              }
+              return;
+            }
+
+            var resData = resObj.data.data.reservation;
+            showTableSuccess(resData);
+          })
+          .catch(function() {
+            setTableLoading(false);
+            showTableError('Error de conexión al enviar la reserva. Verificá tu conexión a internet.');
+          });
+      });
+    }
+
+    // Submit Event Reservation
+    if (eventForm) {
+      eventForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (eventErrorBox) eventErrorBox.style.display = 'none';
+
+        var slug = resolveRestaurantSlug(root);
+        if (!slug) {
+          showEventError('No se pudo identificar el restaurante para procesar la reserva.');
+          return;
+        }
+
+        if (!selectedEventObj) {
+          showEventError('No se ha seleccionado ningún evento.');
+          return;
+        }
+
+        var nameVal = (root.querySelector('#resEventNameInput').value || '').trim();
+        var phoneVal = (root.querySelector('#resEventPhoneInput').value || '').trim();
+        var emailVal = (root.querySelector('#resEventEmailInput').value || '').trim();
+        var notesVal = (root.querySelector('#resEventNotesInput').value || '').trim();
+
+        if (!nameVal || !phoneVal) {
+          showEventError('Nombre y teléfono de WhatsApp son requeridos.');
+          return;
+        }
+
+        setEventLoading(true);
+
+        var payload = {
+          eventId: selectedEventObj.id,
+          partySize: selectedEventSpots,
+          customerName: nameVal,
+          customerPhone: phoneVal,
+          customerEmail: emailVal || undefined,
+          notes: notesVal || undefined,
+        };
+
+        var postUrl = '/api/public/landing/' + encodeURIComponent(slug) + '/reservations/events';
+
+        fetch(postUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(function(res) {
+            return res.json().then(function(data) { return { status: res.status, data: data }; });
+          })
+          .then(function(resObj) {
+            setEventLoading(false);
+            if (!resObj.data.success) {
+              var errMsg = resObj.data.error ? resObj.data.error.message : 'Error al reservar tu entrada para el evento.';
+              showEventError(errMsg);
+              return;
+            }
+
+            var resData = resObj.data.data.reservation;
+            showEventSuccess(resData, selectedEventObj);
+          })
+          .catch(function() {
+            setEventLoading(false);
+            showEventError('Error de conexión al reservar el evento. Verificá tu conexión a internet.');
+          });
+      });
+    }
+
+    function showTableError(msg) {
+      if (tableErrorBox) {
+        tableErrorBox.textContent = msg;
+        tableErrorBox.style.display = 'block';
+        tableErrorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        alert(msg);
+      }
+    }
+
+    function showEventError(msg) {
+      if (eventErrorBox) {
+        eventErrorBox.textContent = msg;
+        eventErrorBox.style.display = 'block';
+        eventErrorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        alert(msg);
+      }
+    }
+
+    function setTableLoading(isLoading) {
+      if (tableSubmitBtn) tableSubmitBtn.disabled = isLoading;
+      var textEl = tableSubmitBtn ? tableSubmitBtn.querySelector('.res-btn-text') : null;
+      var spinEl = tableSubmitBtn ? tableSubmitBtn.querySelector('.res-btn-spinner') : null;
+      if (textEl) textEl.style.display = isLoading ? 'none' : 'inline';
+      if (spinEl) spinEl.style.display = isLoading ? 'inline' : 'none';
+    }
+
+    function setEventLoading(isLoading) {
+      if (eventSubmitBtn) eventSubmitBtn.disabled = isLoading;
+      var textEl = eventSubmitBtn ? eventSubmitBtn.querySelector('.res-event-btn-text') : null;
+      var spinEl = eventSubmitBtn ? eventSubmitBtn.querySelector('.res-event-btn-spinner') : null;
+      if (textEl) textEl.style.display = isLoading ? 'none' : 'inline';
+      if (spinEl) spinEl.style.display = isLoading ? 'inline' : 'none';
+    }
+
+    function showTableSuccess(reservation) {
+      if (panelTable) panelTable.style.display = 'none';
+      if (panelEvent) panelEvent.style.display = 'none';
+      var switchWrapper = root.querySelector('.res-mode-switch-wrapper');
+      if (switchWrapper) switchWrapper.style.display = 'none';
+
+      if (successView) {
+        successView.style.display = 'block';
+        if (successIcon) {
+          successIcon.textContent = '✓';
+          successIcon.className = 'res-success-icon-badge';
+        }
+        if (voucherCard) {
+          voucherCard.className = 'res-voucher-card';
+        }
+        if (voucherBadgeType) {
+          voucherBadgeType.textContent = '🍽️ COMPROBANTE DE MESA REGULAR';
+          voucherBadgeType.className = 'res-voucher-badge-type tag-table';
+        }
+        if (voucherCode) voucherCode.textContent = reservation.code || '#RES-OK';
+        if (voucherEventItem) voucherEventItem.style.display = 'none';
+        if (voucherDate) voucherDate.textContent = reservation.date;
+        if (voucherTimeLabel) voucherTimeLabel.textContent = 'Turno / Horario';
+        if (voucherTime) voucherTime.textContent = reservation.time + ' hs';
+        if (voucherGuestsLabel) voucherGuestsLabel.textContent = 'Comensales';
+        if (voucherGuests) voucherGuests.textContent = reservation.partySize + ' personas';
+        if (voucherName) voucherName.textContent = reservation.customerName;
+
+        var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
+        var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
+        var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
+        var waMsg = encodeURIComponent('¡Hola! Tengo una reserva confirmada para cenar en ' + restaurantName + '.\n' +
+          '🍽️ Tipo: Reserva de Mesa Regular\n' +
+          'Código: ' + (reservation.code || '') + '\n' +
+          'Fecha: ' + reservation.date + ' ' + reservation.time + ' hs\n' +
+          'Comensales: ' + reservation.partySize + '\n' +
+          'A nombre de: ' + reservation.customerName);
+        var waUrl = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
+        if (voucherWaBtn) voucherWaBtn.href = waUrl;
+
+        successView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function showEventSuccess(reservation, eventObj) {
+      if (panelTable) panelTable.style.display = 'none';
+      if (panelEvent) panelEvent.style.display = 'none';
+      var switchWrapper = root.querySelector('.res-mode-switch-wrapper');
+      if (switchWrapper) switchWrapper.style.display = 'none';
+
+      if (successView) {
+        successView.style.display = 'block';
+        if (successIcon) {
+          successIcon.textContent = '🎟️';
+          successIcon.className = 'res-success-icon-badge is-event-icon';
+        }
+        if (voucherCard) {
+          voucherCard.className = 'res-voucher-card is-event-voucher';
+        }
+        if (voucherBadgeType) {
+          voucherBadgeType.textContent = '🎉 ENTRADA CONFIRMADA A EVENTO ESPECIAL';
+          voucherBadgeType.className = 'res-voucher-badge-type tag-event';
+        }
+        if (voucherCode) voucherCode.textContent = reservation.code || '#EVT-OK';
+        if (voucherEventItem) {
+          voucherEventItem.style.display = 'flex';
+          if (voucherEvent) voucherEvent.textContent = reservation.eventTitle || eventObj.title || 'Evento Especial';
+        }
+        if (voucherDate) voucherDate.textContent = reservation.date || eventObj.date;
+        if (voucherTimeLabel) voucherTimeLabel.textContent = 'Horario de Inicio';
+        if (voucherTime) voucherTime.textContent = (reservation.time || eventObj.time) + ' hs';
+        if (voucherGuestsLabel) voucherGuestsLabel.textContent = 'Lugares / Entradas';
+        if (voucherGuests) voucherGuests.textContent = reservation.partySize + ' lugares';
+        if (voucherName) voucherName.textContent = reservation.customerName;
+
+        var restaurantName = root.getAttribute('data-restaurant-name') || 'el restaurante';
+        var restaurantPhone = root.getAttribute('data-restaurant-phone') || '';
+        var waPhone = restaurantPhone.replace(/[^0-9]/g, '');
+        var waMsg = encodeURIComponent('¡Hola! Reservé mis entradas para el EVENTO ESPECIAL en ' + restaurantName + '.\n' +
+          '🎉 Evento: ' + (reservation.eventTitle || eventObj.title) + '\n' +
+          'Código: ' + (reservation.code || '') + '\n' +
+          'Fecha: ' + (reservation.date || eventObj.date) + ' a las ' + (reservation.time || eventObj.time) + ' hs\n' +
+          'Lugares reservados: ' + reservation.partySize + '\n' +
+          'A nombre de: ' + reservation.customerName);
+        var waUrl = waPhone ? ('https://wa.me/' + waPhone + '?text=' + waMsg) : ('https://wa.me/?text=' + waMsg);
+        if (voucherWaBtn) voucherWaBtn.href = waUrl;
+
+        successView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    if (newBookingBtn) {
+      newBookingBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (successView) successView.style.display = 'none';
+        var switchWrapper = root.querySelector('.res-mode-switch-wrapper');
+        if (switchWrapper) switchWrapper.style.display = 'flex';
+        switchMode('tables');
+        if (tableForm) tableForm.reset();
+        if (eventForm) eventForm.reset();
+        if (eventsListSection) eventsListSection.style.display = 'block';
+        if (eventForm) eventForm.style.display = 'none';
+        selectedEventObj = null;
+        renderCalendar(viewYear, viewMonth);
+        selectDate(todayStr);
+        fetchAvailability();
+      });
+    }
+
+    renderCalendar(viewYear, viewMonth);
+    selectDate(todayStr);
+    fetchAvailability();
+  }
+
+  function checkAndInit() {
+    var sections = document.querySelectorAll('.res-booking-section, .reservation-section, #reservas');
+    sections.forEach(function(sec) {
+      setupUnifiedWidget(sec);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAndInit);
+  } else {
+    checkAndInit();
+  }
+})();

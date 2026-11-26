@@ -29,7 +29,7 @@ export type ChangePasswordCommand = z.infer<typeof changePasswordCommandSchema>;
 export type UpdateAccountEmailCommand = z.infer<typeof updateAccountEmailCommandSchema>;
 export type VerifyCurrentPasswordCommand = z.infer<typeof verifyCurrentPasswordCommandSchema>;
 
-export type AdminRole = "SUPER_ADMIN" | "TENANT_ADMIN";
+export type AdminRole = "SUPER_ADMIN" | "TENANT_ADMIN" | "WAITER";
 
 export type LoginView = {
   email: string;
@@ -50,4 +50,5 @@ export type {
   CurrentActor,
   SuperAdminActor,
   TenantAdminActor,
+  WaiterActor,
 } from "./domain/current-actor";

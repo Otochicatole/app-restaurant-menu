@@ -1,0 +1,128 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { KitchenStatus, ServiceAccountView, ServiceCommand, ServiceSnapshot } from "@/modules/reservation-management/contracts";
+
+export type FloorServiceCommand = Extract<ServiceCommand, { action: "open" | "open-table" | "assign-waiter" | "add-line" | "confirm-order" | "update-line" | "checkout" | "pay-partial" | "close-empty" | "deliver-all" | "march-round" }>;
+type KitchenLineCommand = Extract<ServiceCommand, { action: "update-kitchen-status" }>;
+
+async function serviceRequest<T>(restaurantId: string, { at, signal, command }: { at?: string; signal?: AbortSignal; command?: FloorServiceCommand | KitchenLineCommand }): Promise<T> {
+  const params = at ? `?${new URLSearchParams({ at })}` : "";
+  const response = await fetch(`/api/restaurants/${encodeURIComponent(restaurantId)}/service${params}`, {
+    cache: "no-store", credentials: "same-origin", signal,
+    ...(command ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) } : {}),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.success) throw new Error(payload?.error?.message ?? "No se pudo consultar el servicio. Volvé a intentar.");
+  return payload.data as T;
+}
+
+type ServiceResult = { key: string; snapshot: ServiceSnapshot | null; error: string | null };
+
+export function useFloorService(restaurantId: string, active: boolean, at?: string) {
+  const key = `${restaurantId}:${at ?? "live"}`;
+  const [result, setResult] = useState<ServiceResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const read = useRef<AbortController | null>(null);
+  const writing = useRef(false);
+
+  const refresh = useCallback(async () => {
+    if (!active || writing.current) return;
+    read.current?.abort();
+    const controller = new AbortController();
+    read.current = controller;
+    try {
+      const snapshot = await serviceRequest<ServiceSnapshot>(restaurantId, { at, signal: controller.signal });
+      if (!controller.signal.aborted) setResult({ key, snapshot, error: null });
+    } catch (error) {
+      if (!controller.signal.aborted) setResult((current) => ({
+        key, snapshot: current?.key === key ? current.snapshot : null,
+        error: error instanceof Error ? error.message : "No se pudo actualizar el servicio.",
+      }));
+    } finally {
+      if (read.current === controller) read.current = null;
+    }
+  }, [active, at, key, restaurantId]);
+
+  useEffect(() => {
+    if (!active) return;
+    const whenVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    void refresh();
+    const interval = at ? undefined : window.setInterval(whenVisible, 15_000);
+    window.addEventListener("focus", whenVisible);
+    document.addEventListener("visibilitychange", whenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", whenVisible);
+      document.removeEventListener("visibilitychange", whenVisible);
+      read.current?.abort();
+    };
+  }, [active, at, refresh]);
+
+  const mutate = async (command: FloorServiceCommand): Promise<ServiceAccountView> => {
+    if (at || writing.current) throw new Error("Esperá a que termine la operación actual y volvé a intentar.");
+    read.current?.abort();
+    writing.current = true;
+    setBusy(true);
+    let shouldRefresh = false;
+    try {
+      const account = await serviceRequest<ServiceAccountView>(restaurantId, { command });
+      shouldRefresh =
+        command.action === "open-table"
+        || command.action === "checkout"
+        || command.action === "close-empty"
+        || (command.action === "pay-partial" && account.closedAt !== null);
+      setResult((current) => {
+        if (current?.key !== key || !current.snapshot) return current;
+        const accounts = current.snapshot.accounts.filter(({ id }) => id !== account.id);
+        const unserved = command.action === "close-empty" ? current.snapshot.unserved.filter((group) => group.allocationId !== command.allocationId || group.tableId !== command.tableId) : current.snapshot.unserved;
+        return { key, snapshot: { ...current.snapshot, accounts: [account, ...accounts], unserved }, error: null };
+      });
+      return account;
+    } catch (error) {
+      shouldRefresh = true;
+      throw error;
+    } finally {
+      writing.current = false;
+      setBusy(false);
+      if (shouldRefresh) void refresh();
+    }
+  };
+
+  const updateKitchenStatus = async (lineId: string, status: KitchenStatus): Promise<void> => {
+    if (at || writing.current) throw new Error("Esperá a que termine la operación actual y volvé a intentar.");
+    read.current?.abort();
+    writing.current = true;
+    setBusy(true);
+    try {
+      await serviceRequest<{ updated: boolean }>(restaurantId, {
+        command: { action: "update-kitchen-status", lineId, status },
+      });
+      setResult((current) => {
+        if (current?.key !== key || !current.snapshot) return current;
+        const accounts = current.snapshot.accounts.map((account) => {
+          if (!account.lines.some((line) => line.id === lineId)) return account;
+          const lines = account.lines.map((line) => {
+            if (line.id !== lineId) return line;
+            return {
+              ...line,
+              kitchenStatus: status,
+              ...(status === "SERVED" ? { deliveredQuantity: line.quantity - line.cancelledQuantity } : {}),
+            };
+          });
+          const pendingQuantity = lines.reduce((sum, line) => sum + Math.max(0, line.quantity - line.deliveredQuantity - line.cancelledQuantity), 0);
+          const readyQuantity = lines.filter((line) => line.kitchenStatus === "READY").reduce((sum, line) => sum + Math.max(0, line.quantity - line.cancelledQuantity), 0);
+          return { ...account, lines, pendingQuantity, readyQuantity };
+        });
+        return { key, snapshot: { ...current.snapshot, accounts }, error: null };
+      });
+    } finally {
+      writing.current = false;
+      setBusy(false);
+      void refresh();
+    }
+  };
+
+  const current = result?.key === key ? result : null;
+  return { snapshot: current?.snapshot ?? null, error: current?.error ?? null, busy, refresh, mutate, updateKitchenStatus };
+}

@@ -90,6 +90,9 @@ export interface ComputeAvailabilityInput {
   events: DomainRestaurantEvent[];
   reservations: DomainReservation[];
   todayIso?: string; // Optional "YYYY-MM-DD" reference for past check
+  currentTime?: string;
+  availableTimesByDate?: Record<string, string[]>;
+  useRoomAvailability?: boolean;
 }
 
 export interface AvailabilityResult {
@@ -129,6 +132,9 @@ export function computeAvailability({
   events,
   reservations,
   todayIso,
+  currentTime,
+  availableTimesByDate,
+  useRoomAvailability = false,
 }: ComputeAvailabilityInput): AvailabilityResult {
   const sortedSlots = [...activeSlots].sort((a, b) => {
     const orderDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
@@ -227,7 +233,7 @@ export function computeAvailability({
 
     const dayEvents = publishedEventsByDate.get(dateStr) ?? [];
     const hasExclusiveEvent = dayEvents.some((e) => e.blocksRegularReservations);
-    if (hasExclusiveEvent) {
+    if (hasExclusiveEvent && !useRoomAvailability) {
       return {
         date: dateStr,
         dayOfWeek,
@@ -241,7 +247,11 @@ export function computeAvailability({
     }
 
     // Regular time slots remain available for all customers to book simultaneously
-    const availableSlots: AvailableSlotView[] = sortedSlots.map((slot) => ({
+    const usableSlots = sortedSlots.filter((slot) =>
+      !(dateStr === todayIso && currentTime && slot.time <= currentTime) &&
+      (!availableTimesByDate || (availableTimesByDate[dateStr] ?? []).includes(slot.time)),
+    );
+    const availableSlots: AvailableSlotView[] = usableSlots.map((slot) => ({
       id: slot.id,
       time: slot.time,
       label: slot.label || slot.time,
@@ -250,9 +260,9 @@ export function computeAvailability({
     return {
       date: dateStr,
       dayOfWeek,
-      available: true,
-      status: "AVAILABLE",
-      reason: null,
+      available: availableSlots.length > 0,
+      status: availableSlots.length > 0 ? "AVAILABLE" : "FULLY_BOOKED",
+      reason: availableSlots.length > 0 ? null : "No hay mesas disponibles para ese grupo en los horarios de esta fecha.",
       totalSlots: sortedSlots.length,
       availableSlots,
       occupiedTimes: [],
@@ -274,7 +284,7 @@ export function computeAvailability({
       imageUrl: evt.imageUrl,
       capacity: evt.capacity,
       remainingSpots,
-      available: remainingSpots > 0,
+      available: remainingSpots > 0 && !(todayIso && (evt.date < todayIso || (evt.date === todayIso && currentTime && evt.startTime <= currentTime))),
       blocksRegularReservations: evt.blocksRegularReservations,
     };
   });

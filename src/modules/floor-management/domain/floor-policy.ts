@@ -1,0 +1,381 @@
+import type { FloorAssignmentOption, FloorInterval, FloorLease, FloorLocation, FloorPose, FloorRoom, FloorRoomInput, FloorRotation, FloorTable } from "../contracts";
+
+export type SectorQuotaStatus = "normal" | "warning" | "exceeded";
+export type SectorQuotaSummary = {
+  locationId: string;
+  name: string;
+  maxTables: number | null;
+  placedTables: number;
+  occupiedTables: number;
+  freeTables: number;
+  maxCapacity: number | null;
+  nominalCapacity: number;
+  occupiedPartySize: number;
+  remainingCapacity: number | null;
+  status: SectorQuotaStatus;
+};
+
+const epsilon = 0.001;
+export const floorTableSeparationGap = 24;
+type Footprint = { x: number; y: number; width: number; height: number; rotation: number; shape?: string };
+function basePose(table: FloorTable): FloorPose {
+  return { tableId: table.id, label: table.label, shape: table.shape, capacity: table.capacity,
+    x: table.x, y: table.y, width: table.width, height: table.height, rotation: table.rotation };
+}
+function bounds(pose: Footprint) {
+  const swap = pose.rotation % 180 !== 0;
+  const width = swap ? pose.height : pose.width;
+  const height = swap ? pose.width : pose.height;
+  return { left: pose.x - width / 2, right: pose.x + width / 2, top: pose.y - height / 2, bottom: pose.y + height / 2 };
+}
+function intersects(a: Footprint, b: Footprint, margin = -epsilon): boolean {
+  if (a.shape === "CIRCLE" && b.shape === "CIRCLE") return Math.hypot(a.x - b.x, a.y - b.y) < (a.width + b.width) / 2 + margin;
+  if (a.shape === "CIRCLE" || b.shape === "CIRCLE") {
+    const circle = a.shape === "CIRCLE" ? a : b;
+    const rect = bounds(a.shape === "CIRCLE" ? b : a);
+    const dx = circle.x - Math.max(rect.left, Math.min(circle.x, rect.right));
+    const dy = circle.y - Math.max(rect.top, Math.min(circle.y, rect.bottom));
+    return Math.hypot(dx, dy) < circle.width / 2 + margin;
+  }
+  const x = bounds(a); const y = bounds(b);
+  return x.left < y.right + margin && x.right > y.left - margin && x.top < y.bottom + margin && x.bottom > y.top - margin;
+}
+
+type RectangleSide = "left" | "right" | "top" | "bottom";
+
+function sharedRectangleSides(a: ReturnType<typeof bounds>, b: ReturnType<typeof bounds>): [RectangleSide, RectangleSide] | undefined {
+  if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > epsilon) {
+    if (Math.abs(a.right - b.left) <= epsilon) return ["right", "left"];
+    if (Math.abs(a.left - b.right) <= epsilon) return ["left", "right"];
+  }
+  if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > epsilon) {
+    if (Math.abs(a.bottom - b.top) <= epsilon) return ["bottom", "top"];
+    if (Math.abs(a.top - b.bottom) <= epsilon) return ["top", "bottom"];
+  }
+}
+
+function tangentRectangleSide(circle: FloorPose, rect: ReturnType<typeof bounds>): RectangleSide | undefined {
+  if (circle.y > rect.top + epsilon && circle.y < rect.bottom - epsilon) {
+    if (circle.x <= rect.left) return "left";
+    if (circle.x >= rect.right) return "right";
+  }
+  if (circle.x > rect.left + epsilon && circle.x < rect.right - epsilon) {
+    if (circle.y <= rect.top) return "top";
+    if (circle.y >= rect.bottom) return "bottom";
+  }
+}
+
+/** The inventory stores total seats. Each blocked straight side or round-table tangency costs one seat. */
+export function usableTableCapacity(poses: readonly FloorPose[]): number {
+  const tables = poses.map((pose) => ({ pose, box: bounds(pose), blockedSides: new Set<RectangleSide>(), circularContacts: 0 }));
+  for (let index = 0; index < tables.length; index++) {
+    const a = tables[index];
+    for (let other = 0; other < index; other++) {
+      const b = tables[other];
+      if (a.pose.shape === "CIRCLE" || b.pose.shape === "CIRCLE") {
+        if (intersects(a.pose, b.pose) || !intersects(a.pose, b.pose, epsilon)) continue;
+        for (const [table, neighbor] of [[a, b], [b, a]]) {
+          if (table.pose.shape === "CIRCLE") {
+            table.circularContacts++;
+          } else {
+            const side = tangentRectangleSide(neighbor.pose, table.box);
+            if (side) table.blockedSides.add(side);
+          }
+        }
+      } else {
+        const sides = sharedRectangleSides(a.box, b.box);
+        if (sides) {
+          a.blockedSides.add(sides[0]);
+          b.blockedSides.add(sides[1]);
+        }
+      }
+    }
+  }
+  return tables.reduce((total, table) => total + Math.max(0, table.pose.capacity - table.blockedSides.size - table.circularContacts), 0);
+}
+
+function validatePoses(room: Pick<FloorRoom, "width" | "height" | "fixtures">, poses: FloorPose[]): string | null {
+  for (let i = 0; i < poses.length; i++) {
+    const pose = poses[i]; const box = bounds(pose);
+    if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `La mesa ${pose.label} queda fuera del salón.`;
+    const fixture = room.fixtures.find((item) => item.type !== "LABEL" && intersects(pose, item));
+    if (fixture) return `La mesa ${pose.label} se superpone con ${fixture.label || (fixture.type === "WALL" ? "una pared" : "la barra")}.`;
+    for (let j = 0; j < i; j++) if (intersects(pose, poses[j])) return `Las mesas ${pose.label} y ${poses[j].label} se superponen.`;
+  }
+  return null;
+}
+export function transformPoses(poses: FloorPose[], x: number, y: number, rotation: FloorRotation): FloorPose[] {
+  const angle = rotation * Math.PI / 180;
+  return poses.map((pose) => ({ ...pose,
+    x: x + pose.x * Math.cos(angle) - pose.y * Math.sin(angle),
+    y: y + pose.x * Math.sin(angle) + pose.y * Math.cos(angle),
+    rotation: ((pose.rotation + rotation) % 360) as FloorRotation,
+  }));
+}
+export function buildFloorOptions(room: FloorRoom): FloorAssignmentOption[] {
+  const tables = room.tables.filter((table) => table.active);
+  const anchor = room.locations?.find((location) => location.active) ?? { x: room.width / 2, y: room.height / 2 };
+  const singles = tables.map((table): FloorAssignmentOption => {
+    if (table.locationId) {
+      return {
+        id: `table:${table.id}`,
+        roomId: room.id,
+        label: `Mesa ${table.label}`,
+        capacity: table.capacity,
+        locationId: table.locationId,
+        x: table.x,
+        y: table.y,
+        rotation: table.rotation,
+        poses: [basePose(table)],
+        available: true,
+      };
+    }
+    return { id: `table:${table.id}`, roomId: room.id, label: `Mesa ${table.label}`, capacity: table.capacity,
+      x: anchor.x, y: anchor.y, rotation: 0, poses: [{ ...basePose(table), x: anchor.x, y: anchor.y, rotation: 0 }], available: true };
+  });
+  const combinations = room.combinations.filter((combination) => combination.active).flatMap((combination): FloorAssignmentOption[] => {
+    const members = combination.members.map((member) => ({ member, table: tables.find((table) => table.id === member.tableId) }));
+    if (members.some(({ table }) => !table)) return [];
+    const { x, y } = anchor;
+    const relative = members.map(({ member, table }): FloorPose => ({ tableId: member.tableId, label: table!.label, shape: table!.shape,
+      width: table!.width, height: table!.height, capacity: table!.capacity, x: member.x, y: member.y, rotation: member.rotation }));
+    return [{ id: `combination:${combination.id}`, roomId: room.id, label: combination.name, capacity: Math.min(combination.capacity, usableTableCapacity(relative)),
+      x, y, rotation: 0, poses: transformPoses(relative, x, y, 0), available: true }];
+  });
+  return [...singles, ...combinations];
+}
+export function effectiveLeaseEnd(lease: FloorLease): number {
+  return Math.min(Date.parse(lease.blockedUntil), lease.releasedAt ? Date.parse(lease.releasedAt) : Infinity);
+}
+export function leaseOverlaps(lease: FloorLease, from: number, until: number): boolean {
+  const start = Date.parse(lease.blockedFrom); const end = effectiveLeaseEnd(lease);
+  return end > start && start < until && end > from;
+}
+function effectivePoseEnd(lease: FloorLease, pose: FloorPose): number {
+  return Math.min(effectiveLeaseEnd(lease), pose.releasedAt ? Date.parse(pose.releasedAt) : Infinity);
+}
+export function floorPoseOverlaps(lease: FloorLease, pose: FloorPose, from: number, until: number): boolean {
+  const start = Date.parse(lease.blockedFrom);
+  const end = effectivePoseEnd(lease, pose);
+  return end > start && start < until && end > from;
+}
+export function composeRoomPoses(room: FloorRoom, leases: FloorLease[], at: string | number): FloorPose[] {
+  const poses = new Map<string, FloorPose>();
+  const instant = typeof at === "number" ? at : Date.parse(at);
+  for (const lease of leases) if (lease.roomId === room.id && Date.parse(lease.blockedFrom) <= instant) {
+    for (const pose of lease.poses) {
+      const openOverrun = lease.serviceOverrun && !lease.releasedAt && !pose.releasedAt;
+      if (openOverrun || effectivePoseEnd(lease, pose) > instant) poses.set(pose.tableId, pose);
+    }
+  }
+  return [...poses.values()];
+}
+export function validateRoomLayout(room: FloorRoomInput): string | null {
+  for (const fixture of room.fixtures) {
+    const box = bounds(fixture);
+    if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `La referencia ${fixture.label || fixture.type} queda fuera del salón.`;
+  }
+  const locations = room.locations ?? [];
+  if (new Set(locations.map((location) => location.id)).size !== locations.length || new Set(locations.map((location) => location.name)).size !== locations.length) return "Cada sector debe tener un identificador y nombre únicos dentro del salón.";
+  for (const location of locations.filter((item) => item.active)) {
+    const box = bounds(location);
+    if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `El sector ${location.name} queda fuera del salón.`;
+    if (location.maxTables != null) {
+      const placed = room.tables.filter((table) => table.active && table.locationId === location.id).length;
+      if (placed > location.maxTables) return `El sector ${location.name} admite hasta ${location.maxTables} mesas.`;
+    }
+  }
+  if (new Set(room.tables.map((table) => table.id)).size !== room.tables.length || new Set(room.tables.map((table) => table.label)).size !== room.tables.length) return "Cada mesa debe tener un identificador y número únicos dentro del salón.";
+  const locatedTables = room.tables.filter((table) => table.active && Boolean(table.locationId));
+  for (let i = 0; i < locatedTables.length; i++) {
+    const table = locatedTables[i];
+    const sector = locations.find((item) => item.id === table.locationId && item.active);
+    if (!sector) return `La mesa ${table.label} pertenece a un sector inexistente o inactivo.`;
+    const tableBox = bounds(table);
+    if (tableBox.left < -epsilon || tableBox.top < -epsilon || tableBox.right > room.width + epsilon || tableBox.bottom > room.height + epsilon) {
+      return `La mesa ${table.label} queda fuera del salón.`;
+    }
+    const sectorBox = bounds(sector);
+    if (tableBox.left < sectorBox.left - epsilon || tableBox.right > sectorBox.right + epsilon || tableBox.top < sectorBox.top - epsilon || tableBox.bottom > sectorBox.bottom + epsilon) {
+      return `La mesa ${table.label} queda fuera del sector ${sector.name}.`;
+    }
+    const fixture = room.fixtures.find((item) => item.type !== "LABEL" && intersects(table, item));
+    if (fixture) return `La mesa ${table.label} se superpone con ${fixture.label || (fixture.type === "WALL" ? "una pared" : "la barra")}.`;
+    for (let j = 0; j < i; j++) {
+      if (intersects(table, locatedTables[j])) return `Las mesas ${table.label} y ${locatedTables[j].label} se superponen.`;
+    }
+  }
+  if (new Set(room.combinations.map((item) => item.id)).size !== room.combinations.length) return "Hay combinaciones repetidas.";
+  for (const combination of room.combinations.filter((item) => item.active)) {
+    if (new Set(combination.members.map((member) => member.tableId)).size !== combination.members.length) return `La combinación ${combination.name} repite una mesa.`;
+    const members = combination.members.map((member) => ({ member, table: room.tables.find((table) => table.id === member.tableId && table.active) }));
+    if (members.some(({ table }) => !table)) return `La combinación ${combination.name} usa mesas inexistentes o inactivas.`;
+    if (combination.capacity > members.reduce((sum, { table }) => sum + table!.capacity, 0)) return `La capacidad útil de ${combination.name} supera la capacidad física.`;
+    const pieces = members.map(({ table, member }): FloorPose => ({ ...basePose(table!), ...member }));
+    const invalid = validateAssembly(pieces);
+    if (invalid) return `La combinación ${combination.name}: ${invalid}`;
+  }
+  return null;
+}
+export function validateTableArrangement(poses: FloorPose[]): string | null {
+  if (!poses.length || poses.some((pose) => !pose.tableId) || new Set(poses.map((pose) => pose.tableId)).size !== poses.length) return "El armado debe usar mesas distintas.";
+  for (let i = 0; i < poses.length; i++) {
+    const pose = poses[i];
+    if (![pose.x, pose.y, pose.width, pose.height].every(Number.isFinite) || pose.width <= 0 || pose.height <= 0 || ![0, 90, 180, 270].includes(pose.rotation)) {
+      return `Las medidas o la posición de la mesa ${pose.label} no son válidas.`;
+    }
+    for (let j = 0; j < i; j++) if (intersects(pose, poses[j])) return `Las mesas ${pose.label} y ${poses[j].label} se superponen.`;
+  }
+  return null;
+}
+
+/** Visual groups are derived from touching tables, never persisted or inferred from presets. */
+export function getJoinedTableGroups(poses: FloorPose[]): FloorPose[][] {
+  const remaining = new Set(poses.map((_, index) => index));
+  const groups: FloorPose[][] = [];
+  for (let first = 0; first < poses.length; first++) {
+    if (!remaining.delete(first)) continue;
+    const members = [first];
+    for (let cursor = 0; cursor < members.length; cursor++) for (const candidate of remaining) {
+      if (!intersects(poses[members[cursor]], poses[candidate]) && intersects(poses[members[cursor]], poses[candidate], epsilon)) {
+        remaining.delete(candidate); members.push(candidate);
+      }
+    }
+    groups.push(members.sort((a, b) => a - b).map((index) => poses[index]));
+  }
+  return groups;
+}
+
+export function validateAssembly(poses: FloorPose[]): string | null {
+  const invalid = validateTableArrangement(poses);
+  if (invalid) return invalid;
+  return getJoinedTableGroups(poses).length === 1 ? null : "Las mesas del armado deben estar unidas por sus bordes.";
+}
+function validateSector(room: FloorRoom, lease: FloorLease): string | null {
+  // Null identifies an allocation preserved from a previous schema generation.
+  if (!lease.locationId) return null;
+  const location = room.locations?.find((item) => item.id === lease.locationId && item.active);
+  if (!location) return "El sector asignado ya no está disponible.";
+  const area = bounds(location);
+  for (const pose of lease.poses) {
+    const box = bounds(pose);
+    if (box.left < area.left - epsilon || box.right > area.right + epsilon || box.top < area.top - epsilon || box.bottom > area.bottom + epsilon) return `La mesa ${pose.label} queda fuera del sector ${location.name}.`;
+  }
+  return null;
+}
+export function validateFloorPlacement(room: FloorRoom, proposal: FloorLease | null, leases: FloorLease[]): string | null {
+  const relevant = leases.filter((lease) => lease.roomId === room.id && lease.id !== proposal?.id && lease.reservationId !== proposal?.reservationId);
+  if (proposal) {
+    const sectorError = validateSector(room, proposal); if (sectorError) return sectorError;
+    const poseError = validatePoses(room, proposal.poses); if (poseError) return poseError;
+    const from = Date.parse(proposal.blockedFrom); const until = effectiveLeaseEnd(proposal);
+    const ids = new Set(proposal.poses.map((pose) => pose.tableId));
+    const conflict = relevant.find((lease) => lease.poses.some((pose) => ids.has(pose.tableId) && floorPoseOverlaps(lease, pose, from, until)));
+    if (conflict) return `Una mesa ya está asignada a la reserva ${conflict.reservationId} durante ese horario.`;
+    const points = [from, until, ...relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), ...lease.poses.map((pose) => effectivePoseEnd(lease, pose))])]
+      .filter((value) => value >= from && value <= until).sort((a, b) => a - b);
+    for (let index = 0; index < points.length - 1; index++) if (points[index + 1] > points[index]) {
+      const invalid = validatePoses(room, composeRoomPoses(room, [...relevant, proposal], (points[index] + points[index + 1]) / 2));
+      if (invalid) return invalid;
+    }
+    return null;
+  }
+  for (const lease of relevant) {
+    if (effectiveLeaseEnd(lease) <= Date.parse(lease.blockedFrom)) continue;
+    const invalid = validateSector(room, lease) ?? validatePoses(room, lease.poses);
+    if (invalid) return invalid;
+  }
+  const points = [...new Set(relevant.flatMap((lease) => [Date.parse(lease.blockedFrom), ...lease.poses.map((pose) => effectivePoseEnd(lease, pose))]))].sort((a, b) => a - b);
+  for (let index = 0; index < points.length - 1; index++) if (points[index + 1] > points[index]) {
+    const invalid = validatePoses(room, composeRoomPoses(room, relevant, (points[index] + points[index + 1]) / 2));
+    if (invalid) return invalid;
+  }
+  return null;
+}
+
+/** A bounded fit check for availability; actual assignments still validate their exact positions. */
+export function findFloorPlacement(room: FloorRoom, option: FloorAssignmentOption, interval: FloorInterval, leases: FloorLease[], excludeReservationId?: string): { locationId: string; x: number; y: number; rotation: FloorRotation; poses: FloorPose[] } | null {
+  const from = Date.parse(interval.blockedFrom);
+  const until = Date.parse(interval.blockedUntil);
+  const relevant = leases.filter((lease) => lease.roomId === room.id && lease.reservationId !== excludeReservationId && leaseOverlaps(lease, from, until));
+  const occupied = relevant.flatMap((lease) => lease.poses.filter((pose) =>
+    floorPoseOverlaps(lease, pose, from, until),
+  )).map(bounds);
+  const obstacles = room.fixtures.filter((fixture) => fixture.type !== "LABEL").map(bounds);
+  const relative = option.poses.map((pose) => ({ ...pose, x: pose.x - option.x, y: pose.y - option.y }));
+  for (const location of (room.locations ?? []).filter((item) => item.active)) for (const rotation of [0, 90, 180, 270] as FloorRotation[]) {
+    const delta = ((rotation - option.rotation + 360) % 360) as FloorRotation;
+    const rotated = transformPoses(relative, 0, 0, delta);
+    const boxes = rotated.map(bounds);
+    const footprint = { left: Math.min(...boxes.map((box) => box.left)), right: Math.max(...boxes.map((box) => box.right)), top: Math.min(...boxes.map((box) => box.top)), bottom: Math.max(...boxes.map((box) => box.bottom)) };
+    const area = bounds(location);
+    if (footprint.right - footprint.left > area.right - area.left + epsilon || footprint.bottom - footprint.top > area.bottom - area.top + epsilon) continue;
+    const xValues = [location.x, area.left - footprint.left, area.right - footprint.right, ...[...occupied, ...obstacles].flatMap((box) => [box.left - footprint.right, box.right - footprint.left])];
+    const yValues = [location.y, area.top - footprint.top, area.bottom - footprint.bottom, ...[...occupied, ...obstacles].flatMap((box) => [box.top - footprint.bottom, box.bottom - footprint.top])];
+    const xs = [...new Set(xValues)].filter((x) => x + footprint.left >= area.left - epsilon && x + footprint.right <= area.right + epsilon).slice(0, 20);
+    const ys = [...new Set(yValues)].filter((y) => y + footprint.top >= area.top - epsilon && y + footprint.bottom <= area.bottom + epsilon).slice(0, 20);
+    for (const x of xs) for (const y of ys) {
+      const poses = rotated.map((pose) => ({ ...pose, x: pose.x + x, y: pose.y + y }));
+      const proposal: FloorLease = { ...interval, id: "availability-proposal", reservationId: excludeReservationId ?? "availability-proposal", roomId: room.id, locationId: location.id, poses, releasedAt: null };
+      if (!validateFloorPlacement(room, proposal, relevant)) return { locationId: location.id, x, y, rotation, poses };
+    }
+  }
+  return null;
+}
+
+export function sectorQuotaStatus(occupiedPartySize: number, maxCapacity: number | null): SectorQuotaStatus {
+  if (maxCapacity === null || maxCapacity <= 0) return "normal";
+  if (occupiedPartySize > maxCapacity) return "exceeded";
+  if (occupiedPartySize / maxCapacity >= 0.8) return "warning";
+  return "normal";
+}
+
+export function summarizeSectorQuota(
+  location: Pick<FloorLocation, "id" | "name" | "maxTables" | "maxCapacity">,
+  tables: readonly FloorTable[],
+  allocations: readonly (FloorLease & { partySize?: number })[],
+  at: string | number,
+  additionalPartySize = 0,
+): SectorQuotaSummary {
+  const sectorTables = tables.filter((table) => table.active && table.locationId === location.id);
+  const sectorTableIds = new Set(sectorTables.map((table) => table.id));
+  const instant = typeof at === "number" ? at : Date.parse(at);
+  const occupiedTableIds = new Set<string>();
+  let occupiedPartySize = 0;
+
+  for (const allocation of allocations) {
+    if (Date.parse(allocation.blockedFrom) > instant) continue;
+    const activePoses = allocation.poses.filter((pose) => {
+      const openOverrun = allocation.serviceOverrun && !allocation.releasedAt && !pose.releasedAt;
+      return openOverrun || effectivePoseEnd(allocation, pose) > instant;
+    });
+    if (!activePoses.length) continue;
+    const touchesSector =
+      allocation.locationId === location.id ||
+      activePoses.some((pose) => sectorTableIds.has(pose.tableId));
+    if (!touchesSector) continue;
+    for (const pose of activePoses) {
+      if (sectorTableIds.has(pose.tableId)) occupiedTableIds.add(pose.tableId);
+    }
+    occupiedPartySize += allocation.partySize ?? activePoses.reduce((sum, pose) => sum + pose.capacity, 0);
+  }
+
+  const totalPartySize = occupiedPartySize + Math.max(0, additionalPartySize);
+  const maxTables = location.maxTables ?? null;
+  const maxCapacity = location.maxCapacity ?? null;
+  const placedTables = sectorTables.length;
+  const occupiedTables = occupiedTableIds.size;
+  return {
+    locationId: location.id,
+    name: location.name,
+    maxTables,
+    placedTables,
+    occupiedTables,
+    freeTables: Math.max(0, placedTables - occupiedTables),
+    maxCapacity,
+    nominalCapacity: sectorTables.reduce((sum, table) => sum + table.capacity, 0),
+    occupiedPartySize: totalPartySize,
+    remainingCapacity: maxCapacity === null ? null : maxCapacity - totalPartySize,
+    status: sectorQuotaStatus(totalPartySize, maxCapacity),
+  };
+}

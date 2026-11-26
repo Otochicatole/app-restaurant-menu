@@ -14,6 +14,7 @@ import type {
   CurrentActor,
   SuperAdminActor,
   TenantAdminActor,
+  WaiterActor,
 } from "../domain/current-actor";
 import type { SessionClaims } from "../domain/session";
 import type {
@@ -173,6 +174,7 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
   }
 
   async function changePassword(actor: CurrentActor, command: ChangePasswordCommand): Promise<void> {
+    if (actor.kind === "waiter") throw new ForbiddenError("La contraseña compartida la administra el restaurante.");
     const account = await repository.findAccountById(actor.adminId);
     if (!account) throw new UnauthorizedError();
 
@@ -245,7 +247,7 @@ export function createIdentityAccess(dependencies: IdentityAccessDependencies) {
   };
 }
 
-type ActorWithoutSession = Omit<SuperAdminActor, "jti"> | Omit<TenantAdminActor, "jti">;
+type ActorWithoutSession = Omit<SuperAdminActor, "jti"> | Omit<TenantAdminActor, "jti"> | Omit<WaiterActor, "jti">;
 
 function accountToActorData(account: AccountRecord): ActorWithoutSession | null {
   const common = {
@@ -277,6 +279,15 @@ function accountToActorData(account: AccountRecord): ActorWithoutSession | null 
       organizationId: account.organizationId,
       organizationSlug: account.organizationSlug,
     };
+  }
+
+  if (
+    account.role === "WAITER" && account.restaurantId && account.organizationId &&
+    account.organizationSlug && account.organizationStatus === "ACTIVE" &&
+    account.restaurantStatus === "ACTIVE" && account.floorManagementEnabled && !account.mustChangePassword
+  ) {
+    return { ...common, kind: "waiter", role: "WAITER", restaurantId: account.restaurantId,
+      organizationId: account.organizationId, organizationSlug: account.organizationSlug };
   }
 
   return null;

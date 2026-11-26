@@ -6,7 +6,7 @@ export async function getPublishedCanvasBySlug(slug: string): Promise<PublicCanv
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
+      restaurant: { status: "ACTIVE", menuEnabled: true, organization: { status: "ACTIVE" } },
     },
     select: {
       id: true,
@@ -55,7 +55,7 @@ export async function getPublicMenuStatus(slug: string): Promise<"published" | "
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
+      restaurant: { status: "ACTIVE", menuEnabled: true, organization: { status: "ACTIVE" } },
     },
     select: { publishedJson: true },
   });
@@ -67,7 +67,7 @@ export async function getPublicMenuMetadata(slug: string): Promise<{ title: stri
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
+      restaurant: { status: "ACTIVE", menuEnabled: true, organization: { status: "ACTIVE" } },
     },
     select: { name: true, publicDescription: true },
   });
@@ -78,7 +78,7 @@ export async function resolvePublishedMenuBySlug(slug: string): Promise<{ restau
   const project = await prisma.menuProject.findFirst({
     where: {
       slug,
-      restaurant: { status: "ACTIVE", organization: { status: "ACTIVE" } },
+      restaurant: { status: "ACTIVE", menuEnabled: true, organization: { status: "ACTIVE" } },
     },
     select: { id: true, restaurantId: true },
   });

@@ -1,0 +1,18 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { resolveRestaurantLayoutMetadata } from "@/app/window-title";
+import { featureFlagsFromRestaurant, requireRestaurantContext } from "@/modules/restaurant-management/server";
+import { AdminShell } from "@/ui/admin/AdminShell";
+import { ApplicationError } from "@/platform/application/errors";
+
+export async function generateMetadata({ params }: { params: Promise<{ restaurantId: string }> }): Promise<Metadata> {
+  const { restaurantId } = await params;
+  return resolveRestaurantLayoutMetadata(async () => (await requireRestaurantContext(restaurantId)).restaurant.name);
+}
+
+export default async function RestaurantLayout({ children, params }: { children: React.ReactNode; params: Promise<{ restaurantId: string }> }) {
+  let context;
+  try { context = await requireRestaurantContext((await params).restaurantId); }
+  catch (error) { if (error instanceof ApplicationError && ["NOT_FOUND", "FORBIDDEN"].includes(error.code)) notFound(); throw error; }
+  return <AdminShell key={context.restaurantId} restaurantId={context.restaurantId} organizationName={context.organizationName} brandTitle={context.restaurant.name} brandSubtitle={context.restaurant.publicDescription} showMenuPickerLink landingEnabled={context.restaurant.landingEnabled} features={featureFlagsFromRestaurant(context.restaurant)}>{children}</AdminShell>;
+}
