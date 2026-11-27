@@ -176,8 +176,14 @@ export function validateRoomLayout(room: FloorRoomInput): string | null {
     if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `La referencia ${fixture.label || fixture.type} queda fuera del salón.`;
   }
   const locations = room.locations ?? [];
-  if (new Set(locations.map((location) => location.id)).size !== locations.length || new Set(locations.map((location) => location.name)).size !== locations.length) return "Cada sector debe tener un identificador y nombre únicos dentro del salón.";
-  for (const location of locations.filter((item) => item.active)) {
+  const activeLocations = locations.filter((item) => item.active);
+  if (
+    new Set(locations.map((location) => location.id)).size !== locations.length ||
+    new Set(activeLocations.map((location) => location.name)).size !== activeLocations.length
+  ) {
+    return "Cada sector activo debe tener un identificador y nombre únicos dentro del salón.";
+  }
+  for (const location of activeLocations) {
     const box = bounds(location);
     if (box.left < -epsilon || box.top < -epsilon || box.right > room.width + epsilon || box.bottom > room.height + epsilon) return `El sector ${location.name} queda fuera del salón.`;
     if (location.maxTables != null) {
@@ -185,7 +191,13 @@ export function validateRoomLayout(room: FloorRoomInput): string | null {
       if (placed > location.maxTables) return `El sector ${location.name} admite hasta ${location.maxTables} mesas.`;
     }
   }
-  if (new Set(room.tables.map((table) => table.id)).size !== room.tables.length || new Set(room.tables.map((table) => table.label)).size !== room.tables.length) return "Cada mesa debe tener un identificador y número únicos dentro del salón.";
+  const activeTables = room.tables.filter((table) => table.active);
+  if (
+    new Set(room.tables.map((table) => table.id)).size !== room.tables.length ||
+    new Set(activeTables.map((table) => table.label)).size !== activeTables.length
+  ) {
+    return "Cada mesa activa debe tener un identificador y número únicos dentro del salón.";
+  }
   const locatedTables = room.tables.filter((table) => table.active && Boolean(table.locationId));
   for (let i = 0; i < locatedTables.length; i++) {
     const table = locatedTables[i];

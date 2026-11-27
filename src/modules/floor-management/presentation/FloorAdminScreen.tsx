@@ -70,12 +70,11 @@ function uniqueName(base: string, existing: string[]) {
 }
 
 function nextTableLabel(tables: FloorTable[]): string {
-  let maxNumber = 0;
-  for (const table of tables) {
-    const match = /^M(\d+)$/i.exec(table.label.trim());
-    if (match) maxNumber = Math.max(maxNumber, Number(match[1]));
-  }
-  return uniqueName(`M${maxNumber + 1}`, tables.map((table) => table.label));
+  const activeTables = tables.filter((table) => table.active);
+  const usedLabels = new Set(activeTables.map((table) => table.label.trim().toUpperCase()));
+  let candidate = 1;
+  while (usedLabels.has(`M${candidate}`)) candidate += 1;
+  return uniqueName(`M${candidate}`, activeTables.map((table) => table.label));
 }
 
 function roomError(room: FloorRoom): string | null {
@@ -506,7 +505,7 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
     if (!draft || busy) return "Esperá a que termine de guardar.";
     const sector = draft.locations.find((item) => item.id === locationId && item.active);
     if (!sector) return "Elegí un sector activo para ubicar la mesa.";
-    if (draft.tables.length >= 200) return "El salón admite hasta 200 mesas.";
+    if (draft.tables.filter((item) => item.active).length >= 200) return "El salón admite hasta 200 mesas.";
     const sectorTableCount = draft.tables.filter((item) => item.active && item.locationId === sector.id).length;
     if (sector.maxTables != null && sectorTableCount >= sector.maxTables) {
       const msg = `El sector ${sector.name} alcanzó su cupo máximo de ${sector.maxTables} mesas.`;
@@ -594,7 +593,7 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
       const height = Math.min(240, draft.height);
       const created: FloorLocation = {
         id: crypto.randomUUID(),
-        name: uniqueName("Sector", draft.locations.map((item) => item.name)),
+        name: uniqueName("Sector", draft.locations.filter((item) => item.active).map((item) => item.name)),
         width,
         height,
         x: Math.round(Math.max(width / 2, Math.min(draft.width - width / 2, x))),
@@ -677,17 +676,28 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
           : "El elemento se quitará del plano cuando guardes los cambios.",
       confirmLabel: title,
       run: () => {
+        const archivedTableIds = selectedSector
+          ? new Set(draft.tables.filter((item) => item.locationId === selection.id).map((item) => item.id))
+          : selectedTable
+            ? new Set([selection.id])
+            : new Set<string>();
         patch(
           selectedSector
             ? {
                 ...draft,
                 locations: draft.locations.map((item) => (item.id === selection.id ? { ...item, active: false } : item)),
                 tables: draft.tables.map((item) => (item.locationId === selection.id ? { ...item, active: false } : item)),
+                combinations: draft.combinations.map((combo) =>
+                  combo.members.some((m) => archivedTableIds.has(m.tableId)) ? { ...combo, active: false } : combo,
+                ),
               }
             : selectedTable
               ? {
                   ...draft,
                   tables: draft.tables.map((item) => (item.id === selection.id ? { ...item, active: false } : item)),
+                  combinations: draft.combinations.map((combo) =>
+                    combo.members.some((m) => archivedTableIds.has(m.tableId)) ? { ...combo, active: false } : combo,
+                  ),
                 }
               : { ...draft, fixtures: draft.fixtures.filter((item) => item.id !== selection.id) },
         );

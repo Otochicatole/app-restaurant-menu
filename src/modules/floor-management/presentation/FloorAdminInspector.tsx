@@ -454,7 +454,7 @@ export function FloorAdminInspector({
             <button
               {...transientButtonProps}
               type="button"
-              disabled={busy || atTableLimit || room.tables.length >= 200}
+              disabled={busy || atTableLimit || activeTables.length >= 200}
               onClick={() => onAddTableInSector(selectedSector.id, tablePreset)}
               className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#182618] px-3 text-xs font-semibold text-white transition hover:bg-[#2d4628] disabled:cursor-not-allowed disabled:opacity-45"
             >
@@ -998,7 +998,7 @@ export function FloorAdminInspector({
                                   {...transientButtonProps}
                                   type="button"
                                   aria-label={`Agregar mesa en ${location.name}`}
-                                  disabled={busy || atTableLimit || room.tables.length >= 200}
+                                  disabled={busy || atTableLimit || activeTables.length >= 200}
                                   onClick={() => onAddTableInSector(location.id, defaultPreset)}
                                   className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-stone-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-stone-50 disabled:opacity-45"
                                 >

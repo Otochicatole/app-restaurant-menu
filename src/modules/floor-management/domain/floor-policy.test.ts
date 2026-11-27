@@ -303,4 +303,21 @@ describe("temporal physical table occupancy", () => {
       status: "exceeded",
     });
   });
+
+  it("allows reusing sector names and table labels once previous entries are archived", () => {
+    const base = room();
+    base.combinations = [];
+    base.locations = [
+      { id: "old-sec", name: "Terraza", x: 300, y: 200, width: 300, height: 240, rotation: 0, active: false },
+      { id: "new-sec", name: "Terraza", x: 300, y: 200, width: 300, height: 240, rotation: 0, active: true },
+    ];
+    base.tables = [
+      { id: "old-m1", label: "M1", shape: "SQUARE", capacity: 4, x: 240, y: 200, width: 80, height: 80, rotation: 0, active: false, locationId: "old-sec" },
+      { id: "new-m1", label: "M1", shape: "SQUARE", capacity: 4, x: 240, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "new-sec" },
+    ];
+    expect(validateRoomLayout(base)).toBeNull();
+
+    base.tables.push({ id: "dup-m1", label: "M1", shape: "SQUARE", capacity: 4, x: 360, y: 200, width: 80, height: 80, rotation: 0, active: true, locationId: "new-sec" });
+    expect(validateRoomLayout(base)).toContain("únicos");
+  });
 });

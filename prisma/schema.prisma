@@ -493,7 +493,7 @@ model DiningRoomLocation {
   allocations   ReservationAllocation[]
 
   @@unique([id, restaurantId, roomId])
-  @@unique([roomId, name])
+  @@index([roomId, name])
   @@index([restaurantId, roomId, active])
 }
 
@@ -521,7 +521,7 @@ model DiningTable {
   serviceAccounts ServiceAccountTable[]
 
   @@unique([id, restaurantId, roomId])
-  @@unique([roomId, label])
+  @@index([roomId, label])
   @@index([restaurantId, roomId, active])
   @@index([restaurantId, roomId, locationId])
 }

@@ -855,4 +855,31 @@ describe("fullscreen studio room editor workflows", () => {
       });
     });
   });
+
+  it("resets and reuses M1/M2 table labels after archiving a sector", async () => {
+    const withM1M2: FloorRoom = {
+      ...structuredClone(room),
+      tables: [
+        { id: "t1", label: "M1", shape: "SQUARE", capacity: 4, x: 200, y: 180, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+        { id: "t2", label: "M2", shape: "SQUARE", capacity: 4, x: 340, y: 180, width: 80, height: 80, rotation: 0, active: true, locationId: "window" },
+      ],
+    };
+    api.config.mockResolvedValue({ ...config(), rooms: [withM1M2] });
+    await editor();
+
+    // Archive existing sector Ventana (with M1 and M2)
+    fireEvent.contextMenu(within(screen.getByRole("navigation", { name: "Sectores del salón" })).getByRole("button", { name: "Ventana" }));
+    fireEvent.click(within(sectorMenu()).getByRole("menuitem", { name: "Eliminar" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Archivar sector" })).getByRole("button", { name: "Archivar sector" }));
+
+    // Create new sector and add a table -> should reset to M1 instead of M3
+    fireEvent.click(screen.getByRole("button", { name: "Agregar sector" }));
+    fireEvent.click(screen.getByRole("button", { name: "Colocar en plano" }));
+
+    const sectorInspector = screen.getByRole("region", { name: "Inspector del sector" });
+    fireEvent.click(within(sectorInspector).getByRole("button", { name: "Agregar mesa" }));
+
+    const activeLabels = plan().tables.filter((table) => table.active).map((table) => table.label);
+    expect(activeLabels).toEqual(["M1"]);
+  });
 });
