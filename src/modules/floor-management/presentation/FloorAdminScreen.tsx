@@ -1308,31 +1308,15 @@ function FloorAdminContent({ restaurantId }: { restaurantId: string }) {
         )}
       </div>
 
-      {sectorMenu && selectedSector && !busy && !confirmation && !placement && (
+      {sectorMenu && selectedSector && selectedSector.active && !busy && !confirmation && !placement && (
         <FloorSectorContextMenu
           name={selectedSector.name}
           point={sectorMenu.point}
           disabled={busy}
-          onEdit={() => {
+          onAddTable={() => {
             setSectorMenu(null);
-            setSelection({ kind: "sector", id: selectedSector.id });
+            addTableInSector(selectedSector.id, defaultTablePreset);
           }}
-          onRotate={() => {
-            setSectorMenu(null);
-            rotateSelection();
-          }}
-          onDelete={() => {
-            setSectorMenu(null);
-            removeSelection();
-          }}
-          onAddTable={
-            selectedSector.active
-              ? () => {
-                  setSectorMenu(null);
-                  addTableInSector(selectedSector.id, defaultTablePreset);
-                }
-              : undefined
-          }
           onClose={() => setSectorMenu(null)}
         />
       )}

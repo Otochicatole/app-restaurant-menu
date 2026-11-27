@@ -511,19 +511,19 @@ describe("fullscreen studio room editor workflows", () => {
     expect(menu.style.left).toBe("420px");
     expect(menu.style.top).toBe("300px");
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
-      "Editar",
-      "Girar",
-      "Eliminar",
       "Agregar mesa aquí",
     ]);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Agregar mesa aquí" }));
     expect(tables()).toHaveLength(3);
 
-    fireEvent.click(within(sectorMenu()).getByRole("menuitem", { name: "Girar" }));
-    expect(screen.queryByRole("menu")).toBeNull();
+    // Selecting the sector opens the side inspector for Girar and Archivar sector
+    fireEvent.click(screen.getByRole("button", { name: "Volver al salón" }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Sectores del salón" })).getByRole("button", { name: "Ventana" }));
+    const sectorInspector = screen.getByRole("region", { name: "Inspector del sector" });
+    fireEvent.click(within(sectorInspector).getByRole("button", { name: "Girar" }));
     expect(plan().locations[0].rotation).toBe(90);
 
-    fireEvent.click(within(sectorMenu()).getByRole("menuitem", { name: "Eliminar" }));
+    fireEvent.click(within(sectorInspector).getByRole("button", { name: "Archivar sector" }));
     const confirmDialog = screen.getByRole("dialog", { name: "Archivar sector" });
     expect(plan().locations[0].active).toBe(true);
     fireEvent.click(within(confirmDialog).getByRole("button", { name: "Archivar sector" }));
@@ -559,8 +559,8 @@ describe("fullscreen studio room editor workflows", () => {
         shiftKey: gesture === "Shift+F10",
       });
       const menu = screen.getByRole("menu", { name: "Acciones de Ventana" });
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "Editar" }));
-      expect(screen.getByRole("region", { name: "Inspector del sector" })).toBeTruthy();
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Agregar mesa aquí" }));
+      expect(tables()).toHaveLength(3);
       expect(screen.queryByRole("menu")).toBeNull();
     },
   );
@@ -867,9 +867,10 @@ describe("fullscreen studio room editor workflows", () => {
     api.config.mockResolvedValue({ ...config(), rooms: [withM1M2] });
     await editor();
 
-    // Archive existing sector Ventana (with M1 and M2)
-    fireEvent.contextMenu(within(screen.getByRole("navigation", { name: "Sectores del salón" })).getByRole("button", { name: "Ventana" }));
-    fireEvent.click(within(sectorMenu()).getByRole("menuitem", { name: "Eliminar" }));
+    // Archive existing sector Ventana (with M1 and M2) via the inspector
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Sectores del salón" })).getByRole("button", { name: "Ventana" }));
+    const oldInspector = screen.getByRole("region", { name: "Inspector del sector" });
+    fireEvent.click(within(oldInspector).getByRole("button", { name: "Archivar sector" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Archivar sector" })).getByRole("button", { name: "Archivar sector" }));
 
     // Create new sector and add a table -> should reset to M1 instead of M3
