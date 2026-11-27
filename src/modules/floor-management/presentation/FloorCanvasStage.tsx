@@ -8,6 +8,7 @@ import type { FloorCanvasElement, FloorCanvasJoinedGroup, FloorCanvasProps, Floo
 import { FloorSectorResizeHandles, type FloorSectorResizePreview } from "./FloorSectorResizeHandles";
 import type { FloorSectorResizeGeometry } from "./floor-sector-resize";
 import { FLOOR_GRID_SIZE, snapSpanCenterToGrid, snapToGrid } from "./floor-grid";
+import { computeTableChairs, type TableChair } from "./floor-table-chairs";
 
 const canvasPaint = {
   default: { board: "#fffdf7", edge: "#6b7067", grid: "#e7e5dc", sector: "#f1f3eb", sectorSelected: "#e8efe6", sectorEdge: "#8d9a85", sectorSelectedEdge: "#3d5934", sectorInk: "#46543e", wall: "#777c72", bar: "#bca98b", fixtureInk: "#383d34", table: "#e8dfc9", tableSelected: "#d6e8d4", tableUnavailable: "#e8e8e2", tableEdge: "#aaa28d", tableSelectedEdge: "#255f46", tableInk: "#313a2f", joinEdge: "#756b4f" },
@@ -433,7 +434,8 @@ export default function FloorCanvasStage({ room, tables, appearance = "default",
           const draggableTable = selecting && !placing && Boolean(onMove) && (!draggableIds || draggableIds.includes(table.id));
           const tableClickable = service ? table.active && Boolean(onServiceTable) : selecting && !placing && Boolean(onSelect || onSelectMany);
           const tableCursor = draggableTable && table.active ? "move" : tableClickable ? "pointer" : null;
-          return <Table key={table.id} table={table} paint={paint} selected={selectedIds.includes(table.id)} selecting={selecting} draggable={draggableTable}
+          const chairs = computeTableChairs(table, liveTables, room.fixtures);
+          return <Table key={table.id} table={table} chairs={chairs} paint={paint} selected={selectedIds.includes(table.id)} selecting={selecting} draggable={draggableTable}
             hoverCursor={tableCursor}
             onCursor={(cursor) => { if (!drag.current && !spatialDrag.current) applyElementCursor(cursor); }}
             onSelect={(additive) => selectTable(table.id, additive)}
@@ -514,7 +516,7 @@ function JoinedTables({ group, tables, selectedIds, paint, onSelect, onContextMe
   </Group>;
 }
 
-function Table({ table, selected, selecting, draggable, hoverCursor, onCursor, paint, onSelect, onSelectIndividual, onOpenService, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; selected: boolean; selecting: boolean; draggable: boolean; hoverCursor: string | null; onCursor: (cursor: string | null) => void; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onOpenService?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
+function Table({ table, chairs, selected, selecting, draggable, hoverCursor, onCursor, paint, onSelect, onSelectIndividual, onOpenService, onContextMenu, onDragStart, onDragMove, onDragEnd }: { table: FloorCanvasTable; chairs: TableChair[]; selected: boolean; selecting: boolean; draggable: boolean; hoverCursor: string | null; onCursor: (cursor: string | null) => void; paint: CanvasPaint; onSelect: (additive: boolean) => void; onSelectIndividual?: () => void; onOpenService?: () => void; onContextMenu?: (point: { x: number; y: number }) => void; onDragStart: (node: Konva.Node) => void; onDragMove: (node: Konva.Node) => void; onDragEnd: (node: Konva.Node) => void }) {
   const gesture = useRef({ dragged: false, selectedOnPress: false });
   const occupied = table.state === "occupied";
   const reserved = table.state === "reserved";
@@ -552,6 +554,14 @@ function Table({ table, selected, selecting, draggable, hoverCursor, onCursor, p
     onDblTap={selecting && onSelectIndividual ? (event) => { if (gesture.current.dragged) return; event.cancelBubble = true; onSelectIndividual(); } : undefined}
     onContextMenu={onContextMenu ? (event) => { event.evt.preventDefault(); event.cancelBubble = true; onContextMenu({ x: event.evt.clientX, y: event.evt.clientY }); } : undefined}
     onDragStart={(event) => { if (!selecting) return; event.cancelBubble = true; gesture.current.dragged = true; onDragStart(event.target); }} onDragMove={(event) => { if (!selecting) return; event.cancelBubble = true; onDragMove(event.target); }} onDragEnd={(event) => { event.cancelBubble = true; onDragEnd(event.target); }}>
+    <Group id={`floor-table-chairs-${table.id}`} listening={false}>
+      {chairs.map((chair, index) => (
+        <Group key={index} id={`floor-table-chair-${table.id}-${index}`} x={chair.x} y={chair.y} rotation={chair.rotation} listening={false}>
+          <Rect x={-chair.width / 2} y={-chair.depth / 2} width={chair.width} height={chair.depth} cornerRadius={[2, 2, 4, 4]} fill={fill} stroke={stroke} strokeWidth={selected ? 1.5 : 1.2} listening={false} />
+          <Rect x={-chair.width / 2 + 1} y={chair.depth / 2 - 2.5} width={Math.max(4, chair.width - 2)} height={2.5} cornerRadius={[0, 0, 3, 3]} fill={stroke} listening={false} />
+        </Group>
+      ))}
+    </Group>
     {table.shape === "CIRCLE" ? <Circle id={`floor-table-shape-${table.id}`} radius={table.width / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : ready ? 2 : 1.5} /> : <Rect id={`floor-table-shape-${table.id}`} x={-table.width / 2} y={-table.height / 2} width={table.width} height={table.height} cornerRadius={6} fill={fill} stroke={stroke} strokeWidth={selected ? 3 : ready ? 2 : 1.5} />}
     <Group rotation={-table.rotation} listening={false}>
       <Text x={-60} y={-12} width={120} align="center" text={table.label} fontSize={15} fontStyle="bold" fill={ink} />

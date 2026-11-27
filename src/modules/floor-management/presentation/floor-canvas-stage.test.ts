@@ -1156,4 +1156,22 @@ describe("floor viewport dragging", () => {
     expect(canvas.groups.get("floor-table-ready-badge-ready")).toMatchObject({ x: 36, y: -36 });
   });
 
+  it("renders top-down chairs around each table and hides chairs blocked by touching neighbors", () => {
+    const view = render(createElement(FloorCanvasStage, {
+      room,
+      tables: [
+        { id: "solo", label: "M1", shape: "CIRCLE", capacity: 6, x: 160, y: 160, width: 80, height: 80, rotation: 0, active: true },
+        { id: "left", label: "M2", shape: "SQUARE", capacity: 4, x: 320, y: 160, width: 80, height: 80, rotation: 0, active: true },
+        { id: "right", label: "M3", shape: "SQUARE", capacity: 4, x: 400, y: 160, width: 80, height: 80, rotation: 0, active: true },
+      ],
+      zoom: 1,
+      onZoomChange: vi.fn(),
+    }));
+
+    expect(view.container.querySelectorAll('[data-testid^="floor-table-chair-solo-"]')).toHaveLength(6);
+    expect(view.container.querySelectorAll('[data-testid^="floor-table-chair-left-"]')).toHaveLength(3);
+    expect(view.container.querySelectorAll('[data-testid^="floor-table-chair-right-"]')).toHaveLength(3);
+    expect(canvas.groups.get("floor-table-chairs-solo")?.listening).toBe(false);
+  });
+
 });
