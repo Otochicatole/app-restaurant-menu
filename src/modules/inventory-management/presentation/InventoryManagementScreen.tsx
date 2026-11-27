@@ -257,8 +257,8 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                 {filteredItems.map((item) => {
                   const status = stockStatusBadge[item.stockStatus];
                   return (
-                    <li key={item.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                      <div className="min-w-0 space-y-1">
+                    <li key={item.id} className="flex flex-col gap-3 px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4 sm:px-5">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">{item.code}</span>
                           <p className="text-sm font-semibold text-zinc-950">{item.name}</p>
@@ -280,7 +280,7 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                           {item.supplierName ? ` · Prov: ${item.supplierName}` : ""}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-nowrap">
                         <button type="button" className={`${adminSecondaryButtonClass} min-h-9 px-2.5 py-1.5 text-xs`} onClick={() => setDialog({ kind: "purchase", item })}>
                           <PackagePlus size={14} aria-hidden="true" /> Compra / Entrada
                         </button>
@@ -309,8 +309,8 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
             ) : (
               <ul className="divide-y divide-zinc-100" aria-label="Listado de proveedores">
                 {filteredSuppliers.map((supplier) => (
-                  <li key={supplier.id} className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <div className="min-w-0">
+                  <li key={supplier.id} className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-zinc-950">{supplier.name}</p>
                       <p className="text-xs text-zinc-600">
                         {[
@@ -321,7 +321,7 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                         ].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    <button type="button" className={`${adminSecondaryButtonClass} min-h-9 px-3 py-1.5 text-xs`} onClick={() => setDialog({ kind: "supplier", supplier })}>
+                    <button type="button" className={`${adminSecondaryButtonClass} min-h-9 shrink-0 self-start px-3 py-1.5 text-xs sm:self-center`} onClick={() => setDialog({ kind: "supplier", supplier })}>
                       <Pencil size={14} aria-hidden="true" /> Editar
                     </button>
                   </li>
@@ -338,8 +338,8 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                 {filteredRecipes.map((recipe) => {
                   const status = stockStatusBadge[recipe.stockStatus];
                   return (
-                    <li key={recipe.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                      <div className="min-w-0 space-y-1">
+                    <li key={recipe.id} className="flex flex-col gap-3 px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4 sm:px-5">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">{recipe.code}</span>
                           <p className="text-sm font-semibold text-zinc-950">{recipe.name}</p>
@@ -359,7 +359,7 @@ export function InventoryManagementScreen({ restaurantId }: { restaurantId: stri
                           {" · "}Ingredientes: {recipe.ingredients.map((ing) => `${formatIngredientQuantity(ing.quantityMilli, ing.displayUnit)} ${ing.itemName}`).join(", ")}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-nowrap">
                         <button type="button" className={`${adminSecondaryButtonClass} min-h-9 px-2.5 py-1.5 text-xs`} onClick={() => setDialog({ kind: "prepare", recipe })}>
                           <Play size={14} aria-hidden="true" /> Preparar / Descontar
                         </button>

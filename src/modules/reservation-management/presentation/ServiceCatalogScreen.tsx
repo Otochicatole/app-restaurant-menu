@@ -249,8 +249,8 @@ export function ServiceCatalogScreen({ restaurantId, inventoryEnabled = true }: 
             ) : (
               <ul className="divide-y divide-zinc-100" aria-label="Propuestas pendientes de aprobación">
                 {pendingProposals.map((proposal) => (
-                  <li key={proposal.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <div className="min-w-0 space-y-1">
+                  <li key={proposal.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-700">{proposal.sourceCode}</span>
                         <p className="text-sm font-semibold text-zinc-950">{proposal.proposedName}</p>
@@ -264,7 +264,7 @@ export function ServiceCatalogScreen({ restaurantId, inventoryEnabled = true }: 
                         {proposal.ingredientSummary.length > 0 ? ` · ${proposal.ingredientSummary.join(", ")}` : ""}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap">
                       <button
                         type="button"
                         className={`${adminPrimaryButtonClass} min-h-10 px-3 py-2 text-xs`}
